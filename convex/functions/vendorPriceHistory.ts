@@ -11,6 +11,11 @@ import { v } from "convex/values";
 import { query, internalMutation, internalQuery } from "../_generated/server";
 import { resolveUserByClerkId } from "../lib/resolvers";
 import { Id } from "../_generated/dataModel";
+import {
+  getAlertLevel,
+  MIN_OBSERVATIONS_FOR_ALERT,
+  PRICE_LOOKBACK_DAYS,
+} from "../../src/domains/payables/lib/price-thresholds";
 
 // ============================================
 // QUERIES (User-facing)
@@ -237,6 +242,258 @@ export const getVendorItems = query({
     return Array.from(itemMap.values()).sort((a, b) =>
       a.itemDescription.localeCompare(b.itemDescription)
     );
+  },
+});
+
+// ============================================
+// PRICE INTELLIGENCE QUERIES (013-ap-vendor-management)
+// ============================================
+
+/**
+ * Detect price changes for line items vs historical vendor prices.
+ * Returns per-item alerts with severity levels and cheaper alternatives.
+ */
+export const detectPriceChanges = query({
+  args: {
+    vendorId: v.id("vendors"),
+    lineItems: v.array(
+      v.object({
+        itemDescription: v.string(),
+        unitPrice: v.number(),
+        currency: v.string(),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return [];
+    }
+
+    // Get vendor to verify business membership
+    const vendor = await ctx.db.get(args.vendorId);
+    if (!vendor) {
+      return [];
+    }
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", vendor.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      return [];
+    }
+
+    const lookbackDate = new Date(
+      Date.now() - PRICE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000
+    )
+      .toISOString()
+      .split("T")[0];
+
+    const results = [];
+
+    for (const item of args.lineItems) {
+      const normalized = item.itemDescription.trim().toLowerCase();
+
+      // Get historical prices for this vendor + item
+      const vendorPrices = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_vendor_normalized", (q) =>
+          q.eq("vendorId", args.vendorId).eq("normalizedDescription", normalized)
+        )
+        .collect();
+
+      const confirmedPrices = vendorPrices.filter(
+        (p) => p.isConfirmed && p.observedAt >= lookbackDate
+      );
+
+      // Sort by date (newest first) and get previous price
+      confirmedPrices.sort((a, b) => b.observedAt.localeCompare(a.observedAt));
+      const previousPrice = confirmedPrices[0]?.unitPrice;
+      const observationCount = confirmedPrices.length;
+
+      let percentChange = 0;
+      let alertLevel: "none" | "info" | "warning" | "alert" = "none";
+
+      if (previousPrice && previousPrice > 0) {
+        percentChange = ((item.unitPrice - previousPrice) / previousPrice) * 100;
+        if (observationCount >= MIN_OBSERVATIONS_FOR_ALERT) {
+          alertLevel = getAlertLevel(percentChange, item.currency);
+        }
+      }
+
+      // Cross-vendor: find cheapest price for this item across all vendors
+      const allPrices = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_businessId_item", (q) =>
+          q.eq("businessId", vendor.businessId).eq("itemDescription", item.itemDescription.trim())
+        )
+        .collect();
+
+      // Also check by normalized description
+      const allPricesNormalized = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_businessId", (q) => q.eq("businessId", vendor.businessId))
+        .collect();
+
+      const matchingAllVendors = allPricesNormalized.filter(
+        (p) =>
+          p.normalizedDescription === normalized &&
+          p.isConfirmed &&
+          p.vendorId !== args.vendorId
+      );
+
+      // Group by vendor and get latest confirmed price
+      const vendorLatestPrices = new Map<string, { vendorId: Id<"vendors">; price: number }>();
+      for (const p of matchingAllVendors) {
+        const existing = vendorLatestPrices.get(p.vendorId.toString());
+        if (!existing || p.observedAt > (allPricesNormalized.find(x => x.vendorId === p.vendorId)?.observedAt ?? "")) {
+          vendorLatestPrices.set(p.vendorId.toString(), {
+            vendorId: p.vendorId,
+            price: p.unitPrice,
+          });
+        }
+      }
+
+      // Find cheapest alternative
+      let cheaperVendor: {
+        vendorId: string;
+        vendorName: string;
+        price: number;
+        savingsPercent: number;
+      } | undefined;
+
+      for (const [, vendorPrice] of vendorLatestPrices) {
+        if (vendorPrice.price < item.unitPrice) {
+          const savingsPercent =
+            ((item.unitPrice - vendorPrice.price) / item.unitPrice) * 100;
+
+          if (!cheaperVendor || vendorPrice.price < cheaperVendor.price) {
+            const altVendor = await ctx.db.get(vendorPrice.vendorId);
+            cheaperVendor = {
+              vendorId: vendorPrice.vendorId.toString(),
+              vendorName: altVendor?.name ?? "Unknown Vendor",
+              price: vendorPrice.price,
+              savingsPercent,
+            };
+          }
+        }
+      }
+
+      results.push({
+        itemDescription: item.itemDescription,
+        currentPrice: item.unitPrice,
+        previousPrice: previousPrice ?? item.unitPrice,
+        percentChange,
+        alertLevel,
+        cheaperVendor,
+        observationCount,
+      });
+    }
+
+    return results;
+  },
+});
+
+/**
+ * Get cross-vendor price comparison for a specific item.
+ * Returns all vendor prices sorted by price ascending with cheapest marked.
+ */
+export const getCrossVendorComparison = query({
+  args: {
+    businessId: v.id("businesses"),
+    normalizedDescription: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return [];
+    }
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      return [];
+    }
+
+    const normalized = args.normalizedDescription.trim().toLowerCase();
+
+    // Get all price history for this business
+    const allPrices = await ctx.db
+      .query("vendor_price_history")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    // Filter for matching item, confirmed only
+    const matching = allPrices.filter(
+      (p) => p.normalizedDescription === normalized && p.isConfirmed
+    );
+
+    // Group by vendor, take latest confirmed price per vendor
+    const vendorLatest = new Map<
+      string,
+      { vendorId: Id<"vendors">; price: number; currency: string; lastObservedAt: string }
+    >();
+
+    for (const p of matching) {
+      const key = p.vendorId.toString();
+      const existing = vendorLatest.get(key);
+      if (!existing || p.observedAt > existing.lastObservedAt) {
+        vendorLatest.set(key, {
+          vendorId: p.vendorId,
+          price: p.unitPrice,
+          currency: p.currency,
+          lastObservedAt: p.observedAt,
+        });
+      }
+    }
+
+    // Fetch vendor names
+    const vendorEntries = Array.from(vendorLatest.entries());
+    const vendorNames = await Promise.all(
+      vendorEntries.map(async ([, data]) => {
+        const vendor = await ctx.db.get(data.vendorId);
+        return vendor?.name ?? "Unknown Vendor";
+      })
+    );
+
+    // Build result array
+    const result = vendorEntries.map(([, data], index) => ({
+      vendorId: data.vendorId,
+      vendorName: vendorNames[index],
+      latestPrice: data.price,
+      currency: data.currency,
+      lastObservedAt: data.lastObservedAt,
+      isCheapest: false,
+    }));
+
+    // Sort by price ascending
+    result.sort((a, b) => a.latestPrice - b.latestPrice);
+
+    // Mark cheapest
+    if (result.length > 0) {
+      result[0].isCheapest = true;
+    }
+
+    return result;
   },
 });
 

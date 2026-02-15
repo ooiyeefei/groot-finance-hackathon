@@ -718,3 +718,410 @@ export const getCashFlowProjection = query({
     };
   },
 });
+
+// ============================================
+// AP VENDOR MANAGEMENT QUERIES
+// ============================================
+
+/**
+ * Get aged payables grouped by vendor with aging bucket breakdown.
+ * Includes "Unassigned Vendor" row for entries without vendorId.
+ */
+export const getAgedPayablesByVendor = query({
+  args: {
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return null;
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return null;
+    }
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      return null;
+    }
+
+    const entries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    const payables = entries.filter(
+      (e) =>
+        !e.deletedAt &&
+        (e.status === "pending" || e.status === "overdue") &&
+        (e.transactionType === "Expense" || e.transactionType === "Cost of Goods Sold")
+    );
+
+    // Group by vendorId
+    const vendorGroups = new Map<
+      string,
+      { current: number; days1to30: number; days31to60: number; days61to90: number; days90plus: number; totalOutstanding: number; entryCount: number }
+    >();
+
+    const today = new Date();
+
+    // Fetch all vendors for name lookup and payment terms
+    const vendorIds = [...new Set(payables.map((e) => e.vendorId).filter(Boolean))];
+    const vendors = await Promise.all(vendorIds.map((id) => ctx.db.get(id!)));
+    const vendorMap = new Map(vendors.filter(Boolean).map((v) => [v!._id.toString(), v!]));
+
+    for (const entry of payables) {
+      const vendorKey = entry.vendorId ? entry.vendorId.toString() : "__unassigned__";
+      const outstanding = (entry.homeCurrencyAmount ?? entry.originalAmount) - (entry.paidAmount ?? 0);
+
+      if (!vendorGroups.has(vendorKey)) {
+        vendorGroups.set(vendorKey, {
+          current: 0, days1to30: 0, days31to60: 0, days61to90: 0, days90plus: 0,
+          totalOutstanding: 0, entryCount: 0,
+        });
+      }
+
+      const group = vendorGroups.get(vendorKey)!;
+      group.totalOutstanding += outstanding;
+      group.entryCount++;
+
+      // Calculate days overdue from dueDate
+      const dueDate = entry.dueDate ? new Date(entry.dueDate) : null;
+      const daysOverdue = dueDate
+        ? Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
+        : 0;
+
+      if (daysOverdue <= 0) group.current += outstanding;
+      else if (daysOverdue <= 30) group.days1to30 += outstanding;
+      else if (daysOverdue <= 60) group.days31to60 += outstanding;
+      else if (daysOverdue <= 90) group.days61to90 += outstanding;
+      else group.days90plus += outstanding;
+    }
+
+    // Build vendor array
+    const vendorArray = Array.from(vendorGroups.entries()).map(([key, data]) => {
+      const vendor = key !== "__unassigned__" ? vendorMap.get(key) : null;
+      return {
+        vendorId: key !== "__unassigned__" ? key : null,
+        vendorName: vendor?.name ?? "Unassigned Vendor",
+        paymentTerms: vendor?.paymentTerms,
+        ...data,
+      };
+    });
+
+    // Sort by totalOutstanding descending
+    vendorArray.sort((a, b) => b.totalOutstanding - a.totalOutstanding);
+
+    // Calculate totals
+    const totals = vendorArray.reduce(
+      (acc, v) => ({
+        current: acc.current + v.current,
+        days1to30: acc.days1to30 + v.days1to30,
+        days31to60: acc.days31to60 + v.days31to60,
+        days61to90: acc.days61to90 + v.days61to90,
+        days90plus: acc.days90plus + v.days90plus,
+        totalOutstanding: acc.totalOutstanding + v.totalOutstanding,
+      }),
+      { current: 0, days1to30: 0, days31to60: 0, days61to90: 0, days90plus: 0, totalOutstanding: 0 }
+    );
+
+    return { vendors: vendorArray, totals };
+  },
+});
+
+/**
+ * Get individual unpaid entries for a specific vendor (drilldown).
+ */
+export const getVendorPayablesDrilldown = query({
+  args: {
+    businessId: v.id("businesses"),
+    vendorId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return [];
+    }
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      return [];
+    }
+
+    const entries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    const today = new Date();
+
+    const filtered = entries.filter((e) => {
+      if (e.deletedAt) return false;
+      if (e.status !== "pending" && e.status !== "overdue") return false;
+      if (e.transactionType !== "Expense" && e.transactionType !== "Cost of Goods Sold") return false;
+
+      // Match vendorId (null/undefined for unassigned)
+      if (args.vendorId) {
+        return e.vendorId?.toString() === args.vendorId;
+      } else {
+        return !e.vendorId;
+      }
+    });
+
+    return filtered
+      .map((e) => {
+        const outstanding = e.originalAmount - (e.paidAmount ?? 0);
+        const dueDate = e.dueDate ? new Date(e.dueDate) : null;
+        const daysOverdue = dueDate
+          ? Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
+          : 0;
+
+        return {
+          entryId: e._id,
+          referenceNumber: e.referenceNumber,
+          originalAmount: e.originalAmount,
+          originalCurrency: e.originalCurrency,
+          homeCurrencyAmount: e.homeCurrencyAmount ?? e.originalAmount,
+          paidAmount: e.paidAmount ?? 0,
+          outstandingBalance: outstanding,
+          transactionDate: e.transactionDate,
+          dueDate: e.dueDate ?? "",
+          daysOverdue,
+          status: e.status as "pending" | "overdue",
+          category: e.category,
+          notes: e.notes,
+        };
+      })
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  },
+});
+
+/**
+ * Get pending payables due within a specified window (upcoming payments).
+ * Includes overdue entries at the top.
+ */
+export const getAPUpcomingPayments = query({
+  args: {
+    businessId: v.id("businesses"),
+    daysAhead: v.union(v.literal(7), v.literal(14), v.literal(30)),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return [];
+    }
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      return [];
+    }
+
+    const entries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    const today = new Date();
+    const windowEnd = new Date(today.getTime() + args.daysAhead * 24 * 60 * 60 * 1000);
+    const windowEndStr = windowEnd.toISOString().split("T")[0];
+    const todayStr = today.toISOString().split("T")[0];
+
+    const payables = entries.filter((e) => {
+      if (e.deletedAt) return false;
+      if (e.status !== "pending" && e.status !== "overdue") return false;
+      if (e.transactionType !== "Expense" && e.transactionType !== "Cost of Goods Sold") return false;
+      if (!e.dueDate) return false;
+      // Include overdue (dueDate < today) and upcoming (dueDate <= windowEnd)
+      return e.dueDate <= windowEndStr;
+    });
+
+    // Fetch vendor names
+    const vendorIds = [...new Set(payables.map((e) => e.vendorId).filter(Boolean))];
+    const vendors = await Promise.all(vendorIds.map((id) => ctx.db.get(id!)));
+    const vendorMap = new Map(vendors.filter(Boolean).map((v) => [v!._id.toString(), v!.name]));
+
+    const result = payables.map((e) => {
+      const dueDate = new Date(e.dueDate!);
+      const daysRemaining = Math.floor(
+        (dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      return {
+        entryId: e._id,
+        vendorId: e.vendorId,
+        vendorName: e.vendorId ? (vendorMap.get(e.vendorId.toString()) ?? "Unknown Vendor") : "Unassigned Vendor",
+        originalAmount: e.originalAmount,
+        originalCurrency: e.originalCurrency,
+        homeCurrencyAmount: e.homeCurrencyAmount ?? e.originalAmount,
+        outstandingBalance: e.originalAmount - (e.paidAmount ?? 0),
+        dueDate: e.dueDate!,
+        daysRemaining,
+        status: e.status as "pending" | "overdue",
+        referenceNumber: e.referenceNumber,
+      };
+    });
+
+    // Sort: overdue first (most overdue at top), then by dueDate ascending
+    result.sort((a, b) => {
+      if (a.daysRemaining < 0 && b.daysRemaining >= 0) return -1;
+      if (a.daysRemaining >= 0 && b.daysRemaining < 0) return 1;
+      return a.daysRemaining - b.daysRemaining;
+    });
+
+    return result;
+  },
+});
+
+/**
+ * Get vendor spend analytics for a selectable period.
+ * Returns top vendors, category breakdown, monthly trend, and total spend.
+ */
+export const getVendorSpendAnalytics = query({
+  args: {
+    businessId: v.id("businesses"),
+    periodDays: v.union(v.literal(30), v.literal(90), v.literal(365)),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return null;
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return null;
+    }
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      return null;
+    }
+
+    const cutoffDate = new Date(Date.now() - args.periodDays * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0];
+
+    const entries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    const spendEntries = entries.filter(
+      (e) =>
+        !e.deletedAt &&
+        (e.transactionType === "Expense" || e.transactionType === "Cost of Goods Sold") &&
+        (e.status === "paid" || e.status === "pending" || e.status === "overdue") &&
+        e.transactionDate >= cutoffDate
+    );
+
+    // Fetch vendor names
+    const vendorIds = [...new Set(spendEntries.map((e) => e.vendorId).filter(Boolean))];
+    const vendors = await Promise.all(vendorIds.map((id) => ctx.db.get(id!)));
+    const vendorMap = new Map(vendors.filter(Boolean).map((v) => [v!._id.toString(), v!.name]));
+
+    // Aggregate by vendor
+    const vendorSpend = new Map<string, { totalSpend: number; transactionCount: number }>();
+    let totalSpend = 0;
+
+    for (const e of spendEntries) {
+      const amount = e.homeCurrencyAmount ?? e.originalAmount;
+      totalSpend += amount;
+
+      const vendorKey = e.vendorId?.toString() ?? "__unassigned__";
+      const existing = vendorSpend.get(vendorKey) ?? { totalSpend: 0, transactionCount: 0 };
+      existing.totalSpend += amount;
+      existing.transactionCount++;
+      vendorSpend.set(vendorKey, existing);
+    }
+
+    // Top 10 vendors
+    const topVendors = Array.from(vendorSpend.entries())
+      .map(([key, data]) => ({
+        vendorId: key !== "__unassigned__" ? key : null,
+        vendorName: key !== "__unassigned__" ? (vendorMap.get(key) ?? "Unknown Vendor") : "Unassigned Vendor",
+        totalSpend: data.totalSpend,
+        transactionCount: data.transactionCount,
+        percentOfTotal: totalSpend > 0 ? (data.totalSpend / totalSpend) * 100 : 0,
+      }))
+      .sort((a, b) => b.totalSpend - a.totalSpend)
+      .slice(0, 10);
+
+    // Category breakdown
+    const categorySpend = new Map<string, { totalSpend: number; transactionCount: number }>();
+    for (const e of spendEntries) {
+      const category = e.category ?? "Uncategorized";
+      const amount = e.homeCurrencyAmount ?? e.originalAmount;
+      const existing = categorySpend.get(category) ?? { totalSpend: 0, transactionCount: 0 };
+      existing.totalSpend += amount;
+      existing.transactionCount++;
+      categorySpend.set(category, existing);
+    }
+
+    const categoryBreakdown = Array.from(categorySpend.entries())
+      .map(([category, data]) => ({
+        category,
+        totalSpend: data.totalSpend,
+        percentOfTotal: totalSpend > 0 ? (data.totalSpend / totalSpend) * 100 : 0,
+        transactionCount: data.transactionCount,
+      }))
+      .sort((a, b) => b.totalSpend - a.totalSpend);
+
+    // Monthly trend (last 12 months)
+    const monthlySpend = new Map<string, { totalSpend: number; transactionCount: number }>();
+    for (const e of spendEntries) {
+      const month = e.transactionDate.substring(0, 7); // "YYYY-MM"
+      const amount = e.homeCurrencyAmount ?? e.originalAmount;
+      const existing = monthlySpend.get(month) ?? { totalSpend: 0, transactionCount: 0 };
+      existing.totalSpend += amount;
+      existing.transactionCount++;
+      monthlySpend.set(month, existing);
+    }
+
+    const monthlyTrend = Array.from(monthlySpend.entries())
+      .map(([month, data]) => ({
+        month,
+        totalSpend: data.totalSpend,
+        transactionCount: data.transactionCount,
+      }))
+      .sort((a, b) => a.month.localeCompare(b.month))
+      .slice(-12);
+
+    return { topVendors, categoryBreakdown, monthlyTrend, totalSpend };
+  },
+});

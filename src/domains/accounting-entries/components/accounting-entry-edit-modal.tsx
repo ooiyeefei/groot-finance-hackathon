@@ -80,7 +80,7 @@ export default function AccountingEntryFormModal({
     vendor_name: transaction?.vendor_name || prefilledData?.vendor_name || '',
     document_number: transaction?.reference_number || prefilledData?.reference_number || '',
     status: transaction?.status || prefilledData?.status || 'pending',
-    due_date: transaction?.due_date?.split('T')[0] || undefined,
+    due_date: transaction?.due_date?.split('T')[0] || prefilledData?.due_date?.split('T')[0] || undefined,
     payment_date: transaction?.payment_date?.split('T')[0] || undefined,
     payment_method: transaction?.payment_method || '',
     notes: transaction?.notes || '',
@@ -448,7 +448,7 @@ export default function AccountingEntryFormModal({
                     {transaction ? 'Updating...' : 'Creating...'}
                   </>
                 ) : (
-                  transaction ? 'Update Record' : 'Create Record'
+                  transaction ? 'Update Record' : (prefilledData?.source_document_type === 'invoice' ? 'Create Payable' : 'Create Record')
                 )}
               </Button>
               <button
@@ -684,7 +684,8 @@ export default function AccountingEntryFormModal({
                       </select>
                     </div>
 
-                    {formData.status === 'overdue' && (
+                    {(formData.status === 'overdue' || formData.status === 'pending' ||
+                      ((formData.transaction_type === 'Expense' || formData.transaction_type === 'Cost of Goods Sold') && prefilledData?.source_document_type === 'invoice')) && (
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-2">
                           <Calendar className="w-4 h-4 inline mr-1" />

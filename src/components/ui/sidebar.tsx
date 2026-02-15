@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@clerk/nextjs'
-import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, Users, CheckCircle, Tag, FileCheck, CalendarDays, FileSpreadsheet } from 'lucide-react'
+import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, Users, CheckCircle, Tag, FileCheck, CalendarDays, FileSpreadsheet, Wallet, Building } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
 import EnhancedBusinessDisplay from '@/domains/account-management/components/enhanced-business-display'
@@ -74,6 +74,8 @@ export default function Sidebar() {
     { name: t('dashboard'), href: localizedHref('/'), icon: Home },
     { name: t('invoices'), href: localizedHref('/invoices'), icon: FileText },
     { name: t('transactions'), href: localizedHref('/accounting'), icon: CreditCard },
+    { name: 'Payables', href: localizedHref('/payables'), icon: Wallet },
+    { name: 'Vendors', href: localizedHref('/vendors'), icon: Building },
   ] : []
 
   // Group 2: Workspace (all users) — day-to-day work items + conditional manager tools

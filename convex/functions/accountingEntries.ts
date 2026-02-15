@@ -10,7 +10,7 @@
  */
 
 import { v } from "convex/values";
-import { query, mutation } from "../_generated/server";
+import { query, mutation, internalMutation } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { Id } from "../_generated/dataModel";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
@@ -825,6 +825,100 @@ export const updateStatus = mutation({
 });
 
 /**
+ * Record a full or partial payment against a pending/overdue accounting entry.
+ * Appends to paymentHistory, updates paidAmount, and transitions status when fully paid.
+ */
+export const recordPayment = mutation({
+  args: {
+    entryId: v.id("accounting_entries"),
+    amount: v.number(),
+    paymentDate: v.string(),
+    paymentMethod: v.string(),
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const entry = await ctx.db.get(args.entryId);
+    if (!entry || entry.deletedAt) {
+      throw new Error("Accounting entry not found");
+    }
+
+    // Check authorization
+    if (entry.businessId) {
+      const membership = await ctx.db
+        .query("business_memberships")
+        .withIndex("by_userId_businessId", (q) =>
+          q.eq("userId", user._id).eq("businessId", entry.businessId!)
+        )
+        .first();
+
+      if (!membership || membership.status !== "active") {
+        throw new Error("Not authorized");
+      }
+    }
+
+    // Validate entry status
+    if (entry.status !== "pending" && entry.status !== "overdue") {
+      throw new Error(`Cannot record payment for entry with status "${entry.status}"`);
+    }
+
+    // Validate amount
+    if (args.amount <= 0) {
+      throw new Error("Payment amount must be greater than 0");
+    }
+
+    const currentPaid = entry.paidAmount ?? 0;
+    const outstandingBalance = entry.originalAmount - currentPaid;
+
+    if (args.amount > outstandingBalance) {
+      throw new Error(
+        `Payment amount (${args.amount}) exceeds outstanding balance (${outstandingBalance})`
+      );
+    }
+
+    // Build payment record
+    const paymentRecord = {
+      amount: args.amount,
+      paymentDate: args.paymentDate,
+      paymentMethod: args.paymentMethod,
+      notes: args.notes,
+      recordedAt: Date.now(),
+    };
+
+    const newPaidAmount = currentPaid + args.amount;
+    const newOutstanding = entry.originalAmount - newPaidAmount;
+    const isFullyPaid = newPaidAmount >= entry.originalAmount;
+
+    const existingHistory = entry.paymentHistory ?? [];
+
+    await ctx.db.patch(args.entryId, {
+      paidAmount: newPaidAmount,
+      paymentHistory: [...existingHistory, paymentRecord],
+      paymentDate: args.paymentDate,
+      paymentMethod: args.paymentMethod,
+      status: isFullyPaid ? "paid" : entry.status,
+      updatedAt: Date.now(),
+    });
+
+    return {
+      success: true,
+      newStatus: isFullyPaid ? ("paid" as const) : entry.status,
+      outstandingBalance: newOutstanding,
+      totalPaid: newPaidAmount,
+    };
+  },
+});
+
+/**
  * Soft delete accounting entry
  */
 export const softDelete = mutation({
@@ -1224,5 +1318,90 @@ export const getEntryCount = query({
     const activeEntries = entries.filter((e) => !e.deletedAt);
 
     return { count: activeEntries.length };
+  },
+});
+
+// ============================================
+// INTERNAL MUTATIONS (for cron jobs)
+// ============================================
+
+/**
+ * Mark overdue payables — called daily by cron.
+ * Finds pending Expense/COGS entries with dueDate < today and marks them overdue.
+ * Creates Action Center insight summarizing newly overdue entries per business.
+ */
+export const markOverduePayables = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const today = new Date().toISOString().split("T")[0];
+    let markedCount = 0;
+
+    // Fetch all pending Expense/COGS entries with a due date in the past
+    // We need to scan all businesses, so query by status-like approach
+    // Convex doesn't support multi-field filter after index, so collect and filter
+    const allEntries = await ctx.db
+      .query("accounting_entries")
+      .collect();
+
+    const overdueEntries = allEntries.filter(
+      (e) =>
+        !e.deletedAt &&
+        e.status === "pending" &&
+        e.dueDate &&
+        e.dueDate < today &&
+        (e.transactionType === "Expense" || e.transactionType === "Cost of Goods Sold")
+    );
+
+    // Group by business for insight creation
+    const entriesByBusiness = new Map<string, typeof overdueEntries>();
+
+    for (const entry of overdueEntries) {
+      await ctx.db.patch(entry._id, {
+        status: "overdue",
+        updatedAt: Date.now(),
+      });
+      markedCount++;
+
+      if (entry.businessId) {
+        const businessKey = entry.businessId.toString();
+        const group = entriesByBusiness.get(businessKey) ?? [];
+        group.push(entry);
+        entriesByBusiness.set(businessKey, group);
+      }
+    }
+
+    // Create Action Center insight per business
+    for (const [businessId, entries] of entriesByBusiness) {
+      const totalAmount = entries.reduce(
+        (sum, e) => sum + (e.homeCurrencyAmount ?? e.originalAmount) - (e.paidAmount ?? 0),
+        0
+      );
+
+      // Get business members for insight
+      const members = await ctx.db
+        .query("business_memberships")
+        .withIndex("by_businessId", (q) => q.eq("businessId", entries[0].businessId!))
+        .collect();
+
+      const activeMembers = members.filter((m) => m.status === "active");
+
+      for (const member of activeMembers) {
+        await ctx.db.insert("actionCenterInsights", {
+          userId: member.userId.toString(),
+          businessId,
+          category: "deadline",
+          priority: "high",
+          status: "new",
+          title: `${entries.length} bill${entries.length > 1 ? "s" : ""} now overdue`,
+          description: `${entries.length} payable${entries.length > 1 ? "s" : ""} totaling ${totalAmount.toLocaleString()} are now past due.`,
+          affectedEntities: entries.map((e) => e._id.toString()),
+          recommendedAction: "Review overdue payables and prioritize payments",
+          detectedAt: Date.now(),
+        });
+      }
+    }
+
+    console.log(`[markOverduePayables] Marked ${markedCount} entries as overdue`);
+    return { markedCount };
   },
 });

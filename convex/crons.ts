@@ -115,4 +115,16 @@ crons.daily(
   internal.functions.salesInvoices.generateDueInvoices
 );
 
+/**
+ * AP Vendor Management: Mark Overdue Payables
+ *
+ * Runs daily at 00:05 UTC (5 min after AR overdue job) to mark
+ * pending Expense/COGS entries as overdue when dueDate has passed.
+ */
+crons.daily(
+  "mark-overdue-payables",
+  { hourUTC: 0, minuteUTC: 5 },
+  internal.functions.accountingEntries.markOverduePayables
+);
+
 export default crons;
