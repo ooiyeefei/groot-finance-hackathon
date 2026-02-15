@@ -150,6 +150,8 @@ function ItemSearchField({
               className="w-full text-left px-3 py-2.5 hover:bg-primary/5 transition-colors border-b border-border flex items-center gap-2"
               onMouseDown={() => {
                 setIsDropdownOpen(false)
+                // Re-focus the input so the user can immediately type a custom item name
+                setTimeout(() => inputRef.current?.focus(), 0)
               }}
             >
               <Plus className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -666,7 +668,7 @@ export default function InvoiceLineItemsTable({
       {/* Hint text */}
       <CatalogHintText />
 
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <div className="bg-card border border-border rounded-lg">
         {lineItems.length === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-muted-foreground">
             No items yet. Add an item to get started.
