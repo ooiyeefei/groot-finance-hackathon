@@ -11,12 +11,15 @@ import { useState, useCallback, useEffect } from 'react'
 import { MessageCircle, X } from 'lucide-react'
 import { ChatWindow } from './chat-window'
 import { useAuth } from '@clerk/nextjs'
+import { useActiveBusiness } from '@/contexts/business-context'
 
 interface ChatWidgetProps {
   businessId?: string
 }
 
-export function ChatWidget({ businessId }: ChatWidgetProps) {
+export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
+  const { businessId: activeBusinessId } = useActiveBusiness()
+  const businessId = businessIdProp || activeBusinessId || undefined
   const [isOpen, setIsOpen] = useState(false)
   const [isMinimized, setIsMinimized] = useState(false)
   const [pendingMessage, setPendingMessage] = useState<string | undefined>()

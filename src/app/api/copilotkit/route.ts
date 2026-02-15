@@ -19,6 +19,7 @@ interface ChatRequestBody {
   conversationId?: string
   conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
   language?: string
+  businessId?: string
 }
 
 export async function POST(req: NextRequest) {
@@ -48,13 +49,6 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  if (!userData.business_id) {
-    return NextResponse.json(
-      { error: 'No business context found' },
-      { status: 400 }
-    )
-  }
-
   // 4. Parse request body
   let body: ChatRequestBody
   try {
@@ -66,7 +60,7 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const { message, conversationId, conversationHistory = [], language = 'en' } = body
+  const { message, conversationId, conversationHistory = [], language = 'en', businessId: requestBusinessId } = body
 
   if (!message || typeof message !== 'string') {
     return NextResponse.json(
@@ -75,8 +69,18 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // 5. Create SSE stream from the LangGraph agent
-  console.log(`[Chat API] Streaming agent for user ${userId}, conversation ${conversationId}`)
+  // 5. Resolve businessId — prefer frontend-provided, fall back to user default.
+  // The frontend sends the active business from BusinessContextProvider.
+  const resolvedBusinessId = requestBusinessId || userData.business_id
+  if (!resolvedBusinessId) {
+    return NextResponse.json(
+      { error: 'No business context found' },
+      { status: 400 }
+    )
+  }
+
+  // 6. Create SSE stream from the LangGraph agent
+  console.log(`[Chat API] Streaming agent for user ${userId}, business ${resolvedBusinessId}, conversation ${conversationId}`)
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -98,7 +102,7 @@ export async function POST(req: NextRequest) {
           userContext: {
             userId,
             convexUserId: userData.id,
-            businessId: userData.business_id!,
+            businessId: resolvedBusinessId,
             conversationId: conversationId || 'new',
           },
           language,
