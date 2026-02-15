@@ -155,11 +155,16 @@ function ItemSearchField({
               }}
             >
               <Plus className="h-3.5 w-3.5 text-primary shrink-0" />
-              <span className="text-sm font-medium text-primary">
-                {value.trim()
-                  ? `Add "${value.trim()}" as one-time item`
-                  : 'Add a new line item'}
-              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-primary">
+                  {value.trim()
+                    ? `Use "${value.trim()}" as custom item`
+                    : 'Enter a custom item name'}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  One-time item for this invoice only — not saved to catalog
+                </p>
+              </div>
             </button>
           )}
 
@@ -286,8 +291,7 @@ function CatalogHintText() {
     <p className="text-xs text-muted-foreground">
       Add single, one-time items or products from your{' '}
       <Link
-        href={`/${locale}/invoices#catalog`}
-        target="_blank"
+        href={`/${locale}/invoices#ar-catalog`}
         className="text-primary font-medium hover:underline"
       >
         product catalog
@@ -364,22 +368,29 @@ export default function InvoiceLineItemsTable({
   )
 
   const handleSelectCatalogItem = useCallback(
-    (index: number, catItem: {
-      _id: string
-      name: string
-      unitPrice: number
-      currency: string
-      sku?: string
-      unitMeasurement?: string
-      taxRate?: number
-    }) => {
+    (index: number, catItem: CatalogItemData) => {
+      // Map Stripe billingInterval → UoM when unitMeasurement is empty
+      const billingToUom: Record<string, string> = {
+        monthly: 'mo',
+        yearly: 'yr',
+        weekly: 'wk',
+        daily: 'day',
+      }
+      const uom =
+        catItem.unitMeasurement ||
+        (catItem.billingInterval && catItem.billingInterval !== 'one_time'
+          ? billingToUom[catItem.billingInterval] ?? ''
+          : '')
+
       onUpdateItem(index, {
         description: catItem.name,
         unitPrice: catItem.unitPrice,
         itemCode: catItem.sku || '',
         taxRate: catItem.taxRate,
-        unitMeasurement: catItem.unitMeasurement,
+        unitMeasurement: uom,
         catalogItemId: catItem._id,
+        // Map currency from catalog item (Stripe products carry their own currency)
+        ...(catItem.currency ? { currency: catItem.currency } : {}),
       })
     },
     [onUpdateItem],
@@ -482,7 +493,8 @@ export default function InvoiceLineItemsTable({
             )}
           </div>
           <div className="text-xs text-muted-foreground mt-0.5">
-            {formatCurrency(item.unitPrice, currency)} × {item.quantity || 1}
+            {formatCurrency(item.unitPrice, item.currency || currency)}
+            {item.unitMeasurement ? ` / ${item.unitMeasurement}` : ''} × {item.quantity || 1}
             {taxPercent}
             {item.supplyDateStart && item.supplyDateEnd && (
               <span className="ml-2">
@@ -553,7 +565,7 @@ export default function InvoiceLineItemsTable({
         {/* Fields */}
         <div className="p-4 space-y-4">
           {/* Row 1: Item search + Qty */}
-          <div className="grid grid-cols-[1fr_100px] gap-3">
+          <div className="grid grid-cols-[1fr_80px] gap-3">
             <div>
               <Label className="text-xs font-medium text-muted-foreground mb-1 block">
                 Item <span className="text-destructive">*</span>
@@ -586,11 +598,11 @@ export default function InvoiceLineItemsTable({
             </div>
           </div>
 
-          {/* Row 2: Price + Item Code */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Row 2: Unit Price + UoM + Subtotal */}
+          <div className="grid grid-cols-[1fr_80px_120px] gap-3">
             <div>
               <Label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Price <span className="text-destructive">*</span>
+                Unit price <span className="text-destructive">*</span>
               </Label>
               <Input
                 type="number"
@@ -604,7 +616,30 @@ export default function InvoiceLineItemsTable({
             </div>
             <div>
               <Label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Item code (optional)
+                UoM
+              </Label>
+              <Input
+                value={item.unitMeasurement || ''}
+                onChange={(e) => handleFieldChange(index, 'unitMeasurement', e.target.value)}
+                placeholder="ea"
+                className="h-9 text-sm bg-background border-border"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground mb-1 block">
+                Subtotal
+              </Label>
+              <div className="h-9 flex items-center px-3 text-sm font-medium text-foreground tabular-nums bg-muted/50 border border-border rounded-md">
+                {formatCurrency(item.unitPrice * (item.quantity || 1), item.currency || currency)}
+              </div>
+            </div>
+          </div>
+
+          {/* Row 3: Item Code */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground mb-1 block">
+                Item code / SKU (optional)
               </Label>
               <ItemSearchField
                 value={item.itemCode || ''}
