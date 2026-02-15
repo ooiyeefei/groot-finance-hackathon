@@ -60,6 +60,10 @@ npx cdk deploy --profile groot-finanseal --region us-west-2
 ```
 **Never make ad-hoc CLI changes** - all infrastructure via CDK.
 
+### No Screenshots or Binary Files in Git
+- **Never commit** `.png`, `.jpg`, `.gif`, or other screenshot/image files to the repo
+- UAT evidence, test screenshots, and debug images belong in external tools (e.g., GitHub issues, Notion), not in source control
+
 ### Prefer Modification Over Creation
 - Do not create new files without approval
 - Check if existing files can be modified first

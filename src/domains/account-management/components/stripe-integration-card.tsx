@@ -170,7 +170,7 @@ export default function StripeIntegrationCard() {
                 <Input
                   id="stripe-api-key"
                   type="password"
-                  placeholder="sk_test_... or sk_live_..."
+                  placeholder="sk_live_... or rk_live_..."
                   value={apiKey}
                   onChange={(e) => {
                     setApiKey(e.target.value)

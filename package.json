@@ -21,11 +21,6 @@
     "type-check": "tsc --noEmit",
     "validate-translations": "node scripts/translations/validate-translations.js",
     "migrate:backfill": "tsx src/scripts/migrations/backfill_transaction_data.ts",
-    "test": "vitest",
-    "test:run": "vitest run",
-    "test:ui": "vitest --ui",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui",
     "clean": "rm -rf .next",
     "setup:python": "./scripts/setup-python.sh",
     "build:full": "npm run clean && npm run setup:python && npm install && npm run build && npm run dev",
@@ -128,7 +123,6 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@next/bundle-analyzer": "^15.5.6",
-    "@playwright/test": "^1.57.0",
     "@serwist/next": "^9.5.0",
     "@testing-library/jest-dom": "^6.9.0",
     "@testing-library/react": "^16.3.0",
@@ -137,7 +131,6 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@typescript-eslint/eslint-plugin": "^8.46.1",
-    "@vitest/ui": "^3.2.4",
     "autoprefixer": "^10.4.21",
     "baseline-browser-mapping": "^2.9.11",
     "concurrently": "^9.2.1",
@@ -146,7 +139,6 @@
     "eslint": "^9",
     "eslint-config-next": "15.4.6",
     "eslint-plugin-unused-imports": "^4.2.0",
-    "jsdom": "^27.0.0",
     "madge": "^8.0.0",
     "postcss": "^8.5.6",
     "source-map-explorer": "^2.5.3",
@@ -154,7 +146,6 @@
     "ts-prune": "^0.10.3",
     "ts-unused-exports": "^11.0.1",
     "typescript": "5.9.3",
-    "vitest": "^3.2.4",
     "webpack-bundle-analyzer": "^4.10.2"
   }
 }

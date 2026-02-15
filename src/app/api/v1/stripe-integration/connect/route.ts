@@ -37,10 +37,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate key format
-    if (!stripeSecretKey.startsWith('sk_test_') && !stripeSecretKey.startsWith('sk_live_')) {
+    // Validate key format (sk_ = standard secret, rk_ = restricted key)
+    const validPrefixes = ['sk_test_', 'sk_live_', 'rk_test_', 'rk_live_']
+    if (!validPrefixes.some((prefix) => stripeSecretKey.startsWith(prefix))) {
       return NextResponse.json(
-        { success: false, error: 'Invalid Stripe secret key format. Key must start with sk_test_ or sk_live_.' },
+        { success: false, error: 'Invalid Stripe key format. Key must start with sk_test_, sk_live_, rk_test_, or rk_live_.' },
         { status: 400 }
       )
     }

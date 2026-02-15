@@ -106,6 +106,10 @@ firebase-debug.log
 # Playwright MCP debugging screenshots
 .playwright-mcp/
 
+# UAT/test screenshots — never commit images to repo
+uat-*.png
+*.screenshot.png
+
 # PWA Service Worker (auto-generated during build)
 public/sw.js
 public/sw.js.map
