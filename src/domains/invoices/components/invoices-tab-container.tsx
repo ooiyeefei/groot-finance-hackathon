@@ -2,50 +2,76 @@
 
 import { lazy, Suspense, useState, useEffect } from 'react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { FileText, Send, Users, BarChart3, Package, Loader2 } from 'lucide-react'
+import {
+  BarChart3,
+  Send,
+  Users,
+  FileText,
+  Package,
+  Building,
+  TrendingUp,
+  Loader2,
+} from 'lucide-react'
 import DocumentsContainer from './documents-container'
 
+// AR sub-tab components (lazy-loaded)
+const ARDashboard = lazy(
+  () => import('@/domains/sales-invoices/components/ar-dashboard')
+)
 const SalesInvoiceList = lazy(
   () => import('@/domains/sales-invoices/components/sales-invoice-list')
 )
-
 const DebtorList = lazy(
   () => import('@/domains/sales-invoices/components/debtor-list')
 )
-
-const AgingReport = lazy(
-  () => import('@/domains/sales-invoices/components/aging-report')
-)
-
 const CatalogItemManager = lazy(
   () => import('@/domains/sales-invoices/components/catalog-item-manager')
 )
 
-const VALID_TABS = ['incoming', 'sales', 'debtors', 'aging', 'catalog'] as const
-type TabValue = (typeof VALID_TABS)[number]
+// AP sub-tab components (lazy-loaded)
+const APDashboard = lazy(
+  () => import('@/domains/payables/components/ap-dashboard')
+)
+const VendorManager = lazy(
+  () => import('@/domains/payables/components/vendor-manager')
+)
+const PriceIntelligence = lazy(
+  () => import('@/domains/payables/components/price-intelligence')
+)
 
-function getTabFromHash(): TabValue {
-  if (typeof window === 'undefined') return 'incoming'
+// --- Types ---
+type TopLevelTab = 'ar' | 'ap'
+type ARSubTab = 'dashboard' | 'sales' | 'debtors' | 'catalog'
+type APSubTab = 'dashboard' | 'incoming' | 'vendors' | 'prices'
+
+const AR_SUB_TABS: readonly ARSubTab[] = ['dashboard', 'sales', 'debtors', 'catalog']
+const AP_SUB_TABS: readonly APSubTab[] = ['dashboard', 'incoming', 'vendors', 'prices']
+
+// --- Hash routing ---
+function parseHash(): { topLevel: TopLevelTab; subTab: string } {
+  if (typeof window === 'undefined') return { topLevel: 'ar', subTab: 'dashboard' }
+
   const hash = window.location.hash.replace('#', '')
-  const mapping: Record<string, TabValue> = {
-    'incoming-invoices': 'incoming',
-    'sales-invoices': 'sales',
-    'debtors': 'debtors',
-    'aging-report': 'aging',
-    'catalog': 'catalog',
+  if (!hash) return { topLevel: 'ar', subTab: 'dashboard' }
+
+  const dashIndex = hash.indexOf('-')
+  if (dashIndex === -1) return { topLevel: 'ar', subTab: 'dashboard' }
+
+  const prefix = hash.substring(0, dashIndex)
+  const suffix = hash.substring(dashIndex + 1)
+
+  if (prefix === 'ar' && (AR_SUB_TABS as readonly string[]).includes(suffix)) {
+    return { topLevel: 'ar', subTab: suffix }
   }
-  return mapping[hash] || 'incoming'
+  if (prefix === 'ap' && (AP_SUB_TABS as readonly string[]).includes(suffix)) {
+    return { topLevel: 'ap', subTab: suffix }
+  }
+
+  return { topLevel: 'ar', subTab: 'dashboard' }
 }
 
-function getHashFromTab(tab: TabValue): string {
-  const mapping: Record<TabValue, string> = {
-    incoming: 'incoming-invoices',
-    sales: 'sales-invoices',
-    debtors: 'debtors',
-    aging: 'aging-report',
-    catalog: 'catalog',
-  }
-  return mapping[tab]
+function updateHash(topLevel: TopLevelTab, subTab: string) {
+  window.history.replaceState(null, '', `#${topLevel}-${subTab}`)
 }
 
 const TabLoading = () => (
@@ -54,91 +80,157 @@ const TabLoading = () => (
   </div>
 )
 
+const subTriggerClassName =
+  'flex items-center gap-2 px-4 py-2.5 rounded-md text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border whitespace-nowrap'
+
+const topTriggerClassName =
+  'flex items-center gap-2 px-6 py-3 rounded-md text-muted-foreground font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm whitespace-nowrap'
+
 export default function InvoicesTabContainer() {
-  const [activeTab, setActiveTab] = useState<TabValue>('incoming')
+  const [topLevel, setTopLevel] = useState<TopLevelTab>('ar')
+  const [arSubTab, setArSubTab] = useState<ARSubTab>('dashboard')
+  const [apSubTab, setApSubTab] = useState<APSubTab>('dashboard')
 
-  // Read hash on mount and on hash changes
+  // Sync from hash on mount and hash changes
   useEffect(() => {
-    setActiveTab(getTabFromHash())
+    const sync = () => {
+      const { topLevel: tl, subTab } = parseHash()
+      setTopLevel(tl)
+      if (tl === 'ar') setArSubTab(subTab as ARSubTab)
+      else setApSubTab(subTab as APSubTab)
+    }
 
-    const onHashChange = () => setActiveTab(getTabFromHash())
-    window.addEventListener('hashchange', onHashChange)
-    return () => window.removeEventListener('hashchange', onHashChange)
+    sync()
+    window.addEventListener('hashchange', sync)
+    return () => window.removeEventListener('hashchange', sync)
   }, [])
 
-  const handleTabChange = (value: string) => {
-    const tab = value as TabValue
-    setActiveTab(tab)
-    window.history.replaceState(null, '', `#${getHashFromTab(tab)}`)
+  const handleTopLevelChange = (value: string) => {
+    const tl = value as TopLevelTab
+    setTopLevel(tl)
+    const sub = tl === 'ar' ? arSubTab : apSubTab
+    updateHash(tl, sub)
+  }
+
+  const handleArSubTabChange = (value: string) => {
+    const sub = value as ARSubTab
+    setArSubTab(sub)
+    updateHash('ar', sub)
+  }
+
+  const handleApSubTabChange = (value: string) => {
+    const sub = value as APSubTab
+    setApSubTab(sub)
+    updateHash('ap', sub)
   }
 
   return (
-    <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-      <TabsList className="w-full justify-start border border-border bg-muted rounded-lg p-1 h-auto gap-1">
-        <TabsTrigger
-          value="incoming"
-          className="flex items-center gap-2 px-4 py-2.5 rounded-md text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border"
-        >
-          <FileText className="h-4 w-4" />
-          Incoming Invoices
-        </TabsTrigger>
-        <TabsTrigger
-          value="sales"
-          className="flex items-center gap-2 px-4 py-2.5 rounded-md text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border"
-        >
-          <Send className="h-4 w-4" />
-          Sales Invoices
-        </TabsTrigger>
-        <TabsTrigger
-          value="debtors"
-          className="flex items-center gap-2 px-4 py-2.5 rounded-md text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border"
-        >
-          <Users className="h-4 w-4" />
-          Debtors
-        </TabsTrigger>
-        <TabsTrigger
-          value="aging"
-          className="flex items-center gap-2 px-4 py-2.5 rounded-md text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border"
-        >
-          <BarChart3 className="h-4 w-4" />
-          Aging Report
-        </TabsTrigger>
-        <TabsTrigger
-          value="catalog"
-          className="flex items-center gap-2 px-4 py-2.5 rounded-md text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border"
-        >
-          <Package className="h-4 w-4" />
-          Catalog
-        </TabsTrigger>
-      </TabsList>
+    <div className="w-full space-y-4">
+      {/* Top-Level Tabs: AR / AP */}
+      <Tabs value={topLevel} onValueChange={handleTopLevelChange}>
+        <TabsList className="w-full justify-start border border-border bg-muted rounded-lg p-1 h-auto gap-1">
+          <TabsTrigger value="ar" className={topTriggerClassName}>
+            Account Receivables
+          </TabsTrigger>
+          <TabsTrigger value="ap" className={topTriggerClassName}>
+            Account Payables
+          </TabsTrigger>
+        </TabsList>
 
-      <TabsContent value="incoming" className="mt-4">
-        <DocumentsContainer />
-      </TabsContent>
+        {/* AR Sub-tabs */}
+        <TabsContent value="ar" className="mt-4">
+          <Tabs value={arSubTab} onValueChange={handleArSubTabChange}>
+            <TabsList className="w-full justify-start border border-border bg-muted rounded-lg p-1 h-auto gap-1 overflow-x-auto">
+              <TabsTrigger value="dashboard" className={subTriggerClassName}>
+                <BarChart3 className="h-4 w-4" />
+                Dashboard
+              </TabsTrigger>
+              <TabsTrigger value="sales" className={subTriggerClassName}>
+                <Send className="h-4 w-4" />
+                Sales Invoices
+              </TabsTrigger>
+              <TabsTrigger value="debtors" className={subTriggerClassName}>
+                <Users className="h-4 w-4" />
+                Debtors
+              </TabsTrigger>
+              <TabsTrigger value="catalog" className={subTriggerClassName}>
+                <Package className="h-4 w-4" />
+                Product Catalog
+              </TabsTrigger>
+            </TabsList>
 
-      <TabsContent value="sales" className="mt-4">
-        <Suspense fallback={<TabLoading />}>
-          <SalesInvoiceList />
-        </Suspense>
-      </TabsContent>
+            <TabsContent value="dashboard" className="mt-4">
+              <Suspense fallback={<TabLoading />}>
+                <ARDashboard />
+              </Suspense>
+            </TabsContent>
 
-      <TabsContent value="debtors" className="mt-4">
-        <Suspense fallback={<TabLoading />}>
-          <DebtorList />
-        </Suspense>
-      </TabsContent>
+            <TabsContent value="sales" className="mt-4">
+              <Suspense fallback={<TabLoading />}>
+                <SalesInvoiceList />
+              </Suspense>
+            </TabsContent>
 
-      <TabsContent value="aging" className="mt-4">
-        <Suspense fallback={<TabLoading />}>
-          <AgingReport />
-        </Suspense>
-      </TabsContent>
+            <TabsContent value="debtors" className="mt-4">
+              <Suspense fallback={<TabLoading />}>
+                <DebtorList />
+              </Suspense>
+            </TabsContent>
 
-      <TabsContent value="catalog" className="mt-4">
-        <Suspense fallback={<TabLoading />}>
-          <CatalogItemManager />
-        </Suspense>
-      </TabsContent>
-    </Tabs>
+            <TabsContent value="catalog" className="mt-4">
+              <Suspense fallback={<TabLoading />}>
+                <CatalogItemManager />
+              </Suspense>
+            </TabsContent>
+          </Tabs>
+        </TabsContent>
+
+        {/* AP Sub-tabs */}
+        <TabsContent value="ap" className="mt-4">
+          <Tabs value={apSubTab} onValueChange={handleApSubTabChange}>
+            <TabsList className="w-full justify-start border border-border bg-muted rounded-lg p-1 h-auto gap-1 overflow-x-auto">
+              <TabsTrigger value="dashboard" className={subTriggerClassName}>
+                <BarChart3 className="h-4 w-4" />
+                Dashboard
+              </TabsTrigger>
+              <TabsTrigger value="incoming" className={subTriggerClassName}>
+                <FileText className="h-4 w-4" />
+                Incoming Invoices
+              </TabsTrigger>
+              <TabsTrigger value="vendors" className={subTriggerClassName}>
+                <Building className="h-4 w-4" />
+                Vendors
+              </TabsTrigger>
+              <TabsTrigger value="prices" className={subTriggerClassName}>
+                <TrendingUp className="h-4 w-4" />
+                Price Intelligence
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="dashboard" className="mt-4">
+              <Suspense fallback={<TabLoading />}>
+                <APDashboard />
+              </Suspense>
+            </TabsContent>
+
+            <TabsContent value="incoming" className="mt-4">
+              <DocumentsContainer />
+            </TabsContent>
+
+            <TabsContent value="vendors" className="mt-4">
+              <Suspense fallback={<TabLoading />}>
+                <VendorManager />
+              </Suspense>
+            </TabsContent>
+
+            <TabsContent value="prices" className="mt-4">
+              <Suspense fallback={<TabLoading />}>
+                <PriceIntelligence />
+              </Suspense>
+            </TabsContent>
+          </Tabs>
+        </TabsContent>
+      </Tabs>
+    </div>
   )
 }
