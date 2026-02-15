@@ -231,7 +231,9 @@ export function useMessages(
 
   return {
     messages,
-    isLoading: result === undefined,
+    // When conversationId is undefined the query is skipped (result === undefined),
+    // but we're not actually loading — there's simply nothing to load yet.
+    isLoading: conversationId ? result === undefined : false,
     error: null,
     hasMore: !result?.isDone,
     loadMore,

@@ -8,7 +8,7 @@
  * Shows progressive status updates, streaming text, and action cards.
  */
 
-import { useState, useRef, useEffect, useCallback, type FormEvent } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, type FormEvent } from 'react'
 import { X, Minus, ArrowUp, Square, Loader2 } from 'lucide-react'
 import { MessageRenderer } from './message-renderer'
 import { ConversationSwitcher } from './conversation-switcher'
@@ -42,6 +42,18 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
   const sessionStreamedIds = useRef(new Set<string>())
   const wasLoadingRef = useRef(false)
 
+  // Rotating fun status messages during cold-start / waiting
+  const [funMessageIndex, setFunMessageIndex] = useState(0)
+  const funMessages = useMemo(() => [
+    'Summoning your financial agent...',
+    'Crunching the numbers...',
+    'Consulting the ledger spirits...',
+    'Warming up the calculators...',
+    'Brewing some insights...',
+    'Balancing the books...',
+    'Almost there, counting beans...',
+  ], [])
+
   // Rich content panel state
   const [richContent, setRichContent] = useState<RichContentData | null>(null)
 
@@ -70,6 +82,16 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
     isLoadingMessages,
     sendMessage,
   } = useCopilotBridge({ businessId })
+
+  // Rotate fun messages every 4s while loading with no streaming text
+  useEffect(() => {
+    if (!isLoading || streamingText) return
+    setFunMessageIndex(0)
+    const interval = setInterval(() => {
+      setFunMessageIndex((i) => (i + 1) % funMessages.length)
+    }, 4000)
+    return () => clearInterval(interval)
+  }, [isLoading, streamingText, funMessages])
 
   // Detect streaming completion and record the message ID for this session.
   // When isLoading goes true→false, the last assistant message was just streamed.
@@ -220,14 +242,6 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
         {isLoading && (
           <div className="flex items-start gap-2">
             <div className="bg-card border border-border rounded-lg px-4 py-3 max-w-[85%] w-full">
-              {/* Status indicator */}
-              {streamingStatus && !streamingText && (
-                <div className="flex items-center gap-2 text-muted-foreground text-sm mb-2">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
-                  <span>{streamingStatus}</span>
-                </div>
-              )}
-
               {/* Progressive streaming text */}
               {streamingText ? (
                 <MessageRenderer
@@ -238,12 +252,14 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
                   isInline={true}
                   onViewDetails={handleViewDetails}
                 />
-              ) : !streamingStatus ? (
+              ) : (
                 <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Thinking...</span>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
+                  <span className="transition-opacity duration-300">
+                    {streamingStatus || funMessages[funMessageIndex]}
+                  </span>
                 </div>
-              ) : null}
+              )}
             </div>
           </div>
         )}
