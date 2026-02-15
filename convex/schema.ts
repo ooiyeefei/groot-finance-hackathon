@@ -134,7 +134,6 @@ export default defineSchema({
       defaultNotes: v.optional(v.string()),
       defaultSignatureName: v.optional(v.string()),
       selectedTemplate: v.optional(v.string()),
-      defaultNotes: v.optional(v.string()),
       customNoteTemplates: v.optional(v.array(v.object({ id: v.string(), label: v.string(), text: v.string() }))),
       customPaymentTemplates: v.optional(v.array(v.object({ id: v.string(), label: v.string(), text: v.string() }))),
       // 012-stripe-invoice-ux: Accepted payment methods for invoice display
@@ -624,10 +623,6 @@ export default defineSchema({
 
     // Business-Specific Codes
     supplierCode: v.optional(v.string()),  // Business's internal vendor/supplier code
-    contactPerson: v.optional(v.string()),
-    website: v.optional(v.string()),
-    notes: v.optional(v.string()),
-    paymentTerms: v.optional(v.string()),
 
     // Classification & Status
     category: v.optional(v.string()),
@@ -1360,10 +1355,6 @@ export default defineSchema({
     taxRate: v.optional(v.number()),
     category: v.optional(v.string()),
     status: catalogItemStatusValidator,
-    source: v.optional(v.string()),
-    stripeProductId: v.optional(v.string()),
-    stripePriceId: v.optional(v.string()),
-    lastSyncedAt: v.optional(v.number()),
 
     // Stripe sync fields (014-stripe-catalog-sync)
     source: v.optional(v.string()), // "manual" | "stripe" — undefined treated as "manual"
