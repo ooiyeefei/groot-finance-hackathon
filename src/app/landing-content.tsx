@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import Image from 'next/image';
-import { FileText, Globe, AlertTriangle, Receipt, MessageCircle, BarChart3, Sparkles, Check } from 'lucide-react';
+import { Bot, Radar, FileText, ScanLine, Printer, Building2, Sparkles, Check } from 'lucide-react';
 
 // Finance icon SVG as base64 (provided)
 const FINANCE_ICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDQ4IDQ4Ij48ZyBmaWxsPSJub25lIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBzdHJva2Utd2lkdGg9IjQiPjxwYXRoIGZpbGw9IiMyZjg4ZmYiIHN0cm9rZT0ibm9uZSIgZD0iTTI0IDQ0QzM1LjA0NTcgNDQgNDQgMzUuMDQ1NyA0NCAyNEM0NCAxMi45NTQzIDM1LjA0NTcgNCAyNCA0QzEyLjk1NDMgNCA0IDEyLjk1NDMgNCAyNEM0IDM1LjA0NTcgMTIuOTU0MyA0NCAyNCA0NFoiLz48cGF0aCBzdHJva2U9IiNmZmYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgZD0iTTE4IDIySDMwIi8+PHBhdGggc3Ryb2tlPSIjZmZmIiBzdHJva2UtbGluZWNhcD0icm91bmQiIGQ9Ik0xOCAyOEgzMCIvPjxwYXRoIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBkPSJNMjQuMDA4MyAyMlYzNCIvPjxwYXRoIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBkPSJNMzAgMTVMMjQgMjFMMTggMTUiLz48L2c+PC9zdmc+';
@@ -20,34 +20,34 @@ function getCurrencyInfo(country: string): { symbol: string; code: string } {
 
 const FEATURES = [
   {
+    icon: Bot,
+    title: 'AI Financial Co-Pilot',
+    description: 'Ask anything in plain English, Thai, or Bahasa. Your AI consultant draws live dashboards, posts invoices, flags compliance risks, and forecasts cash flow — all from a single conversation.',
+  },
+  {
+    icon: Radar,
+    title: 'Proactive Insights Engine',
+    description: 'Our intelligence engine runs behind the scenes — detecting spend anomalies, tracking vendor price surges, and surfacing cash flow risks as actionable alerts before they become problems.',
+  },
+  {
     icon: FileText,
-    title: 'AI Document Processing',
-    description: 'Upload invoices in any format. AI classifies and extracts data in under 5 seconds with 95%+ accuracy.',
+    title: 'Smart Invoicing & Payments',
+    description: 'Create, send, and track sales invoices with PDF generation. Manage vendor bills, debtor statements, and aging reports. Sync your Stripe product catalog or add custom items — one hub for all commercial documents.',
   },
   {
-    icon: Globe,
-    title: 'Multi-Currency Operations',
-    description: 'Track transactions across multiple currencies with real-time exchange rates and automatic home currency conversion.',
+    icon: ScanLine,
+    title: 'AI Expense Intelligence',
+    description: 'Snap receipts and let AI extract every field, auto-categorize by vendor, and flag duplicates with statistical matching. Multi-level approval workflows route claims to the right manager automatically.',
   },
   {
-    icon: AlertTriangle,
-    title: 'Proactive AI Insights',
-    description: 'Get alerts on anomalies, compliance risks, and cash flow concerns before they become costly.',
+    icon: Printer,
+    title: 'Reports & Integration Hub',
+    description: 'Generate print-ready PDF financial reports and build custom CSV export templates mapped to any third-party accounting system. Schedule recurring exports or push to Google Sheets.',
   },
   {
-    icon: Receipt,
-    title: 'Smart Expense Management',
-    description: 'Mobile receipt submission, AI extraction, manager routing, auto IFRS-compliant accounting entries.',
-  },
-  {
-    icon: MessageCircle,
-    title: 'Conversational Finance AI',
-    description: 'Ask in natural language\u2014English, Thai, or Indonesian. Get instant answers about your finances.',
-  },
-  {
-    icon: BarChart3,
-    title: 'Real-Time Analytics',
-    description: 'Monitor income, expenses, profit margins, aged receivables, and payables with trend analysis.',
+    icon: Building2,
+    title: 'Enterprise Command Center',
+    description: 'Multi-tenancy, role-based access, team management with leave tracking and shared calendar, and configurable approval workflows. Full audit trails and data isolation across every business unit.',
   },
 ];
 
@@ -410,13 +410,13 @@ export default function LandingContent({ country }: { country: string }) {
           </div>
 
           <h1 className="hero-fade hero-fade-2 text-4xl md:text-5xl font-semibold text-[#111111] mb-6 tracking-tight">
-            From chaos to <span className="text-[#4285F4]">clarity</span>
+            Your AI-powered <span className="text-[#4285F4]">finance team</span>
           </h1>
 
           <p className="hero-fade hero-fade-3 text-lg md:text-xl text-[#6B7280] font-medium mb-10 max-w-2xl mx-auto">
-            Stop drowning in receipts and spreadsheets.<br />
-            AI processes your documents, tracks every dollar,
-            and surfaces the insights that matter.
+            From invoicing and expense claims to proactive insights<br />
+            and team management — AI automates your financial
+            operations while you focus on growth.
           </p>
 
           <div className="hero-fade hero-fade-4 flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
@@ -455,9 +455,9 @@ export default function LandingContent({ country }: { country: string }) {
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-8">
             <h2 className="text-2xl md:text-3xl font-semibold text-[#111111] mb-2 tracking-tight">
-              Everything you need to <span className="text-[#4285F4]">thrive</span>
+              One platform, every <span className="text-[#4285F4]">advantage</span>
             </h2>
-            <p className="text-sm text-[#6B7280] font-medium">AI-powered tools to transform your financial operations</p>
+            <p className="text-sm text-[#6B7280] font-medium">AI-powered tools that think, act, and scale with your business</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
