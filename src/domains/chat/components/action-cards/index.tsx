@@ -16,6 +16,11 @@ import './anomaly-card'
 import './expense-approval-card'
 import './vendor-comparison-card'
 import './spending-chart'
+import './invoice-posting-card'
+import './cash-flow-dashboard'
+import './compliance-alert-card'
+import './budget-alert-card'
+import './spending-time-series'
 
 // --- Fallback Card ---
 

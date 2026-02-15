@@ -1540,3 +1540,83 @@ export const resetStuckLineItemsStatus = mutation({
     };
   },
 });
+
+// ============================================
+// AI TOOL QUERIES
+// ============================================
+
+/**
+ * Get completed invoices with extracted data for the AI agent.
+ * Returns invoices that have been OCR-processed and are ready to post.
+ * Auth-required: uses authenticated Convex client.
+ */
+export const getCompletedForAI = query({
+  args: {
+    businessId: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return { invoices: [] };
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return { invoices: [] };
+    }
+
+    // Cast string businessId to typed ID
+    const businessId = args.businessId as Id<"businesses">;
+
+    // Verify membership
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      return { invoices: [] };
+    }
+
+    // Fetch completed invoices for the business
+    const allInvoices = await ctx.db
+      .query("invoices")
+      .withIndex("by_businessId", (q) => q.eq("businessId", businessId))
+      .collect();
+
+    // Filter: completed status, has extractedData, not deleted
+    const completed = allInvoices
+      .filter(
+        (inv) =>
+          inv.status === "completed" &&
+          inv.extractedData &&
+          !inv.deletedAt
+      )
+      .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0))
+      .slice(0, args.limit ?? 20);
+
+    // Map to AI-friendly shape
+    return {
+      invoices: completed.map((inv) => {
+        const extracted = inv.extractedData as Record<string, unknown> | undefined;
+        return {
+          _id: inv._id,
+          fileName: inv.fileName,
+          status: inv.status,
+          confidenceScore: inv.confidenceScore ?? 0.5,
+          extractedData: extracted ?? {},
+          vendorName: (extracted?.vendorName as string) ?? (extracted?.vendor_name as string) ?? "Unknown",
+          amount: (extracted?.totalAmount as number) ?? (extracted?.total_amount as number) ?? 0,
+          currency: (extracted?.currency as string) ?? "SGD",
+          invoiceDate: (extracted?.invoiceDate as string) ?? (extracted?.invoice_date as string) ?? "",
+          invoiceNumber: (extracted?.invoiceNumber as string) ?? (extracted?.invoice_number as string),
+          lineItems: (extracted?.lineItems as unknown[]) ?? (extracted?.line_items as unknown[]) ?? [],
+          processedAt: inv.processedAt,
+        };
+      }),
+    };
+  },
+});

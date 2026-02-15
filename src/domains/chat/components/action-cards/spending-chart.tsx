@@ -7,7 +7,8 @@
  * CSS-based visualization that fits within the 400px chat widget.
  */
 
-import { BarChart3 } from 'lucide-react'
+import { BarChart3, Download } from 'lucide-react'
+import { exportToCSV } from '../../lib/csv-export'
 import { registerActionCard, type ActionCardProps } from './registry'
 
 interface ChartCategory {
@@ -57,12 +58,24 @@ function SpendingChart({ action }: ActionCardProps) {
       {/* Header */}
       <div className="px-3 py-2 bg-primary/5 border-b border-border flex items-center gap-2">
         <BarChart3 className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <span className="text-xs font-medium text-foreground">{data.title}</span>
           {data.period && (
             <span className="text-xs text-muted-foreground"> · {data.period}</span>
           )}
         </div>
+        <button
+          onClick={() => exportToCSV(
+            'spending-breakdown.csv',
+            ['Category', 'Amount', 'Percentage'],
+            categoriesWithPct.map((cat) => [cat.label, cat.value, cat.percentage ?? 0])
+          )}
+          className="p-1 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+          aria-label="Export CSV"
+          title="Export as CSV"
+        >
+          <Download className="w-3 h-3" />
+        </button>
       </div>
 
       {/* Bars */}

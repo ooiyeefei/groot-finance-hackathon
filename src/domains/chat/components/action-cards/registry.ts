@@ -13,6 +13,7 @@ export interface ActionCardProps {
   action: ChatAction
   isHistorical: boolean
   onActionComplete?: (result: { success: boolean; message?: string }) => void
+  onViewDetails?: (payload: { type: 'chart' | 'table' | 'dashboard'; title: string; data: unknown }) => void
 }
 
 /** Registry of action type → React component */

@@ -8,7 +8,8 @@
  */
 
 import { useRouter } from 'next/navigation'
-import { Building2, ExternalLink, Star } from 'lucide-react'
+import { Building2, ExternalLink, Star, Download } from 'lucide-react'
+import { exportToCSV } from '../../lib/csv-export'
 import { registerActionCard, type ActionCardProps } from './registry'
 
 interface VendorMetrics {
@@ -38,12 +39,31 @@ function VendorComparisonCard({ action, isHistorical }: ActionCardProps) {
       {/* Header */}
       <div className="px-3 py-2 bg-primary/5 border-b border-border flex items-center gap-2">
         <Building2 className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-        <span className="text-xs font-medium text-foreground">
+        <span className="text-xs font-medium text-foreground flex-1">
           Vendor Comparison
           {data.comparisonPeriod && (
             <span className="text-muted-foreground font-normal"> · {data.comparisonPeriod}</span>
           )}
         </span>
+        <button
+          onClick={() => exportToCSV(
+            'vendor-comparison.csv',
+            ['Vendor', 'Avg Price', 'On-Time %', 'Rating', 'Transactions', 'Total Spend'],
+            data.vendors.map((v) => [
+              v.name,
+              v.averagePrice ?? '',
+              v.onTimeRate ?? '',
+              v.rating ?? '',
+              v.transactionCount ?? '',
+              v.totalSpend ?? '',
+            ])
+          )}
+          className="p-1 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+          aria-label="Export CSV"
+          title="Export as CSV"
+        >
+          <Download className="w-3 h-3" />
+        </button>
       </div>
 
       {/* Vendor sections */}
