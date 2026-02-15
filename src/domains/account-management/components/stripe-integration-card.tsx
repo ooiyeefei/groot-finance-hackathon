@@ -9,7 +9,7 @@ import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import { useToast } from '@/components/ui/toast'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { useStripeConnection, useStripeConnect, useStripeDisconnect } from '@/domains/sales-invoices/hooks/use-stripe-integration'
-import { Loader2, Unplug, Zap } from 'lucide-react'
+import { ExternalLink, Info, Loader2, Unplug, Zap } from 'lucide-react'
 
 export default function StripeIntegrationCard() {
   const { businessId } = useActiveBusiness()
@@ -166,7 +166,7 @@ export default function StripeIntegrationCard() {
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="stripe-api-key">Stripe Secret Key</Label>
+                <Label htmlFor="stripe-api-key">Stripe API Key</Label>
                 <Input
                   id="stripe-api-key"
                   type="password"
@@ -179,9 +179,46 @@ export default function StripeIntegrationCard() {
                   className="font-mono"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Find your secret key in{' '}
-                  <span className="font-medium">Stripe Dashboard &gt; Developers &gt; API keys</span>
+                  Use a{' '}
+                  <a
+                    href="https://docs.stripe.com/keys#create-restricted-api-secret-key"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline inline-flex items-center gap-0.5"
+                  >
+                    restricted key
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  {' '}(recommended) or a standard secret key from{' '}
+                  <span className="font-medium">Stripe Dashboard &gt; Developers &gt; API keys</span>.
                 </p>
+              </div>
+
+              {/* Required permissions guidance */}
+              <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <div className="flex gap-2">
+                  <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+                  <div className="space-y-1.5">
+                    <p className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                      Required permissions for restricted keys
+                    </p>
+                    <ul className="text-xs text-muted-foreground space-y-0.5">
+                      <li><span className="font-medium text-foreground">Products</span> — Read</li>
+                      <li><span className="font-medium text-foreground">Prices</span> — Read</li>
+                      <li><span className="font-medium text-foreground">Connect</span> — Read (for account verification)</li>
+                      <li><span className="font-medium text-foreground">Webhook Endpoints</span> — Write (for real-time sync)</li>
+                    </ul>
+                    <a
+                      href="https://docs.stripe.com/api/accounts"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-primary hover:underline inline-flex items-center gap-0.5"
+                    >
+                      Stripe API reference
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                </div>
               </div>
 
               {error && (

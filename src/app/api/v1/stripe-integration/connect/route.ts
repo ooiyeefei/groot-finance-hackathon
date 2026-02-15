@@ -61,6 +61,20 @@ export async function POST(request: NextRequest) {
         'Stripe Account'
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to validate Stripe key'
+
+      // Detect restricted key permission errors and return actionable guidance
+      const isPermissionError = message.includes('does not have the required permissions') || message.includes('rak_')
+      if (isPermissionError) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Your restricted key is missing required permissions. Please enable: Products (Read), Prices (Read), and Connect (Read) in your Stripe Dashboard under Developers > API keys > Edit key.',
+            code: 'STRIPE_PERMISSION_ERROR',
+          },
+          { status: 403 }
+        )
+      }
+
       return NextResponse.json(
         { success: false, error: message },
         { status: 400 }
