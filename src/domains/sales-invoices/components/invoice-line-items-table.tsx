@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
-import { Plus, Trash2, Pencil, Search, X } from 'lucide-react'
+import { Plus, Trash2, Pencil, Search, X, PackagePlus } from 'lucide-react'
 import { useLocale } from 'next-intl'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -10,7 +10,9 @@ import { Label } from '@/components/ui/label'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { formatBusinessDate } from '@/lib/utils'
 import { ItemDetailForm } from './item-detail-form'
-import { useCatalogItems } from '../hooks/use-catalog-items'
+import { useCatalogItems, useCatalogItemMutations } from '../hooks/use-catalog-items'
+import { useActiveBusiness } from '@/contexts/business-context'
+import type { Id } from '../../../../convex/_generated/dataModel'
 import type { LineItem, TaxMode } from '../types'
 
 // ---------------------------------------------------------------------------
@@ -317,6 +319,11 @@ export default function InvoiceLineItemsTable({
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   // Snapshot of item before editing — used for cancel/restore
   const [editSnapshot, setEditSnapshot] = useState<LineItem | null>(null)
+  // Track "saving to catalog" state
+  const [savingToCatalog, setSavingToCatalog] = useState(false)
+
+  const { businessId } = useActiveBusiness()
+  const { createItem } = useCatalogItemMutations()
 
   // Fetch catalog items once — shared by all ItemSearchField instances
   const { items: rawCatalogItems } = useCatalogItems({ status: 'active', limit: 50 })
@@ -446,6 +453,30 @@ export default function InvoiceLineItemsTable({
       setEditSnapshot(null)
     }, 0)
   }, [onAddItem, lineItems.length])
+
+  const handleSaveToCatalog = useCallback(
+    async (index: number) => {
+      const item = lineItems[index]
+      if (!item.description.trim() || !businessId) return
+      setSavingToCatalog(true)
+      try {
+        const catalogItemId = await createItem({
+          businessId: businessId as Id<"businesses">,
+          name: item.description.trim(),
+          unitPrice: item.unitPrice || 0,
+          currency: (item.currency || currency).toUpperCase(),
+          unitMeasurement: item.unitMeasurement || undefined,
+          taxRate: item.taxRate,
+          sku: item.itemCode || undefined,
+        })
+        // Link the line item to the newly created catalog entry
+        onUpdateItem(index, { catalogItemId: catalogItemId as string })
+      } finally {
+        setSavingToCatalog(false)
+      }
+    },
+    [lineItems, businessId, createItem, currency, onUpdateItem],
+  )
 
   const handleRemoveItem = useCallback(
     (index: number) => {
@@ -676,6 +707,25 @@ export default function InvoiceLineItemsTable({
                 <Trash2 className="h-3.5 w-3.5 mr-1" />
                 Remove
               </Button>
+            )}
+            {!hasCatalogItem && item.description.trim() && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleSaveToCatalog(index)}
+                disabled={savingToCatalog}
+                className="text-xs text-muted-foreground hover:text-foreground"
+                title="Save this item to your product catalog for reuse"
+              >
+                <PackagePlus className="h-3.5 w-3.5 mr-1" />
+                {savingToCatalog ? 'Saving...' : 'Save to catalog'}
+              </Button>
+            )}
+            {hasCatalogItem && (
+              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <PackagePlus className="h-3 w-3" />
+                Linked to catalog
+              </span>
             )}
           </div>
           <div className="flex items-center gap-2">

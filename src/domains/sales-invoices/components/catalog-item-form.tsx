@@ -50,13 +50,26 @@ interface CatalogItemFormProps {
 // ---------------------------------------------------------------------------
 
 function getInitialFormData(initialData?: Partial<CatalogItem>): CatalogItemFormData {
+  // Map Stripe billingInterval → UoM when unitMeasurement is empty
+  const billingToUom: Record<string, string> = {
+    monthly: 'mo',
+    yearly: 'yr',
+    weekly: 'wk',
+    daily: 'day',
+  }
+  const uom =
+    initialData?.unitMeasurement ||
+    (initialData?.billingInterval && initialData.billingInterval !== 'one_time'
+      ? billingToUom[initialData.billingInterval] ?? ''
+      : '')
+
   return {
     name: initialData?.name ?? '',
     description: initialData?.description ?? '',
     sku: initialData?.sku ?? '',
     unitPrice: initialData?.unitPrice != null ? String(initialData.unitPrice) : '',
-    currency: initialData?.currency ?? 'SGD',
-    unitMeasurement: initialData?.unitMeasurement ?? '',
+    currency: (initialData?.currency ?? 'SGD').toUpperCase(),
+    unitMeasurement: uom,
     // Convert decimal (0.07) to percentage string (7)
     taxRate:
       initialData?.taxRate != null
