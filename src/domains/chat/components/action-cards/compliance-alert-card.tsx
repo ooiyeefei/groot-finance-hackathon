@@ -101,7 +101,7 @@ function ComplianceAlertCard({ action }: ActionCardProps) {
           <div className="flex items-center gap-1.5 flex-wrap">
             <ExternalLink className="w-3 h-3 text-muted-foreground" />
             <span className="text-xs text-muted-foreground">Sources:</span>
-            {data.citationIndices.map((citIdx) => (
+            {[...new Set(data.citationIndices)].map((citIdx) => (
               <span
                 key={citIdx}
                 className="citation-ref inline-flex items-center text-primary hover:text-primary/80 font-medium cursor-pointer transition-colors text-xs"

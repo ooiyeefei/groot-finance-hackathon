@@ -41,10 +41,8 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: Date
-  metadata?: {
-    citations?: Citation[]
-    toolCalls?: ToolCall[]
-  }
+  /** Raw metadata from Convex — may contain actions, citations, toolCalls, etc. */
+  metadata?: Record<string, unknown>
 }
 
 export interface Citation {
@@ -217,10 +215,11 @@ export function useMessages(
       role: msg.role as 'user' | 'assistant' | 'system',
       content: msg.content,
       timestamp: new Date(msg._creationTime),
-      metadata: {
-        citations: msg.citations,
-        toolCalls: msg.toolCalls,
-      },
+      // Use raw metadata from Convex (contains actions, citations from copilot bridge).
+      // Fall back to legacy typed fields for backward compatibility with older messages.
+      metadata: msg.metadata ?? (msg.citations || msg.toolCalls
+        ? { citations: msg.citations, toolCalls: msg.toolCalls }
+        : undefined),
     }))
   }, [result])
 

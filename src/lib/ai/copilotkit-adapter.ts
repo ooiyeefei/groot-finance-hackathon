@@ -249,11 +249,20 @@ export async function* streamLangGraphAgent(
     const autoActions = llmActions.length === 0
       ? autoGenerateActionsFromToolResults(finalMessages)
       : []
-    const actions = [...llmActions, ...autoActions]
 
-    if (autoActions.length > 0) {
-      console.log(`[Stream Adapter] Auto-generated ${autoActions.length} action card(s) from tool results`)
-    }
+    // Always strip residual ```actions blocks from text (safety net for edge cases
+    // where the regex extraction partially matched or the LLM used unusual formatting).
+    // Handles both raw (```) and escaped (\`\`\`) backtick patterns.
+    finalContent = finalContent.replace(/(?:\\?`){3,}actions[\s\S]*?(?:\\?`){3,}/g, '').trim()
+
+    // Deduplicate action cards by type (keep first of each type)
+    const allActions = [...llmActions, ...autoActions]
+    const seenTypes = new Set<string>()
+    const actions = allActions.filter((a) => {
+      if (seenTypes.has(a.type)) return false
+      seenTypes.add(a.type)
+      return true
+    })
 
     // Emit text as word-level chunks for progressive rendering
     yield { event: 'status', data: { phase: 'Preparing response...' } }
@@ -297,7 +306,7 @@ function extractActionsFromContent(content: string): {
   actions: Array<{ type: string; id?: string; data: Record<string, unknown> }>
 } {
   const actions: Array<{ type: string; id?: string; data: Record<string, unknown> }> = []
-  const actionBlockRegex = /```actions\s*\n([\s\S]*?)```/g
+  const actionBlockRegex = /```actions\s*([\s\S]*?)```/g
 
   const textContent = content.replace(actionBlockRegex, (_match, jsonBlock: string) => {
     try {

@@ -63,12 +63,18 @@ export function MessageRenderer({
     setActiveCitation(null)
   }, [])
 
-  // Process content to replace [^N] markers with clickable elements
+  // Process content: strip residual ```actions blocks and replace citation markers
   const processedContent = useMemo(() => {
-    if (!citations.length) return content
+    // Strip ```actions JSON blocks — handles both raw backticks (```) and
+    // escaped backticks (\`\`\`) that some LLM responses persist to Convex
+    let processed = content
+      .replace(/(?:\\?`){3,}actions[\s\S]*?(?:\\?`){3,}/g, '')
+      .trim()
+
+    if (!citations.length) return processed
 
     // Replace [^N] markers with HTML superscript elements
-    return content.replace(
+    return processed.replace(
       /\[\^(\d+)\]/g,
       (_match, num) =>
         `<sup class="citation-marker" data-citation-index="${num}">[${num}]</sup>`

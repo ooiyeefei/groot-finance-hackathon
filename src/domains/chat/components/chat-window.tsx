@@ -9,7 +9,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback, type FormEvent } from 'react'
-import { X, Minus, Send, Square, MessageSquarePlus, Loader2 } from 'lucide-react'
+import { X, Minus, ArrowUp, Square, Loader2 } from 'lucide-react'
 import { MessageRenderer } from './message-renderer'
 import { ConversationSwitcher } from './conversation-switcher'
 import { RichContentPanel, type RichContentData } from './rich-content-panel'
@@ -178,7 +178,7 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
             <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
           </div>
         ) : displayMessages.length === 0 && !isLoading ? (
-          <EmptyState />
+          <EmptyState onSuggestionClick={(text) => { setUserScrolledUp(false); sendMessage(text) }} />
         ) : (
           displayMessages.map((msg, index) => (
             <MessageRenderer
@@ -244,7 +244,7 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask about expenses, compliance, vendors..."
-            className="flex-1 resize-none bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring min-h-[40px] max-h-[120px]"
+            className="flex-1 resize-none bg-input border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring min-h-[44px] max-h-[120px]"
             rows={1}
             disabled={isLoading}
           />
@@ -252,7 +252,7 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
             <button
               type="button"
               onClick={stopGeneration}
-              className="p-2 bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-lg transition-colors flex-shrink-0"
+              className="p-2 bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-full transition-colors flex-shrink-0"
               aria-label="Stop generation"
             >
               <Square className="w-4 h-4" />
@@ -261,32 +261,59 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
             <button
               type="submit"
               disabled={!input.trim()}
-              className="p-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+              className="p-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
               aria-label="Send message"
             >
-              <Send className="w-4 h-4" />
+              <ArrowUp className="w-4 h-4" />
             </button>
           )}
         </form>
+        <p className="text-[11px] text-muted-foreground text-center mt-2">
+          AI may make mistakes. Verify important information.
+        </p>
       </div>
     </div>
     </>
   )
 }
 
+// Suggestion prompts shown in empty state
+const SUGGESTIONS = [
+  'Analyze my cash flow runway',
+  'Show my recent invoices',
+  'GST requirements for Singapore',
+  'Find unusual spending patterns',
+  'Compare my vendor costs',
+  'Summarize my expenses this month',
+]
+
 // Empty state shown when no messages exist
-function EmptyState() {
+function EmptyState({ onSuggestionClick }: { onSuggestionClick: (text: string) => void }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-        <MessageSquarePlus className="w-6 h-6 text-primary" />
+    <div className="flex flex-col justify-between h-full py-6 px-1">
+      {/* Welcome text */}
+      <div>
+        <h3 className="text-base font-semibold text-foreground mb-1">
+          What do you need help with?
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Select a topic or type your question below.
+        </p>
       </div>
-      <h4 className="text-sm font-medium text-foreground mb-1">
-        FinanSEAL Assistant
-      </h4>
-      <p className="text-xs text-muted-foreground max-w-[240px]">
-        Ask about expenses, vendor analytics, compliance regulations, or team spending
-      </p>
+
+      {/* Suggestion pills — right-aligned */}
+      <div className="flex flex-col items-end gap-2">
+        {SUGGESTIONS.map((text) => (
+          <button
+            key={text}
+            onClick={() => onSuggestionClick(text)}
+            className="text-sm px-4 py-2 rounded-full border border-primary/30 text-foreground
+              hover:bg-primary/10 transition-colors text-right"
+          >
+            {text}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

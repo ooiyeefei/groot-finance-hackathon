@@ -19,7 +19,7 @@ import httpx
 # Load environment variables FIRST
 try:
     from dotenv import load_dotenv
-    project_root = Path(__file__).resolve().parent.parent.parent.parent
+    project_root = Path(__file__).resolve().parent.parent.parent
     env_path = project_root / '.env.local'
     
     if env_path.exists():
@@ -53,19 +53,20 @@ def string_to_uuid(text: str) -> str:
 class RegulatoryKnowledgeIngestion:
     """FIXED regulatory knowledge base ingestion with controlled concurrency"""
     
-    def __init__(self):
-        # FIXED Configuration: Controlled concurrency
+    def __init__(self, recreate_collection: bool = False):
+        # Configuration
         self.collection_name = "regulatory_kb"
-        self.vector_size = 2560
+        self.vector_size = 3072  # Gemini gemini-embedding-001 default dimension
         self.batch_size = 16  # Efficient batch size for good performance
         self.max_concurrent_requests = 4  # Optimal concurrent requests for throughput
         self.retry_attempts = 3
-        
+        self.recreate_collection = recreate_collection
+
         # Load environment configuration
         self.qdrant_url = os.getenv('QDRANT_URL')
         self.qdrant_api_key = os.getenv('QDRANT_API_KEY')
-        self.embedding_endpoint = os.getenv('EMBEDDING_ENDPOINT_URL', 'https://litellm.eks.kopi.io/v1')
-        self.embedding_model = os.getenv('EMBEDDING_MODEL_ID', 'openai/qwen3-embedding-4b-bf16-cpu')
+        self.embedding_endpoint = os.getenv('EMBEDDING_ENDPOINT_URL', 'https://generativelanguage.googleapis.com/v1beta/openai')
+        self.embedding_model = os.getenv('EMBEDDING_MODEL_ID', 'gemini-embedding-001')
         self.embedding_api_key = os.getenv('EMBEDDING_API_KEY')
         
         # Validate environment
@@ -117,10 +118,16 @@ class RegulatoryKnowledgeIngestion:
         return chunks
     
     async def ensure_collection_exists(self):
-        """Create regulatory_kb collection if it doesn't exist"""
+        """Create regulatory_kb collection if it doesn't exist, or recreate if requested"""
         try:
-            self.qdrant_client.get_collection(self.collection_name)
-            logging.info(f"📦 Collection '{self.collection_name}' already exists")
+            collection_info = self.qdrant_client.get_collection(self.collection_name)
+            existing_size = collection_info.config.params.vectors.size
+            if self.recreate_collection or existing_size != self.vector_size:
+                reason = "explicitly requested" if self.recreate_collection else f"vector size mismatch ({existing_size} != {self.vector_size})"
+                logging.info(f"🔄 Deleting collection '{self.collection_name}' ({reason})")
+                self.qdrant_client.delete_collection(self.collection_name)
+                raise Exception("Recreating collection")
+            logging.info(f"📦 Collection '{self.collection_name}' already exists ({existing_size}D vectors)")
         except Exception:
             logging.info(f"📦 Creating collection '{self.collection_name}' with {self.vector_size}D vectors")
             self.qdrant_client.create_collection(
@@ -315,9 +322,10 @@ class RegulatoryKnowledgeIngestion:
             await self.embedding_client.aclose()
 
 async def main():
-    """Main entry point for FIXED regulatory KB ingestion"""
+    """Main entry point for regulatory KB ingestion"""
+    recreate = '--recreate-collection' in sys.argv
     try:
-        ingestion = RegulatoryKnowledgeIngestion()
+        ingestion = RegulatoryKnowledgeIngestion(recreate_collection=recreate)
         result = await ingestion.run_complete_ingestion()
         
         # Performance metrics
