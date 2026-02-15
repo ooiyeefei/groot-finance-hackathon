@@ -74,6 +74,10 @@ export function useCopilotBridge(
   options: UseCopilotBridgeOptions = {}
 ): UseCopilotBridgeReturn {
   const { businessId, language = 'en' } = options
+  // Capture businessId in a ref so the sendMessage callback always uses the latest value
+  // without triggering re-creation of the callback on every business switch.
+  const businessIdRef = useRef(businessId)
+  businessIdRef.current = businessId
   const { user } = useUser()
 
   // Active conversation tracking
@@ -216,6 +220,7 @@ export function useCopilotBridge(
             conversationId,
             conversationHistory: history,
             language,
+            businessId: businessIdRef.current,
           }),
           signal: controller.signal,
         })
