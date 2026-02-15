@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
-import { ArrowLeft, Download, Loader2, BarChart3 } from 'lucide-react'
+import { Download, Loader2, BarChart3 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,6 +13,7 @@ import { exportAgingReportCsv, getTodayISO } from '../lib/aging-calculations'
 interface AgingDebtor {
   customerId?: string
   customerName: string
+  currency: string
   current: number
   days1to30: number
   days31to60: number
@@ -23,9 +23,6 @@ interface AgingDebtor {
 }
 
 export default function AgingReport() {
-  const router = useRouter()
-  const params = useParams()
-  const locale = params?.locale as string ?? 'en'
   const [asOfDate, setAsOfDate] = useState(getTodayISO())
   const { report, isLoading } = useAgingReport(asOfDate)
 
@@ -68,17 +65,7 @@ export default function AgingReport() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => router.push(`/${locale}/invoices`)}
-          >
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Back
-          </Button>
-          <h2 className="text-xl font-semibold text-foreground">AR Aging Report</h2>
-        </div>
+        <h2 className="text-xl font-semibold text-foreground">AR Aging Report</h2>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <Label className="text-sm text-foreground whitespace-nowrap">As of</Label>
@@ -165,26 +152,31 @@ export default function AgingReport() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {report.debtors.map((debtor: AgingDebtor) => (
-                    <tr key={debtor.customerId}>
-                      <td className="py-2 font-medium text-foreground">{debtor.customerName}</td>
-                      <td className="py-2 text-right text-foreground">
-                        {debtor.current > 0 ? formatCurrency(debtor.current, currency) : '-'}
+                  {report.debtors.map((debtor: AgingDebtor, index: number) => (
+                    <tr key={`${debtor.customerId ?? index}-${debtor.currency}`}>
+                      <td className="py-2 font-medium text-foreground">
+                        {debtor.customerName}
+                        {debtor.currency !== currency && (
+                          <span className="ml-1 text-xs text-muted-foreground">({debtor.currency})</span>
+                        )}
                       </td>
                       <td className="py-2 text-right text-foreground">
-                        {debtor.days1to30 > 0 ? formatCurrency(debtor.days1to30, currency) : '-'}
+                        {debtor.current > 0 ? formatCurrency(debtor.current, debtor.currency) : '-'}
                       </td>
                       <td className="py-2 text-right text-foreground">
-                        {debtor.days31to60 > 0 ? formatCurrency(debtor.days31to60, currency) : '-'}
+                        {debtor.days1to30 > 0 ? formatCurrency(debtor.days1to30, debtor.currency) : '-'}
                       </td>
                       <td className="py-2 text-right text-foreground">
-                        {debtor.days61to90 > 0 ? formatCurrency(debtor.days61to90, currency) : '-'}
+                        {debtor.days31to60 > 0 ? formatCurrency(debtor.days31to60, debtor.currency) : '-'}
                       </td>
                       <td className="py-2 text-right text-foreground">
-                        {debtor.days90plus > 0 ? formatCurrency(debtor.days90plus, currency) : '-'}
+                        {debtor.days61to90 > 0 ? formatCurrency(debtor.days61to90, debtor.currency) : '-'}
+                      </td>
+                      <td className="py-2 text-right text-foreground">
+                        {debtor.days90plus > 0 ? formatCurrency(debtor.days90plus, debtor.currency) : '-'}
                       </td>
                       <td className="py-2 text-right font-semibold text-foreground">
-                        {formatCurrency(debtor.total, currency)}
+                        {formatCurrency(debtor.total, debtor.currency)}
                       </td>
                     </tr>
                   ))}

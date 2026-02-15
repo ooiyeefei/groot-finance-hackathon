@@ -17,6 +17,8 @@ interface CustomerSelectorProps {
   value: CustomerSnapshot
   onChange: (snapshot: CustomerSnapshot) => void
   onCustomerSelect?: (customer: Customer) => void
+  onCustomerClear?: () => void
+  initialCustomerId?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -27,6 +29,8 @@ export default function CustomerSelector({
   value,
   onChange,
   onCustomerSelect,
+  onCustomerClear,
+  initialCustomerId,
 }: CustomerSelectorProps) {
   const { businessId } = useActiveBusiness()
   const { createCustomer, updateCustomer } = useCustomerMutations()
@@ -38,10 +42,12 @@ export default function CustomerSelector({
   const [searchQuery, setSearchQuery] = useState('')
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [isCreatingNew, setIsCreatingNew] = useState(false)
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(initialCustomerId ?? null)
   const [isSavingNew, setIsSavingNew] = useState(false)
   const [isSavingUpdate, setIsSavingUpdate] = useState(false)
-  const [originalSnapshot, setOriginalSnapshot] = useState<CustomerSnapshot | null>(null)
+  const [originalSnapshot, setOriginalSnapshot] = useState<CustomerSnapshot | null>(
+    initialCustomerId ? value : null
+  )
 
   const dropdownRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -105,7 +111,8 @@ export default function CustomerSelector({
     setOriginalSnapshot(null)
     setSearchQuery('')
     setIsCreatingNew(false)
-  }, [onChange])
+    onCustomerClear?.()
+  }, [onChange, onCustomerClear])
 
   const handleStartCreateNew = useCallback(() => {
     setIsCreatingNew(true)
@@ -116,7 +123,8 @@ export default function CustomerSelector({
       email: '',
     })
     setSearchQuery('')
-  }, [searchQuery, onChange])
+    onCustomerClear?.()
+  }, [searchQuery, onChange, onCustomerClear])
 
   const handleSaveNewCustomer = useCallback(async () => {
     if (!businessId || !value.businessName || !value.email) return

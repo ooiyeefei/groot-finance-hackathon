@@ -908,12 +908,13 @@ export const getAgingReport = query({
         ["sent", "partially_paid", "overdue"].includes(inv.status)
     );
 
-    // Group by customer
+    // Group by customer + currency (prevents mixing different currencies under same customer)
     const customerMap = new Map<
       string,
       {
         customerId?: Id<"customers">;
         customerName: string;
+        currency: string;
         current: number;
         days1to30: number;
         days31to60: number;
@@ -925,11 +926,13 @@ export const getAgingReport = query({
 
     for (const inv of outstandingInvoices) {
       // Use customerId if available, fall back to snapshot email for grouping
-      const key = inv.customerId ?? `snapshot_${inv.customerSnapshot.email}`;
+      const customerKey = inv.customerId ?? `snapshot_${inv.customerSnapshot.email}`;
+      const key = `${customerKey}_${inv.currency}`;
       if (!customerMap.has(key)) {
         customerMap.set(key, {
           customerId: inv.customerId ?? undefined,
           customerName: inv.customerSnapshot.businessName,
+          currency: inv.currency,
           current: 0,
           days1to30: 0,
           days31to60: 0,

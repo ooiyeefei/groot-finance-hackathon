@@ -6,7 +6,7 @@ import { useLocale } from 'next-intl'
 import { useToast } from '@/components/ui/toast'
 import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
 import { useSalesInvoiceForm } from '../hooks/use-sales-invoice-form'
-import { useSalesInvoiceMutations, useNextInvoiceNumber, useInvoiceDefaults, useInvoiceDefaultsMutation } from '../hooks/use-sales-invoices'
+import { useSalesInvoiceMutations, useNextInvoiceNumber, useSalesInvoice, useInvoiceDefaults, useInvoiceDefaultsMutation } from '../hooks/use-sales-invoices'
 import { useInvoicePdf, type PdfRenderData } from '../hooks/use-invoice-pdf'
 import { InvoiceEditorHeader } from './invoice-editor-header'
 import { InvoiceFormPanel } from './invoice-form-panel'
@@ -107,6 +107,10 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
     onAutoSave: handleAutoSave,
   })
 
+  // Subscribe to draft invoice for accurate invoice number display
+  const { invoice: draftInvoice } = useSalesInvoice(invoiceId ?? form.draftId ?? undefined)
+  const displayInvoiceNumber = draftInvoice?.invoiceNumber ?? nextInvoiceNumber ?? 'INV-XXXX-XXX'
+
   // UI state
   const [isPreviewVisible, setIsPreviewVisible] = useState(true)
   const [isReviewMode, setIsReviewMode] = useState(false)
@@ -122,7 +126,7 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
 
   // Build preview data
   const previewInvoice = {
-    invoiceNumber: nextInvoiceNumber ?? 'INV-XXXX-XXX',
+    invoiceNumber: displayInvoiceNumber,
     invoiceDate: form.invoiceDate,
     dueDate: form.dueDate,
     customerSnapshot: form.customerSnapshot,
@@ -187,7 +191,7 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
       }
 
       // Generate PDF blob for email attachment + Convex storage
-      const invoiceNum = nextInvoiceNumber ?? 'INV-XXXX-XXX'
+      const invoiceNum = displayInvoiceNumber
       let pdfPayload: Record<string, unknown> = {}
       try {
         const pdfResult = await generatePdfBlob(invoiceNum, buildPdfData())
@@ -289,7 +293,7 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
       isSendingRef.current = false
       setIsSending(false)
     }
-  }, [businessId, form, invoiceId, nextInvoiceNumber, createInvoice, sendInvoice, generatePdfBlob, buildPdfData, generateUploadUrl, storePdfStorageId, businessProfile, business, router, locale, addToast])
+  }, [businessId, form, invoiceId, displayInvoiceNumber, createInvoice, sendInvoice, generatePdfBlob, buildPdfData, generateUploadUrl, storePdfStorageId, businessProfile, business, router, locale, addToast])
 
   const handleDraftCreated = useCallback((newInvoiceId: string) => {
     // Navigate to edit URL if in create mode and draft was auto-saved

@@ -68,6 +68,10 @@ export function InvoiceFormPanel({
     form.setCustomerId(customer._id)
   }
 
+  const handleCustomerClear = () => {
+    form.setCustomerId(undefined)
+  }
+
   return (
     <div className="p-6 space-y-6">
       {/* Section 1: Customer */}
@@ -77,6 +81,8 @@ export function InvoiceFormPanel({
           value={form.customerSnapshot}
           onChange={form.setCustomerSnapshot}
           onCustomerSelect={handleCustomerSelect}
+          onCustomerClear={handleCustomerClear}
+          initialCustomerId={form.customerId}
         />
       </section>
 
