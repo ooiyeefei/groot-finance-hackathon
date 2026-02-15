@@ -64,11 +64,33 @@ export const list = query({
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
 
-    // Apply business filter if provided
+    // Apply business filter if provided — strict match only
     if (resolvedBusinessId) {
       conversations = conversations.filter(
         (conv) => conv.businessId === resolvedBusinessId
       );
+    } else if (args.businessId) {
+      // businessId was provided but didn't resolve (deleted business) — return nothing
+      return { conversations: [], nextCursor: null, totalCount: 0 };
+    } else {
+      // No businessId provided — filter out conversations whose business no longer exists
+      // to prevent orphaned data from deleted businesses from leaking
+      const businessCache = new Map<string, boolean>();
+      const validConversations = [];
+      for (const conv of conversations) {
+        if (!conv.businessId) {
+          validConversations.push(conv);
+          continue;
+        }
+        if (!businessCache.has(conv.businessId)) {
+          const exists = await ctx.db.get(conv.businessId);
+          businessCache.set(conv.businessId, !!exists);
+        }
+        if (businessCache.get(conv.businessId)) {
+          validConversations.push(conv);
+        }
+      }
+      conversations = validConversations;
     }
 
     // Apply active filter
