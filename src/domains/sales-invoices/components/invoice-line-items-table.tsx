@@ -629,6 +629,32 @@ export default function InvoiceLineItemsTable({
             </div>
           </div>
 
+          {/* Save to catalog banner — shown for one-time items with a name */}
+          {!hasCatalogItem && item.description.trim() && (
+            <button
+              type="button"
+              onClick={() => handleSaveToCatalog(index)}
+              disabled={savingToCatalog}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-md border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors text-left"
+            >
+              <PackagePlus className="h-4 w-4 text-primary shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-primary">
+                  {savingToCatalog ? 'Saving to catalog...' : 'Save to product catalog'}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Add &ldquo;{item.description.trim()}&rdquo; as a reusable catalog item
+                </p>
+              </div>
+            </button>
+          )}
+          {hasCatalogItem && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-green-500/5 border border-green-500/20">
+              <PackagePlus className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+              <span className="text-xs font-medium text-green-600 dark:text-green-400">Linked to product catalog</span>
+            </div>
+          )}
+
           {/* Row 2: Unit Price + UoM + Subtotal */}
           <div className="grid grid-cols-[1fr_80px_120px] gap-3">
             <div>
@@ -707,25 +733,6 @@ export default function InvoiceLineItemsTable({
                 <Trash2 className="h-3.5 w-3.5 mr-1" />
                 Remove
               </Button>
-            )}
-            {!hasCatalogItem && item.description.trim() && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleSaveToCatalog(index)}
-                disabled={savingToCatalog}
-                className="text-xs text-muted-foreground hover:text-foreground"
-                title="Save this item to your product catalog for reuse"
-              >
-                <PackagePlus className="h-3.5 w-3.5 mr-1" />
-                {savingToCatalog ? 'Saving...' : 'Save to catalog'}
-              </Button>
-            )}
-            {hasCatalogItem && (
-              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                <PackagePlus className="h-3 w-3" />
-                Linked to catalog
-              </span>
             )}
           </div>
           <div className="flex items-center gap-2">
