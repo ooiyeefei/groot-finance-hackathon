@@ -37,6 +37,7 @@ interface CashFlowAnalysis {
   totalIncome: number;
   totalExpenses: number;
   expenseToIncomeRatio: number;
+  currency: string;
   alerts: Array<{
     type: "low_runway" | "expense_exceeding_income";
     severity: "critical" | "high" | "medium";
@@ -305,6 +306,7 @@ export const analyzeCashFlow = query({
       totalIncome: parseFloat(totalIncome.toFixed(2)),
       totalExpenses: parseFloat(totalExpenses.toFixed(2)),
       expenseToIncomeRatio: parseFloat(expenseToIncomeRatio.toFixed(2)),
+      currency: business.homeCurrency || "MYR",
       alerts,
       periodDays: horizonDays,
     };
@@ -791,13 +793,13 @@ export const getEmployeeExpensesForManager = query({
     // Resolve business
     const business = await resolveById(ctx.db, "businesses", args.businessId);
     if (!business) {
-      return { authorized: false, error: "Business not found", entries: [], totalCount: 0, totalAmount: 0, currency: "SGD", employeeName: "" };
+      return { authorized: false, error: "Business not found", entries: [], totalCount: 0, totalAmount: 0, currency: "MYR", employeeName: "" };
     }
 
     // Resolve requesting user
     const requester = await resolveById(ctx.db, "users", args.requestingUserId);
     if (!requester) {
-      return { authorized: false, error: "Requesting user not found", entries: [], totalCount: 0, totalAmount: 0, currency: "SGD", employeeName: "" };
+      return { authorized: false, error: "Requesting user not found", entries: [], totalCount: 0, totalAmount: 0, currency: "MYR", employeeName: "" };
     }
 
     // Get requester's membership and role
@@ -809,7 +811,7 @@ export const getEmployeeExpensesForManager = query({
       .first();
 
     if (!requesterMembership || requesterMembership.status !== "active") {
-      return { authorized: false, error: "Not a member of this business", entries: [], totalCount: 0, totalAmount: 0, currency: "SGD", employeeName: "" };
+      return { authorized: false, error: "Not a member of this business", entries: [], totalCount: 0, totalAmount: 0, currency: "MYR", employeeName: "" };
     }
 
     const role = requesterMembership.role;
@@ -817,12 +819,12 @@ export const getEmployeeExpensesForManager = query({
     // Resolve target employee
     const targetEmployee = await resolveById(ctx.db, "users", args.targetEmployeeId);
     if (!targetEmployee) {
-      return { authorized: false, error: "Target employee not found", entries: [], totalCount: 0, totalAmount: 0, currency: "SGD", employeeName: "" };
+      return { authorized: false, error: "Target employee not found", entries: [], totalCount: 0, totalAmount: 0, currency: "MYR", employeeName: "" };
     }
 
     // Authorization check
     if (role === "employee") {
-      return { authorized: false, error: "Employees cannot query other employees' data", entries: [], totalCount: 0, totalAmount: 0, currency: "SGD", employeeName: targetEmployee.fullName || "" };
+      return { authorized: false, error: "Employees cannot query other employees' data", entries: [], totalCount: 0, totalAmount: 0, currency: "MYR", employeeName: targetEmployee.fullName || "" };
     }
 
     if (role === "manager") {
@@ -835,7 +837,7 @@ export const getEmployeeExpensesForManager = query({
         .first();
 
       if (!targetMembership || targetMembership.managerId !== requester._id) {
-        return { authorized: false, error: "You can only view data for your direct reports", entries: [], totalCount: 0, totalAmount: 0, currency: "SGD", employeeName: targetEmployee.fullName || "" };
+        return { authorized: false, error: "You can only view data for your direct reports", entries: [], totalCount: 0, totalAmount: 0, currency: "MYR", employeeName: targetEmployee.fullName || "" };
       }
     }
     // finance_admin and owner: allowed for any employee in business
@@ -901,8 +903,8 @@ export const getEmployeeExpensesForManager = query({
       vendorName: e.vendorName || "",
       originalAmount: e.originalAmount || 0,
       homeCurrencyAmount: e.homeCurrencyAmount || e.originalAmount || 0,
-      originalCurrency: e.originalCurrency || "SGD",
-      homeCurrency: e.homeCurrency || business.homeCurrency || "SGD",
+      originalCurrency: e.originalCurrency || "MYR",
+      homeCurrency: e.homeCurrency || business.homeCurrency || "MYR",
       category: e.category || "",
       transactionType: e.transactionType,
       sourceDocumentType: e.sourceDocumentType || "",
@@ -913,7 +915,7 @@ export const getEmployeeExpensesForManager = query({
       entries,
       totalCount,
       totalAmount: parseFloat(totalAmount.toFixed(2)),
-      currency: business.homeCurrency || "SGD",
+      currency: business.homeCurrency || "MYR",
       employeeName: targetEmployee.fullName || targetEmployee.email || "",
     };
   },
@@ -942,13 +944,13 @@ export const getTeamExpenseSummary = query({
     // Resolve business
     const business = await resolveById(ctx.db, "businesses", args.businessId);
     if (!business) {
-      return { authorized: false, error: "Business not found", summary: { totalAmount: 0, currency: "SGD", employeeCount: 0, recordCount: 0 }, breakdown: [], topCategories: [] };
+      return { authorized: false, error: "Business not found", summary: { totalAmount: 0, currency: "MYR", employeeCount: 0, recordCount: 0 }, breakdown: [], topCategories: [] };
     }
 
     // Resolve requesting user
     const requester = await resolveById(ctx.db, "users", args.requestingUserId);
     if (!requester) {
-      return { authorized: false, error: "Requesting user not found", summary: { totalAmount: 0, currency: "SGD", employeeCount: 0, recordCount: 0 }, breakdown: [], topCategories: [] };
+      return { authorized: false, error: "Requesting user not found", summary: { totalAmount: 0, currency: "MYR", employeeCount: 0, recordCount: 0 }, breakdown: [], topCategories: [] };
     }
 
     // Get requester's membership
@@ -960,12 +962,12 @@ export const getTeamExpenseSummary = query({
       .first();
 
     if (!requesterMembership || requesterMembership.status !== "active") {
-      return { authorized: false, error: "Not a member of this business", summary: { totalAmount: 0, currency: "SGD", employeeCount: 0, recordCount: 0 }, breakdown: [], topCategories: [] };
+      return { authorized: false, error: "Not a member of this business", summary: { totalAmount: 0, currency: "MYR", employeeCount: 0, recordCount: 0 }, breakdown: [], topCategories: [] };
     }
 
     const role = requesterMembership.role;
     if (role === "employee") {
-      return { authorized: false, error: "Employees cannot access team data", summary: { totalAmount: 0, currency: "SGD", employeeCount: 0, recordCount: 0 }, breakdown: [], topCategories: [] };
+      return { authorized: false, error: "Employees cannot access team data", summary: { totalAmount: 0, currency: "MYR", employeeCount: 0, recordCount: 0 }, breakdown: [], topCategories: [] };
     }
 
     // Get target employee IDs based on role
@@ -996,7 +998,7 @@ export const getTeamExpenseSummary = query({
     if (targetUserIds.size === 0) {
       return {
         authorized: true,
-        summary: { totalAmount: 0, currency: business.homeCurrency || "SGD", employeeCount: 0, recordCount: 0 },
+        summary: { totalAmount: 0, currency: business.homeCurrency || "MYR", employeeCount: 0, recordCount: 0 },
         breakdown: [],
         topCategories: [],
       };
@@ -1105,7 +1107,7 @@ export const getTeamExpenseSummary = query({
       authorized: true,
       summary: {
         totalAmount: parseFloat(totalAmount.toFixed(2)),
-        currency: business.homeCurrency || "SGD",
+        currency: business.homeCurrency || "MYR",
         employeeCount: uniqueEmployees.size,
         recordCount: filtered.length,
       },
@@ -1219,7 +1221,7 @@ export const getMcpTeamExpenses = query({
       categoryName: e.category || "",
       originalAmount: e.originalAmount || 0,
       homeCurrencyAmount: e.homeCurrencyAmount || e.originalAmount || 0,
-      currency: e.originalCurrency || business.homeCurrency || "SGD",
+      currency: e.originalCurrency || business.homeCurrency || "MYR",
       transactionType: e.transactionType,
     }));
   },

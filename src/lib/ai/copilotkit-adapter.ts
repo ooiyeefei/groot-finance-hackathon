@@ -506,7 +506,7 @@ function buildCashFlowCard(data: Record<string, unknown>): ActionCard | null {
       totalIncome: data.totalIncome ?? 0,
       totalExpenses: data.totalExpenses ?? 0,
       expenseToIncomeRatio: data.expenseToIncomeRatio ?? data.expenseRatio ?? 0,
-      currency: data.currency ?? 'SGD',
+      currency: data.currency ?? 'MYR',
       forecastPeriod: data.forecastPeriod ?? `${data.horizonDays ?? 30}-day forecast`,
       alerts: Array.isArray(data.alerts) ? data.alerts : [],
     },
@@ -542,7 +542,7 @@ function buildInvoicePostingCards(data: Record<string, unknown>): ActionCard[] {
       invoiceId: inv._id ?? inv.invoiceId ?? '',
       vendorName: inv.vendorName ?? (inv.extractedData as Record<string, unknown>)?.vendorName ?? 'Unknown',
       amount: inv.amount ?? (inv.extractedData as Record<string, unknown>)?.totalAmount ?? 0,
-      currency: inv.currency ?? (inv.extractedData as Record<string, unknown>)?.currency ?? 'SGD',
+      currency: inv.currency ?? (inv.extractedData as Record<string, unknown>)?.currency ?? 'MYR',
       invoiceDate: inv.invoiceDate ?? (inv.extractedData as Record<string, unknown>)?.invoiceDate ?? '',
       invoiceNumber: inv.invoiceNumber ?? (inv.extractedData as Record<string, unknown>)?.invoiceNumber,
       confidenceScore: inv.confidenceScore ?? (inv.extractedData as Record<string, unknown>)?.confidence ?? 0.5,
@@ -664,7 +664,7 @@ function buildBudgetAlertFromTransactions(txns: ParsedTransaction[], content: st
   }
   if (categoryMap.size < 2) return null
 
-  const currency = txns[0]?.currency || 'SGD'
+  const currency = txns[0]?.currency || 'MYR'
   const totalSpend = txns.reduce((s, t) => s + t.amount, 0)
   const avgPerCategory = totalSpend / categoryMap.size
 
@@ -724,7 +724,7 @@ function buildSpendingTimeSeriesFromTransactions(txns: ParsedTransaction[], cont
   const sortedMonths = [...monthMap.keys()].sort()
   if (sortedMonths.length < 2) return null
 
-  const currency = txns[0]?.currency || 'SGD'
+  const currency = txns[0]?.currency || 'MYR'
 
   const periods = sortedMonths.map((month) => {
     const cats = monthMap.get(month)!
