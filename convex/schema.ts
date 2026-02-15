@@ -624,6 +624,10 @@ export default defineSchema({
 
     // Business-Specific Codes
     supplierCode: v.optional(v.string()),  // Business's internal vendor/supplier code
+    contactPerson: v.optional(v.string()),
+    website: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    paymentTerms: v.optional(v.string()),
 
     // Classification & Status
     category: v.optional(v.string()),

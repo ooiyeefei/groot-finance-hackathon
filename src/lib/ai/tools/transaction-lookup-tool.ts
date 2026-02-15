@@ -42,6 +42,20 @@ export class TransactionLookupTool extends BaseTool {
     /\b(what|show|list|find)\b/gi
   ]
 
+  // Natural language intent words that should NEVER be used as text search terms.
+  // These describe what the user wants to DO with the data, not what data to search for.
+  private static readonly INTENT_PATTERNS = [
+    /\b(spending|expenses?|income|revenue|costs?|profits?|loss(?:es)?|earnings?|savings?)\b/gi,
+    /\b(trends?|patterns?|overview|summary|breakdown|analysis|analyze|insights?|metrics?)\b/gi,
+    /\b(budget|budgets?|forecast|prediction|projections?|estimates?)\b/gi,
+    /\b(anomal(?:y|ies)|unusual|irregular|strange|suspicious|outliers?)\b/gi,
+    /\b(compare|comparison|versus|vs|against)\b/gi,
+    /\b(cash|flow|runway|burn|rate|ratio)\b/gi,
+    /\b(categorize|classify|group|sort|rank|order)\b/gi,
+    /\b(report|reports?|chart|graph|visualization|dashboard)\b/gi,
+    /\b(monitor|tracking|performance|review|audit)\b/gi,
+  ]
+
   /**
    * Self-defending query sanitization to prevent temporal contamination
    * CRITICAL FIX: Preserve analytical terms for analysis queries
@@ -68,6 +82,11 @@ export class TransactionLookupTool extends BaseTool {
       console.log(`[GUARDRAIL] Removed analytical patterns for non-analysis query`)
     } else {
       console.log(`[GUARDRAIL] PRESERVED analytical terms for analysis query: "${originalQuery}"`)
+    }
+
+    // Remove natural language intent words (unconditional — these are never valid text search terms)
+    for (const pattern of TransactionLookupTool.INTENT_PATTERNS) {
+      sanitized = sanitized.replace(pattern, '')
     }
 
     // Clean up extra spaces and common words
@@ -162,8 +181,8 @@ export class TransactionLookupTool extends BaseTool {
           properties: {
             query: {
               type: "string",
-              description: "SEARCH QUERY: Include ALL search terms from user query including 'largest', 'biggest', 'smallest' for analysis. Also include vendor names, transaction descriptions, or category terms. CRITICAL: For queries like 'largest transaction', you MUST include 'largest' in this parameter so the tool can detect it as an analysis query. Do NOT strip analytical terms.",
-              examples: ["largest", "biggest transaction", "smallest expense", "McDonald's", "Grab", "office supplies"]
+              description: "Text search filter for vendor names, descriptions, or reference numbers ONLY. CRITICAL RULES: (1) Set to empty string \"\" when user wants ALL transactions in a time period. (2) NEVER include temporal words (past, days, months), analytical words (largest, smallest, total, trends, patterns), or natural language. (3) Only include actual search content: vendor names, category keywords, or description text. Examples: \"McDonald's\", \"office supplies\", \"Grab\". For 'show spending trends' or 'largest transaction' → use query=\"\" and handle analysis after getting results.",
+              examples: ["McDonald's", "Grab", "office supplies", "WeWork", ""]
             },
             dateRange: {
               type: "string",
@@ -1332,7 +1351,19 @@ Your response must be valid JSON only. Nothing else.`
       'what', 'is', 'are', 'was', 'were', 'have', 'has', 'had', 'do', 'does', 'did',
       'my', 'me', 'i', 'you', 'your', 'his', 'her', 'their', 'our',
       'show', 'find', 'get', 'give', 'tell', 'display', 'list',
-      'amount', 'value', 'transaction', 'transactions', 'record', 'records', 'data'
+      'amount', 'value', 'transaction', 'transactions', 'record', 'records', 'data',
+      // Financial intent words — describe what to DO with data, not what to search for
+      'spending', 'expense', 'expenses', 'income', 'revenue', 'cost', 'costs',
+      'profit', 'profits', 'loss', 'losses', 'earnings', 'savings',
+      'trends', 'trend', 'patterns', 'pattern', 'overview', 'summary', 'breakdown',
+      'analysis', 'analyze', 'insights', 'metrics', 'budget', 'budgets',
+      'forecast', 'prediction', 'projections', 'estimates',
+      'anomaly', 'anomalies', 'unusual', 'irregular', 'suspicious', 'outliers',
+      'compare', 'comparison', 'versus',
+      'cash', 'flow', 'runway', 'burn', 'rate', 'ratio',
+      'categorize', 'classify', 'group', 'sort', 'rank', 'order',
+      'report', 'reports', 'chart', 'graph', 'visualization', 'dashboard',
+      'monitor', 'tracking', 'performance', 'review', 'audit',
     ]
     
     const foundAnalysisTerms: string[] = []

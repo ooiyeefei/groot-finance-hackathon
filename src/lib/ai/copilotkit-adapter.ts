@@ -244,21 +244,39 @@ export async function* streamLangGraphAgent(
     const { textContent, actions: llmActions } = extractActionsFromContent(finalContent)
     finalContent = textContent
 
-    // Server-side auto-generation: if the LLM didn't emit action cards,
-    // generate them from structured tool results
-    const autoActions = llmActions.length === 0
-      ? autoGenerateActionsFromToolResults(finalMessages)
-      : []
+    // Server-side auto-generation: always generate from tool results,
+    // then merge with LLM-emitted cards (deduplicating by content)
+    const autoActions = autoGenerateActionsFromToolResults(finalMessages)
 
     // Always strip residual ```actions blocks from text (safety net for edge cases
     // where the regex extraction partially matched or the LLM used unusual formatting).
-    // Handles both raw (```) and escaped (\`\`\`) backtick patterns.
-    finalContent = finalContent.replace(/(?:\\?`){3,}actions[\s\S]*?(?:\\?`){3,}/g, '').trim()
+    // Handles any level of backtick escaping and ```json blocks with action card types.
+    finalContent = finalContent
+      .replace(/(?:\\*`){3,}actions[\s\S]*?(?:\\*`){3,}/g, '')
+      .replace(/(?:\\*`){3,}(?:json)?\s*\n\s*\[\s*\{[\s\S]*?"type"\s*:\s*"(?:invoice_posting|cash_flow_dashboard|compliance_alert|budget_alert|spending_time_series|anomaly_card|vendor_comparison|expense_approval)"[\s\S]*?(?:\\*`){3,}/g, '')
+      .trim()
 
-    // Deduplicate action cards by type (keep first of each type)
+    // Deduplicate action cards: LLM-emitted cards take priority.
+    // Bulk-capable types (invoice_posting, expense_approval) allow multiple cards
+    // but deduplicate by content key (invoiceId / expenseId).
+    // Other types keep only one card per type.
+    const BULK_CARD_TYPES = new Set(['invoice_posting', 'expense_approval'])
     const allActions = [...llmActions, ...autoActions]
+    const seenIds = new Set<string>()
+    const seenContentKeys = new Set<string>()
     const seenTypes = new Set<string>()
     const actions = allActions.filter((a) => {
+      if (a.id && seenIds.has(a.id)) return false
+      if (a.id) seenIds.add(a.id)
+
+      if (BULK_CARD_TYPES.has(a.type)) {
+        const d = a.data as Record<string, unknown>
+        const contentKey = `${a.type}:${d?.invoiceId ?? d?.expenseId ?? a.id}`
+        if (seenContentKeys.has(contentKey)) return false
+        seenContentKeys.add(contentKey)
+        return true
+      }
+
       if (seenTypes.has(a.type)) return false
       seenTypes.add(a.type)
       return true
@@ -390,6 +408,15 @@ function ensureCitationMarkers(content: string, citations: CitationData[]): stri
 
 type ActionCard = { type: string; id: string; data: Record<string, unknown> }
 
+/** Generate a short deterministic hash from a string (djb2 algorithm) */
+function hashCode(str: string): string {
+  let hash = 5381
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash + str.charCodeAt(i)) | 0
+  }
+  return Math.abs(hash).toString(36)
+}
+
 /**
  * Auto-generate action cards from tool results when the LLM doesn't emit them.
  * Scans the message history for successful ToolMessages and maps known tool
@@ -397,12 +424,19 @@ type ActionCard = { type: string; id: string; data: Record<string, unknown> }
  */
 function autoGenerateActionsFromToolResults(messages: BaseMessage[]): ActionCard[] {
   const actions: ActionCard[] = []
+  const processedToolCallIds = new Set<string>()
 
   for (const msg of messages) {
     if (msg._getType?.() !== 'tool') continue
     const toolMsg = msg as ToolMessage
     const toolName = toolMsg.name
     const content = typeof toolMsg.content === 'string' ? toolMsg.content : ''
+
+    // Deduplicate by tool_call_id to prevent processing the same tool result twice
+    // (LangGraph message arrays can contain duplicates from graph traversal)
+    const toolCallId = toolMsg.tool_call_id
+    if (toolCallId && processedToolCallIds.has(toolCallId)) continue
+    if (toolCallId) processedToolCallIds.add(toolCallId)
 
     // Skip error responses
     if (content.startsWith('TOOL_ERROR:') || content.startsWith('SYSTEM_ERROR:') || content.startsWith('DATA_EMPTY:')) {
@@ -442,6 +476,17 @@ function autoGenerateActionsFromToolResults(messages: BaseMessage[]): ActionCard
       const card = buildComplianceCardFromText(content)
       if (card) actions.push(card)
     }
+
+    if (toolName === 'get_transactions' && content) {
+      // get_transactions returns formatted text — parse it into structured cards
+      const txns = parseTransactionText(content)
+      if (txns.length >= 2) {
+        const budgetCard = buildBudgetAlertFromTransactions(txns, content)
+        if (budgetCard) actions.push(budgetCard)
+        const timeSeriesCard = buildSpendingTimeSeriesFromTransactions(txns, content)
+        if (timeSeriesCard) actions.push(timeSeriesCard)
+      }
+    }
   }
 
   return actions
@@ -453,7 +498,7 @@ function buildCashFlowCard(data: Record<string, unknown>): ActionCard | null {
 
   return {
     type: 'cash_flow_dashboard',
-    id: `cashflow-auto-${Date.now()}`,
+    id: `cashflow-auto-${hashCode(JSON.stringify(data))}`,
     data: {
       runwayDays: data.runwayDays ?? 0,
       monthlyBurnRate: data.monthlyBurnRate ?? 0,
@@ -472,7 +517,7 @@ function buildAnomalyCards(data: Record<string, unknown>): ActionCard[] {
   const anomalies = Array.isArray(data.anomalies) ? data.anomalies : (Array.isArray(data) ? data : [])
   return anomalies.map((anomaly: Record<string, unknown>, idx: number) => ({
     type: 'anomaly_card',
-    id: `anomaly-auto-${Date.now()}-${idx}`,
+    id: `anomaly-auto-${hashCode(JSON.stringify(anomaly))}-${idx}`,
     data: anomaly,
   }))
 }
@@ -483,7 +528,7 @@ function buildVendorComparisonCard(data: Record<string, unknown>): ActionCard | 
 
   return {
     type: 'vendor_comparison',
-    id: `vendor-auto-${Date.now()}`,
+    id: `vendor-auto-${hashCode(JSON.stringify(vendors))}`,
     data: { vendors, ...data },
   }
 }
@@ -492,7 +537,7 @@ function buildInvoicePostingCards(data: Record<string, unknown>): ActionCard[] {
   const invoices = Array.isArray(data.invoices) ? data.invoices : (Array.isArray(data) ? data : [])
   return invoices.map((inv: Record<string, unknown>, idx: number) => ({
     type: 'invoice_posting',
-    id: `invoice-auto-${Date.now()}-${idx}`,
+    id: `invoice-auto-${hashCode(JSON.stringify(inv))}-${idx}`,
     data: {
       invoiceId: inv._id ?? inv.invoiceId ?? '',
       vendorName: inv.vendorName ?? (inv.extractedData as Record<string, unknown>)?.vendorName ?? 'Unknown',
@@ -558,7 +603,7 @@ function buildComplianceCardFromText(content: string): ActionCard | null {
 
   return {
     type: 'compliance_alert',
-    id: `compliance-auto-${Date.now()}`,
+    id: `compliance-auto-${hashCode(content.slice(0, 200))}`,
     data: {
       country,
       countryCode: codeMap[countryLower] ?? country.slice(0, 2).toUpperCase(),
@@ -569,4 +614,153 @@ function buildComplianceCardFromText(content: string): ActionCard | null {
       citationIndices,
     },
   }
+}
+
+// --- get_transactions text parsing and card builders ---
+
+interface ParsedTransaction {
+  amount: number
+  currency: string
+  date: string
+  category: string
+  month: string // "YYYY-MM" for grouping
+}
+
+/** Parse the formatted text output of get_transactions into structured data */
+function parseTransactionText(content: string): ParsedTransaction[] {
+  const txns: ParsedTransaction[] = []
+  // Match each transaction block: "N. Description\n   Amount: ...\n   Date: ...\n   Category: ..."
+  const blockRegex = /\d+\.\s+.+?\n\s+Amount:\s+([\d,.]+)\s+(\w+).*?\n\s+Date:\s+(.+?)\n\s+Category:\s+(.+?)(?:\n|$)/g
+  let match: RegExpExecArray | null
+  while ((match = blockRegex.exec(content)) !== null) {
+    const amount = parseFloat(match[1].replace(/,/g, ''))
+    const currency = match[2]
+    const dateStr = match[3].trim()
+    const category = match[4].trim()
+
+    // Parse month from date like "Feb 05, 2026" or "Oct 31, 2025"
+    const dateMatch = dateStr.match(/(\w{3})\s+\d{1,2},\s+(\d{4})/)
+    const monthMap: Record<string, string> = {
+      Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
+      Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12',
+    }
+    const month = dateMatch
+      ? `${dateMatch[2]}-${monthMap[dateMatch[1]] || '01'}`
+      : 'unknown'
+
+    if (!isNaN(amount) && amount > 0) {
+      txns.push({ amount, currency, date: dateStr, category, month })
+    }
+  }
+  return txns
+}
+
+/** Build a budget_alert card from parsed transactions (category spending breakdown) */
+function buildBudgetAlertFromTransactions(txns: ParsedTransaction[], content: string): ActionCard | null {
+  // Group by category
+  const categoryMap = new Map<string, number>()
+  for (const t of txns) {
+    categoryMap.set(t.category, (categoryMap.get(t.category) || 0) + t.amount)
+  }
+  if (categoryMap.size < 2) return null
+
+  const currency = txns[0]?.currency || 'SGD'
+  const totalSpend = txns.reduce((s, t) => s + t.amount, 0)
+  const avgPerCategory = totalSpend / categoryMap.size
+
+  type BudgetStatus = 'on_track' | 'above_average' | 'overspending'
+  const categories = Array.from(categoryMap.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, spend]) => {
+      const pct = (spend / avgPerCategory) * 100
+      const status: BudgetStatus = pct > 130 ? 'overspending'
+        : pct > 100 ? 'above_average'
+        : 'on_track'
+      return {
+        name,
+        currentSpend: spend,
+        averageSpend: Math.round(avgPerCategory * 100) / 100,
+        percentOfAverage: Math.round(pct),
+        status,
+      }
+    })
+
+  const overCount = categories.filter(c => c.status === 'overspending').length
+  const overallStatus: BudgetStatus = overCount >= categories.length / 2 ? 'overspending'
+    : overCount > 0 ? 'above_average'
+    : 'on_track'
+
+  // Derive period from transaction dates
+  const months = [...new Set(txns.map(t => t.month))].sort()
+  const period = months.length === 1
+    ? formatMonthLabel(months[0])
+    : `${formatMonthLabel(months[0])} – ${formatMonthLabel(months[months.length - 1])}`
+
+  return {
+    type: 'budget_alert',
+    id: `budget-auto-${hashCode(content.slice(0, 200))}`,
+    data: {
+      period,
+      currency,
+      categories,
+      totalCurrentSpend: totalSpend,
+      totalAverageSpend: Math.round(avgPerCategory * categoryMap.size * 100) / 100,
+      overallStatus,
+    },
+  }
+}
+
+/** Build a spending_time_series card from parsed transactions (monthly totals) */
+function buildSpendingTimeSeriesFromTransactions(txns: ParsedTransaction[], content: string): ActionCard | null {
+  // Group by month
+  const monthMap = new Map<string, Map<string, number>>()
+  for (const t of txns) {
+    if (t.month === 'unknown') continue
+    if (!monthMap.has(t.month)) monthMap.set(t.month, new Map())
+    const cats = monthMap.get(t.month)!
+    cats.set(t.category, (cats.get(t.category) || 0) + t.amount)
+  }
+
+  const sortedMonths = [...monthMap.keys()].sort()
+  if (sortedMonths.length < 2) return null
+
+  const currency = txns[0]?.currency || 'SGD'
+
+  const periods = sortedMonths.map((month) => {
+    const cats = monthMap.get(month)!
+    const catArray = [...cats.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, amount]) => ({ name, amount }))
+    return {
+      label: formatMonthLabel(month),
+      total: catArray.reduce((s, c) => s + c.amount, 0),
+      categories: catArray,
+    }
+  })
+
+  // Calculate trend from first to last period
+  const first = periods[0].total
+  const last = periods[periods.length - 1].total
+  const trendPct = first > 0 ? Math.round(((last - first) / first) * 100) : 0
+  const trendDirection = trendPct > 5 ? 'up' : trendPct < -5 ? 'down' : 'stable'
+
+  return {
+    type: 'spending_time_series',
+    id: `timeseries-auto-${hashCode(content.slice(0, 200))}`,
+    data: {
+      chartType: 'time_series',
+      title: 'Spending Trends',
+      currency,
+      periods,
+      trendPercent: Math.abs(trendPct),
+      trendDirection,
+    },
+  }
+}
+
+/** Format "2026-02" to "Feb 2026" */
+function formatMonthLabel(yyyyMm: string): string {
+  const [year, month] = yyyyMm.split('-')
+  const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  return `${names[parseInt(month, 10) - 1] || month} ${year}`
 }

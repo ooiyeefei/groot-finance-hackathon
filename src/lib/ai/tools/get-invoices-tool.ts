@@ -57,40 +57,53 @@ This tool queries the invoices table (NOT accounting_entries).`
       }
     }
 
-    try {
-      console.log(`[GetInvoicesTool] Fetching completed invoices for business ${userContext.businessId}`)
+    const maxRetries = 2
+    let lastError: unknown
 
-      const result = await this.convex.query(
-        this.convexApi.functions.invoices.getCompletedForAI,
-        {
-          businessId: userContext.businessId,
-          limit: parameters.limit,
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[GetInvoicesTool] Fetching completed invoices for business ${userContext.businessId} (attempt ${attempt + 1})`)
+
+        const result = await this.convex.query(
+          this.convexApi.functions.invoices.getCompletedForAI,
+          {
+            businessId: userContext.businessId,
+            limit: parameters.limit,
+          }
+        )
+
+        if (!result || !result.invoices || result.invoices.length === 0) {
+          return {
+            success: true,
+            data: 'No completed invoices with extracted data found. Invoices appear here after OCR processing completes.',
+            metadata: { resultsCount: 0 }
+          }
         }
-      )
 
-      if (!result || !result.invoices || result.invoices.length === 0) {
+        console.log(`[GetInvoicesTool] Found ${result.invoices.length} completed invoice(s)`)
+
         return {
           success: true,
-          data: 'No completed invoices with extracted data found. Invoices appear here after OCR processing completes.',
-          metadata: { resultsCount: 0 }
+          data: result,
+          metadata: {
+            resultsCount: result.invoices.length,
+          }
+        }
+      } catch (error) {
+        lastError = error
+        console.error(`[GetInvoicesTool] Attempt ${attempt + 1} failed:`, error)
+        if (attempt < maxRetries) {
+          const delayMs = 1000 * (attempt + 1)
+          console.log(`[GetInvoicesTool] Retrying in ${delayMs}ms...`)
+          await new Promise(resolve => setTimeout(resolve, delayMs))
         }
       }
+    }
 
-      console.log(`[GetInvoicesTool] Found ${result.invoices.length} completed invoice(s)`)
-
-      return {
-        success: true,
-        data: result,
-        metadata: {
-          resultsCount: result.invoices.length,
-        }
-      }
-    } catch (error) {
-      console.error('[GetInvoicesTool] Error:', error)
-      return {
-        success: false,
-        error: `Failed to fetch invoices: ${error instanceof Error ? error.message : 'Unknown error'}`
-      }
+    const errorMsg = lastError instanceof Error ? lastError.message : 'Unknown error'
+    return {
+      success: false,
+      error: `Failed to fetch invoices after ${maxRetries + 1} attempts: ${errorMsg}. This may be a temporary server issue — please try again.`
     }
   }
 

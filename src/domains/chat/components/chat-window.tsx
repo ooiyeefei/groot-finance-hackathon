@@ -36,6 +36,12 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
   // Smart auto-scroll: track if user has scrolled up
   const [userScrolledUp, setUserScrolledUp] = useState(false)
 
+  // Track messages streamed in this browser session (for interactive vs historical rendering).
+  // Messages streamed this session keep interactive controls (bulk checkboxes, post buttons).
+  // On page reload the Set is empty, so all messages render as historical.
+  const sessionStreamedIds = useRef(new Set<string>())
+  const wasLoadingRef = useRef(false)
+
   // Rich content panel state
   const [richContent, setRichContent] = useState<RichContentData | null>(null)
 
@@ -64,6 +70,23 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
     isLoadingMessages,
     sendMessage,
   } = useCopilotBridge({ businessId })
+
+  // Detect streaming completion and record the message ID for this session.
+  // When isLoading goes true→false, the last assistant message was just streamed.
+  useEffect(() => {
+    if (wasLoadingRef.current && !isLoading && convexMessages.length > 0) {
+      const lastMsg = convexMessages[convexMessages.length - 1]
+      if (lastMsg.role === 'assistant') {
+        sessionStreamedIds.current.add(lastMsg.id)
+      }
+    }
+    wasLoadingRef.current = isLoading
+  }, [isLoading, convexMessages])
+
+  // Clear session tracking on conversation switch
+  useEffect(() => {
+    sessionStreamedIds.current.clear()
+  }, [activeConversationId])
 
   // Smart auto-scroll: only scroll if user hasn't scrolled up
   useEffect(() => {
@@ -187,7 +210,7 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
               role={msg.role}
               citations={msg.citations}
               actions={msg.actions}
-              isHistorical={true}
+              isHistorical={!sessionStreamedIds.current.has(msg.id)}
               onViewDetails={handleViewDetails}
             />
           ))

@@ -527,6 +527,29 @@ export const create = mutation({
       }
     }
 
+    // Duplicate detection: prevent posting the same source document twice
+    if (args.sourceRecordId && args.sourceDocumentType) {
+      const existing = await ctx.db
+        .query("accounting_entries")
+        .withIndex("by_sourceDocument", (q) =>
+          q
+            .eq("sourceDocumentType", args.sourceDocumentType!)
+            .eq("sourceRecordId", args.sourceRecordId!)
+        )
+        .filter((q) =>
+          args.businessId
+            ? q.eq(q.field("businessId"), args.businessId)
+            : q.eq(q.field("businessId"), undefined)
+        )
+        .first();
+
+      if (existing) {
+        throw new Error(
+          `This ${args.sourceDocumentType} has already been posted to accounting (entry created ${new Date(existing._creationTime).toLocaleDateString()})`
+        );
+      }
+    }
+
     const now = Date.now();
     const entryId = await ctx.db.insert("accounting_entries", {
       businessId: args.businessId,

@@ -65,10 +65,11 @@ export function MessageRenderer({
 
   // Process content: strip residual ```actions blocks and replace citation markers
   const processedContent = useMemo(() => {
-    // Strip ```actions JSON blocks — handles both raw backticks (```) and
-    // escaped backticks (\`\`\`) that some LLM responses persist to Convex
+    // Strip ```actions JSON blocks — handles raw, single-escaped, and multi-escaped backticks.
+    // Also catches ```json blocks containing action card type objects.
     let processed = content
-      .replace(/(?:\\?`){3,}actions[\s\S]*?(?:\\?`){3,}/g, '')
+      .replace(/(?:\\*`){3,}actions[\s\S]*?(?:\\*`){3,}/g, '')
+      .replace(/(?:\\*`){3,}(?:json)?\s*\n\s*\[\s*\{[\s\S]*?"type"\s*:\s*"(?:invoice_posting|cash_flow_dashboard|compliance_alert|budget_alert|spending_time_series|anomaly_card|vendor_comparison|expense_approval)"[\s\S]*?(?:\\*`){3,}/g, '')
       .trim()
 
     if (!citations.length) return processed
