@@ -30,6 +30,7 @@ interface InvoicePreviewProps {
       currency: string
       itemCode?: string
       unitMeasurement?: string
+      itemNotes?: string
     }>
     subtotal: number
     totalDiscount?: number

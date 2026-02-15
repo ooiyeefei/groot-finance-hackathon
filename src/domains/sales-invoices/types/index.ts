@@ -165,6 +165,7 @@ export interface LineItem {
   itemCode?: string;
   unitMeasurement?: string;
   catalogItemId?: string;
+  itemNotes?: string;
   supplyDateStart?: string;
   supplyDateEnd?: string;
   isDiscountable?: boolean;
@@ -185,6 +186,7 @@ export const lineItemSchema = z.object({
   itemCode: z.string().optional(),
   unitMeasurement: z.string().optional(),
   catalogItemId: z.string().optional(),
+  itemNotes: z.string().optional(),
   supplyDateStart: z.string().optional(),
   supplyDateEnd: z.string().optional(),
   isDiscountable: z.boolean().optional(),

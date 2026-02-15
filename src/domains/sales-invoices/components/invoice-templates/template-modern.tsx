@@ -31,6 +31,7 @@ interface InvoiceTemplateProps {
       currency: string
       itemCode?: string
       unitMeasurement?: string
+      itemNotes?: string
       supplyDateStart?: string
       supplyDateEnd?: string
     }>
@@ -216,6 +217,11 @@ export function ModernInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplate
                 </td>
                 <td className="py-3 pr-4 text-foreground">
                   <div className="font-medium">{item.description}</div>
+                  {item.itemNotes && (
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {item.itemNotes}
+                    </div>
+                  )}
                   {item.unitMeasurement && (
                     <div className="text-xs text-muted-foreground mt-0.5">
                       Unit: {item.unitMeasurement}

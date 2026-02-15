@@ -27,6 +27,7 @@ interface InvoiceTemplateProps {
       currency: string
       itemCode?: string
       unitMeasurement?: string
+      itemNotes?: string
       supplyDateStart?: string
       supplyDateEnd?: string
     }>
@@ -218,6 +219,11 @@ export function ClassicInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplat
                 </td>
                 <td className="border border-border px-3 py-2 text-foreground">
                   <span>{item.description}</span>
+                  {item.itemNotes && (
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {item.itemNotes}
+                    </div>
+                  )}
                   {item.unitMeasurement && (
                     <span className="text-muted-foreground text-xs ml-1">
                       ({item.unitMeasurement})

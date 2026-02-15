@@ -40,6 +40,7 @@ export interface PdfInvoiceData {
     currency: string
     itemCode?: string
     unitMeasurement?: string
+    itemNotes?: string
     supplyDateStart?: string
     supplyDateEnd?: string
   }>
@@ -275,6 +276,9 @@ export function InvoicePdfDocument({ invoice, businessInfo }: InvoicePdfDocument
             <Text style={[s.tdMuted, s.colCode]}>{item.itemCode || '-'}</Text>
             <View style={s.colDesc}>
               <Text style={s.tdText}>{item.description}</Text>
+              {item.itemNotes && (
+                <Text style={{ fontSize: 7, color: C.muted }}>{item.itemNotes}</Text>
+              )}
               {item.unitMeasurement && (
                 <Text style={{ fontSize: 7, color: C.muted }}>Unit: {item.unitMeasurement}</Text>
               )}

@@ -1251,6 +1251,7 @@ export default defineSchema({
       itemCode: v.optional(v.string()),
       unitMeasurement: v.optional(v.string()),
       catalogItemId: v.optional(v.string()),
+      itemNotes: v.optional(v.string()),
       // 012-stripe-invoice-ux: Advanced item options
       supplyDateStart: v.optional(v.string()),
       supplyDateEnd: v.optional(v.string()),

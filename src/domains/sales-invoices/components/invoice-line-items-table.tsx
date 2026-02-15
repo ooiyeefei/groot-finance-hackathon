@@ -35,6 +35,7 @@ interface InvoiceLineItemsTableProps {
 type CatalogItemData = {
   _id: string
   name: string
+  description?: string
   unitPrice: number
   currency: string
   sku?: string
@@ -331,6 +332,7 @@ export default function InvoiceLineItemsTable({
     () => (rawCatalogItems ?? []).map((item) => ({
       _id: item._id,
       name: item.name,
+      description: item.description,
       unitPrice: item.unitPrice,
       currency: item.currency,
       sku: item.sku,
@@ -396,6 +398,7 @@ export default function InvoiceLineItemsTable({
         taxRate: catItem.taxRate,
         unitMeasurement: uom,
         catalogItemId: catItem._id,
+        itemNotes: catItem.description || '',
         // Map currency from catalog item (Stripe products carry their own currency)
         ...(catItem.currency ? { currency: catItem.currency } : {}),
       })
@@ -523,6 +526,11 @@ export default function InvoiceLineItemsTable({
               </span>
             )}
           </div>
+          {item.itemNotes && (
+            <p className="text-xs text-muted-foreground mt-0.5 truncate">
+              {item.itemNotes}
+            </p>
+          )}
           <div className="text-xs text-muted-foreground mt-0.5">
             {formatCurrency(item.unitPrice, item.currency || currency)}
             {item.unitMeasurement ? ` / ${item.unitMeasurement}` : ''} × {item.quantity || 1}
@@ -654,6 +662,19 @@ export default function InvoiceLineItemsTable({
               <span className="text-xs font-medium text-green-600 dark:text-green-400">Linked to product catalog</span>
             </div>
           )}
+
+          {/* Description / notes */}
+          <div>
+            <Label className="text-xs font-medium text-muted-foreground mb-1 block">
+              Description
+            </Label>
+            <Input
+              value={item.itemNotes || ''}
+              onChange={(e) => handleFieldChange(index, 'itemNotes', e.target.value)}
+              placeholder="Brief description shown on invoice"
+              className="h-9 text-sm bg-background border-border"
+            />
+          </div>
 
           {/* Row 2: Unit Price + UoM + Subtotal */}
           <div className="grid grid-cols-[1fr_80px_120px] gap-3">
