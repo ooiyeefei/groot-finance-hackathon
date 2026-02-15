@@ -337,7 +337,17 @@ export default function CatalogItemManager() {
                           {item.sku || '--'}
                         </td>
                         <td className="px-4 py-3 text-sm text-foreground text-right">
-                          {formatCurrency(item.unitPrice, item.currency)}
+                          <div>
+                            {formatCurrency(item.unitPrice, item.currency)}
+                            {item.billingInterval && item.billingInterval !== 'one_time' && (
+                              <span className="text-xs text-muted-foreground ml-1">
+                                / {item.billingInterval === 'monthly' ? 'mo' : item.billingInterval === 'yearly' ? 'yr' : item.billingInterval === 'weekly' ? 'wk' : 'day'}
+                              </span>
+                            )}
+                            {item.billingInterval === 'one_time' && (
+                              <span className="text-xs text-muted-foreground ml-1">one-time</span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-muted-foreground text-right">
                           {item.taxRate != null
@@ -467,6 +477,14 @@ export default function CatalogItemManager() {
                         <span className="font-medium text-foreground">
                           {formatCurrency(item.unitPrice, item.currency)}
                         </span>
+                        {item.billingInterval && item.billingInterval !== 'one_time' && (
+                          <span className="text-muted-foreground ml-1">
+                            / {item.billingInterval === 'monthly' ? 'mo' : item.billingInterval === 'yearly' ? 'yr' : item.billingInterval === 'weekly' ? 'wk' : 'day'}
+                          </span>
+                        )}
+                        {item.billingInterval === 'one_time' && (
+                          <span className="text-muted-foreground ml-1">one-time</span>
+                        )}
                         {item.taxRate != null && (
                           <span className="text-muted-foreground ml-2">
                             Tax: {(item.taxRate * 100).toFixed(1)}%

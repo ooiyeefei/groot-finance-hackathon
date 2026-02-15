@@ -312,6 +312,7 @@ export interface CatalogItem {
   source?: string; // "manual" | "stripe" — undefined treated as "manual"
   stripeProductId?: string;
   stripePriceId?: string;
+  billingInterval?: string; // "monthly" | "yearly" | "weekly" | "daily" | "one_time"
   lastSyncedAt?: number;
   locallyDeactivated?: boolean;
   deletedAt?: number;

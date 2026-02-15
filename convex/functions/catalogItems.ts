@@ -431,19 +431,21 @@ export const upsertSyncedItem = mutation({
   args: {
     businessId: v.id("businesses"),
     stripeProductId: v.string(),
-    stripePriceId: v.optional(v.string()),
+    stripePriceId: v.string(),
     name: v.string(),
     description: v.optional(v.string()),
     unitPrice: v.number(),
     currency: v.string(),
+    billingInterval: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<"created" | "updated" | "skipped"> => {
     await requireFinanceAdmin(ctx, args.businessId);
 
+    // Dedup by stripePriceId (one catalog item per price, not per product)
     const existing = await ctx.db
       .query("catalog_items")
-      .withIndex("by_businessId_stripeProductId", (q) =>
-        q.eq("businessId", args.businessId).eq("stripeProductId", args.stripeProductId)
+      .withIndex("by_businessId_stripePriceId", (q) =>
+        q.eq("businessId", args.businessId).eq("stripePriceId", args.stripePriceId)
       )
       .first();
 
@@ -461,6 +463,7 @@ export const upsertSyncedItem = mutation({
         unitPrice: args.unitPrice,
         currency: args.currency,
         stripePriceId: args.stripePriceId,
+        billingInterval: args.billingInterval,
         lastSyncedAt: now,
         status: "active",
         updatedAt: now,
@@ -477,6 +480,7 @@ export const upsertSyncedItem = mutation({
         source: "stripe",
         stripeProductId: args.stripeProductId,
         stripePriceId: args.stripePriceId,
+        billingInterval: args.billingInterval,
         lastSyncedAt: now,
         status: "active",
         updatedAt: now,
@@ -602,21 +606,23 @@ export const webhookUpsertItem = mutation({
   args: {
     businessId: v.id("businesses"),
     stripeProductId: v.string(),
-    stripePriceId: v.optional(v.string()),
+    stripePriceId: v.string(),
     name: v.string(),
     description: v.optional(v.string()),
     unitPrice: v.number(),
     currency: v.string(),
+    billingInterval: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<"created" | "updated" | "skipped"> => {
     // Verify business exists (basic validation)
     const business = await ctx.db.get(args.businessId);
     if (!business) throw new Error("Business not found");
 
+    // Dedup by stripePriceId (one catalog item per price, not per product)
     const existing = await ctx.db
       .query("catalog_items")
-      .withIndex("by_businessId_stripeProductId", (q) =>
-        q.eq("businessId", args.businessId).eq("stripeProductId", args.stripeProductId)
+      .withIndex("by_businessId_stripePriceId", (q) =>
+        q.eq("businessId", args.businessId).eq("stripePriceId", args.stripePriceId)
       )
       .first();
 
@@ -630,6 +636,7 @@ export const webhookUpsertItem = mutation({
         unitPrice: args.unitPrice,
         currency: args.currency,
         stripePriceId: args.stripePriceId,
+        billingInterval: args.billingInterval,
         lastSyncedAt: now,
         status: "active",
         updatedAt: now,
@@ -645,6 +652,7 @@ export const webhookUpsertItem = mutation({
         source: "stripe",
         stripeProductId: args.stripeProductId,
         stripePriceId: args.stripePriceId,
+        billingInterval: args.billingInterval,
         lastSyncedAt: now,
         status: "active",
         updatedAt: now,
@@ -666,18 +674,22 @@ export const webhookDeactivateItem = mutation({
     const business = await ctx.db.get(args.businessId);
     if (!business) throw new Error("Business not found");
 
-    const item = await ctx.db
+    // Deactivate ALL catalog items for this product (may have multiple prices)
+    const items = await ctx.db
       .query("catalog_items")
       .withIndex("by_businessId_stripeProductId", (q) =>
         q.eq("businessId", args.businessId).eq("stripeProductId", args.stripeProductId)
       )
-      .first();
+      .collect();
 
-    if (item && item.status === "active") {
-      await ctx.db.patch(item._id, {
-        status: "inactive",
-        updatedAt: Date.now(),
-      });
+    const now = Date.now();
+    for (const item of items) {
+      if (item.status === "active") {
+        await ctx.db.patch(item._id, {
+          status: "inactive",
+          updatedAt: now,
+        });
+      }
     }
   },
 });

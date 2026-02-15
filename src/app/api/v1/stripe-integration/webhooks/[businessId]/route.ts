@@ -72,43 +72,37 @@ export async function POST(
           break
         }
 
-        // Resolve default price
-        let unitPrice = 0
-        let currency = 'usd'
-        let priceId: string | undefined
-
-        if (product.default_price && typeof product.default_price === 'string') {
-          // default_price is just an ID — fetch from Stripe to get amount
-          const stripeSecretKey = await getSSMParameter(`/finanseal/stripe/${businessId}/secret-key`)
-          if (stripeSecretKey) {
-            const stripe = new Stripe(stripeSecretKey)
-            try {
-              const price = await stripe.prices.retrieve(product.default_price)
-              unitPrice = (price.unit_amount ?? 0) / 100
-              currency = price.currency ?? 'usd'
-              priceId = price.id
-            } catch {
-              console.warn('[Stripe Webhook] Failed to fetch price:', product.default_price)
-            }
-          }
-        } else if (product.default_price && typeof product.default_price === 'object') {
-          const price = product.default_price as Stripe.Price
-          unitPrice = (price.unit_amount ?? 0) / 100
-          currency = price.currency ?? 'usd'
-          priceId = price.id
+        // Fetch all active prices for this product
+        const stripeSecretKey = await getSSMParameter(`/finanseal/stripe/${businessId}/secret-key`)
+        if (!stripeSecretKey) {
+          console.warn('[Stripe Webhook] No secret key for business:', businessId)
+          break
         }
 
-        const result = await convex.mutation(api.functions.catalogItems.webhookUpsertItem, {
-          businessId: typedBusinessId,
-          stripeProductId: product.id,
-          stripePriceId: priceId,
-          name: product.name,
-          description: product.description ?? undefined,
-          unitPrice,
-          currency: currency.toLowerCase(),
-        })
+        const stripe = new Stripe(stripeSecretKey)
+        const prices = await stripe.prices
+          .list({ product: product.id, active: true, limit: 100 })
+          .autoPagingToArray({ limit: 1000 })
 
-        console.log('[Stripe Webhook] Product', event.type, ':', product.id, '->', result)
+        for (const price of prices) {
+          const billingInterval = price.recurring
+            ? ({ month: 'monthly', year: 'yearly', week: 'weekly', day: 'daily' }[price.recurring.interval] ?? 'one_time')
+            : 'one_time'
+
+          const result = await convex.mutation(api.functions.catalogItems.webhookUpsertItem, {
+            businessId: typedBusinessId,
+            stripeProductId: product.id,
+            stripePriceId: price.id,
+            name: product.name,
+            description: product.description ?? undefined,
+            unitPrice: (price.unit_amount ?? 0) / 100,
+            currency: (price.currency ?? 'usd').toLowerCase(),
+            billingInterval,
+          })
+
+          console.log('[Stripe Webhook] Product', event.type, ':', product.id, 'price:', price.id, '->', result)
+        }
+
         break
       }
 
@@ -126,12 +120,10 @@ export async function POST(
       case 'price.updated': {
         const price = event.data.object as Stripe.Price
 
-        // Only process if this price is the default for its product
         if (!price.product) break
 
         const productId = typeof price.product === 'string' ? price.product : price.product.id
 
-        // Fetch the product to check if this is the default price
         const stripeSecretKey = await getSSMParameter(`/finanseal/stripe/${businessId}/secret-key`)
         if (!stripeSecretKey) break
 
@@ -140,12 +132,12 @@ export async function POST(
           const product = await stripe.products.retrieve(productId)
           if (!product.active) break
 
-          const defaultPriceId = typeof product.default_price === 'string'
-            ? product.default_price
-            : product.default_price?.id
+          // Skip inactive prices
+          if (!price.active) break
 
-          // Only update if this price is the product's default price
-          if (defaultPriceId !== price.id) break
+          const billingInterval = price.recurring
+            ? ({ month: 'monthly', year: 'yearly', week: 'weekly', day: 'daily' }[price.recurring.interval] ?? 'one_time')
+            : 'one_time'
 
           await convex.mutation(api.functions.catalogItems.webhookUpsertItem, {
             businessId: typedBusinessId,
@@ -155,9 +147,10 @@ export async function POST(
             description: product.description ?? undefined,
             unitPrice: (price.unit_amount ?? 0) / 100,
             currency: (price.currency ?? 'usd').toLowerCase(),
+            billingInterval,
           })
 
-          console.log('[Stripe Webhook] Price', event.type, 'for product:', productId)
+          console.log('[Stripe Webhook] Price', event.type, 'for product:', productId, 'price:', price.id)
         } catch {
           console.warn('[Stripe Webhook] Failed to process price event for product:', productId)
         }

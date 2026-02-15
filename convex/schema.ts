@@ -1360,6 +1360,7 @@ export default defineSchema({
     source: v.optional(v.string()), // "manual" | "stripe" — undefined treated as "manual"
     stripeProductId: v.optional(v.string()),
     stripePriceId: v.optional(v.string()),
+    billingInterval: v.optional(v.string()), // "monthly" | "yearly" | "weekly" | "daily" | "one_time"
     lastSyncedAt: v.optional(v.number()),
     locallyDeactivated: v.optional(v.boolean()),
 
@@ -1372,6 +1373,7 @@ export default defineSchema({
     .index("by_businessId_name", ["businessId", "name"])
     .index("by_businessId_sku", ["businessId", "sku"])
     .index("by_businessId_stripeProductId", ["businessId", "stripeProductId"])
+    .index("by_businessId_stripePriceId", ["businessId", "stripePriceId"])
     .index("by_businessId_source", ["businessId", "source"]),
 
   recurring_invoice_schedules: defineTable({

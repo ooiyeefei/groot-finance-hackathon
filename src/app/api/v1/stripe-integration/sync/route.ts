@@ -72,7 +72,6 @@ export async function POST(request: NextRequest) {
       products = await stripe.products
         .list({
           active: true,
-          expand: ['data.default_price'],
           limit: 100,
         })
         .autoPagingToArray({ limit: 10000 })
@@ -96,40 +95,59 @@ export async function POST(request: NextRequest) {
     let skipped = 0
     let deactivated = 0
     const errors: string[] = []
-    const syncedStripeProductIds = new Set<string>()
+    const syncedStripePriceIds = new Set<string>()
 
-    // Process each product
+    // Helper: map Stripe recurring interval to billingInterval string
+    function toBillingInterval(recurring: Stripe.Price.Recurring | null): string {
+      if (!recurring) return 'one_time'
+      switch (recurring.interval) {
+        case 'month': return 'monthly'
+        case 'year': return 'yearly'
+        case 'week': return 'weekly'
+        case 'day': return 'daily'
+        default: return 'one_time'
+      }
+    }
+
+    // Process each product — fetch ALL active prices per product
     for (let i = 0; i < products.length; i++) {
       const product = products[i]
 
       try {
-        // Resolve price
-        let unitPrice = 0
-        let currency = 'usd'
-        let priceId: string | undefined
+        // Fetch all active prices for this product
+        const prices = await stripe.prices
+          .list({ product: product.id, active: true, limit: 100 })
+          .autoPagingToArray({ limit: 1000 })
 
-        const defaultPrice = product.default_price
-        if (defaultPrice && typeof defaultPrice === 'object' && 'unit_amount' in defaultPrice) {
-          unitPrice = (defaultPrice.unit_amount ?? 0) / 100
-          currency = defaultPrice.currency ?? 'usd'
-          priceId = defaultPrice.id
+        if (prices.length === 0) {
+          // No active prices — skip product
+          skipped++
+          continue
         }
 
-        const result = await client.mutation(api.functions.catalogItems.upsertSyncedItem, {
-          businessId: typedBusinessId,
-          stripeProductId: product.id,
-          stripePriceId: priceId,
-          name: product.name,
-          description: product.description ?? undefined,
-          unitPrice,
-          currency: currency.toLowerCase(),
-        })
+        // Create one catalog item per price
+        for (const price of prices) {
+          const unitPrice = (price.unit_amount ?? 0) / 100
+          const currency = (price.currency ?? 'usd').toLowerCase()
+          const billingInterval = toBillingInterval(price.recurring)
 
-        syncedStripeProductIds.add(product.id)
+          const result = await client.mutation(api.functions.catalogItems.upsertSyncedItem, {
+            businessId: typedBusinessId,
+            stripeProductId: product.id,
+            stripePriceId: price.id,
+            name: product.name,
+            description: product.description ?? undefined,
+            unitPrice,
+            currency,
+            billingInterval,
+          })
 
-        if (result === 'created') created++
-        else if (result === 'updated') updated++
-        else if (result === 'skipped') skipped++
+          syncedStripePriceIds.add(price.id)
+
+          if (result === 'created') created++
+          else if (result === 'updated') updated++
+          else if (result === 'skipped') skipped++
+        }
 
         // Update progress every 20 products
         if ((i + 1) % 20 === 0 || i === products.length - 1) {
@@ -147,7 +165,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Deactivate items no longer in Stripe
+    // Deactivate items whose stripePriceId is no longer active in Stripe
     const existingSyncedItems = await client.query(
       api.functions.catalogItems.getStripeSyncedItems,
       { businessId: typedBusinessId }
@@ -155,8 +173,8 @@ export async function POST(request: NextRequest) {
 
     for (const item of existingSyncedItems) {
       if (
-        item.stripeProductId &&
-        !syncedStripeProductIds.has(item.stripeProductId) &&
+        item.stripePriceId &&
+        !syncedStripePriceIds.has(item.stripePriceId) &&
         item.status === 'active' &&
         !item.locallyDeactivated
       ) {
