@@ -52,6 +52,13 @@ interface ReviewInvoiceViewProps {
     companyAddress?: string
     companyPhone?: string
     companyEmail?: string
+    paymentMethods?: Array<{
+      id: string
+      label: string
+      enabled: boolean
+      details?: string
+      qrCodeUrl?: string
+    }>
   }
   onSendInvoice: () => Promise<void>
   onBackToEdit: () => void

@@ -127,6 +127,19 @@ export const PAYMENT_INSTRUCTION_TEMPLATES: Array<{ label: string; text: string 
   },
 ];
 
+// ============================================
+// PAYMENT METHOD CONFIG (rich payment methods)
+// ============================================
+
+export interface PaymentMethodConfig {
+  id: string
+  label: string
+  enabled: boolean
+  details?: string
+  qrCodeStorageId?: string
+  qrCodeUrl?: string  // Resolved URL from query
+}
+
 export const INVOICE_TEMPLATES = {
   MODERN: "modern",
   CLASSIC: "classic",
@@ -359,6 +372,7 @@ export interface InvoiceSettings {
   customNoteTemplates?: InvoiceTemplateItem[];
   customPaymentTemplates?: InvoiceTemplateItem[];
   acceptedPaymentMethods?: string[];
+  paymentMethods?: PaymentMethodConfig[];
 }
 
 const invoiceTemplateItemSchema = z.object({

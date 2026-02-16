@@ -1030,6 +1030,54 @@ export const getInvoiceDefaults = query({
     if (!business) return null;
 
     const settings = business.invoiceSettings;
+
+    // Resolve payment methods: prefer new rich format, fall back to old string array
+    let paymentMethods: Array<{
+      id: string;
+      label: string;
+      enabled: boolean;
+      details?: string;
+      qrCodeUrl?: string;
+    }> = [];
+
+    if (settings?.paymentMethods && settings.paymentMethods.length > 0) {
+      // Resolve QR code URLs from storage IDs
+      paymentMethods = await Promise.all(
+        settings.paymentMethods.map(async (m) => {
+          let qrCodeUrl: string | undefined;
+          if (m.qrCodeStorageId) {
+            qrCodeUrl = (await ctx.storage.getUrl(m.qrCodeStorageId as never)) ?? undefined;
+          }
+          return {
+            id: m.id,
+            label: m.label,
+            enabled: m.enabled,
+            details: m.details,
+            qrCodeUrl,
+          };
+        })
+      );
+    } else if (settings?.acceptedPaymentMethods && settings.acceptedPaymentMethods.length > 0) {
+      // Backward compat: convert old string array to new format
+      const labelMap: Record<string, string> = {
+        bank_transfer: "Bank Transfer",
+        credit_card: "Credit Card",
+        paynow: "PayNow (SG)",
+        duitnow: "DuitNow (MY)",
+        promptpay: "PromptPay (TH)",
+        gcash: "GCash (PH)",
+        grabpay: "GrabPay",
+        paypal: "PayPal",
+        cheque: "Cheque",
+        cash: "Cash",
+      };
+      paymentMethods = settings.acceptedPaymentMethods.map((id) => ({
+        id,
+        label: labelMap[id] ?? id,
+        enabled: true,
+      }));
+    }
+
     return {
       invoiceNumberPrefix: settings?.invoiceNumberPrefix ?? "INV",
       nextInvoiceNumber: settings?.nextInvoiceNumber ?? 1,
@@ -1042,6 +1090,7 @@ export const getInvoiceDefaults = query({
       selectedTemplate: settings?.selectedTemplate ?? "modern",
       acceptedPaymentMethods: settings?.acceptedPaymentMethods ?? ["bank_transfer"],
       bccOutgoingEmails: settings?.bccOutgoingEmails ?? true,
+      paymentMethods,
     };
   },
 });
@@ -1062,6 +1111,13 @@ export const updateInvoiceDefaults = mutation({
     selectedTemplate: v.optional(v.string()),
     acceptedPaymentMethods: v.optional(v.array(v.string())),
     bccOutgoingEmails: v.optional(v.boolean()),
+    paymentMethods: v.optional(v.array(v.object({
+      id: v.string(),
+      label: v.string(),
+      enabled: v.boolean(),
+      details: v.optional(v.string()),
+      qrCodeStorageId: v.optional(v.string()),
+    }))),
   },
   handler: async (ctx, args) => {
     await requireFinanceAdmin(ctx, args.businessId);
@@ -1085,6 +1141,7 @@ export const updateInvoiceDefaults = mutation({
     if (args.selectedTemplate !== undefined) patch.selectedTemplate = args.selectedTemplate;
     if (args.acceptedPaymentMethods !== undefined) patch.acceptedPaymentMethods = args.acceptedPaymentMethods;
     if (args.bccOutgoingEmails !== undefined) patch.bccOutgoingEmails = args.bccOutgoingEmails;
+    if (args.paymentMethods !== undefined) patch.paymentMethods = args.paymentMethods;
 
     await ctx.db.patch(args.businessId, {
       invoiceSettings: patch as never,

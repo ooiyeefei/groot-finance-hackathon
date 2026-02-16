@@ -57,6 +57,13 @@ interface InvoicePreviewPanelProps {
       registrationNumber?: string
       taxId?: string
       logoUrl?: string
+      paymentMethods?: Array<{
+        id: string
+        label: string
+        enabled: boolean
+        details?: string
+        qrCodeUrl?: string
+      }>
     }
     templateId: string
   }

@@ -60,6 +60,13 @@ interface InvoiceTemplateProps {
     registrationNumber?: string
     taxId?: string
     logoUrl?: string
+    paymentMethods?: Array<{
+      id: string
+      label: string
+      enabled: boolean
+      details?: string
+      qrCodeUrl?: string
+    }>
   }
 }
 
@@ -72,6 +79,7 @@ export function ModernInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplate
   const taxLabel = invoice.taxMode === 'inclusive' ? 'Tax (Inclusive)' : 'Tax'
   const hasDiscount = (invoice.totalDiscount ?? 0) > 0
   const hasAmountPaid = (invoice.amountPaid ?? 0) > 0
+  const enabledPaymentMethods = businessInfo?.paymentMethods?.filter((m) => m.enabled && (m.details || m.qrCodeUrl)) ?? []
 
   return (
     <div
@@ -353,6 +361,34 @@ export function ModernInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplate
             </div>
           )}
         </footer>
+      )}
+
+      {/* ── Payment Methods ── */}
+      {enabledPaymentMethods.length > 0 && (
+        <section className="border-t border-border pt-6 mt-2" style={{ pageBreakInside: 'avoid' }}>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+            Accepted Payment Methods
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {enabledPaymentMethods.map((method) => (
+              <div key={method.id} className="flex gap-3">
+                {method.qrCodeUrl && (
+                  <img
+                    src={method.qrCodeUrl}
+                    alt={`${method.label} QR Code`}
+                    className="w-16 h-16 rounded border border-border object-contain bg-white shrink-0"
+                  />
+                )}
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground">{method.label}</p>
+                  {method.details && (
+                    <p className="text-xs text-muted-foreground whitespace-pre-line mt-0.5">{method.details}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       {/* ── Footer ── */}

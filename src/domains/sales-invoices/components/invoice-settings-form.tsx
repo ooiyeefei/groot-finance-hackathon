@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
-import { ArrowLeft, Settings, Save, Loader2, Eye, CreditCard, Mail } from 'lucide-react'
+import { ArrowLeft, Settings, Save, Loader2, Eye, CreditCard, Mail, Upload, X, ChevronDown, ChevronRight, QrCode } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useToast } from '@/components/ui/toast'
 import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
-import { useInvoiceDefaults, useInvoiceDefaultsMutation } from '../hooks/use-sales-invoices'
+import { useInvoiceDefaults, useInvoiceDefaultsMutation, useSalesInvoiceMutations } from '../hooks/use-sales-invoices'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import {
   SUPPORTED_CURRENCIES,
@@ -23,24 +23,39 @@ import {
   type PaymentTerms,
   type TaxMode,
   type InvoiceTemplate,
+  type PaymentMethodConfig,
 } from '../types'
 import { formatInvoiceNumber } from '../lib/invoice-number-format'
+
+// ---------------------------------------------------------------------------
+// Payment method definitions
+// ---------------------------------------------------------------------------
+
+const PAYMENT_METHOD_DEFS = [
+  { id: 'bank_transfer', label: 'Bank Transfer', supportsQr: false, placeholder: 'Bank: DBS Bank\nAccount Name: Company Pte Ltd\nAccount Number: 123-456789-0\nSwift: DBSSSGSG' },
+  { id: 'credit_card', label: 'Credit Card', supportsQr: false, placeholder: 'Visa, Mastercard accepted' },
+  { id: 'paynow', label: 'PayNow (SG)', supportsQr: true, placeholder: 'PayNow UEN: 202012345A' },
+  { id: 'duitnow', label: 'DuitNow (MY)', supportsQr: true, placeholder: 'DuitNow ID: 123456789012' },
+  { id: 'promptpay', label: 'PromptPay (TH)', supportsQr: true, placeholder: 'PromptPay ID: 0812345678' },
+  { id: 'gcash', label: 'GCash (PH)', supportsQr: true, placeholder: 'GCash Number: 0917 123 4567' },
+  { id: 'grabpay', label: 'GrabPay', supportsQr: true, placeholder: 'GrabPay Number: +65 9123 4567' },
+  { id: 'paypal', label: 'PayPal', supportsQr: false, placeholder: 'PayPal: payments@company.com' },
+  { id: 'cheque', label: 'Cheque', supportsQr: false, placeholder: 'Payable to: Company Name' },
+  { id: 'cash', label: 'Cash', supportsQr: false, placeholder: 'Cash payment accepted' },
+] as const
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-const PAYMENT_METHODS = [
-  { id: 'bank_transfer', label: 'Bank Transfer' },
-  { id: 'credit_card', label: 'Credit Card' },
-  { id: 'paynow', label: 'PayNow (SG)' },
-  { id: 'grabpay', label: 'GrabPay' },
-  { id: 'promptpay', label: 'PromptPay (TH)' },
-  { id: 'gcash', label: 'GCash (PH)' },
-  { id: 'paypal', label: 'PayPal' },
-  { id: 'cheque', label: 'Cheque' },
-  { id: 'cash', label: 'Cash' },
-] as const
+interface PaymentMethodState {
+  id: string
+  label: string
+  enabled: boolean
+  details?: string
+  qrCodeStorageId?: string
+  qrCodeUrl?: string
+}
 
 interface InvoiceSettingsState {
   invoicePrefix: string
@@ -51,8 +66,28 @@ interface InvoiceSettingsState {
   defaultPaymentInstructions: string
   defaultNotes: string
   defaultTemplateId: InvoiceTemplate
-  acceptedPaymentMethods: string[]
+  paymentMethods: PaymentMethodState[]
   bccOutgoingEmails: boolean
+}
+
+function buildInitialPaymentMethods(
+  savedMethods?: PaymentMethodConfig[]
+): PaymentMethodState[] {
+  if (savedMethods && savedMethods.length > 0) {
+    // Merge saved with definitions (in case new methods were added)
+    const savedMap = new Map(savedMethods.map((m) => [m.id, m]))
+    return PAYMENT_METHOD_DEFS.map((def) => {
+      const saved = savedMap.get(def.id)
+      return saved
+        ? { id: def.id, label: def.label, enabled: saved.enabled, details: saved.details, qrCodeStorageId: saved.qrCodeStorageId, qrCodeUrl: saved.qrCodeUrl }
+        : { id: def.id, label: def.label, enabled: false }
+    })
+  }
+  return PAYMENT_METHOD_DEFS.map((def) => ({
+    id: def.id,
+    label: def.label,
+    enabled: false,
+  }))
 }
 
 // ---------------------------------------------------------------------------
@@ -66,6 +101,7 @@ export default function InvoiceSettingsForm() {
   const { profile: businessProfile } = useBusinessProfile()
   const invoiceDefaults = useInvoiceDefaults()
   const { updateDefaults } = useInvoiceDefaultsMutation()
+  const { generateUploadUrl } = useSalesInvoiceMutations()
 
   const contactEmail = businessProfile?.contact_email || (business as unknown as Record<string, unknown>)?.contactEmail as string | undefined
 
@@ -78,7 +114,7 @@ export default function InvoiceSettingsForm() {
     defaultPaymentInstructions: '',
     defaultNotes: '',
     defaultTemplateId: 'modern',
-    acceptedPaymentMethods: ['bank_transfer'],
+    paymentMethods: buildInitialPaymentMethods(),
     bccOutgoingEmails: true,
   })
 
@@ -96,7 +132,7 @@ export default function InvoiceSettingsForm() {
         defaultPaymentInstructions: invoiceDefaults.defaultPaymentInstructions ?? '',
         defaultNotes: invoiceDefaults.defaultNotes ?? '',
         defaultTemplateId: (invoiceDefaults.selectedTemplate as InvoiceTemplate) ?? 'modern',
-        acceptedPaymentMethods: invoiceDefaults.acceptedPaymentMethods ?? ['bank_transfer'],
+        paymentMethods: buildInitialPaymentMethods(invoiceDefaults.paymentMethods as PaymentMethodConfig[] | undefined),
         bccOutgoingEmails: invoiceDefaults.bccOutgoingEmails ?? true,
       })
     }
@@ -104,6 +140,7 @@ export default function InvoiceSettingsForm() {
 
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
+  const [uploadingMethodId, setUploadingMethodId] = useState<string | null>(null)
 
   // Live preview of formatted invoice number
   const previewInvoiceNumber = useMemo(() => {
@@ -115,12 +152,74 @@ export default function InvoiceSettingsForm() {
     )
   }, [settings.invoicePrefix, settings.nextNumber])
 
+  const enabledCount = useMemo(
+    () => settings.paymentMethods.filter((m) => m.enabled).length,
+    [settings.paymentMethods]
+  )
+
+  // Payment method helpers
+  const updatePaymentMethod = useCallback((methodId: string, updates: Partial<PaymentMethodState>) => {
+    setSettings((prev) => ({
+      ...prev,
+      paymentMethods: prev.paymentMethods.map((m) =>
+        m.id === methodId ? { ...m, ...updates } : m
+      ),
+    }))
+  }, [])
+
+  const handleQrUpload = useCallback(async (methodId: string, file: File) => {
+    if (!file.type.startsWith('image/')) {
+      addToast({ type: 'error', title: 'Invalid file type', description: 'Please upload an image file (PNG, JPG, etc.)' })
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      addToast({ type: 'error', title: 'File too large', description: 'QR code image must be under 2MB' })
+      return
+    }
+
+    setUploadingMethodId(methodId)
+    try {
+      const uploadUrl = await generateUploadUrl()
+      const response = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      })
+      if (!response.ok) throw new Error('Upload failed')
+      const { storageId } = await response.json()
+
+      // Create a local preview URL
+      const localUrl = URL.createObjectURL(file)
+      updatePaymentMethod(methodId, { qrCodeStorageId: storageId, qrCodeUrl: localUrl })
+      addToast({ type: 'success', title: 'QR code uploaded' })
+    } catch (error) {
+      console.error('[InvoiceSettings] QR upload failed:', error)
+      addToast({ type: 'error', title: 'Failed to upload QR code' })
+    } finally {
+      setUploadingMethodId(null)
+    }
+  }, [generateUploadUrl, updatePaymentMethod, addToast])
+
   const handleSave = async () => {
     if (!businessId) return
     setIsSaving(true)
     setSaveSuccess(false)
 
     try {
+      // Convert payment methods to saveable format (strip qrCodeUrl which is resolved at query time)
+      const paymentMethodsToSave = settings.paymentMethods.map((m) => ({
+        id: m.id,
+        label: m.label,
+        enabled: m.enabled,
+        details: m.details || undefined,
+        qrCodeStorageId: m.qrCodeStorageId || undefined,
+      }))
+
+      // Also derive acceptedPaymentMethods for backward compat
+      const acceptedPaymentMethods = settings.paymentMethods
+        .filter((m) => m.enabled)
+        .map((m) => m.id)
+
       await updateDefaults({
         businessId: businessId as Id<'businesses'>,
         invoiceNumberPrefix: settings.invoicePrefix || undefined,
@@ -131,8 +230,9 @@ export default function InvoiceSettingsForm() {
         selectedTemplate: settings.defaultTemplateId,
         defaultPaymentInstructions: settings.defaultPaymentInstructions || undefined,
         defaultNotes: settings.defaultNotes || undefined,
-        acceptedPaymentMethods: settings.acceptedPaymentMethods,
+        acceptedPaymentMethods,
         bccOutgoingEmails: settings.bccOutgoingEmails,
+        paymentMethods: paymentMethodsToSave,
       })
 
       setSaveSuccess(true)
@@ -336,37 +436,29 @@ export default function InvoiceSettingsForm() {
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-muted-foreground text-xs">
-                Select the payment methods your business accepts. These will be shown on invoices.
+                Enable the payment methods your business accepts. Add account details and QR codes — these will be shown on invoices.
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {PAYMENT_METHODS.map((method) => (
-                  <label
-                    key={method.id}
-                    className="flex items-center gap-2.5 p-2.5 rounded-md border border-border hover:bg-muted/50 cursor-pointer transition-colors"
-                  >
-                    <Checkbox
-                      checked={settings.acceptedPaymentMethods.includes(method.id)}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          updateSetting('acceptedPaymentMethods', [
-                            ...settings.acceptedPaymentMethods,
-                            method.id,
-                          ])
-                        } else {
-                          updateSetting(
-                            'acceptedPaymentMethods',
-                            settings.acceptedPaymentMethods.filter((m) => m !== method.id)
-                          )
-                        }
-                      }}
+              <div className="space-y-2">
+                {settings.paymentMethods.map((method) => {
+                  const def = PAYMENT_METHOD_DEFS.find((d) => d.id === method.id)
+                  if (!def) return null
+                  return (
+                    <PaymentMethodCard
+                      key={method.id}
+                      method={method}
+                      def={def}
+                      onToggle={(enabled) => updatePaymentMethod(method.id, { enabled })}
+                      onDetailsChange={(details) => updatePaymentMethod(method.id, { details })}
+                      onQrUpload={(file) => handleQrUpload(method.id, file)}
+                      onQrRemove={() => updatePaymentMethod(method.id, { qrCodeStorageId: undefined, qrCodeUrl: undefined })}
+                      isUploading={uploadingMethodId === method.id}
                     />
-                    <span className="text-sm text-foreground">{method.label}</span>
-                  </label>
-                ))}
+                  )
+                })}
               </div>
-              {settings.acceptedPaymentMethods.length === 0 && (
+              {enabledCount === 0 && (
                 <p className="text-xs text-destructive">
-                  Select at least one payment method
+                  Enable at least one payment method to display on invoices
                 </p>
               )}
             </CardContent>
@@ -528,7 +620,7 @@ export default function InvoiceSettingsForm() {
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground">Payment Methods</dt>
                   <dd className="text-foreground font-medium">
-                    {settings.acceptedPaymentMethods.length}
+                    {enabledCount}
                   </dd>
                 </div>
                 <div className="flex justify-between">
@@ -542,6 +634,139 @@ export default function InvoiceSettingsForm() {
           </Card>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Payment Method Card sub-component
+// ---------------------------------------------------------------------------
+
+interface PaymentMethodCardProps {
+  method: PaymentMethodState
+  def: typeof PAYMENT_METHOD_DEFS[number]
+  onToggle: (enabled: boolean) => void
+  onDetailsChange: (details: string) => void
+  onQrUpload: (file: File) => void
+  onQrRemove: () => void
+  isUploading: boolean
+}
+
+function PaymentMethodCard({
+  method,
+  def,
+  onToggle,
+  onDetailsChange,
+  onQrUpload,
+  onQrRemove,
+  isUploading,
+}: PaymentMethodCardProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  return (
+    <div className={`rounded-md border transition-colors ${method.enabled ? 'border-primary/40 bg-primary/5' : 'border-border'}`}>
+      {/* Toggle header */}
+      <label className="flex items-center gap-2.5 p-3 cursor-pointer">
+        <Checkbox
+          checked={method.enabled}
+          onCheckedChange={(checked) => onToggle(!!checked)}
+        />
+        <span className="text-sm font-medium text-foreground flex-1">{def.label}</span>
+        {method.enabled ? (
+          <ChevronDown className="w-4 h-4 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="w-4 h-4 text-muted-foreground" />
+        )}
+      </label>
+
+      {/* Expanded section */}
+      {method.enabled && (
+        <div className="px-3 pb-3 pt-0 space-y-3 border-t border-border/50">
+          {/* Details textarea */}
+          <div className="pt-3">
+            <Label className="text-foreground text-xs">Payment Details</Label>
+            <Textarea
+              placeholder={def.placeholder}
+              value={method.details ?? ''}
+              onChange={(e) => onDetailsChange(e.target.value)}
+              rows={2}
+              className="bg-input border-border text-foreground text-sm mt-1"
+            />
+            <p className="text-muted-foreground text-[11px] mt-1">
+              Shown on the invoice under this payment method
+            </p>
+          </div>
+
+          {/* QR code upload (only for supported methods) */}
+          {def.supportsQr && (
+            <div>
+              <Label className="text-foreground text-xs flex items-center gap-1.5">
+                <QrCode className="w-3.5 h-3.5" />
+                QR Code
+              </Label>
+              {method.qrCodeUrl || method.qrCodeStorageId ? (
+                <div className="mt-1 flex items-start gap-3">
+                  {method.qrCodeUrl && (
+                    <img
+                      src={method.qrCodeUrl}
+                      alt={`${def.label} QR Code`}
+                      className="w-20 h-20 rounded border border-border object-contain bg-white"
+                    />
+                  )}
+                  <div className="flex flex-col gap-1">
+                    <p className="text-xs text-muted-foreground">QR code uploaded</p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-destructive hover:text-destructive"
+                      onClick={onQrRemove}
+                    >
+                      <X className="w-3 h-3 mr-1" />
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-1">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) onQrUpload(file)
+                      e.target.value = ''
+                    }}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                  >
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-3 h-3 mr-1.5" />
+                        Upload QR Code
+                      </>
+                    )}
+                  </Button>
+                  <p className="text-muted-foreground text-[11px] mt-1">
+                    PNG or JPG, max 2MB. Will be displayed on the invoice.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

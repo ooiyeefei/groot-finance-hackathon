@@ -139,6 +139,14 @@ export default defineSchema({
       customPaymentTemplates: v.optional(v.array(v.object({ id: v.string(), label: v.string(), text: v.string() }))),
       // 012-stripe-invoice-ux: Accepted payment methods for invoice display
       acceptedPaymentMethods: v.optional(v.array(v.string())),
+      // Rich payment method configs with details and QR codes
+      paymentMethods: v.optional(v.array(v.object({
+        id: v.string(),
+        label: v.string(),
+        enabled: v.boolean(),
+        details: v.optional(v.string()),
+        qrCodeStorageId: v.optional(v.string()),
+      }))),
       // BCC sender on outgoing invoice emails
       bccOutgoingEmails: v.optional(v.boolean()),
     })),

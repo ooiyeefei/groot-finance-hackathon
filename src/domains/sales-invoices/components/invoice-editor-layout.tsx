@@ -118,11 +118,13 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
   const [isSending, setIsSending] = useState(false)
 
   // Build business info for preview
+  const enabledPaymentMethods = invoiceDefaults?.paymentMethods?.filter((m: { enabled: boolean }) => m.enabled) ?? []
   const businessInfo = businessProfile ? {
     companyName: businessProfile.name,
     companyAddress: businessProfile.address || undefined,
     companyPhone: businessProfile.contact_phone || undefined,
     companyEmail: businessProfile.contact_email || undefined,
+    paymentMethods: enabledPaymentMethods.length > 0 ? enabledPaymentMethods : undefined,
   } : undefined
 
   // Build preview data

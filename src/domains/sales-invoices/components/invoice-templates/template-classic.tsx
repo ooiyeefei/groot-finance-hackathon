@@ -56,6 +56,13 @@ interface InvoiceTemplateProps {
     registrationNumber?: string
     taxId?: string
     logoUrl?: string
+    paymentMethods?: Array<{
+      id: string
+      label: string
+      enabled: boolean
+      details?: string
+      qrCodeUrl?: string
+    }>
   }
 }
 
@@ -77,6 +84,8 @@ export function ClassicInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplat
     notes,
     paymentInstructions,
   } = invoice
+
+  const enabledPaymentMethods = businessInfo?.paymentMethods?.filter((m) => m.enabled && (m.details || m.qrCodeUrl)) ?? []
 
   return (
     <div id="invoice-template" className="bg-card text-foreground p-10 max-w-[800px] mx-auto">
@@ -346,6 +355,34 @@ export function ClassicInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplat
           </div>
         )}
       </div>
+
+      {/* Payment Methods */}
+      {enabledPaymentMethods.length > 0 && (
+        <div className="border-t border-border pt-4 mt-4" style={{ pageBreakInside: 'avoid' }}>
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+            Accepted Payment Methods
+          </h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {enabledPaymentMethods.map((method) => (
+              <div key={method.id} className="flex gap-3">
+                {method.qrCodeUrl && (
+                  <img
+                    src={method.qrCodeUrl}
+                    alt={`${method.label} QR Code`}
+                    className="w-16 h-16 rounded border border-border object-contain bg-white shrink-0"
+                  />
+                )}
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground">{method.label}</p>
+                  {method.details && (
+                    <p className="text-xs text-muted-foreground whitespace-pre-line mt-0.5">{method.details}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Signature */}
       {invoice.signatureName && (

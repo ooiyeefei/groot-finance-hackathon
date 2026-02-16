@@ -70,6 +70,13 @@ export interface PdfBusinessInfo {
   registrationNumber?: string
   taxId?: string
   logoUrl?: string
+  paymentMethods?: Array<{
+    id: string
+    label: string
+    enabled: boolean
+    details?: string
+    qrCodeUrl?: string
+  }>
 }
 
 interface InvoicePdfDocumentProps {
@@ -182,6 +189,7 @@ export function InvoicePdfDocument({ invoice, businessInfo }: InvoicePdfDocument
   const taxLabel = invoice.taxMode === 'inclusive' ? 'Tax (Inclusive)' : 'Tax'
   const hasDiscount = (invoice.totalDiscount ?? 0) > 0
   const hasAmountPaid = (invoice.amountPaid ?? 0) > 0
+  const enabledPaymentMethods = businessInfo?.paymentMethods?.filter((m) => m.enabled && (m.details || m.qrCodeUrl)) ?? []
 
   return (
     <Document>
@@ -359,6 +367,28 @@ export function InvoicePdfDocument({ invoice, businessInfo }: InvoicePdfDocument
           <View style={s.footerSection}>
             <Text style={s.sectionLabel}>Payment Instructions</Text>
             <Text style={s.footerText}>{invoice.paymentInstructions}</Text>
+          </View>
+        )}
+
+        {/* ── Payment Methods ── */}
+        {enabledPaymentMethods.length > 0 && (
+          <View style={[s.footerSection, { marginTop: 12 }]}>
+            <Text style={s.sectionLabel}>Accepted Payment Methods</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+              {enabledPaymentMethods.map((method, i) => (
+                <View key={i} style={{ width: '50%', flexDirection: 'row', marginBottom: 8, paddingRight: 8 }}>
+                  {method.qrCodeUrl && (
+                    <Image src={method.qrCodeUrl} style={{ width: 48, height: 48, marginRight: 6, objectFit: 'contain' }} />
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', marginBottom: 1 }}>{method.label}</Text>
+                    {method.details && (
+                      <Text style={{ fontSize: 8, color: C.muted, lineHeight: 1.4 }}>{method.details}</Text>
+                    )}
+                  </View>
+                </View>
+              ))}
+            </View>
           </View>
         )}
 
