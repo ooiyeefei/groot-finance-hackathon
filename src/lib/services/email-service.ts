@@ -195,6 +195,7 @@ class EmailService {
     textBody: string
     attachments?: EmailAttachment[]
     bcc?: string
+    replyTo?: string
   }): Promise<{ success: boolean; error?: string; messageId?: string }> {
     if (!this.resend) {
       return { success: false, error: 'Resend not configured (RESEND_API_KEY missing)' }
@@ -208,6 +209,7 @@ class EmailService {
         html: params.htmlBody,
         text: params.textBody,
         ...(params.bcc ? { bcc: params.bcc } : {}),
+        ...(params.replyTo ? { reply_to: params.replyTo } : {}),
         ...(params.attachments?.length ? {
           attachments: params.attachments.map(a => ({
             filename: a.filename,
@@ -244,8 +246,9 @@ class EmailService {
     textBody: string
     attachments?: EmailAttachment[]
     bcc?: string
+    replyTo?: string
   }): string {
-    const { from, to, subject, htmlBody, textBody, attachments, bcc } = params
+    const { from, to, subject, htmlBody, textBody, attachments, bcc, replyTo } = params
 
     const altBoundary = `----=_Alt_${Date.now().toString(36)}`
     const lines: string[] = []
@@ -254,6 +257,7 @@ class EmailService {
     lines.push(`From: Groot Finance <${from}>`)
     lines.push(`To: ${to}`)
     if (bcc) lines.push(`Bcc: ${bcc}`)
+    if (replyTo) lines.push(`Reply-To: ${replyTo}`)
     lines.push(`Subject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=`)
     lines.push('MIME-Version: 1.0')
 
@@ -1075,7 +1079,7 @@ ${this.config!.appUrl}
   async sendInvoiceEmail(data: InvoiceEmailData): Promise<{ success: boolean; error?: string; messageId?: string; provider?: 'ses' | 'resend' }> {
     this.initialize()
 
-    const { recipientEmail, businessName, invoiceNumber, pdfAttachment, bccEmail } = data
+    const { recipientEmail, businessName, invoiceNumber, pdfAttachment, bccEmail, businessEmail } = data
 
     const htmlBody = this.generateInvoiceEmailHTML(data)
     const textBody = this.generateInvoiceEmailText(data)
@@ -1092,6 +1096,7 @@ ${this.config!.appUrl}
         textBody,
         attachments,
         bcc: bccEmail,
+        replyTo: businessEmail,
       })
 
       const destinations = [recipientEmail]
@@ -1126,6 +1131,7 @@ ${this.config!.appUrl}
             textBody,
             attachments,
             bcc: bccEmail,
+            replyTo: businessEmail,
           })
 
           if (resendResult.success) {
