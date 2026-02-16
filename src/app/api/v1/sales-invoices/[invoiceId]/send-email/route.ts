@@ -96,12 +96,16 @@ export async function POST(
       }
     }
 
+    // Server-side BCC fallback: if frontend didn't send bccEmail, use businessEmail
+    const resolvedBccEmail = bccEmail || businessEmail || undefined
+
     console.log('[Sales Invoices API] Sending invoice email:', {
       invoiceId,
       to,
       invoiceNumber,
       hasPdf: !!resolvedPdfAttachment,
-      bccEmail: bccEmail || '(none)',
+      bccEmail: resolvedBccEmail || '(none)',
+      businessEmail: businessEmail || '(none)',
     })
 
     const result = await emailService.sendInvoiceEmail({
@@ -123,7 +127,7 @@ export async function POST(
       lineItems,
       pdfAttachment: resolvedPdfAttachment,
       viewUrl,
-      bccEmail,
+      bccEmail: resolvedBccEmail,
     })
 
     if (!result.success) {
