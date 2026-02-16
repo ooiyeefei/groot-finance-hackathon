@@ -8,8 +8,9 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useUser } from '@clerk/nextjs'
 import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
-import { useSalesInvoice, useSalesInvoiceMutations, useInvoicePdfUrl } from '@/domains/sales-invoices/hooks/use-sales-invoices'
+import { useSalesInvoice, useSalesInvoiceMutations, useInvoicePdfUrl, useInvoiceDefaults } from '@/domains/sales-invoices/hooks/use-sales-invoices'
 import { useInvoicePdf, type PdfRenderData } from '@/domains/sales-invoices/hooks/use-invoice-pdf'
 import { InvoicePreview } from '@/domains/sales-invoices/components/invoice-preview'
 import { InvoiceStatusBadge } from '@/domains/sales-invoices/components/invoice-status-badge'
@@ -18,6 +19,7 @@ import { formatBusinessDate } from '@/lib/utils'
 import { SALES_INVOICE_STATUSES } from '@/domains/sales-invoices/types'
 import type { SalesInvoiceStatus } from '@/domains/sales-invoices/types'
 import { PaymentHistory } from '@/domains/sales-invoices/components/payment-history'
+import { useToast } from '@/components/ui/toast'
 
 export default function SalesInvoiceDetailPage() {
   const params = useParams()
@@ -27,6 +29,9 @@ export default function SalesInvoiceDetailPage() {
 
   const { business } = useActiveBusiness()
   const { profile: businessProfile } = useBusinessProfile()
+  const { user } = useUser()
+  const invoiceDefaults = useInvoiceDefaults()
+  const { addToast } = useToast()
   const { invoice, isLoading } = useSalesInvoice(invoiceId)
   const { sendInvoice, voidInvoice, removeInvoice } = useSalesInvoiceMutations()
   const { generatePdf, generatePdfBlob, isGenerating } = useInvoicePdf()
@@ -97,6 +102,9 @@ export default function SalesInvoiceDetailPage() {
       unitPrice: item.unitPrice,
       amount: item.totalAmount,
     })),
+    ...(invoiceDefaults?.bccOutgoingEmails !== false
+      ? { bccEmail: businessProfile?.contact_email || user?.primaryEmailAddress?.emailAddress || undefined }
+      : {}),
   })
 
   /** Generate PDF blob and convert to base64 for email attachment */
@@ -134,11 +142,14 @@ export default function SalesInvoiceDetailPage() {
       // Send email to customer after invoice status is updated
       try {
         const pdfPayload = await buildPdfPayload()
-        await fetch(`/api/v1/sales-invoices/${invoice._id}/send-email`, {
+        const res = await fetch(`/api/v1/sales-invoices/${invoice._id}/send-email`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...buildEmailPayload(), ...pdfPayload }),
         })
+        if (res.ok) {
+          addToast({ type: 'success', title: 'Invoice sent', description: `Email sent to ${invoice.customerSnapshot.email}` })
+        }
       } catch (emailError) {
         // Email failure is non-blocking — invoice is already marked as sent
         console.error('Failed to send invoice email:', emailError)
@@ -157,11 +168,16 @@ export default function SalesInvoiceDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...buildEmailPayload(), ...pdfPayload }),
       })
-      if (!res.ok) {
-        console.error('Resend email failed:', await res.text())
+      if (res.ok) {
+        addToast({ type: 'success', title: 'Email sent', description: `Invoice email resent to ${invoice.customerSnapshot.email}` })
+      } else {
+        const errorText = await res.text().catch(() => 'Unknown error')
+        console.error('Resend email failed:', errorText)
+        addToast({ type: 'error', title: 'Failed to send email', description: 'Please try again later' })
       }
     } catch (err) {
       console.error('Failed to resend invoice email:', err)
+      addToast({ type: 'error', title: 'Failed to send email', description: 'Please try again later' })
     } finally {
       setIsResending(false)
     }
