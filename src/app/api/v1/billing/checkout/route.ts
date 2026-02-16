@@ -96,11 +96,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // If user has a paused/expired subscription, cancel it before creating new one
+    // If user has a paused/expired subscription, cancel it before creating new one.
+    // IMPORTANT: Do NOT cancel 'trialing' subscriptions here. Canceling an active trial
+    // triggers subscription.deleted webhook → sets subscriptionStatus="canceled" → locks
+    // user out if they click browser Back without completing checkout. Stripe handles the
+    // transition automatically when the new subscription activates.
     if (business.stripeSubscriptionId &&
         (business.subscriptionStatus === 'paused' ||
-         business.subscriptionStatus === 'canceled' ||
-         business.subscriptionStatus === 'trialing')) {
+         business.subscriptionStatus === 'canceled')) {
       try {
         console.log(`[Billing Checkout] Canceling expired subscription: ${business.stripeSubscriptionId}`)
         await getStripe().subscriptions.cancel(business.stripeSubscriptionId)

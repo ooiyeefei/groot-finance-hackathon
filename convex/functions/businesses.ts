@@ -1472,24 +1472,30 @@ export const getTrialStatusByClerkId = query({
       return { isExpired: false, businessId: user.businessId };
     }
 
+    // Check trial_end_date FIRST (synced from Stripe subscription)
+    // This must run before status checks because the checkout flow can
+    // temporarily cancel a trialing subscription (creating a race condition
+    // with the subscription.deleted webhook). If the trial period is still
+    // active, the user should retain access regardless of status.
+    if (business.trialEndDate && typeof business.trialEndDate === "number") {
+      const now = Date.now();
+      if (business.trialEndDate > now) {
+        // Trial is still active — allow access even if status is temporarily "canceled"
+        return { isExpired: false, businessId: user.businessId };
+      }
+      // Trial has expired based on date
+      return { isExpired: true, businessId: user.businessId };
+    }
+
     // Check for explicitly paused status (trial ended without payment method)
     // Stripe sets this via webhook when trial_settings.missing_payment_method = 'pause'
     if (business.subscriptionStatus === "paused") {
       return { isExpired: true, businessId: user.businessId };
     }
 
-    // Check for canceled/unpaid status
+    // Check for canceled/unpaid status (only reached if no trialEndDate set)
     if (business.subscriptionStatus === "canceled" || business.subscriptionStatus === "unpaid") {
       return { isExpired: true, businessId: user.businessId };
-    }
-
-    // Check trial_end_date (synced from Stripe subscription)
-    if (business.trialEndDate && typeof business.trialEndDate === "number") {
-      const now = Date.now();
-      if (business.trialEndDate < now) {
-        // Trial has expired based on date
-        return { isExpired: true, businessId: user.businessId };
-      }
     }
 
     // EDGE CASE: User has trial plan but no trial dates set
