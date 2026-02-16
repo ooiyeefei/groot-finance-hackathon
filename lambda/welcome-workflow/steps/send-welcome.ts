@@ -31,8 +31,8 @@ export async function sendWelcomeEmail(params: SendWelcomeParams): Promise<SendW
 
   const templateType = isTeamMember ? 'welcome_team_member' : 'welcome_new_user';
   const subject = isTeamMember
-    ? `Welcome to FinanSEAL${invitedBy ? ` - ${invitedBy} invited you` : ''}`
-    : 'Welcome to FinanSEAL - Your Financial Co-Pilot';
+    ? `Welcome to Groot Finance${invitedBy ? ` - ${invitedBy} invited you` : ''}`
+    : 'Welcome to Groot Finance - Your Financial Co-Pilot';
 
   try {
     // Generate unsubscribe token and URL

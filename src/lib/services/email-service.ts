@@ -200,7 +200,7 @@ class EmailService {
 
     try {
       const { data, error } = await this.resend.emails.send({
-        from: `FinanSEAL <${this.config!.fromEmail}>`,
+        from: `Groot Finance <${this.config!.fromEmail}>`,
         to: params.to,
         subject: params.subject,
         html: params.htmlBody,
@@ -247,7 +247,7 @@ class EmailService {
     const lines: string[] = []
 
     // Required headers
-    lines.push(`From: FinanSEAL <${from}>`)
+    lines.push(`From: Groot Finance <${from}>`)
     lines.push(`To: ${to}`)
     lines.push(`Subject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=`)
     lines.push('MIME-Version: 1.0')
@@ -320,7 +320,7 @@ class EmailService {
 
     const htmlBody = this.generateInvitationHTML(data)
     const textBody = this.generateInvitationText(data)
-    const subject = `Invitation to join ${businessName} on FinanSEAL`
+    const subject = `Invitation to join ${businessName} on Groot Finance`
 
     // Try SES first
     try {
@@ -392,7 +392,7 @@ class EmailService {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Join ${businessName} on FinanSEAL</title>
+      <title>Join ${businessName} on Groot Finance</title>
       <style>
         body {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -448,21 +448,21 @@ class EmailService {
     </head>
     <body>
       <div class="header">
-        <h1>You're invited to join FinanSEAL!</h1>
+        <h1>You're invited to join Groot Finance!</h1>
         <p>Your team is waiting for you</p>
       </div>
 
       <div class="content">
         <h2>Hi there!</h2>
 
-        <p><strong>${inviterName}</strong> has invited you to join <strong>${businessName}</strong> on FinanSEAL as a <span class="role-badge">${role}</span>.</p>
+        <p><strong>${inviterName}</strong> has invited you to join <strong>${businessName}</strong> on Groot Finance as a <span class="role-badge">${role}</span>.</p>
 
-        <p>FinanSEAL is a financial co-pilot that helps Southeast Asian SMEs manage expenses, process receipts, and track financial performance with AI-powered insights.</p>
+        <p>Groot Finance is a financial co-pilot that helps Southeast Asian SMEs manage expenses, process receipts, and track financial performance with AI-powered insights.</p>
 
         <div style="text-align: center; margin: 30px 0;">
           <a href="${invitationUrl}" class="cta-button">Accept Invitation</a>
           <p style="font-size: 13px; color: #6b7280; margin-top: 12px;">
-            New to FinanSEAL? You'll be prompted to sign up first.<br>
+            New to Groot Finance? You'll be prompted to sign up first.<br>
             Already have an account? Just sign in to accept.
           </p>
         </div>
@@ -492,7 +492,7 @@ class EmailService {
           If you didn't expect this invitation, you can safely ignore this email.
         </p>
         <p style="margin-top: 20px;">
-          <a href="https://finance.hellogroot.com" style="color: #3b82f6;">FinanSEAL</a> -
+          <a href="https://finance.hellogroot.com" style="color: #3b82f6;">Groot Finance</a> -
           Financial Co-Pilot for Southeast Asian SMEs
         </p>
       </div>
@@ -508,17 +508,17 @@ class EmailService {
     const { businessName, inviterName, role, invitationUrl } = data
 
     return `
-You're invited to join ${businessName} on FinanSEAL!
+You're invited to join ${businessName} on Groot Finance!
 
 Hi there!
 
-${inviterName} has invited you to join ${businessName} on FinanSEAL as a ${role}.
+${inviterName} has invited you to join ${businessName} on Groot Finance as a ${role}.
 
-FinanSEAL is a financial co-pilot that helps Southeast Asian SMEs manage expenses, process receipts, and track financial performance with AI-powered insights.
+Groot Finance is a financial co-pilot that helps Southeast Asian SMEs manage expenses, process receipts, and track financial performance with AI-powered insights.
 
 Accept your invitation: ${invitationUrl}
 
-Note: New to FinanSEAL? You'll be prompted to sign up first.
+Note: New to Groot Finance? You'll be prompted to sign up first.
 Already have an account? Just sign in to accept.
 
 What you'll get access to:
@@ -533,7 +533,7 @@ This invitation will expire in 7 days.
 If you didn't expect this invitation, you can safely ignore this email.
 
 ---
-FinanSEAL - Financial Co-Pilot for Southeast Asian SMEs
+Groot Finance - Financial Co-Pilot for Southeast Asian SMEs
 https://finance.hellogroot.com
     `
   }
@@ -554,7 +554,7 @@ https://finance.hellogroot.com
 
     const htmlBody = this.generateFeedbackNotificationHTML(data)
     const textBody = this.generateFeedbackNotificationText(data)
-    const subject = `New ${typeLabels[feedbackType]} from FinanSEAL`
+    const subject = `New ${typeLabels[feedbackType]} from Groot Finance`
 
     // Try SES first
     try {
@@ -716,7 +716,7 @@ https://finance.hellogroot.com
       </div>
 
       <div class="footer">
-        <p>This notification was sent from FinanSEAL Feedback System</p>
+        <p>This notification was sent from Groot Finance Feedback System</p>
       </div>
     </body>
     </html>
@@ -736,7 +736,7 @@ https://finance.hellogroot.com
     }
 
     return `
-New ${typeLabels[feedbackType]} from FinanSEAL
+New ${typeLabels[feedbackType]} from Groot Finance
 
 A new ${typeLabels[feedbackType].toLowerCase()} has been submitted:
 
@@ -751,7 +751,7 @@ ${githubIssueUrl ? `GitHub Issue: ${githubIssueUrl}` : ''}
 View in Dashboard: ${this.config!.appUrl}/en/admin/feedback
 
 ---
-FinanSEAL Feedback System
+Groot Finance Feedback System
     `
   }
 
@@ -993,14 +993,14 @@ FinanSEAL Feedback System
         ` : ''}
 
         <div style="text-align: center;">
-          <a href="${this.config!.appUrl}/en/leave" class="cta-button">View in FinanSEAL</a>
+          <a href="${this.config!.appUrl}/en/leave" class="cta-button">View in Groot Finance</a>
         </div>
       </div>
 
       <div class="footer">
-        <p>This notification was sent from ${businessName} via FinanSEAL</p>
+        <p>This notification was sent from ${businessName} via Groot Finance</p>
         <p style="margin-top: 12px;">
-          <a href="${this.config!.appUrl}" style="color: #3b82f6;">FinanSEAL</a> -
+          <a href="${this.config!.appUrl}" style="color: #3b82f6;">Groot Finance</a> -
           Financial Co-Pilot for Southeast Asian SMEs
         </p>
       </div>
@@ -1055,10 +1055,10 @@ ${notificationType === 'rejected' ? 'Reason for rejection:' : 'Notes:'}
 ${reason}
 ` : ''}
 
-View in FinanSEAL: ${this.config!.appUrl}/en/leave
+View in Groot Finance: ${this.config!.appUrl}/en/leave
 
 ---
-This notification was sent from ${businessName} via FinanSEAL
+This notification was sent from ${businessName} via Groot Finance
 Financial Co-Pilot for Southeast Asian SMEs
 ${this.config!.appUrl}
     `
@@ -1283,7 +1283,7 @@ ${this.config!.appUrl}
                     If you have any questions, please reply to this email or contact us directly.
                   </p>
                   <p style="margin: 8px 0 0 0; font-size: 11px; color: #d1d5db;">
-                    Sent from ${businessName} via FinanSEAL
+                    Sent from ${businessName} via Groot Finance
                   </p>
                 </td>
               </tr>
@@ -1317,7 +1317,7 @@ ${viewUrl ? `\nDownload invoice PDF: ${viewUrl}\n` : ''}${pdfAttachment ? '\nThe
 If you have any questions, please reply to this email or contact us directly.
 
 ---
-Sent from ${businessName} via FinanSEAL
+Sent from ${businessName} via Groot Finance
     `
   }
 

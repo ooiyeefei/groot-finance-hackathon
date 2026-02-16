@@ -12,7 +12,7 @@ const TEMPLATES: Record<string, string> = {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Welcome to FinanSEAL</title>
+  <title>Welcome to Groot Finance</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -115,18 +115,18 @@ const TEMPLATES: Record<string, string> = {
   <div class="container">
     <div class="card">
       <div class="logo">
-        <span class="logo-text">FinanSEAL</span>
+        <span class="logo-text">Groot Finance</span>
       </div>
 
       <h1>Welcome, {{firstName}}! 🎉</h1>
 
-      <p>Thank you for joining FinanSEAL - your AI-powered financial co-pilot for Southeast Asian SMEs.</p>
+      <p>Thank you for joining Groot Finance - your AI-powered financial co-pilot for Southeast Asian SMEs.</p>
 
       <div class="highlight">
         <p>You're now part of a growing community of business owners who are simplifying their financial management with intelligent automation.</p>
       </div>
 
-      <p>Here's what you can do with FinanSEAL:</p>
+      <p>Here's what you can do with Groot Finance:</p>
 
       <div class="features">
         <div class="feature">
@@ -161,10 +161,10 @@ const TEMPLATES: Record<string, string> = {
       <p>Need help? Contact <a href="mailto:hello@hellogroot.com">hello@hellogroot.com</a></p>
 
       <div class="footer">
-        <p>© 2026 FinanSEAL. All rights reserved.</p>
+        <p>© 2026 Groot Finance. All rights reserved.</p>
         <p>Singapore | Thailand | Indonesia | Malaysia</p>
         <p class="unsubscribe">
-          You're receiving this email because you signed up for FinanSEAL.<br>
+          You're receiving this email because you signed up for Groot Finance.<br>
           <a href="{{unsubscribeUrl}}">Manage email preferences</a>
         </p>
       </div>
@@ -178,7 +178,7 @@ const TEMPLATES: Record<string, string> = {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Welcome to FinanSEAL</title>
+  <title>Welcome to Groot Finance</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -302,7 +302,7 @@ const TEMPLATES: Record<string, string> = {
   <div class="container">
     <div class="card">
       <div class="logo">
-        <span class="logo-text">FinanSEAL</span>
+        <span class="logo-text">Groot Finance</span>
       </div>
 
       <h1>Welcome to the team, {{firstName}}! 👋</h1>
@@ -312,7 +312,7 @@ const TEMPLATES: Record<string, string> = {
         <p class="inviter" style="margin: 8px 0 0;">{{invitedBy}}</p>
       </div>
 
-      <p>You now have access to FinanSEAL - your team's AI-powered financial co-pilot. Your account is ready to use.</p>
+      <p>You now have access to Groot Finance - your team's AI-powered financial co-pilot. Your account is ready to use.</p>
 
       <div class="tips">
         <h3>🚀 Quick Start Guide</h3>
@@ -331,10 +331,10 @@ const TEMPLATES: Record<string, string> = {
       <p>Need help? Contact <a href="mailto:hello@hellogroot.com">hello@hellogroot.com</a></p>
 
       <div class="footer">
-        <p>© 2026 FinanSEAL. All rights reserved.</p>
+        <p>© 2026 Groot Finance. All rights reserved.</p>
         <p>Singapore | Thailand | Indonesia | Malaysia</p>
         <p class="unsubscribe">
-          You're receiving this email because you were invited to join FinanSEAL.<br>
+          You're receiving this email because you were invited to join Groot Finance.<br>
           <a href="{{unsubscribeUrl}}">Manage email preferences</a>
         </p>
       </div>
@@ -348,7 +348,7 @@ const TEMPLATES: Record<string, string> = {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>You're Invited to FinanSEAL</title>
+  <title>You're Invited to Groot Finance</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -414,12 +414,12 @@ const TEMPLATES: Record<string, string> = {
   <div class="container">
     <div class="card">
       <div class="logo">
-        <span class="logo-text">FinanSEAL</span>
+        <span class="logo-text">Groot Finance</span>
       </div>
 
       <h1>You're invited! 🎉</h1>
 
-      <p>{{invitedBy}} has invited you to join their team on FinanSEAL.</p>
+      <p>{{invitedBy}} has invited you to join their team on Groot Finance.</p>
 
       <p style="text-align: center;">
         <a href="{{inviteUrl}}" class="button" style="color: #ffffff !important;">Accept Invitation →</a>
@@ -428,7 +428,7 @@ const TEMPLATES: Record<string, string> = {
       <p>This invitation expires in 7 days.</p>
 
       <div class="footer">
-        <p>© 2026 FinanSEAL. All rights reserved.</p>
+        <p>© 2026 Groot Finance. All rights reserved.</p>
       </div>
     </div>
   </div>
