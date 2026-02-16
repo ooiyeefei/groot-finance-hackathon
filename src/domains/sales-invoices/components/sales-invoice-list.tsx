@@ -23,8 +23,9 @@ import { formatBusinessDate } from '@/lib/utils'
 import { useConvex } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
+import { useUser } from '@clerk/nextjs'
 import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
-import { useSalesInvoices, useSalesInvoiceMutations } from '../hooks/use-sales-invoices'
+import { useSalesInvoices, useSalesInvoiceMutations, useInvoiceDefaults } from '../hooks/use-sales-invoices'
 import { InvoiceStatusBadge } from './invoice-status-badge'
 import type { SalesInvoice, SalesInvoiceStatus } from '../types'
 import { SALES_INVOICE_STATUSES } from '../types'
@@ -57,6 +58,8 @@ export default function SalesInvoiceList() {
   const locale = useLocale()
   const { business } = useActiveBusiness()
   const { profile: businessProfile } = useBusinessProfile()
+  const { user } = useUser()
+  const invoiceDefaults = useInvoiceDefaults()
   const [activeTab, setActiveTab] = useState<FilterTab>('all')
 
   const statusFilter = activeTab === 'all' ? undefined : activeTab
@@ -127,9 +130,9 @@ export default function SalesInvoiceList() {
                 amount: item.totalAmount,
               })),
               ...pdfPayload,
-              ...((business as unknown as Record<string, unknown>)?.invoiceSettings as Record<string, unknown> | undefined)?.bccOutgoingEmails !== false
-                ? { bccEmail: businessProfile?.contact_email || (business as unknown as Record<string, unknown>)?.contactEmail as string }
-                : {},
+              ...(invoiceDefaults?.bccOutgoingEmails !== false
+                ? { bccEmail: businessProfile?.contact_email || user?.primaryEmailAddress?.emailAddress || undefined }
+                : {}),
             }),
           })
         } catch (emailError) {
@@ -143,7 +146,7 @@ export default function SalesInvoiceList() {
         })
       }
     },
-    [sendInvoice, business, businessProfile, convex],
+    [sendInvoice, business, businessProfile, convex, user, invoiceDefaults],
   )
 
   const handleVoid = useCallback(

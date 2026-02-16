@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
+import { useUser } from '@clerk/nextjs'
 import { useToast } from '@/components/ui/toast'
 import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
 import { useSalesInvoiceForm } from '../hooks/use-sales-invoice-form'
@@ -30,6 +31,7 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
   const { addToast } = useToast()
   const { businessId, business } = useActiveBusiness()
   const { profile: businessProfile } = useBusinessProfile()
+  const { user } = useUser()
   const isSendingRef = useRef(false)
 
   const invoiceDefaults = useInvoiceDefaults()
@@ -265,9 +267,9 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
             })),
             viewUrl: `${typeof window !== 'undefined' ? window.location.origin : ''}/${locale}/sales-invoices/${currentInvoiceId}`,
             ...pdfPayload,
-            ...((business as unknown as Record<string, unknown>)?.invoiceSettings as Record<string, unknown> | undefined)?.bccOutgoingEmails !== false
-              ? { bccEmail: businessProfile?.contact_email || (business as unknown as Record<string, unknown>)?.contactEmail as string }
-              : {},
+            ...(invoiceDefaults?.bccOutgoingEmails !== false
+              ? { bccEmail: businessProfile?.contact_email || user?.primaryEmailAddress?.emailAddress || undefined }
+              : {}),
           }),
         })
         if (!emailResponse.ok) {
@@ -299,7 +301,7 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
       isSendingRef.current = false
       setIsSending(false)
     }
-  }, [businessId, form, invoiceId, displayInvoiceNumber, createInvoice, sendInvoice, generatePdfBlob, buildPdfData, generateUploadUrl, storePdfStorageId, businessProfile, business, router, locale, addToast])
+  }, [businessId, form, invoiceId, displayInvoiceNumber, createInvoice, sendInvoice, generatePdfBlob, buildPdfData, generateUploadUrl, storePdfStorageId, businessProfile, business, router, locale, addToast, user, invoiceDefaults])
 
   const handleDraftCreated = useCallback((newInvoiceId: string) => {
     // Navigate to edit URL if in create mode and draft was auto-saved

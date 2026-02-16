@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Save, Eye, Send, ArrowLeft, Plus, Trash2, X } from 'lucide-react'
+import { useUser } from '@clerk/nextjs'
 import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
 import { useSalesInvoiceForm } from '../hooks/use-sales-invoice-form'
 import { useSalesInvoiceMutations, useNextInvoiceNumber, useInvoiceTemplateMutations, useCustomInvoiceTemplates } from '../hooks/use-sales-invoices'
@@ -37,6 +38,7 @@ export function SalesInvoiceForm() {
   const locale = useLocale()
   const { businessId, business } = useActiveBusiness()
   const { profile: businessProfile } = useBusinessProfile()
+  const { user } = useUser()
   const [mode, setMode] = useState<FormMode>('edit')
   const [isSaving, setIsSaving] = useState(false)
 
@@ -240,7 +242,7 @@ export function SalesInvoiceForm() {
             })),
             ...pdfPayload,
             ...(invoiceSettings?.bccOutgoingEmails !== false
-              ? { bccEmail: businessProfile?.contact_email || (business as unknown as Record<string, unknown>)?.contactEmail as string }
+              ? { bccEmail: businessProfile?.contact_email || user?.primaryEmailAddress?.emailAddress || undefined }
               : {}),
           }),
         })
