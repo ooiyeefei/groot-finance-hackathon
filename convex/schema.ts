@@ -138,6 +138,8 @@ export default defineSchema({
       customPaymentTemplates: v.optional(v.array(v.object({ id: v.string(), label: v.string(), text: v.string() }))),
       // 012-stripe-invoice-ux: Accepted payment methods for invoice display
       acceptedPaymentMethods: v.optional(v.array(v.string())),
+      // BCC sender on outgoing invoice emails
+      bccOutgoingEmails: v.optional(v.boolean()),
     })),
 
     // Timestamps

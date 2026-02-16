@@ -126,6 +126,9 @@ export default function SalesInvoiceList() {
                 amount: item.totalAmount,
               })),
               ...pdfPayload,
+              ...((business as unknown as Record<string, unknown>)?.invoiceSettings as Record<string, unknown> | undefined)?.bccOutgoingEmails
+                ? { bccEmail: businessProfile?.contact_email || (business as unknown as Record<string, unknown>)?.contactEmail as string }
+                : {},
             }),
           })
         } catch (emailError) {

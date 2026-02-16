@@ -84,6 +84,7 @@ interface InvoiceEmailData {
   lineItems?: InvoiceLineItemEmail[]
   viewUrl?: string
   pdfAttachment?: EmailAttachment
+  bccEmail?: string
 }
 
 interface EmailServiceConfig {
@@ -193,6 +194,7 @@ class EmailService {
     htmlBody: string
     textBody: string
     attachments?: EmailAttachment[]
+    bcc?: string
   }): Promise<{ success: boolean; error?: string; messageId?: string }> {
     if (!this.resend) {
       return { success: false, error: 'Resend not configured (RESEND_API_KEY missing)' }
@@ -205,6 +207,7 @@ class EmailService {
         subject: params.subject,
         html: params.htmlBody,
         text: params.textBody,
+        ...(params.bcc ? { bcc: params.bcc } : {}),
         ...(params.attachments?.length ? {
           attachments: params.attachments.map(a => ({
             filename: a.filename,
@@ -240,8 +243,9 @@ class EmailService {
     htmlBody: string
     textBody: string
     attachments?: EmailAttachment[]
+    bcc?: string
   }): string {
-    const { from, to, subject, htmlBody, textBody, attachments } = params
+    const { from, to, subject, htmlBody, textBody, attachments, bcc } = params
 
     const altBoundary = `----=_Alt_${Date.now().toString(36)}`
     const lines: string[] = []
@@ -249,6 +253,7 @@ class EmailService {
     // Required headers
     lines.push(`From: Groot Finance <${from}>`)
     lines.push(`To: ${to}`)
+    if (bcc) lines.push(`Bcc: ${bcc}`)
     lines.push(`Subject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=`)
     lines.push('MIME-Version: 1.0')
 
@@ -1070,7 +1075,7 @@ ${this.config!.appUrl}
   async sendInvoiceEmail(data: InvoiceEmailData): Promise<{ success: boolean; error?: string; messageId?: string; provider?: 'ses' | 'resend' }> {
     this.initialize()
 
-    const { recipientEmail, businessName, invoiceNumber, pdfAttachment } = data
+    const { recipientEmail, businessName, invoiceNumber, pdfAttachment, bccEmail } = data
 
     const htmlBody = this.generateInvoiceEmailHTML(data)
     const textBody = this.generateInvoiceEmailText(data)
@@ -1086,19 +1091,24 @@ ${this.config!.appUrl}
         htmlBody,
         textBody,
         attachments,
+        bcc: bccEmail,
       })
+
+      const destinations = [recipientEmail]
+      if (bccEmail) destinations.push(bccEmail)
 
       const command = new SendRawEmailCommand({
         RawMessage: {
           Data: Buffer.from(rawMessage)
         },
+        Destinations: destinations,
         ConfigurationSetName: this.config!.configurationSet
       })
 
       const response = await this.ses!.send(command)
 
       if (response.MessageId) {
-        console.log(`[EmailService] Invoice email sent via SES to ${recipientEmail}, MessageId: ${response.MessageId}`)
+        console.log(`[EmailService] Invoice email sent via SES to ${recipientEmail}${bccEmail ? ` (bcc: ${bccEmail})` : ''}, MessageId: ${response.MessageId}`)
         return { success: true, messageId: response.MessageId, provider: 'ses' }
       }
     } catch (sesError) {
@@ -1115,6 +1125,7 @@ ${this.config!.appUrl}
             htmlBody,
             textBody,
             attachments,
+            bcc: bccEmail,
           })
 
           if (resendResult.success) {

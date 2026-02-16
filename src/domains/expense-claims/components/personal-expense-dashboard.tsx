@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useCallback, lazy, Suspense, useMemo } from 'react'
 import { useSearchParams, useRouter, useParams } from 'next/navigation'
-import { FileText, Clock, CheckCircle, XCircle, Edit3, BarChart3, Eye, Trash2, Loader2, RotateCcw, Brain, AlertCircle } from 'lucide-react'
+import { FileText, Clock, CheckCircle, XCircle, Edit3, BarChart3, Eye, Trash2, Loader2, RotateCcw, Brain, AlertCircle, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -59,6 +59,8 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
     loading: convexLoading,
     deleteClaim: convexDeleteClaim,
     deleting: convexDeleting,
+    submitClaim: convexSubmitClaim,
+    submitting: convexSubmitting,
   } = useExpenseClaimsRealtime(businessId, { limit: 10 })
 
   // Fetch expense categories for displaying category names instead of IDs
@@ -157,6 +159,41 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
       setDeletingClaimId(null)
     }
   }, [isDeleting])
+
+  // Submit claim handler with confirmation
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false)
+  const [submittingClaimId, setSubmittingClaimId] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const handleSubmitClick = useCallback((claimId: string) => {
+    setSubmittingClaimId(claimId)
+    setShowSubmitConfirm(true)
+  }, [])
+
+  const submitClaim = useCallback(async () => {
+    if (!submittingClaimId) return
+    setIsSubmitting(true)
+    try {
+      await convexSubmitClaim(submittingClaimId)
+      setToastType('success')
+      setToastMessage('Expense claim submitted for approval')
+      setShowSubmitConfirm(false)
+      setSubmittingClaimId(null)
+    } catch (error) {
+      console.error('Error submitting claim:', error)
+      setToastType('error')
+      setToastMessage(error instanceof Error ? error.message : 'Failed to submit expense claim')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }, [submittingClaimId, convexSubmitClaim])
+
+  const handleCloseSubmitConfirm = useCallback(() => {
+    if (!isSubmitting) {
+      setShowSubmitConfirm(false)
+      setSubmittingClaimId(null)
+    }
+  }, [isSubmitting])
 
   // ✅ CONVEX REAL-TIME: AI reprocessing handler - no manual refresh needed
   // Convex subscription auto-updates when Trigger.dev changes status
@@ -373,6 +410,8 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
             setDetailsClaimId={setDetailsClaimId}
             setShowDetailsModal={setShowDetailsModal}
             deleteClaim={handleDeleteClick}
+            submitClaim={handleSubmitClick}
+            submittingClaims={convexSubmitting}
             fetchDashboardData={fetchDashboardData}
             setToastMessage={setToastMessage}
             setToastType={setToastType}
@@ -449,6 +488,22 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
         </Suspense>
       )}
 
+      {/* Submit Confirmation Dialog */}
+      {showSubmitConfirm && (
+        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-6 h-6 animate-spin text-white" /></div>}>
+          <ConfirmationDialog
+            isOpen={showSubmitConfirm}
+            onClose={handleCloseSubmitConfirm}
+            onConfirm={submitClaim}
+            title="Submit Expense Claim"
+            message="Submit this expense claim for approval? You won't be able to edit it after submission."
+            confirmText="Submit"
+            cancelText="Cancel"
+            isLoading={isSubmitting}
+          />
+        </Suspense>
+      )}
+
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-4 right-4 z-50 max-w-md">
@@ -468,7 +523,7 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
 }
 
 // Unified Expense Claim Card Component
-function ExpenseClaimCard({ claim, index, context, categories, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, fetchDashboardData, setToastMessage, setToastType, handleReprocessClick, reprocessingClaims }: {
+function ExpenseClaimCard({ claim, index, context, categories, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, submitClaim, submittingClaims, fetchDashboardData, setToastMessage, setToastType, handleReprocessClick, reprocessingClaims }: {
   claim: any
   index: number
   context: 'overview' | 'history'
@@ -478,6 +533,8 @@ function ExpenseClaimCard({ claim, index, context, categories, setEditingClaimId
   setDetailsClaimId: (id: string | null) => void
   setShowDetailsModal: (show: boolean) => void
   deleteClaim: (claimId: string) => void
+  submitClaim?: (claimId: string) => void
+  submittingClaims?: Set<string>
   fetchDashboardData: () => void
   setToastMessage: (message: string | null) => void
   setToastType: (type: 'success' | 'error') => void
@@ -649,6 +706,21 @@ function ExpenseClaimCard({ claim, index, context, categories, setEditingClaimId
               <Edit3 className="w-4 h-4 mr-1.5" />
               Edit
             </Button>
+            {submitClaim && (
+              <Button
+                onClick={() => submitClaim(claim.id)}
+                disabled={submittingClaims?.has(claim.id)}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                size="sm"
+              >
+                {submittingClaims?.has(claim.id) ? (
+                  <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4 mr-1.5" />
+                )}
+                Submit
+              </Button>
+            )}
             <Button
               onClick={() => deleteClaim(claim.id)}
               variant="destructive"
@@ -755,7 +827,7 @@ function ExpenseClaimCard({ claim, index, context, categories, setEditingClaimId
 }
 
 // Personal History Content - Now uses unified card
-function PersonalHistoryContent({ data, categories, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, fetchDashboardData, setToastMessage, setToastType, handleReprocessClick, reprocessingClaims }: {
+function PersonalHistoryContent({ data, categories, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, submitClaim, submittingClaims, fetchDashboardData, setToastMessage, setToastType, handleReprocessClick, reprocessingClaims }: {
   data: PersonalDashboardData
   categories: DynamicExpenseCategory[]
   setEditingClaimId: (id: string | null) => void
@@ -763,6 +835,8 @@ function PersonalHistoryContent({ data, categories, setEditingClaimId, setShowEd
   setDetailsClaimId: (id: string | null) => void
   setShowDetailsModal: (show: boolean) => void
   deleteClaim: (claimId: string) => void
+  submitClaim: (claimId: string) => void
+  submittingClaims: Set<string>
   fetchDashboardData: () => void
   setToastMessage: (message: string | null) => void
   setToastType: (type: 'success' | 'error') => void
@@ -796,6 +870,8 @@ function PersonalHistoryContent({ data, categories, setEditingClaimId, setShowEd
                 setDetailsClaimId={setDetailsClaimId}
                 setShowDetailsModal={setShowDetailsModal}
                 deleteClaim={deleteClaim}
+                submitClaim={submitClaim}
+                submittingClaims={submittingClaims}
                 fetchDashboardData={fetchDashboardData}
                 setToastMessage={setToastMessage}
                 setToastType={setToastType}

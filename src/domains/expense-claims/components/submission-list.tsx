@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback, lazy, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { useExpenseSubmissions, useSubmissionMutations } from '../hooks/use-expense-submissions'
 import { useActiveBusiness } from '@/contexts/business-context'
@@ -24,6 +24,8 @@ import {
   X,
 } from 'lucide-react'
 import type { CurrencyTotal } from '../types/expense-claims'
+
+const ConfirmationDialog = lazy(() => import('@/components/ui/confirmation-dialog'))
 
 interface SubmissionListProps {
   locale: string
@@ -62,7 +64,36 @@ export default function SubmissionList({ locale }: SubmissionListProps) {
     businessId: businessId || '',
     enabled: !!businessId,
   })
-  const { createSubmission } = useSubmissionMutations()
+  const { createSubmission, submitForApproval } = useSubmissionMutations()
+
+  // Submit confirmation state
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false)
+  const [submitTargetId, setSubmitTargetId] = useState<string | null>(null)
+
+  const handleSubmitClick = useCallback((e: React.MouseEvent, submissionId: string) => {
+    e.stopPropagation() // Prevent card click navigation
+    setSubmitTargetId(submissionId)
+    setShowSubmitConfirm(true)
+  }, [])
+
+  const handleConfirmSubmit = useCallback(async () => {
+    if (!submitTargetId) return
+    try {
+      await submitForApproval.mutateAsync(submitTargetId)
+      setShowSubmitConfirm(false)
+      setSubmitTargetId(null)
+    } catch (e: any) {
+      console.error('Failed to submit:', e)
+      alert(e.message || 'Failed to submit')
+    }
+  }, [submitTargetId, submitForApproval])
+
+  const handleCloseSubmitConfirm = useCallback(() => {
+    if (!submitForApproval.isPending) {
+      setShowSubmitConfirm(false)
+      setSubmitTargetId(null)
+    }
+  }, [submitForApproval.isPending])
 
   // Client-side filtering and sorting
   const filteredSubmissions = useMemo(() => {
@@ -284,11 +315,42 @@ export default function SubmissionList({ locale }: SubmissionListProps) {
                     )}
                   </div>
                 </div>
+                {submission.status === 'draft' && (submission.claimCount ?? 0) > 0 && (
+                  <Button
+                    onClick={(e) => handleSubmitClick(e, submission._id)}
+                    disabled={submitForApproval.isPending && submitTargetId === submission._id}
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground flex-shrink-0 ml-2"
+                    size="sm"
+                  >
+                    {submitForApproval.isPending && submitTargetId === submission._id ? (
+                      <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4 mr-1.5" />
+                    )}
+                    Submit
+                  </Button>
+                )}
                 <ChevronRight className="h-5 w-5 text-muted-foreground flex-shrink-0 ml-3" />
               </div>
             )
           })}
         </div>
+      )}
+
+      {/* Submit Confirmation Dialog */}
+      {showSubmitConfirm && (
+        <Suspense fallback={null}>
+          <ConfirmationDialog
+            isOpen={showSubmitConfirm}
+            onClose={handleCloseSubmitConfirm}
+            onConfirm={handleConfirmSubmit}
+            title="Submit for Approval"
+            message="Submit this expense submission for approval? All claims will be sent to your approver."
+            confirmText="Submit"
+            cancelText="Cancel"
+            isLoading={submitForApproval.isPending}
+          />
+        </Suspense>
       )}
     </div>
   )

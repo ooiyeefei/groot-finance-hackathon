@@ -262,6 +262,9 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
             })),
             viewUrl: `${typeof window !== 'undefined' ? window.location.origin : ''}/${locale}/sales-invoices/${currentInvoiceId}`,
             ...pdfPayload,
+            ...((business as unknown as Record<string, unknown>)?.invoiceSettings as Record<string, unknown> | undefined)?.bccOutgoingEmails
+              ? { bccEmail: businessProfile?.contact_email || (business as unknown as Record<string, unknown>)?.contactEmail as string }
+              : {},
           }),
         })
         if (!emailResponse.ok) {

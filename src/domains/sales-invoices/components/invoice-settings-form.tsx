@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Settings, Save, Loader2, Eye, CreditCard } from 'lucide-react'
+import { Settings, Save, Loader2, Eye, CreditCard, Mail } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
-import { useActiveBusiness } from '@/contexts/business-context'
+import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
 import {
   SUPPORTED_CURRENCIES,
   PAYMENT_TERMS_LABELS,
@@ -47,6 +47,7 @@ interface InvoiceSettingsState {
   defaultNotes: string
   defaultTemplateId: InvoiceTemplate
   acceptedPaymentMethods: string[]
+  bccOutgoingEmails: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -55,9 +56,11 @@ interface InvoiceSettingsState {
 
 export default function InvoiceSettingsForm() {
   const { business } = useActiveBusiness()
+  const { profile: businessProfile } = useBusinessProfile()
 
   // Extract current invoice settings from business context if available
   const invoiceSettings = (business as unknown as Record<string, unknown>)?.invoiceSettings as Record<string, unknown> | undefined
+  const contactEmail = businessProfile?.contact_email || (business as unknown as Record<string, unknown>)?.contactEmail as string | undefined
 
   const [settings, setSettings] = useState<InvoiceSettingsState>({
     invoicePrefix: (invoiceSettings?.invoiceNumberPrefix as string) ?? 'INV',
@@ -69,6 +72,7 @@ export default function InvoiceSettingsForm() {
     defaultNotes: (invoiceSettings?.defaultNotes as string) ?? '',
     defaultTemplateId: (invoiceSettings?.selectedTemplate as InvoiceTemplate) ?? 'modern',
     acceptedPaymentMethods: (invoiceSettings?.acceptedPaymentMethods as string[]) ?? ['bank_transfer'],
+    bccOutgoingEmails: (invoiceSettings?.bccOutgoingEmails as boolean) ?? false,
   })
 
   const [isSaving, setIsSaving] = useState(false)
@@ -321,6 +325,35 @@ export default function InvoiceSettingsForm() {
             </CardContent>
           </Card>
 
+          {/* Email Settings */}
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="text-foreground text-base flex items-center gap-2">
+                <Mail className="w-4 h-4" />
+                Email Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <label className="flex items-start gap-3 p-3 rounded-md border border-border hover:bg-muted/50 cursor-pointer transition-colors">
+                <Checkbox
+                  checked={settings.bccOutgoingEmails}
+                  onCheckedChange={(checked) => updateSetting('bccOutgoingEmails', !!checked)}
+                  className="mt-0.5"
+                />
+                <div>
+                  <span className="text-sm font-medium text-foreground">
+                    Send me a copy of outgoing invoice emails
+                  </span>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {contactEmail
+                      ? `A BCC copy will be sent to ${contactEmail}`
+                      : 'Set a contact email in your business profile to receive copies'}
+                  </p>
+                </div>
+              </label>
+            </CardContent>
+          </Card>
+
           {/* Default Text Fields */}
           <Card className="bg-card border-border">
             <CardHeader>
@@ -449,6 +482,12 @@ export default function InvoiceSettingsForm() {
                   <dt className="text-muted-foreground">Payment Methods</dt>
                   <dd className="text-foreground font-medium">
                     {settings.acceptedPaymentMethods.length}
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">BCC Emails</dt>
+                  <dd className="text-foreground font-medium">
+                    {settings.bccOutgoingEmails ? 'On' : 'Off'}
                   </dd>
                 </div>
               </dl>
