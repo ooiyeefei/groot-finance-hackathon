@@ -223,7 +223,7 @@ class EmailService {
         return { success: false, error: error.message }
       }
 
-      console.log(`[EmailService] Email sent via Resend, ID: ${data?.id}`)
+      console.log(`[EmailService] Email sent via Resend, ID: ${data?.id}, to: ${params.to}, bcc: ${params.bcc || '(none)'}`)
       return { success: true, messageId: data?.id }
     } catch (error) {
       console.error('[EmailService] Resend exception:', error)
@@ -1080,6 +1080,8 @@ ${this.config!.appUrl}
     this.initialize()
 
     const { recipientEmail, businessName, invoiceNumber, pdfAttachment, bccEmail, businessEmail } = data
+
+    console.log(`[EmailService] sendInvoiceEmail called: to=${recipientEmail}, bccEmail=${bccEmail || '(not set)'}, businessEmail=${businessEmail || '(not set)'}`)
 
     const htmlBody = this.generateInvoiceEmailHTML(data)
     const textBody = this.generateInvoiceEmailText(data)

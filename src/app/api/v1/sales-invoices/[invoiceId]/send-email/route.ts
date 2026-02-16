@@ -101,6 +101,7 @@ export async function POST(
       to,
       invoiceNumber,
       hasPdf: !!resolvedPdfAttachment,
+      bccEmail: bccEmail || '(none)',
     })
 
     const result = await emailService.sendInvoiceEmail({
