@@ -239,7 +239,7 @@ export function SalesInvoiceForm() {
               amount: item.totalAmount,
             })),
             ...pdfPayload,
-            ...(invoiceSettings?.bccOutgoingEmails
+            ...(invoiceSettings?.bccOutgoingEmails !== false
               ? { bccEmail: businessProfile?.contact_email || (business as unknown as Record<string, unknown>)?.contactEmail as string }
               : {}),
           }),

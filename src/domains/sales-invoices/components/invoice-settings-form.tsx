@@ -72,7 +72,7 @@ export default function InvoiceSettingsForm() {
     defaultNotes: (invoiceSettings?.defaultNotes as string) ?? '',
     defaultTemplateId: (invoiceSettings?.selectedTemplate as InvoiceTemplate) ?? 'modern',
     acceptedPaymentMethods: (invoiceSettings?.acceptedPaymentMethods as string[]) ?? ['bank_transfer'],
-    bccOutgoingEmails: (invoiceSettings?.bccOutgoingEmails as boolean) ?? false,
+    bccOutgoingEmails: (invoiceSettings?.bccOutgoingEmails as boolean) ?? true,
   })
 
   const [isSaving, setIsSaving] = useState(false)
