@@ -14,6 +14,7 @@ import {
   Trash2,
   Loader2,
   Filter,
+  Settings,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -218,12 +219,19 @@ export default function SalesInvoiceList() {
           </p>
         </div>
 
-        <Link href={`/${locale}/sales-invoices/create`}>
-          <Button variant="primary" size="default">
-            <Plus className="h-4 w-4 mr-1.5" />
-            New Invoice
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href={`/${locale}/sales-invoices/settings`}>
+            <Button variant="outline" size="icon" title="Invoice Settings">
+              <Settings className="h-4 w-4" />
+            </Button>
+          </Link>
+          <Link href={`/${locale}/sales-invoices/create`}>
+            <Button variant="primary" size="default">
+              <Plus className="h-4 w-4 mr-1.5" />
+              New Invoice
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* ----------------------------------------------------------------- */}
