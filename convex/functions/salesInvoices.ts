@@ -1031,12 +1031,17 @@ export const getInvoiceDefaults = query({
 
     const settings = business.invoiceSettings;
     return {
+      invoiceNumberPrefix: settings?.invoiceNumberPrefix ?? "INV",
+      nextInvoiceNumber: settings?.nextInvoiceNumber ?? 1,
       defaultCurrency: settings?.defaultCurrency ?? "SGD",
       defaultPaymentTerms: settings?.defaultPaymentTerms ?? "net_30",
+      defaultTaxMode: settings?.defaultTaxMode ?? "exclusive",
       defaultPaymentInstructions: settings?.defaultPaymentInstructions,
       defaultNotes: settings?.defaultNotes,
       defaultSignatureName: settings?.defaultSignatureName,
       selectedTemplate: settings?.selectedTemplate ?? "modern",
+      acceptedPaymentMethods: settings?.acceptedPaymentMethods ?? ["bank_transfer"],
+      bccOutgoingEmails: settings?.bccOutgoingEmails ?? true,
     };
   },
 });
@@ -1048,6 +1053,15 @@ export const updateInvoiceDefaults = mutation({
     defaultFooter: v.optional(v.string()),
     defaultPaymentInstructions: v.optional(v.string()),
     defaultSignatureName: v.optional(v.string()),
+    // Full settings fields
+    invoiceNumberPrefix: v.optional(v.string()),
+    nextInvoiceNumber: v.optional(v.number()),
+    defaultCurrency: v.optional(v.string()),
+    defaultPaymentTerms: v.optional(v.string()),
+    defaultTaxMode: v.optional(v.string()),
+    selectedTemplate: v.optional(v.string()),
+    acceptedPaymentMethods: v.optional(v.array(v.string())),
+    bccOutgoingEmails: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     await requireFinanceAdmin(ctx, args.businessId);
@@ -1057,14 +1071,23 @@ export const updateInvoiceDefaults = mutation({
 
     const settings = (business as Record<string, unknown>).invoiceSettings as Record<string, unknown> | undefined ?? {};
 
+    // Build patch: only include fields that were explicitly passed
+    const patch: Record<string, unknown> = { ...settings };
+    if (args.defaultNotes !== undefined) patch.defaultNotes = args.defaultNotes;
+    if (args.defaultFooter !== undefined) patch.defaultFooter = args.defaultFooter;
+    if (args.defaultPaymentInstructions !== undefined) patch.defaultPaymentInstructions = args.defaultPaymentInstructions;
+    if (args.defaultSignatureName !== undefined) patch.defaultSignatureName = args.defaultSignatureName;
+    if (args.invoiceNumberPrefix !== undefined) patch.invoiceNumberPrefix = args.invoiceNumberPrefix;
+    if (args.nextInvoiceNumber !== undefined) patch.nextInvoiceNumber = args.nextInvoiceNumber;
+    if (args.defaultCurrency !== undefined) patch.defaultCurrency = args.defaultCurrency;
+    if (args.defaultPaymentTerms !== undefined) patch.defaultPaymentTerms = args.defaultPaymentTerms;
+    if (args.defaultTaxMode !== undefined) patch.defaultTaxMode = args.defaultTaxMode;
+    if (args.selectedTemplate !== undefined) patch.selectedTemplate = args.selectedTemplate;
+    if (args.acceptedPaymentMethods !== undefined) patch.acceptedPaymentMethods = args.acceptedPaymentMethods;
+    if (args.bccOutgoingEmails !== undefined) patch.bccOutgoingEmails = args.bccOutgoingEmails;
+
     await ctx.db.patch(args.businessId, {
-      invoiceSettings: {
-        ...settings,
-        defaultNotes: args.defaultNotes,
-        defaultFooter: args.defaultFooter,
-        defaultPaymentInstructions: args.defaultPaymentInstructions,
-        defaultSignatureName: args.defaultSignatureName,
-      } as never,
+      invoiceSettings: patch as never,
       updatedAt: Date.now(),
     });
   },

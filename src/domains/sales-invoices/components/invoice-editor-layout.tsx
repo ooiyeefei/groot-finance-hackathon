@@ -12,7 +12,7 @@ import { InvoiceEditorHeader } from './invoice-editor-header'
 import { InvoiceFormPanel } from './invoice-form-panel'
 import { InvoicePreviewPanel } from './invoice-preview-panel'
 import { ReviewInvoiceView } from './review-invoice-view'
-import type { PaymentTerms, SalesInvoiceFormInput } from '../types'
+import type { PaymentTerms, TaxMode, SalesInvoiceFormInput } from '../types'
 import type { Id } from '../../../../convex/_generated/dataModel'
 
 const DEFAULT_NOTES = 'Thank you for your business.'
@@ -98,6 +98,7 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
   const form = useSalesInvoiceForm({
     defaultCurrency: invoiceDefaults?.defaultCurrency ?? 'SGD',
     defaultPaymentTerms: (invoiceDefaults?.defaultPaymentTerms as PaymentTerms) ?? 'net_30',
+    defaultTaxMode: (invoiceDefaults?.defaultTaxMode as TaxMode) ?? 'exclusive',
     defaultPaymentInstructions: invoiceDefaults?.defaultPaymentInstructions ?? (invoiceDefaults !== undefined ? DEFAULT_PAYMENT_INSTRUCTIONS : undefined),
     defaultNotes: invoiceDefaults?.defaultNotes ?? (invoiceDefaults !== undefined ? DEFAULT_NOTES : undefined),
     defaultSignatureName: invoiceDefaults?.defaultSignatureName,

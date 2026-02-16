@@ -1,7 +1,9 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { Settings, Save, Loader2, Eye, CreditCard, Mail } from 'lucide-react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import Link from 'next/link'
+import { useLocale } from 'next-intl'
+import { ArrowLeft, Settings, Save, Loader2, Eye, CreditCard, Mail } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -9,7 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
+import { useToast } from '@/components/ui/toast'
 import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
+import { useInvoiceDefaults, useInvoiceDefaultsMutation } from '../hooks/use-sales-invoices'
+import type { Id } from '../../../../convex/_generated/dataModel'
 import {
   SUPPORTED_CURRENCIES,
   PAYMENT_TERMS_LABELS,
@@ -55,25 +60,47 @@ interface InvoiceSettingsState {
 // ---------------------------------------------------------------------------
 
 export default function InvoiceSettingsForm() {
-  const { business } = useActiveBusiness()
+  const locale = useLocale()
+  const { addToast } = useToast()
+  const { businessId, business } = useActiveBusiness()
   const { profile: businessProfile } = useBusinessProfile()
+  const invoiceDefaults = useInvoiceDefaults()
+  const { updateDefaults } = useInvoiceDefaultsMutation()
 
-  // Extract current invoice settings from business context if available
-  const invoiceSettings = (business as unknown as Record<string, unknown>)?.invoiceSettings as Record<string, unknown> | undefined
   const contactEmail = businessProfile?.contact_email || (business as unknown as Record<string, unknown>)?.contactEmail as string | undefined
 
   const [settings, setSettings] = useState<InvoiceSettingsState>({
-    invoicePrefix: (invoiceSettings?.invoiceNumberPrefix as string) ?? 'INV',
-    nextNumber: (invoiceSettings?.nextInvoiceNumber as number) ?? 1,
-    defaultCurrency: (invoiceSettings?.defaultCurrency as string) ?? 'SGD',
-    defaultPaymentTerms: (invoiceSettings?.defaultPaymentTerms as PaymentTerms) ?? 'net_30',
-    defaultTaxMode: (invoiceSettings?.defaultTaxMode as TaxMode) ?? 'exclusive',
-    defaultPaymentInstructions: (invoiceSettings?.defaultPaymentInstructions as string) ?? '',
-    defaultNotes: (invoiceSettings?.defaultNotes as string) ?? '',
-    defaultTemplateId: (invoiceSettings?.selectedTemplate as InvoiceTemplate) ?? 'modern',
-    acceptedPaymentMethods: (invoiceSettings?.acceptedPaymentMethods as string[]) ?? ['bank_transfer'],
-    bccOutgoingEmails: (invoiceSettings?.bccOutgoingEmails as boolean) ?? true,
+    invoicePrefix: 'INV',
+    nextNumber: 1,
+    defaultCurrency: 'SGD',
+    defaultPaymentTerms: 'net_30',
+    defaultTaxMode: 'exclusive',
+    defaultPaymentInstructions: '',
+    defaultNotes: '',
+    defaultTemplateId: 'modern',
+    acceptedPaymentMethods: ['bank_transfer'],
+    bccOutgoingEmails: true,
   })
+
+  // Sync state when Convex data loads
+  const hasInitialized = useRef(false)
+  useEffect(() => {
+    if (invoiceDefaults && !hasInitialized.current) {
+      hasInitialized.current = true
+      setSettings({
+        invoicePrefix: invoiceDefaults.invoiceNumberPrefix ?? 'INV',
+        nextNumber: invoiceDefaults.nextInvoiceNumber ?? 1,
+        defaultCurrency: invoiceDefaults.defaultCurrency ?? 'SGD',
+        defaultPaymentTerms: (invoiceDefaults.defaultPaymentTerms as PaymentTerms) ?? 'net_30',
+        defaultTaxMode: (invoiceDefaults.defaultTaxMode as TaxMode) ?? 'exclusive',
+        defaultPaymentInstructions: invoiceDefaults.defaultPaymentInstructions ?? '',
+        defaultNotes: invoiceDefaults.defaultNotes ?? '',
+        defaultTemplateId: (invoiceDefaults.selectedTemplate as InvoiceTemplate) ?? 'modern',
+        acceptedPaymentMethods: invoiceDefaults.acceptedPaymentMethods ?? ['bank_transfer'],
+        bccOutgoingEmails: invoiceDefaults.bccOutgoingEmails ?? true,
+      })
+    }
+  }, [invoiceDefaults])
 
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
@@ -89,20 +116,35 @@ export default function InvoiceSettingsForm() {
   }, [settings.invoicePrefix, settings.nextNumber])
 
   const handleSave = async () => {
+    if (!businessId) return
     setIsSaving(true)
     setSaveSuccess(false)
 
     try {
-      // TODO: Persist settings to backend when Convex mutation is available
-      console.log('[InvoiceSettings] Saving settings:', settings)
-
-      // Simulate save delay for UX feedback
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      await updateDefaults({
+        businessId: businessId as Id<'businesses'>,
+        invoiceNumberPrefix: settings.invoicePrefix || undefined,
+        nextInvoiceNumber: settings.nextNumber,
+        defaultCurrency: settings.defaultCurrency,
+        defaultPaymentTerms: settings.defaultPaymentTerms,
+        defaultTaxMode: settings.defaultTaxMode,
+        selectedTemplate: settings.defaultTemplateId,
+        defaultPaymentInstructions: settings.defaultPaymentInstructions || undefined,
+        defaultNotes: settings.defaultNotes || undefined,
+        acceptedPaymentMethods: settings.acceptedPaymentMethods,
+        bccOutgoingEmails: settings.bccOutgoingEmails,
+      })
 
       setSaveSuccess(true)
+      addToast({ type: 'success', title: 'Invoice settings saved' })
       setTimeout(() => setSaveSuccess(false), 3000)
     } catch (error) {
       console.error('[InvoiceSettings] Failed to save settings:', error)
+      addToast({
+        type: 'error',
+        title: 'Failed to save settings',
+        description: error instanceof Error ? error.message : 'Please try again.',
+      })
     } finally {
       setIsSaving(false)
     }
@@ -120,6 +162,11 @@ export default function InvoiceSettingsForm() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
+          <Link href={`/${locale}/invoices#sales-invoices`}>
+            <Button variant="outline" size="icon" title="Back to Sales Invoices">
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+          </Link>
           <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
             <Settings className="w-5 h-5 text-primary" />
           </div>
@@ -130,7 +177,7 @@ export default function InvoiceSettingsForm() {
             </p>
           </div>
         </div>
-        <Button onClick={handleSave} disabled={isSaving}>
+        <Button variant="primary" onClick={handleSave} disabled={isSaving}>
           {isSaving ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />

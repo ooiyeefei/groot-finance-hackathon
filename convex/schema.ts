@@ -133,6 +133,7 @@ export default defineSchema({
       defaultFooter: v.optional(v.string()),
       defaultNotes: v.optional(v.string()),
       defaultSignatureName: v.optional(v.string()),
+      defaultTaxMode: v.optional(v.string()),
       selectedTemplate: v.optional(v.string()),
       customNoteTemplates: v.optional(v.array(v.object({ id: v.string(), label: v.string(), text: v.string() }))),
       customPaymentTemplates: v.optional(v.array(v.object({ id: v.string(), label: v.string(), text: v.string() }))),

@@ -98,7 +98,7 @@ export function AdditionalOptionsSection({
       {onSaveDefaults && (
         <div className="pt-2 border-t border-border">
           <Button
-            variant="outline"
+            variant={isCurrentlySaved ? 'outline' : 'primary'}
             size="sm"
             className={`h-8 text-xs ${isCurrentlySaved ? 'border-green-600/30 text-green-600' : ''}`}
             disabled={isSavingDefaults || isCurrentlySaved}
