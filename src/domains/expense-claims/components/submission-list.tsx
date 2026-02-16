@@ -170,6 +170,7 @@ export default function SubmissionList({ locale }: SubmissionListProps) {
           </p>
         </div>
         <Button
+          variant="primary"
           onClick={handleCreateSubmission}
           disabled={createSubmission.isPending || !businessId}
         >
