@@ -152,21 +152,17 @@ export function handleApiError(
 
   // Add request context if available
   if (request) {
-    const currentExtra = (sentryContext.extra || {}) as Record<string, unknown>;
-    sentryContext.extra = {
-      ...currentExtra,
+    Object.assign(sentryContext.extra as Record<string, unknown>, {
       url: request.url,
       headers: sanitizeHeaders(request.headers),
-    };
+    });
   }
 
   // Add business context if available
   if (businessId) {
-    const currentExtra = (sentryContext.extra || {}) as Record<string, unknown>;
-    sentryContext.extra = {
-      ...currentExtra,
+    Object.assign(sentryContext.extra as Record<string, unknown>, {
       business_id: businessId,
-    };
+    });
   }
 
   // Capture to Sentry (only for 5xx errors or unhandled exceptions)
