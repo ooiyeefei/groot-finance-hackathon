@@ -1,18 +1,21 @@
 /**
  * Sentry Webhook Handler
  *
- * Receives Sentry alert webhooks and forwards critical errors to Telegram.
+ * Receives Sentry alert webhooks and forwards critical errors to Telegram and Discord.
  * Only processes 'triggered' actions with error/fatal severity.
  *
  * @see specs/003-sentry-integration/contracts/webhook-api.yaml
  * @see specs/003-sentry-integration/research.md
  */
-
 import { NextRequest, NextResponse } from "next/server";
 import {
   sendSentryAlert,
   type SentryIssueData,
 } from "@/domains/system/lib/telegram-notifier";
+import {
+  sendDiscordAlert,
+  isDiscordConfigured,
+} from "@/domains/system/lib/discord-notifier";
 
 /**
  * Sentry webhook payload structure.
@@ -69,12 +72,37 @@ interface SentryWebhookPayload {
 }
 
 /**
+ * Notification result for a single channel.
+ */
+interface NotificationResult {
+  sent: boolean;
+  message?: string;
+  error?: string;
+}
+
+/**
  * Response structure for webhook processing.
  */
 interface WebhookResponse {
   success: boolean;
   telegram_sent: boolean;
+  discord_sent: boolean;
   message: string;
+  notifications: {
+    telegram: NotificationResult;
+    discord: NotificationResult;
+  };
+}
+
+/**
+ * Health check response structure.
+ */
+interface WebhookHealthResponse {
+  status: string;
+  endpoint: string;
+  telegram_configured: boolean;
+  discord_configured: boolean;
+  webhook_secret_configured: boolean;
 }
 
 /**
@@ -106,7 +134,6 @@ async function validateWebhookSignature(
       .createHmac("sha256", secret)
       .update(body)
       .digest("hex");
-
     const isValid = signature === expectedSignature;
     if (!isValid) {
       console.warn("[Sentry Webhook] Invalid sentry-hook-signature");
@@ -129,7 +156,7 @@ async function validateWebhookSignature(
 }
 
 /**
- * Checks if the alert should be forwarded to Telegram.
+ * Checks if the alert should be forwarded to notifications.
  *
  * Only forwards:
  * - action === 'triggered' (new alerts, not resolved/assigned)
@@ -150,7 +177,7 @@ function shouldForwardAlert(payload: SentryWebhookPayload): boolean {
 }
 
 /**
- * Extracts issue data from Sentry webhook payload for Telegram formatting.
+ * Extracts issue data from Sentry webhook payload for notification formatting.
  */
 function extractIssueData(payload: SentryWebhookPayload): SentryIssueData {
   const event = payload.data.event;
@@ -213,7 +240,7 @@ function extractErrorType(title?: string): string | undefined {
 /**
  * POST /api/v1/system/webhooks/sentry
  *
- * Receives Sentry webhook alerts and forwards critical errors to Telegram.
+ * Receives Sentry webhook alerts and forwards critical errors to Telegram and Discord.
  */
 export async function POST(
   request: NextRequest
@@ -259,73 +286,104 @@ export async function POST(
         : ""
     );
 
-    // 4. Check if should forward to Telegram
+    // 4. Check if should forward to notifications
     if (!shouldForwardAlert(payload)) {
       const level =
         payload.data.event?.level || payload.data.issue?.level || "unknown";
       console.log(
         `[Sentry Webhook] Skipping: action=${payload.action}, level=${level}`
       );
-
       return NextResponse.json({
         success: true,
         telegram_sent: false,
+        discord_sent: false,
         message: `Alert not forwarded: action=${payload.action}, level=${level}`,
+        notifications: {
+          telegram: { sent: false, message: "Alert filtered by severity/action" },
+          discord: { sent: false, message: "Alert filtered by severity/action" },
+        },
       });
     }
 
-    // 5. Check Telegram configuration
-    if (
-      !process.env.TELEGRAM_BOT_TOKEN ||
-      !process.env.TELEGRAM_CHAT_ID
-    ) {
-      console.warn(
-        "[Sentry Webhook] Telegram not configured - alert not forwarded"
-      );
-
-      return NextResponse.json({
-        success: true,
-        telegram_sent: false,
-        message: "Telegram not configured",
-      });
-    }
-
-    // 6. Extract issue data and send to Telegram
+    // 5. Extract issue data
     const issueData = extractIssueData(payload);
 
-    try {
-      const messageId = await sendSentryAlert(issueData);
-      console.log(
-        `[Sentry Webhook] Alert forwarded to Telegram (message_id: ${messageId})`
-      );
+    // 6. Send to Telegram and Discord in parallel
+    const [telegramResult, discordResult] = await Promise.allSettled([
+      // Telegram
+      (async (): Promise<NotificationResult> => {
+        if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHAT_ID) {
+          return { sent: false, message: "Telegram not configured" };
+        }
+        try {
+          const messageId = await sendSentryAlert(issueData);
+          console.log(
+            `[Sentry Webhook] Alert forwarded to Telegram (message_id: ${messageId})`
+          );
+          return { sent: true, message: `message_id: ${messageId}` };
+        } catch (error) {
+          console.error("[Sentry Webhook] Telegram error:", error);
+          return {
+            sent: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+          };
+        }
+      })(),
+      // Discord
+      (async (): Promise<NotificationResult> => {
+        if (!isDiscordConfigured()) {
+          return { sent: false, message: "Discord not configured" };
+        }
+        try {
+          await sendDiscordAlert(issueData);
+          console.log("[Sentry Webhook] Alert forwarded to Discord");
+          return { sent: true };
+        } catch (error) {
+          console.error("[Sentry Webhook] Discord error:", error);
+          return {
+            sent: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+          };
+        }
+      })(),
+    ]);
 
-      return NextResponse.json({
-        success: true,
-        telegram_sent: true,
-        message: `Alert forwarded to Telegram (message_id: ${messageId})`,
-      });
-    } catch (telegramError) {
-      console.error(
-        "[Sentry Webhook] Failed to send Telegram alert:",
-        telegramError
-      );
+    // Extract results
+    const telegram =
+      telegramResult.status === "fulfilled"
+        ? telegramResult.value
+        : { sent: false, error: "Promise rejected" };
+    const discord =
+      discordResult.status === "fulfilled"
+        ? discordResult.value
+        : { sent: false, error: "Promise rejected" };
 
-      // Return success=true but telegram_sent=false
-      // The webhook processed successfully, Telegram just failed
-      return NextResponse.json({
-        success: true,
-        telegram_sent: false,
-        message: `Telegram send failed: ${telegramError instanceof Error ? telegramError.message : "Unknown error"}`,
-      });
-    }
+    // Build response message
+    const messages: string[] = [];
+    if (telegram.sent) messages.push("Telegram: ✓");
+    else if (telegram.error) messages.push(`Telegram: ✗ (${telegram.error})`);
+    else messages.push(`Telegram: skipped (${telegram.message})`);
+
+    if (discord.sent) messages.push("Discord: ✓");
+    else if (discord.error) messages.push(`Discord: ✗ (${discord.error})`);
+    else messages.push(`Discord: skipped (${discord.message})`);
+
+    const anySent = telegram.sent || discord.sent;
+
+    return NextResponse.json({
+      success: true,
+      telegram_sent: telegram.sent,
+      discord_sent: discord.sent,
+      message: messages.join(" | "),
+      notifications: {
+        telegram,
+        discord,
+      },
+    });
   } catch (error) {
     console.error("[Sentry Webhook] Unexpected error:", error);
-
     return NextResponse.json(
-      {
-        error: "Internal server error",
-        code: "INTERNAL_ERROR",
-      },
+      { error: "Internal server error", code: "INTERNAL_ERROR" },
       { status: 500 }
     );
   }
@@ -336,15 +394,17 @@ export async function POST(
  *
  * Health check endpoint for webhook configuration.
  */
-export async function GET(): Promise<NextResponse> {
+export async function GET(): Promise<NextResponse<WebhookHealthResponse>> {
   const hasTelegramConfig =
     !!process.env.TELEGRAM_BOT_TOKEN && !!process.env.TELEGRAM_CHAT_ID;
+  const hasDiscordConfig = isDiscordConfigured();
   const hasWebhookSecret = !!process.env.SENTRY_WEBHOOK_SECRET;
 
   return NextResponse.json({
     status: "ok",
     endpoint: "/api/v1/system/webhooks/sentry",
     telegram_configured: hasTelegramConfig,
+    discord_configured: hasDiscordConfig,
     webhook_secret_configured: hasWebhookSecret,
   });
 }
