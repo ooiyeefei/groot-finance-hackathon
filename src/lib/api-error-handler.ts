@@ -200,7 +200,7 @@ export function handleApiError(
 
   // Add Sentry event ID for 5xx errors (helps support lookup)
   if (statusCode >= 500) {
-    const eventId = Sentry.getCurrentScope().getLastEventId();
+    const eventId = Sentry.lastEventId();
     if (eventId) {
       responseBody.request_id = eventId;
     }
