@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth, currentUser } from '@clerk/nextjs/server'
-import { createBusiness, getUserBusinessMemberships, updateBusinessProfile } from '@/domains/account-management/lib/account-management.service'
+import { createBusiness, getUserBusinessMemberships, updateBusinessProfile, type CreateBusinessRequest } from '@/domains/account-management/lib/account-management.service'
 import { rateLimiters } from '@/domains/security/lib/rate-limit'
 import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Parse request body
-    let body: { name?: string }
+    let body: Partial<CreateBusinessRequest>
     try {
       body = await request.json()
     } catch {
@@ -101,8 +101,13 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Create new business
-    const business = await createBusiness(userId, body)
+    // Validate required name for new business
+    if (!body.name || body.name.trim().length === 0) {
+      throw new ApiError('Business name is required', HttpStatus.BAD_REQUEST, 'REQUIRED_FIELD')
+    }
+
+    // Create new business (cast validated body to required type)
+    const business = await createBusiness(userId, body as CreateBusinessRequest)
 
     return NextResponse.json({
       success: true,
