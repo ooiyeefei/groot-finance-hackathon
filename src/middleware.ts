@@ -20,6 +20,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/v1/system/webhooks(.*)',
   '/api/v1/stripe-integration/webhooks(.*)',
   '/api/health(.*)',
+  '/api/test-error(.*)',
   // Static/public pages
   '/:locale/pricing(.*)',
   '/pricing(.*)',
