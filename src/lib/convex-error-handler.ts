@@ -50,9 +50,11 @@ interface ConvexContext {
  * });
  * ```
  */
+let sentryInitialized = false;
+
 export function initSentryForConvex(): void {
   // Only initialize once
-  if (Sentry.getCurrentHub().getClient()) {
+  if (sentryInitialized) {
     return;
   }
 
@@ -63,6 +65,8 @@ export function initSentryForConvex(): void {
     // Disable auto-instrumentation - Convex manages its own runtime
     integrations: [],
   });
+
+  sentryInitialized = true;
 }
 
 /**
