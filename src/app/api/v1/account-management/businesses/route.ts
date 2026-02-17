@@ -7,32 +7,29 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { auth,currentUser } from '@clerk/nextjs/server'
-import { createBusiness, getUserBusinessMemberships } from '@/domains/account-management/lib/account-management.service'
+import { auth, currentUser } from '@clerk/nextjs/server'
+import { createBusiness, getUserBusinessMemberships, updateBusinessProfile } from '@/domains/account-management/lib/account-management.service'
 import { rateLimiters } from '@/domains/security/lib/rate-limit'
 import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
+import { handleApiError, ApiError, HttpStatus } from '@/lib/api-error-handler'
 
 /**
  * Create new business and assign current user as owner
  */
 export async function POST(request: NextRequest) {
+  const startTime = Date.now()
+
   try {
     const { userId } = await auth()
     if (!userId) {
-      return NextResponse.json({
-        success: false,
-        error: 'Authentication required'
-      }, { status: 401 })
+      throw new ApiError('Authentication required', HttpStatus.UNAUTHORIZED, 'UNAUTHORIZED')
     }
 
     // Get Clerk user info for repair function
     const clerkUser = await currentUser()
     if (!clerkUser) {
-      return NextResponse.json({
-        success: false,
-        error: 'Failed to get user info'
-      }, { status: 401 })
+      throw new ApiError('Failed to get user info', HttpStatus.UNAUTHORIZED, 'USER_INFO_FAILED')
     }
 
     const userEmail = clerkUser.emailAddresses[0]?.emailAddress || ''
@@ -44,10 +41,13 @@ export async function POST(request: NextRequest) {
       return rateLimitResponse
     }
 
-    // Note: CSRF protection removed - not needed with JWT auth + business context validation
-
-    // Parse request body first (used in multiple paths)
-    const body = await request.json()
+    // Parse request body
+    let body: { name?: string }
+    try {
+      body = await request.json()
+    } catch {
+      throw new ApiError('Invalid JSON body', HttpStatus.BAD_REQUEST, 'INVALID_JSON')
+    }
 
     // 🔧 REPAIR LOGIC: Check for broken user state before creating new business
     console.log(`[Business API] 🛠️ Checking for broken user state: ${userId}`)
@@ -55,7 +55,6 @@ export async function POST(request: NextRequest) {
 
     // Handle existing business cases (both repaired and non-repaired)
     if (repairResult.hasExistingBusiness || repairResult.fixed) {
-      // CRITICAL FIX: Check if existing business has default name and user wants to update it
       const existingBusinessName = repairResult.business?.name || ''
       const userProvidedName = body.name?.trim()
 
@@ -69,8 +68,6 @@ export async function POST(request: NextRequest) {
         console.log(`[Business API] 🔧 Updating business name from "${existingBusinessName}" to "${userProvidedName}"`)
 
         try {
-          // Update the business name using the service layer
-          const { updateBusinessProfile } = await import('@/domains/account-management/lib/account-management.service')
           const updatedBusiness = await updateBusinessProfile(userId, { name: userProvidedName })
 
           return NextResponse.json({
@@ -85,8 +82,8 @@ export async function POST(request: NextRequest) {
             action: 'redirect_to_dashboard'
           })
         } catch (updateError) {
+          // Log but don't fail - fall through to existing business response
           console.error('[Business API] Failed to update business name:', updateError)
-          // Fall through to existing business response
         }
       }
 
@@ -103,6 +100,8 @@ export async function POST(request: NextRequest) {
         action: 'redirect_to_dashboard'
       })
     }
+
+    // Create new business
     const business = await createBusiness(userId, body)
 
     return NextResponse.json({
@@ -112,11 +111,15 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('[Business V1 API] Create error:', error)
-    return NextResponse.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error'
-    }, { status: 500 })
+    return handleApiError(error, {
+      route: '/api/v1/account-management/businesses',
+      method: 'POST',
+      request,
+      domain: 'account-management',
+      extra: {
+        duration_ms: Date.now() - startTime,
+      },
+    })
   }
 }
 
@@ -124,15 +127,15 @@ export async function POST(request: NextRequest) {
  * Get all businesses user is member of
  */
 export async function GET(request: NextRequest) {
+  const startTime = Date.now()
+
   try {
     const { userId } = await auth()
     if (!userId) {
-      return NextResponse.json({
-        success: false,
-        error: 'Authentication required'
-      }, { status: 401 })
+      throw new ApiError('Authentication required', HttpStatus.UNAUTHORIZED, 'UNAUTHORIZED')
     }
 
+    // Apply rate limiting
     const rateLimitResponse = await rateLimiters.query(request)
     if (rateLimitResponse) {
       return rateLimitResponse
@@ -144,28 +147,33 @@ export async function GET(request: NextRequest) {
       success: true,
       data: {
         memberships: businesses
+      },
+      meta: {
+        duration_ms: Date.now() - startTime,
       }
     })
 
   } catch (error) {
-    console.error('[Business V1 API] List error:', error)
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to fetch business memberships'
-    }, { status: 500 })
+    return handleApiError(error, {
+      route: '/api/v1/account-management/businesses',
+      method: 'GET',
+      request,
+      domain: 'account-management',
+      extra: {
+        duration_ms: Date.now() - startTime,
+      },
+    })
   }
 }
 
 /**
  * 🛠️ REPAIR FUNCTION: Fix broken user states from incomplete signup flows
- * Migrated to use Convex ensureUserWithBusiness mutation
- *
- * Handles cases where:
- * - User has business_id but missing business_membership
- * - User exists but no active membership
- * - Pending invitations need activation
  */
-async function repairBrokenUserState(clerkUserId: string, email: string, fullName?: string): Promise<{
+async function repairBrokenUserState(
+  clerkUserId: string,
+  email: string,
+  fullName?: string
+): Promise<{
   fixed: boolean
   hasExistingBusiness: boolean
   business?: { id: string; name: string }
