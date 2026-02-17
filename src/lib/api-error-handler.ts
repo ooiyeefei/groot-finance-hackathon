@@ -152,8 +152,9 @@ export function handleApiError(
 
   // Add request context if available
   if (request) {
+    const currentExtra = (sentryContext.extra || {}) as Record<string, unknown>;
     sentryContext.extra = {
-      ...sentryContext.extra,
+      ...currentExtra,
       url: request.url,
       headers: sanitizeHeaders(request.headers),
     };
@@ -161,8 +162,9 @@ export function handleApiError(
 
   // Add business context if available
   if (businessId) {
+    const currentExtra = (sentryContext.extra || {}) as Record<string, unknown>;
     sentryContext.extra = {
-      ...sentryContext.extra,
+      ...currentExtra,
       business_id: businessId,
     };
   }
