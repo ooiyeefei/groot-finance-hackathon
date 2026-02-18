@@ -176,6 +176,25 @@ function AcceptInvitationContent() {
     validateInvitation()
   }, [token])
 
+  // Check if user needs to provide name after invitation is loaded
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !user || !invitation || success) return
+
+    const userEmail = user.emailAddresses[0]?.emailAddress
+
+    if (userEmail?.toLowerCase() === invitation.email.toLowerCase()) {
+      // Check if user has a full name from Clerk
+      const hasName = user.firstName && user.lastName
+
+      if (!hasName && !showNameForm) {
+        // User needs to provide their name first
+        setShowNameForm(true)
+      }
+    } else if (userEmail) {
+      setError(`This invitation is for ${invitation.email}, but you are signed in as ${userEmail}.\n\nPlease sign out and create an account with the invited email.`)
+    }
+  }, [isLoaded, isSignedIn, user, invitation, success, showNameForm])
+
   const handleSignUp = () => {
     // Use direct browser navigation to avoid CORS issues with Clerk redirects
     // Use locale-aware sign-up route
