@@ -931,3 +931,105 @@ export const listAll = query({
     }));
   },
 });
+
+/**
+ * Accept invitation for a new user
+ * Links Clerk account to invitation placeholder and activates membership
+ * 
+ * FLOW: New user accepts invitation via email link
+ * 1. Find placeholder user by email
+ * 2. Update with Clerk ID and set active business
+ * 3. Activate the pending membership
+ * 4. Return membership profile
+ */
+export const acceptInvitation = mutation({
+  args: {
+    clerkUserId: v.string(),
+    email: v.string(),
+    fullName: v.optional(v.string()),
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    // Find the placeholder user by email (created when invitation was sent)
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", args.email.toLowerCase()))
+      .first();
+
+    if (!user) {
+      throw new Error("Invitation not found - user record missing");
+    }
+
+    // Check if this user already has a Clerk ID (already linked)
+    if (user.clerkUserId && !user.clerkUserId.startsWith("pending_")) {
+      // User already linked - just return profile
+      const membership = await ctx.db
+        .query("business_memberships")
+        .withIndex("by_userId_businessId", (q) =>
+          q.eq("userId", user._id).eq("businessId", args.businessId)
+        )
+        .first();
+
+      if (!membership) {
+        throw new Error("Membership not found");
+      }
+
+      return {
+        id: membership._id,
+        user_id: user._id,
+        business_id: membership.businessId,
+        role: membership.role,
+        role_permissions: {
+          employee: true,
+          manager: membership.role === "manager" || membership.role === "owner",
+          finance_admin: membership.role === "owner",
+        },
+        created_at: new Date(membership._creationTime).toISOString(),
+        updated_at: membership.updatedAt
+          ? new Date(membership.updatedAt).toISOString()
+          : new Date(membership._creationTime).toISOString(),
+      };
+    }
+
+    // Find the pending membership for this user and business
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership) {
+      throw new Error("Invitation membership not found");
+    }
+
+    // Update user with Clerk ID and set active business
+    await ctx.db.patch(user._id, {
+      clerkUserId: args.clerkUserId,
+      businessId: args.businessId,
+      fullName: args.fullName || user.fullName,
+      updatedAt: Date.now(),
+    });
+
+    // Activate the membership
+    await ctx.db.patch(membership._id, {
+      status: "active",
+      joinedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    return {
+      id: membership._id,
+      user_id: user._id,
+      business_id: membership.businessId,
+      role: membership.role,
+      role_permissions: {
+        employee: true,
+        manager: membership.role === "manager" || membership.role === "owner",
+        finance_admin: membership.role === "owner",
+      },
+      created_at: new Date(membership._creationTime).toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+  },
+});

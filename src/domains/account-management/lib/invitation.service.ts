@@ -427,12 +427,13 @@ async function _updateUserAndMembership(
     finalFullName = `${clerkUser.firstName} ${clerkUser.lastName}`
   }
 
-  // Use the ensureUserWithBusiness mutation which handles linking Clerk account
-  // and activating pending membership
-  const profile = await client.mutation(api.functions.users.ensureUserWithBusiness, {
+  // Use the acceptInvitation mutation which properly links Clerk account
+  // to the invitation placeholder and activates the membership
+  const profile = await client.mutation(api.functions.users.acceptInvitation, {
     clerkUserId,
     email: tokenData.email,
-    fullName: finalFullName
+    fullName: finalFullName,
+    businessId: tokenData.businessId as any
   })
 
   // Sync role to Clerk - invited users can only be employee or manager (not owner)
