@@ -186,7 +186,11 @@ function AcceptInvitationContent() {
       // Check if user has a full name from Clerk
       const hasName = user.firstName && user.lastName
 
-      if (!hasName && !showNameForm) {
+      if (hasName) {
+        // Pre-populate fullName state from Clerk so it's available when accepting
+        const clerkFullName = `${user.firstName} ${user.lastName}`
+        setFullName(clerkFullName)
+      } else if (!showNameForm) {
         // User needs to provide their name first
         setShowNameForm(true)
       }
