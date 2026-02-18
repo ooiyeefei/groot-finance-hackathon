@@ -176,35 +176,6 @@ function AcceptInvitationContent() {
     validateInvitation()
   }, [token])
 
-  // Auto-accept invitation if user is already signed in and email matches
-  // Add delay to allow Clerk session to fully propagate to prevent 401 errors
-  useEffect(() => {
-    if (!isLoaded || !isSignedIn || !user || !invitation || accepting || success || showNameForm) return
-
-    const userEmail = user.emailAddresses[0]?.emailAddress
-
-    if (userEmail?.toLowerCase() === invitation.email.toLowerCase()) {
-      // Check if user has a full name from Clerk
-      const hasName = user.firstName && user.lastName
-      const clerkFullName = hasName ? `${user.firstName} ${user.lastName}` : ''
-
-      if (hasName) {
-        // Add 1.5 second delay to allow Clerk JWT to propagate to server
-        // This prevents race condition where client thinks auth is ready but server hasn't received JWT yet
-        const timer = setTimeout(() => {
-          handleAcceptInvitation(clerkFullName)
-        }, 1500)
-
-        return () => clearTimeout(timer)
-      } else {
-        // User needs to provide their name first
-        setShowNameForm(true)
-      }
-    } else if (userEmail) {
-      setError(`This invitation is for ${invitation.email}, but you are signed in as ${userEmail}.\n\nPlease sign out and create an account with the invited email.`)
-    }
-  }, [isLoaded, isSignedIn, user, invitation, accepting, success, showNameForm])
-
   const handleSignUp = () => {
     // Use direct browser navigation to avoid CORS issues with Clerk redirects
     // Use locale-aware sign-up route
