@@ -38,7 +38,7 @@ export default function BusinessProfileSettings() {
         businessAddress: profile.address || '',
         businessEmail: profile.contact_email || '',
         businessPhone: profile.contact_phone || '',
-        homeCurrency: profile.home_currency || 'SGD'
+        homeCurrency: (profile.home_currency || 'SGD') as SupportedCurrency
       }
       setInitialValues(initial)
       setBusinessName(initial.businessName)
