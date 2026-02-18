@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { X, Camera, Building2, DollarSign } from 'lucide-react'
 import Image from 'next/image'
 import { useToast } from '@/components/ui/toast'
 import { useBusinessProfile } from '@/contexts/business-context'
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
 import { SUPPORTED_CURRENCIES } from '@/domains/users/hooks/use-home-currency'
+import { useRegisterUnsavedChanges } from '@/components/providers/unsaved-changes-provider'
 
 export default function BusinessProfileSettings() {
   const { profile, isLoading, updateProfile } = useBusinessProfile()
@@ -21,14 +22,42 @@ export default function BusinessProfileSettings() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { addToast } = useToast()
 
+  // Track initial values for dirty state detection
+  const [initialValues, setInitialValues] = useState({
+    businessName: '',
+    businessAddress: '',
+    businessEmail: '',
+    businessPhone: '',
+    homeCurrency: 'SGD' as SupportedCurrency
+  })
+
   useEffect(() => {
     if (profile) {
-      setBusinessName(profile.name || '')
-      setBusinessAddress(profile.address || '')
-      setBusinessEmail(profile.contact_email || '')
-      setBusinessPhone(profile.contact_phone || '')
+      const initial = {
+        businessName: profile.name || '',
+        businessAddress: profile.address || '',
+        businessEmail: profile.contact_email || '',
+        businessPhone: profile.contact_phone || '',
+        homeCurrency: profile.home_currency || 'SGD'
+      }
+      setInitialValues(initial)
+      setBusinessName(initial.businessName)
+      setBusinessAddress(initial.businessAddress)
+      setBusinessEmail(initial.businessEmail)
+      setBusinessPhone(initial.businessPhone)
     }
   }, [profile])
+
+  // Calculate dirty state for unsaved changes warning
+  const isDirty = useMemo(() => {
+    return businessName !== initialValues.businessName ||
+      businessAddress !== initialValues.businessAddress ||
+      businessEmail !== initialValues.businessEmail ||
+      businessPhone !== initialValues.businessPhone
+  }, [businessName, businessAddress, businessEmail, businessPhone, initialValues])
+
+  // Register dirty state with unsaved changes provider
+  useRegisterUnsavedChanges('business-profile-settings', isDirty)
 
 
   const updateBusinessDetails = async () => {
@@ -60,6 +89,14 @@ export default function BusinessProfileSettings() {
 
       if (result.success) {
         updateProfile(result.data)
+        // Update initial values to match saved state, clearing dirty state
+        setInitialValues({
+          businessName: businessName.trim(),
+          businessAddress: businessAddress.trim(),
+          businessEmail: businessEmail.trim(),
+          businessPhone: businessPhone.trim(),
+          homeCurrency: (result.data.home_currency || 'SGD') as SupportedCurrency
+        })
         addToast({
           type: 'success',
           title: 'Business profile updated',

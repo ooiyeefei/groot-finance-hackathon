@@ -720,6 +720,7 @@ export const create = mutation({
       duplicateOverrideReason: args.duplicateOverrideReason,
       duplicateOverrideAt: args.duplicateOverrideAt,
       isSplitExpense: args.isSplitExpense,
+      version: 0,  // Initialize version for optimistic locking
       updatedAt: Date.now(),
     });
 
@@ -784,12 +785,10 @@ export const update = mutation({
       throw new Error("Not authorized");
     }
 
-    // Only owner of claim can update (unless finance_admin/owner role)
-    if (
-      claim.userId !== user._id &&
-      !["owner", "finance_admin"].includes(membership.role)
-    ) {
-      throw new Error("Not authorized to update this claim");
+    // ONLY the claim owner can update their claim
+    // Managers/Admins can ONLY approve/reject and add notes (via updateStatus mutation)
+    if (claim.userId !== user._id) {
+      throw new Error("Not authorized to update this claim - only the claim owner can edit");
     }
 
     // Can only update draft/pending/submitted claims
@@ -838,8 +837,139 @@ export const update = mutation({
     if (updates.reviewerNotes !== undefined)
       updateData.reviewerNotes = updates.reviewerNotes;
 
+    // Increment version for optimistic locking
+    updateData.version = (claim.version || 0) + 1;
+
     await ctx.db.patch(claim._id, updateData);
     return claim._id;
+  },
+});
+
+/**
+ * Update expense claim with version check (for concurrent edit detection)
+ * Throws error if version doesn't match (someone else edited since last fetch)
+ */
+export const updateWithVersion = mutation({
+  args: {
+    id: v.string(),
+    expectedVersion: v.number(),
+    businessPurpose: v.optional(v.string()),
+    description: v.optional(v.string()),
+    vendorName: v.optional(v.string()),
+    totalAmount: v.optional(v.number()),
+    currency: v.optional(v.string()),
+    homeCurrency: v.optional(v.string()),
+    homeCurrencyAmount: v.optional(v.number()),
+    exchangeRate: v.optional(v.number()),
+    transactionDate: v.optional(v.string()),
+    referenceNumber: v.optional(v.string()),
+    expenseCategory: v.optional(v.string()),
+    storagePath: v.optional(v.string()),
+    convertedImagePath: v.optional(v.string()),
+    fileName: v.optional(v.string()),
+    fileType: v.optional(v.string()),
+    fileSize: v.optional(v.number()),
+    confidenceScore: v.optional(v.number()),
+    processingMetadata: v.optional(v.any()),
+    errorMessage: v.optional(v.any()),
+    reviewerNotes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Resolve claim
+    const claim = await resolveById(ctx.db, "expense_claims", args.id);
+    if (!claim || claim.deletedAt) {
+      throw new Error("Expense claim not found");
+    }
+
+    // Verify membership and ownership
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", claim.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      throw new Error("Not authorized");
+    }
+
+    // ONLY the claim owner can update their claim
+    // Managers/Admins can ONLY approve/reject and add notes (via updateStatus mutation)
+    if (claim.userId !== user._id) {
+      throw new Error("Not authorized to update this claim - only the claim owner can edit");
+    }
+
+    // Can only update draft/pending/submitted claims
+    if (["approved", "reimbursed", "rejected"].includes(claim.status)) {
+      throw new Error("Cannot update claim in final status");
+    }
+
+    // CHECK VERSION for concurrent edit detection
+    const currentVersion = claim.version || 0;
+    if (currentVersion !== args.expectedVersion) {
+      throw new Error(
+        `CONCURRENT_EDIT: This expense claim was modified by another user. ` +
+        `Please refresh and try again. ` +
+        `(Expected version: ${args.expectedVersion}, Current version: ${currentVersion})`
+      );
+    }
+
+    const { id, expectedVersion, ...updates } = args;
+    const updateData: Record<string, unknown> = { 
+      updatedAt: Date.now(),
+      version: currentVersion + 1  // Increment version
+    };
+
+    // Only include provided fields
+    if (updates.businessPurpose !== undefined)
+      updateData.businessPurpose = updates.businessPurpose;
+    if (updates.description !== undefined)
+      updateData.description = updates.description;
+    if (updates.vendorName !== undefined)
+      updateData.vendorName = updates.vendorName;
+    if (updates.totalAmount !== undefined)
+      updateData.totalAmount = updates.totalAmount;
+    if (updates.currency !== undefined) updateData.currency = updates.currency;
+    if (updates.homeCurrency !== undefined)
+      updateData.homeCurrency = updates.homeCurrency;
+    if (updates.homeCurrencyAmount !== undefined)
+      updateData.homeCurrencyAmount = updates.homeCurrencyAmount;
+    if (updates.exchangeRate !== undefined)
+      updateData.exchangeRate = updates.exchangeRate;
+    if (updates.transactionDate !== undefined)
+      updateData.transactionDate = updates.transactionDate;
+    if (updates.referenceNumber !== undefined)
+      updateData.referenceNumber = updates.referenceNumber;
+    if (updates.expenseCategory !== undefined)
+      updateData.expenseCategory = updates.expenseCategory;
+    if (updates.storagePath !== undefined)
+      updateData.storagePath = updates.storagePath;
+    if (updates.convertedImagePath !== undefined)
+      updateData.convertedImagePath = updates.convertedImagePath;
+    if (updates.fileName !== undefined) updateData.fileName = updates.fileName;
+    if (updates.fileType !== undefined) updateData.fileType = updates.fileType;
+    if (updates.fileSize !== undefined) updateData.fileSize = updates.fileSize;
+    if (updates.confidenceScore !== undefined)
+      updateData.confidenceScore = updates.confidenceScore;
+    if (updates.processingMetadata !== undefined)
+      updateData.processingMetadata = updates.processingMetadata;
+    if (updates.errorMessage !== undefined)
+      updateData.errorMessage = updates.errorMessage;
+    if (updates.reviewerNotes !== undefined)
+      updateData.reviewerNotes = updates.reviewerNotes;
+
+    await ctx.db.patch(claim._id, updateData);
+    return { claimId: claim._id, newVersion: currentVersion + 1 };
   },
 });
 

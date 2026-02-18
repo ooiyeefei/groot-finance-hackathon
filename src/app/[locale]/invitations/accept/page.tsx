@@ -7,7 +7,7 @@
 
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter, useParams } from 'next/navigation'
-import { useAuth, useUser } from '@clerk/nextjs'
+import { useAuth, useUser, useSession } from '@clerk/nextjs'
 import { Loader2, CheckCircle, AlertCircle, UserPlus, User } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -27,6 +27,7 @@ function AcceptInvitationContent() {
   const params = useParams()
   const { isLoaded, isSignedIn } = useAuth()
   const { user } = useUser()
+  const { session } = useSession()
 
   const locale = (params.locale as string) || 'en'
   
@@ -95,6 +96,18 @@ function AcceptInvitationContent() {
       }
 
       setSuccess(true)
+
+      // CRITICAL FIX: Reload Clerk session to get updated JWT with new business association
+      // before redirecting. This ensures the backend can verify the user's business membership.
+      if (session) {
+        console.log('[Invitation Accept] Reloading Clerk session before redirect...')
+        try {
+          await session.reload()
+          console.log('[Invitation Accept] Session reloaded successfully')
+        } catch (sessionError) {
+          console.warn('[Invitation Accept] Session reload failed, proceeding anyway:', sessionError)
+        }
+      }
 
       // Force full page reload to ensure Clerk middleware runs properly
       // Use window.location.href instead of router.push to avoid auth timing issues

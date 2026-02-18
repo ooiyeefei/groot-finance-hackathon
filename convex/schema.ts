@@ -396,6 +396,9 @@ export default defineSchema({
     // Batch Submission (009-batch-receipt-submission)
     submissionId: v.optional(v.id("expense_submissions")),  // Parent submission
 
+    // Optimistic Locking / Version Control (for concurrent edit detection)
+    version: v.optional(v.number()),  // Incremented on each update, used for conflict detection
+
     // Timestamps
     updatedAt: v.optional(v.number()),
   })

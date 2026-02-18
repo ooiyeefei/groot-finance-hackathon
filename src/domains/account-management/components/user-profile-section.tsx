@@ -9,11 +9,12 @@
  * - Email Notification Preferences (connected to Convex via API)
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { DollarSign, Clock, Bell, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
 import { useBusinessContext } from '@/contexts/business-context'
 import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/domains/accounting-entries/types'
 import { useToast } from '@/components/ui/toast'
+import { useRegisterUnsavedChanges } from '@/components/providers/unsaved-changes-provider'
 
 interface UserProfileSectionProps {
   className?: string
@@ -61,6 +62,18 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
   const [isEmailPrefLoading, setIsEmailPrefLoading] = useState(true)
   const [isEmailPrefSaving, setIsEmailPrefSaving] = useState(false)
 
+  // Track initial values for dirty state detection
+  const [initialValues, setInitialValues] = useState({
+    preferredCurrency: 'USD' as SupportedCurrency,
+    timezone: 'Asia/Singapore',
+    emailPreferences: {
+      marketingEnabled: true,
+      onboardingTipsEnabled: true,
+      productUpdatesEnabled: true,
+      globalUnsubscribe: false,
+    }
+  })
+
   // Load allowed currencies
   useEffect(() => {
     setAllowedCurrencies(['USD', 'SGD', 'MYR', 'THB', 'IDR', 'VND', 'PHP', 'CNY', 'EUR'])
@@ -74,8 +87,15 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
         if (response.ok) {
           const result = await response.json()
           if (result.success && result.data) {
-            setPreferredCurrency(result.data.preferred_currency || 'USD')
-            setTimezone(result.data.timezone || 'Asia/Singapore')
+            const currency = result.data.preferred_currency || 'USD'
+            const tz = result.data.timezone || 'Asia/Singapore'
+            setPreferredCurrency(currency)
+            setTimezone(tz)
+            setInitialValues(prev => ({
+              ...prev,
+              preferredCurrency: currency,
+              timezone: tz
+            }))
           }
         }
       } catch (error) {
@@ -95,12 +115,14 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
         if (response.ok) {
           const result = await response.json()
           if (result.success && result.data) {
-            setEmailPreferences({
+            const prefs = {
               marketingEnabled: result.data.marketingEnabled ?? true,
               onboardingTipsEnabled: result.data.onboardingTipsEnabled ?? true,
               productUpdatesEnabled: result.data.productUpdatesEnabled ?? true,
               globalUnsubscribe: result.data.globalUnsubscribe ?? false,
-            })
+            }
+            setEmailPreferences(prefs)
+            setInitialValues(prev => ({ ...prev, emailPreferences: prefs }))
           }
         }
       } catch (error) {
@@ -232,6 +254,19 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
     setEmailPreferences(prev => ({ ...prev, [field]: newValue }))
     await saveEmailPreference(field, newValue)
   }
+
+  // Calculate dirty state for unsaved changes warning
+  const isDirty = useMemo(() => {
+    return preferredCurrency !== initialValues.preferredCurrency ||
+      timezone !== initialValues.timezone ||
+      emailPreferences.marketingEnabled !== initialValues.emailPreferences.marketingEnabled ||
+      emailPreferences.onboardingTipsEnabled !== initialValues.emailPreferences.onboardingTipsEnabled ||
+      emailPreferences.productUpdatesEnabled !== initialValues.emailPreferences.productUpdatesEnabled ||
+      emailPreferences.globalUnsubscribe !== initialValues.emailPreferences.globalUnsubscribe
+  }, [preferredCurrency, timezone, emailPreferences, initialValues])
+
+  // Register dirty state with unsaved changes provider
+  useRegisterUnsavedChanges('user-profile-section', isDirty)
 
   if (isLoadingProfile) {
     return (

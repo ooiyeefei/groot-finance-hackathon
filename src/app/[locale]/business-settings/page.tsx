@@ -9,6 +9,7 @@ import { redirect } from 'next/navigation'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import { ClientProviders } from '@/components/providers/client-providers'
+import { UnsavedChangesProvider } from '@/components/providers/unsaved-changes-provider'
 import { Suspense, lazy } from 'react'
 import { Loader2 } from 'lucide-react'
 
@@ -40,14 +41,16 @@ export default async function BusinessSettingsPage() {
           {/* Main Content Area - Full Width Tabbed Interface */}
           <main className="flex-1 overflow-auto p-4 sm:p-6 pb-24 sm:pb-6">
             <div className="w-full max-w-none">
-              <Suspense fallback={
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">Loading business settings...</span>
-                </div>
-              }>
-                <TabbedBusinessSettings />
-              </Suspense>
+              <UnsavedChangesProvider defaultMessage="You have unsaved changes in your settings. Are you sure you want to leave?">
+                <Suspense fallback={
+                  <div className="flex items-center justify-center p-8">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                    <span className="ml-2 text-muted-foreground">Loading business settings...</span>
+                  </div>
+                }>
+                  <TabbedBusinessSettings />
+                </Suspense>
+              </UnsavedChangesProvider>
             </div>
           </main>
         </div>
