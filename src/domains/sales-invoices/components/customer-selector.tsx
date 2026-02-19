@@ -91,6 +91,16 @@ export default function CustomerSelector({
         phone: customer.phone,
         address: customer.address,
         taxId: customer.taxId,
+        // 016-e-invoice-schema-change: LHDN buyer compliance fields
+        tin: customer.tin,
+        brn: customer.brn,
+        addressLine1: customer.addressLine1,
+        addressLine2: customer.addressLine2,
+        addressLine3: customer.addressLine3,
+        city: customer.city,
+        stateCode: customer.stateCode,
+        postalCode: customer.postalCode,
+        countryCode: customer.countryCode,
       }
       onChange(snapshot)
       setOriginalSnapshot(snapshot)
@@ -139,6 +149,15 @@ export default function CustomerSelector({
         phone: value.phone,
         address: value.address,
         taxId: value.taxId,
+        tin: value.tin,
+        brn: value.brn,
+        addressLine1: value.addressLine1,
+        addressLine2: value.addressLine2,
+        addressLine3: value.addressLine3,
+        city: value.city,
+        stateCode: value.stateCode,
+        postalCode: value.postalCode,
+        countryCode: value.countryCode,
       })
       setSelectedCustomerId(newCustomerId)
       setIsCreatingNew(false)
@@ -173,6 +192,15 @@ export default function CustomerSelector({
         phone: value.phone,
         address: value.address,
         taxId: value.taxId,
+        tin: value.tin,
+        brn: value.brn,
+        addressLine1: value.addressLine1,
+        addressLine2: value.addressLine2,
+        addressLine3: value.addressLine3,
+        city: value.city,
+        stateCode: value.stateCode,
+        postalCode: value.postalCode,
+        countryCode: value.countryCode,
       })
       setOriginalSnapshot({ ...value })
     } catch {

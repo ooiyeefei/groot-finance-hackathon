@@ -30,6 +30,9 @@ import {
   recurringFrequencyValidator,
   paymentTypeValidator,
   paymentMethodValidator,
+  lhdnStatusValidator,
+  peppolStatusValidator,
+  einvoiceTypeValidator,
 } from "./lib/validators";
 
 export default defineSchema({
@@ -150,6 +153,17 @@ export default defineSchema({
       // BCC sender on outgoing invoice emails
       bccOutgoingEmails: v.optional(v.boolean()),
     })),
+
+    // 016-e-invoice-schema-change: LHDN compliance fields
+    msicCode: v.optional(v.string()),
+    msicDescription: v.optional(v.string()),
+    sstRegistrationNumber: v.optional(v.string()),
+    lhdnTin: v.optional(v.string()),
+    businessRegistrationNumber: v.optional(v.string()),
+    lhdnClientId: v.optional(v.string()),
+
+    // 016-e-invoice-schema-change: Peppol
+    peppolParticipantId: v.optional(v.string()),
 
     // Timestamps
     updatedAt: v.optional(v.number()),
@@ -1285,6 +1299,16 @@ export default defineSchema({
       phone: v.optional(v.string()),
       address: v.optional(v.string()),
       taxId: v.optional(v.string()),
+      // 016-e-invoice-schema-change: LHDN buyer compliance fields
+      tin: v.optional(v.string()),
+      brn: v.optional(v.string()),
+      addressLine1: v.optional(v.string()),
+      addressLine2: v.optional(v.string()),
+      addressLine3: v.optional(v.string()),
+      city: v.optional(v.string()),
+      stateCode: v.optional(v.string()),
+      postalCode: v.optional(v.string()),
+      countryCode: v.optional(v.string()),
     }),
 
     // Line Items (embedded)
@@ -1365,6 +1389,33 @@ export default defineSchema({
     // PDF Storage (generated on save from preview, used for email attachments)
     pdfStorageId: v.optional(v.id("_storage")),
 
+    // 016-e-invoice-schema-change: LHDN MyInvois tracking
+    lhdnSubmissionId: v.optional(v.string()),
+    lhdnDocumentUuid: v.optional(v.string()),
+    lhdnLongId: v.optional(v.string()),
+    lhdnStatus: v.optional(lhdnStatusValidator),
+    lhdnSubmittedAt: v.optional(v.number()),
+    lhdnValidatedAt: v.optional(v.number()),
+    lhdnValidationErrors: v.optional(v.array(v.object({
+      code: v.string(),
+      message: v.string(),
+      target: v.optional(v.string()),
+    }))),
+    lhdnDocumentHash: v.optional(v.string()),
+
+    // 016-e-invoice-schema-change: Peppol InvoiceNow tracking
+    peppolDocumentId: v.optional(v.string()),
+    peppolStatus: v.optional(peppolStatusValidator),
+    peppolTransmittedAt: v.optional(v.number()),
+    peppolDeliveredAt: v.optional(v.number()),
+    peppolErrors: v.optional(v.array(v.object({
+      code: v.string(),
+      message: v.string(),
+    }))),
+
+    // 016-e-invoice-schema-change: e-invoice document type
+    einvoiceType: v.optional(einvoiceTypeValidator),
+
     // Soft Delete & Timestamps
     deletedAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),
@@ -1374,7 +1425,10 @@ export default defineSchema({
     .index("by_businessId_customerId", ["businessId", "customerId"])
     .index("by_businessId_invoiceNumber", ["businessId", "invoiceNumber"])
     .index("by_businessId_dueDate", ["businessId", "dueDate"])
-    .index("by_recurringScheduleId", ["recurringScheduleId"]),
+    .index("by_recurringScheduleId", ["recurringScheduleId"])
+    // 016-e-invoice-schema-change: e-invoice status indexes
+    .index("by_businessId_lhdnStatus", ["businessId", "lhdnStatus"])
+    .index("by_businessId_peppolStatus", ["businessId", "peppolStatus"]),
 
   customers: defineTable({
     businessId: v.id("businesses"),
@@ -1388,6 +1442,23 @@ export default defineSchema({
     notes: v.optional(v.string()),
     status: customerStatusValidator,
 
+    // 016-e-invoice-schema-change: Tax identifiers
+    tin: v.optional(v.string()),
+    brn: v.optional(v.string()),
+    sstRegistration: v.optional(v.string()),
+
+    // 016-e-invoice-schema-change: Peppol
+    peppolParticipantId: v.optional(v.string()),
+
+    // 016-e-invoice-schema-change: Structured address (LHDN requirement)
+    addressLine1: v.optional(v.string()),
+    addressLine2: v.optional(v.string()),
+    addressLine3: v.optional(v.string()),
+    city: v.optional(v.string()),
+    stateCode: v.optional(v.string()),
+    postalCode: v.optional(v.string()),
+    countryCode: v.optional(v.string()),
+
     // Soft Delete & Timestamps
     deletedAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),
@@ -1395,7 +1466,9 @@ export default defineSchema({
     .index("by_businessId", ["businessId"])
     .index("by_businessId_status", ["businessId", "status"])
     .index("by_businessId_businessName", ["businessId", "businessName"])
-    .index("by_businessId_email", ["businessId", "email"]),
+    .index("by_businessId_email", ["businessId", "email"])
+    // 016-e-invoice-schema-change: TIN lookup index
+    .index("by_businessId_tin", ["businessId", "tin"]),
 
   catalog_items: defineTable({
     businessId: v.id("businesses"),
