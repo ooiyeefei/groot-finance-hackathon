@@ -41,7 +41,7 @@
 | Custom expense categories | ✓ | ✓ | ✓ |
 | Multi-currency support | ✓ | ✓ | ✓ |
 | IFRS-compliant accounting entries | ✓ | ✓ | ✓ |
-| Batch receipt submission | - | ✓ | ✓ |
+| Batch receipt submission | ✓ | ✓ | ✓ |
 | Duplicate detection (exact/strong/fuzzy) | - | ✓ | ✓ |
 | OCR scans per month | 150 | 500 | Unlimited |
 
@@ -91,10 +91,10 @@
 | Leave balance tracking | ✓ | ✓ | ✓ |
 | Public holidays (multi-country: MY, SG, ID, PH, TH, VN) | ✓ | ✓ | ✓ |
 | Business day calculation | ✓ | ✓ | ✓ |
-| Team calendar view | - | ✓ | ✓ |
-| Custom leave types & policies | - | ✓ | ✓ |
-| Custom leave entitlements per employee | - | ✓ | ✓ |
-| Carryover policies | - | ✓ | ✓ |
+| Team calendar view | ✓ | ✓ | ✓ |
+| Custom leave types & policies | ✓ | ✓ | ✓ |
+| Custom leave entitlements per employee | ✓ | ✓ | ✓ |
+| Carryover policies | ✓ | ✓ | ✓ |
 
 ### AI & Intelligence
 
@@ -107,10 +107,9 @@
 | Financial question answering | ✓ | ✓ | ✓ |
 | Transaction lookups via chat | ✓ | ✓ | ✓ |
 | Action cards (approve/post from chat) | - | ✓ | ✓ |
-| RAG regulatory compliance | - | ✓ | ✓ |
-| Multi-language chat (EN, TH, ID, ZH) | - | ✓ | ✓ |
-| Action center (proactive insights) | - | ✓ | ✓ |
-| Anomaly detection | - | ✓ | ✓ |
+| RAG regulatory compliance | ✓ | ✓ | ✓ |
+| Multi-language chat (EN, TH, ID, ZH) | ✓ | ✓ | ✓ |
+| Action center (proactive insights) | - | ✓ (15/mo) | ✓ (Unlimited) |
 | Cash flow forecasting | - | - | ✓ |
 | Financial intelligence (vendor risk, compliance gaps) | - | - | ✓ |
 
@@ -400,11 +399,12 @@ Multiple natural moments push Starter users toward Pro:
 | Need vendor management | Any time | "I need to track what I owe suppliers" |
 | Need debtor management | Any time | "I need AR aging and debtor statements" |
 | Team growth (>20 pax) | Natural growth | Hard limit on team size |
-| Need batch submissions | Any time | "I want to submit 10 receipts at once" |
 | Need duplicate detection | After a duplicate incident | "We just paid the same invoice twice" |
 | Need scheduled exports | Any time | "I want automatic weekly CSV exports" |
 | e-Invoice limit (100/mo) | Month 2-3 | Growing business exceeding 100 e-invoices/month |
 | Need full SST management | Any time | "I need input tax tracking and category management" |
+| Need action center insights | Any time | "I want proactive anomaly detection and alerts" |
+| Need audit trail | After compliance review | "Auditor needs to see who approved what and when" |
 
 ---
 
@@ -458,48 +458,146 @@ Multiple natural moments push Starter users toward Pro:
 
 ## Stripe Configuration
 
+> **Note:** Enterprise plan uses custom pricing and does NOT go through Stripe.
+> Only Starter and Pro are configured as Stripe products.
+
 ### Products Required in Stripe
 
 | Product | Stripe Metadata |
 |---|---|
-| FinanSEAL Starter | `plan_key: starter`, `team_limit: 20`, `ocr_limit: 150`, `ai_message_limit: 30`, `invoice_limit: 10`, `einvoice_limit: 100` |
-| FinanSEAL Pro | `plan_key: pro`, `team_limit: 50`, `ocr_limit: 500`, `ai_message_limit: 300`, `invoice_limit: -1`, `einvoice_limit: -1` |
+| FinanSEAL Starter | See full metadata below |
+| FinanSEAL Pro | See full metadata below |
 | AI Chat Boost (50 msgs) | `addon_type: ai_credits`, `message_count: 50` |
 | AI Chat Power (150 msgs) | `addon_type: ai_credits`, `message_count: 150` |
 | Extra OCR Pack (100 scans) | `addon_type: ocr_credits`, `scan_count: 100` |
 
-### Feature Flags in Stripe Metadata
+### Complete Stripe Product Metadata — Starter
 
-| Metadata Key | Starter | Pro | Enterprise |
-|---|:---:|:---:|:---:|
-| `feature_custom_categories` | ✓ | ✓ | ✓ |
-| `feature_ai_categorization` | ✓ | ✓ | ✓ |
-| `feature_approval_workflow` | ✓ | ✓ | ✓ |
-| `feature_multi_currency` | ✓ | ✓ | ✓ |
-| `feature_rbac` | ✓ | ✓ | ✓ |
-| `feature_basic_invoicing` | ✓ | ✓ | ✓ |
-| `feature_ai_chat` | ✓ | ✓ | ✓ |
-| `feature_batch_submissions` | - | ✓ | ✓ |
-| `feature_duplicate_detection` | - | ✓ | ✓ |
-| `feature_full_ar` | - | ✓ | ✓ |
-| `feature_full_ap` | - | ✓ | ✓ |
-| `feature_advanced_leave` | - | ✓ | ✓ |
-| `feature_action_cards` | - | ✓ | ✓ |
-| `feature_rag_compliance` | - | ✓ | ✓ |
-| `feature_multilang_chat` | - | ✓ | ✓ |
-| `feature_action_center` | - | ✓ | ✓ |
-| `feature_anomaly_detection` | - | ✓ | ✓ |
-| `feature_advanced_analytics` | - | ✓ | ✓ |
-| `feature_export_templates` | - | ✓ | ✓ |
-| `feature_scheduled_exports` | - | ✓ | ✓ |
-| `feature_audit_trail` | - | ✓ | ✓ |
-| `feature_cash_flow_forecast` | - | - | ✓ |
-| `feature_financial_intelligence` | - | - | ✓ |
-| `feature_mcp_api` | - | - | ✓ |
-| `feature_custom_integrations` | - | - | ✓ |
-| `feature_dedicated_manager` | - | - | ✓ |
-| `feature_sla_guarantee` | - | - | ✓ |
-| `feature_unlimited_ocr` | - | - | ✓ |
+```
+# Identity & Limits
+plan_key                    = starter
+team_limit                  = 20
+ocr_limit                   = 150
+ai_message_limit            = 30
+invoice_limit               = 10
+einvoice_limit              = 100
+action_center_limit         = 0
+is_custom_pricing           = false
+
+# All-plan features (true for both Starter and Pro — pricing card bullet points)
+feature_custom_categories   = true
+feature_ai_categorization   = true
+feature_approval_workflow   = true
+feature_multi_currency      = true
+feature_rbac                = true
+feature_ai_chat             = true
+feature_basic_invoicing     = true
+feature_batch_submissions   = true
+feature_leave_management    = true
+feature_basic_sst           = true
+feature_einvoice            = true
+feature_multilang_chat      = true
+feature_rag_compliance      = true
+
+# Pro-only features (false for Starter)
+feature_duplicate_detection = false
+feature_full_ar             = false
+feature_full_ap             = false
+feature_full_sst            = false
+feature_action_cards        = false
+feature_export_templates    = false
+feature_scheduled_exports   = false
+feature_audit_trail         = false
+feature_advanced_analytics  = false
+```
+
+**Prices (4 per product):**
+- MYR 249/month (recurring)
+- MYR 2,490/year (recurring)
+- SGD 149/month (recurring)
+- SGD 1,490/year (recurring)
+
+### Complete Stripe Product Metadata — Pro
+
+```
+# Identity & Limits
+plan_key                    = pro
+team_limit                  = 50
+ocr_limit                   = 500
+ai_message_limit            = 300
+invoice_limit               = -1
+einvoice_limit              = -1
+action_center_limit         = 15
+is_custom_pricing           = false
+
+# All-plan features (true for both Starter and Pro — pricing card bullet points)
+feature_custom_categories   = true
+feature_ai_categorization   = true
+feature_approval_workflow   = true
+feature_multi_currency      = true
+feature_rbac                = true
+feature_ai_chat             = true
+feature_basic_invoicing     = true
+feature_batch_submissions   = true
+feature_leave_management    = true
+feature_basic_sst           = true
+feature_einvoice            = true
+feature_multilang_chat      = true
+feature_rag_compliance      = true
+
+# Pro-only features (true for Pro)
+feature_duplicate_detection = true
+feature_full_ar             = true
+feature_full_ap             = true
+feature_full_sst            = true
+feature_action_cards        = true
+feature_export_templates    = true
+feature_scheduled_exports   = true
+feature_audit_trail         = true
+feature_advanced_analytics  = true
+```
+
+**Prices (4 per product):**
+- MYR 599/month (recurring)
+- MYR 5,990/year (recurring)
+- SGD 349/month (recurring)
+- SGD 3,490/year (recurring)
+
+### Feature Flag Design Principles
+
+1. **Limits gate quantity, flags gate capability.** Capped features use `*_limit` fields (-1 = unlimited). Boolean flags control on/off.
+2. **All-plan features are `true` on BOTH Starter and Pro.** These generate pricing card bullet points. The code does NOT gate functionality based on these — they're always enabled. They exist in Stripe purely for UI display.
+3. **Tier-gated features differ between plans.** `false` on Starter, `true` on Pro. These are features Starter genuinely doesn't have (full AR/AP, audit trail, etc.). The code checks these to gate access.
+4. **Enterprise is NOT in Stripe.** Custom pricing handled via manual invoicing / offline contract. Enterprise feature access is configured per-business in the database.
+5. **No `feature_multi_tenancy` flag.** Multi-tenancy is internal architecture, not a customer-facing feature. Always enabled.
+
+### Features Available to ALL Plans (no flag needed)
+
+These are always enabled — the code should NOT check a feature flag for these:
+
+- Receipt OCR + auto-extraction (limited by `ocr_limit`)
+- Expense claim submission & approval workflow
+- Manager routing with hierarchy
+- Custom expense categories
+- Multi-currency support
+- IFRS-compliant accounting entries
+- Batch receipt submission
+- Basic sales invoicing (limited by `invoice_limit`)
+- Basic customer list & payment recording
+- Invoice email delivery
+- LHDN e-Invoice (limited by `einvoice_limit`)
+- Basic SST rate tracking (8% service / 5-10% sales)
+- AI chat assistant (limited by `ai_message_limit`)
+- RAG regulatory compliance
+- Multi-language chat (EN, TH, ID, ZH)
+- Financial question answering & transaction lookups
+- All leave management features (custom types, carryover, team calendar)
+- General ledger & transaction categorisation
+- Financial dashboard & basic charts
+- RBAC (owner, finance_admin, manager, employee)
+- Team invitations & business profile
+- CSV export (manual)
+- All email notifications & preferences
 
 ---
 
@@ -552,3 +650,8 @@ Multiple natural moments push Starter users toward Pro:
 | 2026-02-19 | SG InvoiceNow via same Peppol partner as MY | Both markets use Peppol. Single partner covers both. |
 | 2026-02-19 | Payroll: partner (not build) | Too complex to build (EPF/SOCSO/CPF). Refer to Swingvy/Talenox. CSV export templates for integration. |
 | 2026-02-19 | API rate limit: 1,000 req/min for Enterprise | Sufficient for integration use cases. Higher limits via custom quote. |
+| 2026-02-19 | Batch submissions, multilang chat, RAG, leave → ALL plans | Hard to split from core features. Multilang/RAG are inherent to AI chat quality. Batch is UX convenience. Leave management is baseline HR. |
+| 2026-02-19 | Action center: volume-gated (0/15/unlimited), NOT feature-gated | Can't reliably instruct AI agent to skip tools per plan tier. Volume limit (insights/month) is cleaner than selectively disabling MCP tools. |
+| 2026-02-19 | Enterprise NOT in Stripe | Custom pricing = manual invoicing / offline contract. Feature access configured per-business in database. |
+| 2026-02-19 | Stripe metadata: limits for quantity, flags for capability | `*_limit` fields for capped features (-1=unlimited). Boolean flags only for features Starter genuinely doesn't have. All-plan features have no flag. |
+| 2026-02-19 | einvoice_limit: 100 for Starter confirmed | Covers outgoing sales invoices AND self-billed invoices for purchases from individuals/foreign suppliers. 100 is reasonable for 20-pax SME. |

@@ -15,62 +15,104 @@ FinanSEAL uses a tiered subscription model with features controlled via Stripe p
 
 ## Stripe Product Metadata
 
-### Required Fields
+> **Enterprise is NOT in Stripe.** Custom pricing handled via manual invoicing / offline contract.
+
+### Complete Metadata — Starter
 
 ```
-plan_key: 'starter' | 'pro'
-team_limit: number (e.g., '20', '50')
-ocr_limit: number (e.g., '150', '500')
-ai_message_limit: number (e.g., '30', '300')
-invoice_limit: number (e.g., '10', '-1' for unlimited)
-einvoice_limit: number (e.g., '100', '-1' for unlimited)
+# Identity & Limits
+plan_key                    = starter
+team_limit                  = 20
+ocr_limit                   = 150
+ai_message_limit            = 30
+invoice_limit               = 10
+einvoice_limit              = 100
+action_center_limit         = 0
+is_custom_pricing           = false
+
+# All-plan features (true for both Starter and Pro — pricing card bullet points)
+feature_custom_categories   = true
+feature_ai_categorization   = true
+feature_approval_workflow   = true
+feature_multi_currency      = true
+feature_rbac                = true
+feature_ai_chat             = true
+feature_basic_invoicing     = true
+feature_batch_submissions   = true
+feature_leave_management    = true
+feature_basic_sst           = true
+feature_einvoice            = true
+feature_multilang_chat      = true
+feature_rag_compliance      = true
+
+# Pro-only features (false for Starter)
+feature_duplicate_detection = false
+feature_full_ar             = false
+feature_full_ap             = false
+feature_full_sst            = false
+feature_action_cards        = false
+feature_export_templates    = false
+feature_scheduled_exports   = false
+feature_audit_trail         = false
+feature_advanced_analytics  = false
 ```
 
-### Feature Flags
+### Complete Metadata — Pro
 
-| Metadata Key | Display Name | Starter | Pro | Enterprise |
-|--------------|--------------|:-------:|:---:|:----------:|
-| `feature_custom_categories` | Custom business categories | ✓ | ✓ | ✓ |
-| `feature_ai_categorization` | AI auto categorization | ✓ | ✓ | ✓ |
-| `feature_approval_workflow` | Approval workflow | ✓ | ✓ | ✓ |
-| `feature_multi_currency` | Multi-currency tracking | ✓ | ✓ | ✓ |
-| `feature_rbac` | Role-based access control | ✓ | ✓ | ✓ |
-| `feature_basic_invoicing` | Basic invoicing (10/mo) | ✓ | ✓ | ✓ |
-| `feature_ai_chat` | AI chat assistant (limited) | ✓ | ✓ | ✓ |
-| `feature_einvoice` | LHDN e-Invoice / SG InvoiceNow | ✓ | ✓ | ✓ |
-| `feature_basic_sst` | Basic SST rate tracking (8%/5%/10%) | ✓ | ✓ | ✓ |
-| `feature_full_sst` | Full SST category management & input tax | | ✓ | ✓ |
-| `feature_batch_submissions` | Batch receipt submission | | ✓ | ✓ |
-| `feature_duplicate_detection` | Duplicate expense detection | | ✓ | ✓ |
-| `feature_full_ar` | Full AR suite (debtors, aging, recurring) | | ✓ | ✓ |
-| `feature_full_ap` | Full AP suite (vendors, aging, price intel) | | ✓ | ✓ |
-| `feature_advanced_leave` | Advanced leave (calendar, custom types) | | ✓ | ✓ |
-| `feature_action_cards` | Chat action cards | | ✓ | ✓ |
-| `feature_rag_compliance` | RAG regulatory compliance | | ✓ | ✓ |
-| `feature_multilang_chat` | Multi-language chat (TH, ID, ZH) | | ✓ | ✓ |
-| `feature_action_center` | Proactive AI insights | | ✓ | ✓ |
-| `feature_anomaly_detection` | Anomaly detection | | ✓ | ✓ |
-| `feature_advanced_analytics` | Advanced analytics & charts | | ✓ | ✓ |
-| `feature_export_templates` | Pre-built export templates | | ✓ | ✓ |
-| `feature_scheduled_exports` | Scheduled CSV exports | | ✓ | ✓ |
-| `feature_audit_trail` | Audit trail | | ✓ | ✓ |
-| `feature_cash_flow_forecast` | Cash flow forecasting | | | ✓ |
-| `feature_financial_intelligence` | Financial intelligence | | | ✓ |
-| `feature_mcp_api` | MCP Server / API access | | | ✓ |
-| `feature_custom_integrations` | Custom integrations | | | ✓ |
-| `feature_dedicated_manager` | Dedicated account manager | | | ✓ |
-| `feature_sla_guarantee` | SLA guarantee | | | ✓ |
-| `feature_unlimited_ocr` | Unlimited OCR scans | | | ✓ |
+```
+# Identity & Limits
+plan_key                    = pro
+team_limit                  = 50
+ocr_limit                   = 500
+ai_message_limit            = 300
+invoice_limit               = -1
+einvoice_limit              = -1
+action_center_limit         = 15
+is_custom_pricing           = false
 
-### Auto-Generated Features
+# All-plan features (true for both Starter and Pro — pricing card bullet points)
+feature_custom_categories   = true
+feature_ai_categorization   = true
+feature_approval_workflow   = true
+feature_multi_currency      = true
+feature_rbac                = true
+feature_ai_chat             = true
+feature_basic_invoicing     = true
+feature_batch_submissions   = true
+feature_leave_management    = true
+feature_basic_sst           = true
+feature_einvoice            = true
+feature_multilang_chat      = true
+feature_rag_compliance      = true
 
-From limits:
-- `ocr_limit: 150` -> "150 OCR scans/month"
-- `team_limit: 20` -> "Up to 20 team members"
-- `ai_message_limit: 30` -> "30 AI chat messages/month"
-- `invoice_limit: 10` -> "10 sales invoices/month"
-- `einvoice_limit: 100` -> "100 LHDN e-invoices/month"
-- `*_limit: -1` -> "Unlimited" variant
+# Pro-only features (true for Pro)
+feature_duplicate_detection = true
+feature_full_ar             = true
+feature_full_ap             = true
+feature_full_sst            = true
+feature_action_cards        = true
+feature_export_templates    = true
+feature_scheduled_exports   = true
+feature_audit_trail         = true
+feature_advanced_analytics  = true
+```
+
+### Design Principles
+
+1. **Limits gate quantity, flags gate capability.** Capped features use `*_limit` (-1 = unlimited).
+2. **All-plan features are `true` on BOTH plans.** They generate pricing card bullet points. Code does NOT gate on these — they're always enabled. They exist in Stripe for UI display.
+3. **Tier-gated features differ between plans.** `false` on Starter, `true` on Pro. Code checks these to gate access.
+4. **No `feature_multi_tenancy`.** Internal architecture, not customer-facing. Always enabled.
+
+### Auto-Generated Feature Labels (from limits)
+
+- `ocr_limit: 150` → "150 OCR scans/month"
+- `team_limit: 20` → "Up to 20 team members"
+- `ai_message_limit: 30` → "30 AI chat messages/month"
+- `invoice_limit: 10` → "10 sales invoices/month"
+- `einvoice_limit: 100` → "100 LHDN e-invoices/month"
+- `action_center_limit: 15` → "15 proactive insights/month"
+- `*_limit: -1` → "Unlimited" variant
 
 ## Add-On Products
 
