@@ -179,19 +179,7 @@ export const FALLBACK_PLANS: Record<PlanKey, PlanConfig> = {
     einvoiceLimit: -1,
     actionCenterLimit: 15,
     features: [
-      'Custom business categories',
-      'AI auto categorization',
-      'Approval workflow',
-      'Multi-currency tracking',
-      'Role-based access control',
-      'AI chat assistant',
-      'Basic invoicing',
-      'Batch receipt submission',
-      'Leave management',
-      'Basic SST tracking',
-      'LHDN e-Invoice',
-      'Multi-language chat',
-      'RAG regulatory compliance',
+      'Everything in Starter, plus:',
       'Duplicate expense detection',
       'Full AR management',
       'Full AP management',
@@ -396,6 +384,14 @@ async function fetchCatalogFromStripe(): Promise<Record<PlanKey, PlanConfig>> {
     if (config && config.planKey !== 'trial') {
       plans[config.planKey] = config
     }
+  }
+
+  // Deduplicate Pro features against Starter (show "Everything in Starter, plus:")
+  // This mirrors how Enterprise already shows "Everything in Pro, plus:"
+  if (plans.pro && plans.starter) {
+    const starterFeatureSet = new Set(plans.starter.features)
+    const proOnlyFeatures = plans.pro.features.filter(f => !starterFeatureSet.has(f))
+    plans.pro.features = ['Everything in Starter, plus:', ...proOnlyFeatures]
   }
 
   return plans
