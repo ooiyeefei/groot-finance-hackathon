@@ -413,3 +413,46 @@ export const THOUSAND_SEPARATORS = {
 
 export type ThousandSeparator = typeof THOUSAND_SEPARATORS[keyof typeof THOUSAND_SEPARATORS];
 export const THOUSAND_SEPARATOR_VALUES = Object.values(THOUSAND_SEPARATORS);
+
+// ============================================
+// LHDN e-INVOICE STATUSES (016-e-invoice-schema-change)
+// ============================================
+
+export const LHDN_STATUSES = {
+  PENDING: "pending",
+  SUBMITTED: "submitted",
+  VALID: "valid",
+  INVALID: "invalid",
+  CANCELLED: "cancelled",
+} as const;
+
+export type LhdnStatus = typeof LHDN_STATUSES[keyof typeof LHDN_STATUSES];
+export const LHDN_STATUS_VALUES = Object.values(LHDN_STATUSES);
+
+// ============================================
+// PEPPOL e-INVOICE STATUSES (016-e-invoice-schema-change)
+// ============================================
+
+export const PEPPOL_STATUSES = {
+  PENDING: "pending",
+  TRANSMITTED: "transmitted",
+  DELIVERED: "delivered",
+  FAILED: "failed",
+} as const;
+
+export type PeppolStatus = typeof PEPPOL_STATUSES[keyof typeof PEPPOL_STATUSES];
+export const PEPPOL_STATUS_VALUES = Object.values(PEPPOL_STATUSES);
+
+// ============================================
+// E-INVOICE DOCUMENT TYPES (016-e-invoice-schema-change)
+// ============================================
+
+export const EINVOICE_TYPES = {
+  INVOICE: "invoice",
+  CREDIT_NOTE: "credit_note",
+  DEBIT_NOTE: "debit_note",
+  REFUND_NOTE: "refund_note",
+} as const;
+
+export type EinvoiceType = typeof EINVOICE_TYPES[keyof typeof EINVOICE_TYPES];
+export const EINVOICE_TYPE_VALUES = Object.values(EINVOICE_TYPES);

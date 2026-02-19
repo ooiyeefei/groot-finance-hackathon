@@ -38,6 +38,9 @@ import {
   RECURRING_FREQUENCY_VALUES,
   PAYMENT_TYPE_VALUES,
   PAYMENT_METHOD_VALUES,
+  LHDN_STATUS_VALUES,
+  PEPPOL_STATUS_VALUES,
+  EINVOICE_TYPE_VALUES,
 } from "../../src/lib/constants/statuses";
 
 // ============================================
@@ -238,3 +241,25 @@ export const paymentTypeValidator = literalUnion(PAYMENT_TYPE_VALUES);
  * bank_transfer, cash, cheque, card, other
  */
 export const paymentMethodValidator = literalUnion(PAYMENT_METHOD_VALUES);
+
+// ============================================
+// E-INVOICE VALIDATORS (016-e-invoice-schema-change)
+// ============================================
+
+/**
+ * LHDN e-invoice status validator
+ * Lifecycle: pending → submitted → valid/invalid → cancelled
+ */
+export const lhdnStatusValidator = literalUnion(LHDN_STATUS_VALUES);
+
+/**
+ * Peppol e-invoice status validator
+ * Lifecycle: pending → transmitted → delivered/failed
+ */
+export const peppolStatusValidator = literalUnion(PEPPOL_STATUS_VALUES);
+
+/**
+ * E-invoice document type validator
+ * Classification: invoice, credit_note, debit_note, refund_note
+ */
+export const einvoiceTypeValidator = literalUnion(EINVOICE_TYPE_VALUES);

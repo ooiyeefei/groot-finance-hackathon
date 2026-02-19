@@ -216,6 +216,16 @@ export interface CustomerSnapshot {
   phone?: string;
   address?: string;
   taxId?: string;
+  // 016-e-invoice-schema-change: LHDN buyer compliance fields
+  tin?: string;
+  brn?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  addressLine3?: string;
+  city?: string;
+  stateCode?: string;
+  postalCode?: string;
+  countryCode?: string;
 }
 
 export const customerSnapshotSchema = z.object({
@@ -225,6 +235,16 @@ export const customerSnapshotSchema = z.object({
   phone: z.string().optional(),
   address: z.string().optional(),
   taxId: z.string().optional(),
+  // 016-e-invoice-schema-change: LHDN buyer compliance fields
+  tin: z.string().optional(),
+  brn: z.string().optional(),
+  addressLine1: z.string().optional(),
+  addressLine2: z.string().optional(),
+  addressLine3: z.string().optional(),
+  city: z.string().optional(),
+  stateCode: z.string().optional(),
+  postalCode: z.string().optional(),
+  countryCode: z.string().optional(),
 });
 
 // ============================================
@@ -291,6 +311,20 @@ export interface Customer {
   customerCode?: string;
   notes?: string;
   status: CustomerStatus;
+  // 016-e-invoice-schema-change: Tax identifiers
+  tin?: string;
+  brn?: string;
+  sstRegistration?: string;
+  // 016-e-invoice-schema-change: Peppol
+  peppolParticipantId?: string;
+  // 016-e-invoice-schema-change: Structured address
+  addressLine1?: string;
+  addressLine2?: string;
+  addressLine3?: string;
+  city?: string;
+  stateCode?: string;
+  postalCode?: string;
+  countryCode?: string;
   deletedAt?: number;
   updatedAt?: number;
 }
