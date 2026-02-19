@@ -4,26 +4,31 @@
  * Fetches plan configuration dynamically from Stripe Product Catalog.
  * Stripe becomes the single source of truth for pricing.
  *
- * Product Metadata Expected:
- * - plan_key: 'starter' | 'pro' | 'enterprise'
- * - ocr_limit: number (-1 for unlimited)
+ * Product Metadata Expected (30 keys per product):
+ *
+ * Identity & Limits:
+ * - plan_key: 'starter' | 'pro'
  * - team_limit: number (-1 for unlimited)
+ * - ocr_limit: number (-1 for unlimited)
+ * - ai_message_limit: number (-1 for unlimited)
+ * - invoice_limit: number (-1 for unlimited)
+ * - einvoice_limit: number (-1 for unlimited)
+ * - action_center_limit: number (-1 for unlimited)
  * - is_custom_pricing: 'true' | 'false'
  *
- * Feature Metadata (individual boolean fields):
- * - feature_custom_categories: 'true' | 'false'
- * - feature_ai_categorization: 'true' | 'false'
- * - feature_approval_workflow: 'true' | 'false'
- * - feature_multi_currency: 'true' | 'false'
- * - feature_rbac: 'true' | 'false'
- * - feature_ai_chat: 'true' | 'false'
- * - feature_multi_tenancy: 'true' | 'false'
- * - feature_vendor_management: 'true' | 'false'
- * - feature_dedicated_manager: 'true' | 'false'
- * - feature_custom_integrations: 'true' | 'false'
- * - feature_sla_guarantee: 'true' | 'false'
- * - feature_on_premise: 'true' | 'false'
+ * All-plan features (true on both Starter and Pro):
+ * - feature_custom_categories, feature_ai_categorization,
+ *   feature_approval_workflow, feature_multi_currency, feature_rbac,
+ *   feature_ai_chat, feature_basic_invoicing, feature_batch_submissions,
+ *   feature_leave_management, feature_basic_sst, feature_einvoice,
+ *   feature_multilang_chat, feature_rag_compliance
  *
+ * Tier-gated features (false on Starter, true on Pro):
+ * - feature_duplicate_detection, feature_full_ar, feature_full_ap,
+ *   feature_full_sst, feature_action_cards, feature_export_templates,
+ *   feature_scheduled_exports, feature_audit_trail, feature_advanced_analytics
+ *
+ * @see docs/features/billing/groot-finance-pricing-strategy.md
  * @see https://docs.stripe.com/products-prices/how-products-and-prices-work
  */
 
@@ -42,6 +47,10 @@ export interface PlanConfig {
   currency: string
   ocrLimit: number // -1 for unlimited
   teamLimit: number // -1 for unlimited
+  aiMessageLimit: number // -1 for unlimited
+  invoiceLimit: number // -1 for unlimited
+  einvoiceLimit: number // -1 for unlimited
+  actionCenterLimit: number // -1 for unlimited
   features: string[]
   isCustomPricing: boolean
   interval: 'month' | 'year' | null
@@ -57,27 +66,39 @@ const CACHE_TTL_MS = 60 * 60 * 1000
 let catalogCache: CatalogData | null = null
 
 /**
- * Feature metadata key to display name mapping
- * Keys match Stripe metadata fields (feature_*)
+ * Feature metadata key to display name mapping.
+ * Keys match Stripe product metadata fields (feature_*).
+ * Used to auto-generate pricing card bullet points.
  */
 const FEATURE_METADATA_MAP: Record<string, string> = {
+  // All-plan features
   feature_custom_categories: 'Custom business categories',
   feature_ai_categorization: 'AI auto categorization',
-  feature_approval_workflow: 'Advanced approval workflow',
+  feature_approval_workflow: 'Approval workflow',
   feature_multi_currency: 'Multi-currency tracking',
   feature_rbac: 'Role-based access control',
   feature_ai_chat: 'AI chat assistant',
-  feature_multi_tenancy: 'Multi-tenancy support',
-  feature_vendor_management: 'Vendor management',
-  feature_dedicated_manager: 'Dedicated account manager',
-  feature_custom_integrations: 'Custom integrations',
-  feature_sla_guarantee: 'SLA guarantee',
-  feature_on_premise: 'On-premise option',
-  feature_unlimited_ocr: 'Unlimited OCR scans',
+  feature_basic_invoicing: 'Basic invoicing',
+  feature_batch_submissions: 'Batch receipt submission',
+  feature_leave_management: 'Leave management',
+  feature_basic_sst: 'Basic SST tracking',
+  feature_einvoice: 'LHDN e-Invoice',
+  feature_multilang_chat: 'Multi-language chat',
+  feature_rag_compliance: 'RAG regulatory compliance',
+  // Tier-gated features (Pro-only)
+  feature_duplicate_detection: 'Duplicate expense detection',
+  feature_full_ar: 'Full AR management',
+  feature_full_ap: 'Full AP management',
+  feature_full_sst: 'Full SST management',
+  feature_action_cards: 'Chat action cards',
+  feature_export_templates: 'Export templates',
+  feature_scheduled_exports: 'Scheduled exports',
+  feature_audit_trail: 'Audit trail',
+  feature_advanced_analytics: 'Advanced analytics',
 }
 
 // Default trial plan (not in Stripe)
-// Trial gives access to Starter-level features
+// Trial gives access to Starter-level features with reduced limits
 const TRIAL_PLAN: PlanConfig = {
   name: 'Trial',
   planKey: 'trial',
@@ -87,11 +108,15 @@ const TRIAL_PLAN: PlanConfig = {
   currency: 'MYR',
   ocrLimit: 50,
   teamLimit: 3,
+  aiMessageLimit: 10,
+  invoiceLimit: 3,
+  einvoiceLimit: 10,
+  actionCenterLimit: 0,
   features: [
     '14-day free trial',
     'Custom business categories',
     'AI auto categorization',
-    'Advanced approval workflow',
+    'Approval workflow',
     'Multi-currency tracking',
     'Role-based access control',
     '50 OCR scans during trial',
@@ -109,18 +134,33 @@ export const FALLBACK_PLANS: Record<PlanKey, PlanConfig> = {
     planKey: 'starter',
     priceId: null,
     productId: null,
-    price: 99,
+    price: 249,
     currency: 'MYR',
-    ocrLimit: 30,
-    teamLimit: 5,
+    ocrLimit: 150,
+    teamLimit: 20,
+    aiMessageLimit: 30,
+    invoiceLimit: 10,
+    einvoiceLimit: 100,
+    actionCenterLimit: 0,
     features: [
       'Custom business categories',
       'AI auto categorization',
-      'Advanced approval workflow',
+      'Approval workflow',
       'Multi-currency tracking',
       'Role-based access control',
-      '30 OCR scans/month',
-      'Up to 5 team members',
+      'AI chat assistant',
+      'Basic invoicing',
+      'Batch receipt submission',
+      'Leave management',
+      'Basic SST tracking',
+      'LHDN e-Invoice',
+      'Multi-language chat',
+      'RAG regulatory compliance',
+      '150 OCR scans/month',
+      '30 AI chat messages/month',
+      '10 sales invoices/month',
+      '100 e-invoices/month',
+      'Up to 20 team members',
     ],
     isCustomPricing: false,
     interval: 'month',
@@ -130,16 +170,43 @@ export const FALLBACK_PLANS: Record<PlanKey, PlanConfig> = {
     planKey: 'pro',
     priceId: null,
     productId: null,
-    price: 299,
+    price: 599,
     currency: 'MYR',
-    ocrLimit: 100,
-    teamLimit: 13,
+    ocrLimit: 500,
+    teamLimit: 50,
+    aiMessageLimit: 300,
+    invoiceLimit: -1,
+    einvoiceLimit: -1,
+    actionCenterLimit: 15,
     features: [
-      'Everything in Starter',
+      'Custom business categories',
+      'AI auto categorization',
+      'Approval workflow',
+      'Multi-currency tracking',
+      'Role-based access control',
       'AI chat assistant',
-      '100 OCR scans/month',
-      'Multi-tenancy support',
-      'Up to 13 team members',
+      'Basic invoicing',
+      'Batch receipt submission',
+      'Leave management',
+      'Basic SST tracking',
+      'LHDN e-Invoice',
+      'Multi-language chat',
+      'RAG regulatory compliance',
+      'Duplicate expense detection',
+      'Full AR management',
+      'Full AP management',
+      'Full SST management',
+      'Chat action cards',
+      'Export templates',
+      'Scheduled exports',
+      'Audit trail',
+      'Advanced analytics',
+      '500 OCR scans/month',
+      '300 AI chat messages/month',
+      'Unlimited sales invoices',
+      'Unlimited e-invoices',
+      '15 proactive insights/month',
+      'Up to 50 team members',
     ],
     isCustomPricing: false,
     interval: 'month',
@@ -153,14 +220,19 @@ export const FALLBACK_PLANS: Record<PlanKey, PlanConfig> = {
     currency: 'MYR',
     ocrLimit: -1,
     teamLimit: -1,
+    aiMessageLimit: -1,
+    invoiceLimit: -1,
+    einvoiceLimit: -1,
+    actionCenterLimit: -1,
     features: [
-      'Everything in Pro',
-      'Vendor management',
-      'Unlimited OCR scans',
-      'Dedicated account manager',
+      'Everything in Pro, plus:',
+      'Unlimited everything',
+      'Cash flow forecasting',
+      'Financial intelligence',
+      'MCP Server / API access',
       'Custom integrations',
+      'Dedicated account manager',
       'SLA guarantee',
-      'On-premise option',
     ],
     isCustomPricing: true,
     interval: null,
@@ -183,9 +255,13 @@ function parseProductMetadata(
     return null
   }
 
-  // Parse numeric limits first (needed for dynamic feature text)
+  // Parse numeric limits
   const ocrLimit = metadata.ocr_limit ? parseInt(metadata.ocr_limit, 10) : -1
   const teamLimit = metadata.team_limit ? parseInt(metadata.team_limit, 10) : -1
+  const aiMessageLimit = metadata.ai_message_limit ? parseInt(metadata.ai_message_limit, 10) : -1
+  const invoiceLimit = metadata.invoice_limit ? parseInt(metadata.invoice_limit, 10) : -1
+  const einvoiceLimit = metadata.einvoice_limit ? parseInt(metadata.einvoice_limit, 10) : -1
+  const actionCenterLimit = metadata.action_center_limit ? parseInt(metadata.action_center_limit, 10) : -1
 
   // Build features array from individual metadata fields
   const features: string[] = []
@@ -197,10 +273,37 @@ function parseProductMetadata(
     }
   }
 
-  // Add dynamic features based on limits (if not already added via feature_unlimited_ocr)
-  if (ocrLimit > 0 && !features.includes('Unlimited OCR scans')) {
+  // Add dynamic features based on limits
+  if (ocrLimit > 0) {
     features.push(`${ocrLimit} OCR scans/month`)
+  } else if (ocrLimit === -1) {
+    features.push('Unlimited OCR scans')
   }
+
+  if (aiMessageLimit > 0) {
+    features.push(`${aiMessageLimit} AI chat messages/month`)
+  } else if (aiMessageLimit === -1) {
+    features.push('Unlimited AI chat messages')
+  }
+
+  if (invoiceLimit > 0) {
+    features.push(`${invoiceLimit} sales invoices/month`)
+  } else if (invoiceLimit === -1) {
+    features.push('Unlimited sales invoices')
+  }
+
+  if (einvoiceLimit > 0) {
+    features.push(`${einvoiceLimit} e-invoices/month`)
+  } else if (einvoiceLimit === -1) {
+    features.push('Unlimited e-invoices')
+  }
+
+  if (actionCenterLimit > 0) {
+    features.push(`${actionCenterLimit} proactive insights/month`)
+  } else if (actionCenterLimit === -1) {
+    features.push('Unlimited proactive insights')
+  }
+
   if (teamLimit > 0) {
     features.push(`Up to ${teamLimit} team members`)
   } else if (teamLimit === -1) {
@@ -223,6 +326,10 @@ function parseProductMetadata(
     currency,
     ocrLimit,
     teamLimit,
+    aiMessageLimit,
+    invoiceLimit,
+    einvoiceLimit,
+    actionCenterLimit,
     features,
     isCustomPricing,
     interval,
@@ -248,14 +355,29 @@ async function fetchCatalogFromStripe(): Promise<Record<PlanKey, PlanConfig>> {
     limit: 100,
   })
 
-  // Create price lookup by product
+  // Create price lookup by product, preferring monthly interval
   const pricesByProduct = new Map<string, Stripe.Price>()
   for (const price of prices.data) {
     const productId = typeof price.product === 'string' ? price.product : price.product.id
-    // Use the first active recurring price for each product
-    // You can add logic to prefer default_price or specific intervals
-    if (!pricesByProduct.has(productId)) {
+    const existing = pricesByProduct.get(productId)
+    if (!existing) {
       pricesByProduct.set(productId, price)
+    } else if (price.recurring?.interval === 'month' && existing.recurring?.interval !== 'month') {
+      // Prefer monthly price for display
+      pricesByProduct.set(productId, price)
+    }
+  }
+
+  // Override with product's default_price when available
+  for (const product of products.data) {
+    if (product.default_price) {
+      const defaultPriceId = typeof product.default_price === 'string'
+        ? product.default_price
+        : product.default_price.id
+      const matchingPrice = prices.data.find(p => p.id === defaultPriceId)
+      if (matchingPrice) {
+        pricesByProduct.set(product.id, matchingPrice)
+      }
     }
   }
 
@@ -418,6 +540,34 @@ export function getTeamLimitSync(planKey: PlanKey | string): number {
 }
 
 /**
+ * Get AI message limit synchronously
+ */
+export function getAiMessageLimitSync(planKey: PlanKey | string): number {
+  return getPlanSync(planKey).aiMessageLimit
+}
+
+/**
+ * Get invoice limit synchronously
+ */
+export function getInvoiceLimitSync(planKey: PlanKey | string): number {
+  return getPlanSync(planKey).invoiceLimit
+}
+
+/**
+ * Get e-invoice limit synchronously
+ */
+export function getEinvoiceLimitSync(planKey: PlanKey | string): number {
+  return getPlanSync(planKey).einvoiceLimit
+}
+
+/**
+ * Get action center limit synchronously
+ */
+export function getActionCenterLimitSync(planKey: PlanKey | string): number {
+  return getPlanSync(planKey).actionCenterLimit
+}
+
+/**
  * Check if OCR usage is within limit
  */
 export function canUseOcr(planKey: PlanKey | string, currentUsage: number): boolean {
@@ -427,10 +577,58 @@ export function canUseOcr(planKey: PlanKey | string, currentUsage: number): bool
 }
 
 /**
- * Get usage percentage
+ * Check if AI message usage is within limit
  */
-export function getUsagePercentage(planKey: PlanKey | string, currentUsage: number): number {
-  const limit = getOcrLimitSync(planKey)
+export function canSendAiMessage(planKey: PlanKey | string, currentUsage: number): boolean {
+  const limit = getAiMessageLimitSync(planKey)
+  if (limit === -1) return true
+  return currentUsage < limit
+}
+
+/**
+ * Check if invoice creation is within limit
+ */
+export function canCreateInvoice(planKey: PlanKey | string, currentUsage: number): boolean {
+  const limit = getInvoiceLimitSync(planKey)
+  if (limit === -1) return true
+  return currentUsage < limit
+}
+
+/**
+ * Check if e-invoice submission is within limit
+ */
+export function canSubmitEinvoice(planKey: PlanKey | string, currentUsage: number): boolean {
+  const limit = getEinvoiceLimitSync(planKey)
+  if (limit === -1) return true
+  return currentUsage < limit
+}
+
+/**
+ * Check if action center usage is within limit
+ */
+export function canUseActionCenter(planKey: PlanKey | string, currentUsage: number): boolean {
+  const limit = getActionCenterLimitSync(planKey)
+  if (limit === -1) return true
+  return currentUsage < limit
+}
+
+/**
+ * Get usage percentage for any limit type
+ */
+export function getUsagePercentage(
+  planKey: PlanKey | string,
+  currentUsage: number,
+  limitType: 'ocr' | 'aiMessage' | 'invoice' | 'einvoice' | 'actionCenter' = 'ocr'
+): number {
+  const plan = getPlanSync(planKey)
+  const limitMap: Record<string, number> = {
+    ocr: plan.ocrLimit,
+    aiMessage: plan.aiMessageLimit,
+    invoice: plan.invoiceLimit,
+    einvoice: plan.einvoiceLimit,
+    actionCenter: plan.actionCenterLimit,
+  }
+  const limit = limitMap[limitType]
   if (limit === -1) return 0
   return Math.min(100, Math.round((currentUsage / limit) * 100))
 }
