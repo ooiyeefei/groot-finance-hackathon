@@ -127,4 +127,16 @@ crons.daily(
   internal.functions.accountingEntries.markOverduePayables
 );
 
+/**
+ * Credit Pack Expiry
+ *
+ * Runs daily at 3:00 AM UTC to expire active credit packs
+ * where expiresAt <= now (90 days after purchase).
+ */
+crons.daily(
+  "expire-credit-packs",
+  { hourUTC: 3, minuteUTC: 0 },
+  internal.functions.creditPacks.expireDaily
+);
+
 export default crons;

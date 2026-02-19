@@ -11,7 +11,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getStripe } from '@/lib/stripe/client'
-import { getPlan, PlanKey, getOcrLimitSync } from '@/lib/stripe/plans'
+import {
+  getPlan,
+  PlanKey,
+  getOcrLimitSync,
+  getAiMessageLimitSync,
+  getInvoiceLimitSync,
+  getEinvoiceLimitSync,
+} from '@/lib/stripe/plans'
 import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
 import { Id } from '@/convex/_generated/dataModel'
@@ -49,16 +56,63 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get current month OCR usage from Convex
+    // Get current month usage from Convex (parallel queries, fail-open)
+    const businessIdTyped = business._id as Id<"businesses">
+
     let currentUsage = 0
+    let aiMessagesUsed = 0
+    let aiMessagesPlanLimit = 0
+    let salesInvoicesUsed = 0
+    let salesInvoicesPlanLimit = 0
+    let einvoicesUsed = 0
+    let einvoicesPlanLimit = 0
+    let creditPacksList: Array<{
+      id: string
+      packType: string
+      packName: string
+      totalCredits: number
+      creditsUsed: number
+      creditsRemaining: number
+      purchasedAt: number
+      expiresAt: number
+      status: string
+    }> = []
+
     try {
-      const usageData = await client.query(api.functions.ocrUsage.getCurrentUsage, {
-        businessId: business._id as Id<"businesses">
-      })
-      currentUsage = usageData?.creditsUsed ?? 0
+      const [ocrData, aiData, salesData, einvoiceData, activePacks] = await Promise.all([
+        client.query(api.functions.ocrUsage.getCurrentUsage, { businessId: businessIdTyped })
+          .catch(() => null),
+        client.query(api.functions.aiMessageUsage.getCurrentUsage, { businessId: businessIdTyped })
+          .catch(() => null),
+        client.query(api.functions.salesInvoiceUsage.getCurrentCount, { businessId: businessIdTyped })
+          .catch(() => null),
+        client.query(api.functions.einvoiceUsage.getCurrentUsage, { businessId: businessIdTyped })
+          .catch(() => null),
+        client.query(api.functions.creditPacks.getActivePacks, { businessId: businessIdTyped })
+          .catch(() => []),
+      ])
+
+      currentUsage = ocrData?.creditsUsed ?? 0
+      aiMessagesUsed = aiData?.messagesUsed ?? 0
+      aiMessagesPlanLimit = aiData?.planLimit ?? 0
+      salesInvoicesUsed = salesData?.count ?? 0
+      salesInvoicesPlanLimit = salesData?.planLimit ?? 0
+      einvoicesUsed = einvoiceData?.submissionsUsed ?? 0
+      einvoicesPlanLimit = einvoiceData?.planLimit ?? 0
+      creditPacksList = (activePacks ?? []).map((p: any) => ({
+        id: p._id,
+        packType: p.packType,
+        packName: p.packName,
+        totalCredits: p.totalCredits,
+        creditsUsed: p.creditsUsed,
+        creditsRemaining: p.creditsRemaining,
+        purchasedAt: p.purchasedAt,
+        expiresAt: p.expiresAt,
+        status: p.status,
+      }))
     } catch (usageError) {
-      console.error('[Billing Subscription] Failed to get OCR usage:', usageError)
-      // Continue with 0 usage
+      console.error('[Billing Subscription] Failed to get usage data:', usageError)
+      // Continue with 0 defaults (fail-open)
     }
 
     // Normalize plan key - 'free' maps to 'trial'
@@ -67,6 +121,9 @@ export async function GET(request: NextRequest) {
     // Get plan from Stripe catalog (with caching/fallback)
     const plan = await getPlan(planKey)
     const ocrLimit = getOcrLimitSync(planKey)
+    const aiMessageLimit = aiMessagesPlanLimit || getAiMessageLimitSync(planKey)
+    const invoiceLimit = salesInvoicesPlanLimit || getInvoiceLimitSync(planKey)
+    const einvoiceLimit = einvoicesPlanLimit || getEinvoiceLimitSync(planKey)
 
     // Build subscription response
     let subscriptionDetails = null
@@ -225,7 +282,23 @@ export async function GET(request: NextRequest) {
           ocrRemaining: ocrLimit === -1 ? -1 : Math.max(0, ocrLimit - currentUsage),
           ocrPercentage: ocrLimit === -1 ? 0 : Math.min(100, Math.round((currentUsage / ocrLimit) * 100)),
           isUnlimited: ocrLimit === -1,
+          aiMessagesUsed,
+          aiMessagesLimit: aiMessageLimit,
+          aiMessagesRemaining: aiMessageLimit === -1 ? -1 : Math.max(0, aiMessageLimit - aiMessagesUsed),
+          aiMessagesPercentage: aiMessageLimit === -1 ? 0 : Math.min(100, Math.round((aiMessagesUsed / aiMessageLimit) * 100)),
+          aiMessagesIsUnlimited: aiMessageLimit === -1,
+          salesInvoicesUsed,
+          salesInvoicesLimit: invoiceLimit,
+          salesInvoicesRemaining: invoiceLimit === -1 ? -1 : Math.max(0, invoiceLimit - salesInvoicesUsed),
+          salesInvoicesPercentage: invoiceLimit === -1 ? 0 : Math.min(100, Math.round((salesInvoicesUsed / invoiceLimit) * 100)),
+          salesInvoicesIsUnlimited: invoiceLimit === -1,
+          einvoicesUsed,
+          einvoicesLimit: einvoiceLimit,
+          einvoicesRemaining: einvoiceLimit === -1 ? -1 : Math.max(0, einvoiceLimit - einvoicesUsed),
+          einvoicesPercentage: einvoiceLimit === -1 ? 0 : Math.min(100, Math.round((einvoicesUsed / einvoiceLimit) * 100)),
+          einvoicesIsUnlimited: einvoiceLimit === -1,
         },
+        creditPacks: creditPacksList,
         trial: trialInfo,
         renewal: renewalInfo,
         business: {

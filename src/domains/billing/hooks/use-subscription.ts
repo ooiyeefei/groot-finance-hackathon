@@ -117,6 +117,18 @@ export interface RenewalInfo {
   urgencyLevel: 'none' | 'low' | 'medium' | 'high'
 }
 
+export interface CreditPackData {
+  id: string
+  packType: string
+  packName: string
+  totalCredits: number
+  creditsUsed: number
+  creditsRemaining: number
+  purchasedAt: number
+  expiresAt: number
+  status: string
+}
+
 export interface SubscriptionData {
   plan: {
     name: PlanName
@@ -140,7 +152,23 @@ export interface SubscriptionData {
     ocrRemaining: number
     ocrPercentage: number
     isUnlimited: boolean
+    aiMessagesUsed: number
+    aiMessagesLimit: number
+    aiMessagesRemaining: number
+    aiMessagesPercentage: number
+    aiMessagesIsUnlimited: boolean
+    salesInvoicesUsed: number
+    salesInvoicesLimit: number
+    salesInvoicesRemaining: number
+    salesInvoicesPercentage: number
+    salesInvoicesIsUnlimited: boolean
+    einvoicesUsed: number
+    einvoicesLimit: number
+    einvoicesRemaining: number
+    einvoicesPercentage: number
+    einvoicesIsUnlimited: boolean
   }
+  creditPacks: CreditPackData[]
   trial: TrialInfo
   renewal: RenewalInfo
   business: {

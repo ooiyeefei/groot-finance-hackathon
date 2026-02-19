@@ -16,6 +16,7 @@ import { api } from '@/convex/_generated/api'
 import Stripe from 'stripe'
 import {
   handleCheckoutSessionCompletedConvex,
+  handleCreditPackPurchaseConvex,
   handleSubscriptionCreatedConvex,
   handleSubscriptionUpdatedConvex,
   handleSubscriptionDeletedConvex,
@@ -128,11 +129,16 @@ export async function POST(request: NextRequest) {
     // ✅ MIGRATED: Process the event using Convex handlers
     try {
       switch (event.type) {
-        case 'checkout.session.completed':
-          await handleCheckoutSessionCompletedConvex(
-            event.data.object as Stripe.Checkout.Session
-          )
+        case 'checkout.session.completed': {
+          const session = event.data.object as Stripe.Checkout.Session
+          // Route credit pack purchases to dedicated handler
+          if (session.metadata?.addon_type) {
+            await handleCreditPackPurchaseConvex(session)
+          } else {
+            await handleCheckoutSessionCompletedConvex(session)
+          }
           break
+        }
 
         case 'customer.subscription.created':
           await handleSubscriptionCreatedConvex(

@@ -10,9 +10,11 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { getUserDataConvex } from '@/lib/convex'
+import { getUserDataConvex, getAuthenticatedConvex } from '@/lib/convex'
 import { rateLimit } from '@/domains/security/lib/rate-limit'
 import { streamLangGraphAgent } from '@/lib/ai/copilotkit-adapter'
+import { api } from '@/convex/_generated/api'
+import { Id } from '@/convex/_generated/dataModel'
 
 interface ChatRequestBody {
   message: string
@@ -77,6 +79,30 @@ export async function POST(req: NextRequest) {
       { error: 'No business context found' },
       { status: 400 }
     )
+  }
+
+  // 5.5 AI chat usage pre-flight check (fail-open per FR-016)
+  try {
+    const { client: convexClient } = await getAuthenticatedConvex()
+    if (convexClient) {
+      const usageCheck = await convexClient.mutation(
+        api.functions.aiMessageUsage.checkAndRecordFromApi,
+        { businessId: resolvedBusinessId as Id<"businesses"> }
+      )
+
+      if (!usageCheck.allowed) {
+        return NextResponse.json(
+          {
+            error: 'AI chat message limit reached for this month. Purchase a credit pack or upgrade your plan for more messages.',
+            code: 'USAGE_LIMIT_REACHED',
+          },
+          { status: 429 }
+        )
+      }
+    }
+  } catch (usageError) {
+    // Fail-open: log and proceed if usage check fails (FR-016)
+    console.warn('[Usage Tracking] AI chat pre-flight failed, proceeding (fail-open):', usageError)
   }
 
   // 6. Create SSE stream from the LangGraph agent

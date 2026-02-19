@@ -108,9 +108,9 @@ const TRIAL_PLAN: PlanConfig = {
   currency: 'MYR',
   ocrLimit: 50,
   teamLimit: 3,
-  aiMessageLimit: 10,
-  invoiceLimit: 3,
-  einvoiceLimit: 10,
+  aiMessageLimit: 300,  // Trial uses Pro limits (FR-015)
+  invoiceLimit: -1,     // Trial uses Pro limits (unlimited)
+  einvoiceLimit: -1,    // Trial uses Pro limits (unlimited)
   actionCenterLimit: 0,
   features: [
     '14-day free trial',

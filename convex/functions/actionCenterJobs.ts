@@ -195,7 +195,7 @@ export const runProactiveAnalysis = internalAction({
         internal.functions.actionCenterJobs.runDetectionAlgorithms,
         {
           businessId: business._id,
-          memberUserIds: members.map((m) => m.userId.toString()),
+          memberUserIds: members.map((m: { userId: { toString(): string } }) => m.userId.toString()),
         }
       );
 

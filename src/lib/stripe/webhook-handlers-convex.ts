@@ -269,6 +269,75 @@ async function updateBusinessSubscriptionConvex(
 }
 
 /**
+ * Handle credit pack purchase from checkout.session.completed
+ *
+ * Detects credit pack purchases via addon_type in session metadata.
+ * Maps metadata to pack type/name/credits and creates the credit pack record.
+ */
+export async function handleCreditPackPurchaseConvex(
+  session: Stripe.Checkout.Session
+): Promise<void> {
+  console.log(`[Webhook Handler Convex] Credit pack purchase: ${session.id}`)
+
+  const businessId = session.metadata?.business_id
+  const addonType = session.metadata?.addon_type
+  const messageCount = session.metadata?.message_count
+  const scanCount = session.metadata?.scan_count
+
+  if (!businessId) {
+    console.error('[Webhook Handler Convex] No business_id in credit pack session metadata')
+    throw new Error('Missing business_id in credit pack checkout session metadata')
+  }
+
+  // Map addon_type to pack configuration
+  let packType: string
+  let packName: string
+  let totalCredits: number
+
+  switch (addonType) {
+    case 'ai_chat_boost':
+      packType = 'ai_credits'
+      packName = 'boost'
+      totalCredits = messageCount ? parseInt(messageCount, 10) : 50
+      break
+    case 'ai_chat_power':
+      packType = 'ai_credits'
+      packName = 'power'
+      totalCredits = messageCount ? parseInt(messageCount, 10) : 150
+      break
+    case 'extra_ocr':
+      packType = 'ocr_credits'
+      packName = 'extra_ocr'
+      totalCredits = scanCount ? parseInt(scanCount, 10) : 100
+      break
+    default:
+      console.error(`[Webhook Handler Convex] Unknown addon_type: ${addonType}`)
+      throw new Error(`Unknown addon_type: ${addonType}`)
+  }
+
+  const convex = getConvexInternalClient()
+
+  const paymentIntentId = session.payment_intent
+    ? (typeof session.payment_intent === 'string'
+        ? session.payment_intent
+        : session.payment_intent.id)
+    : undefined
+
+  await convex.mutation(api.functions.creditPacks.createFromWebhook, {
+    businessId: businessId as any, // Convex ID type from string
+    packType,
+    packName,
+    totalCredits,
+    stripePaymentIntentId: paymentIntentId,
+    stripeSessionId: session.id,
+  })
+
+  console.log(
+    `[Webhook Handler Convex] Created ${packName} credit pack (${totalCredits} ${packType}) for business ${businessId}`
+  )
+}
+
+/**
  * Map Stripe subscription status to our simplified status
  * CRITICAL: 'paused' must be preserved for trial expiration enforcement
  */

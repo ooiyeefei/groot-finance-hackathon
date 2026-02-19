@@ -136,6 +136,7 @@ formatBusinessDate('2025-10-31')  // "Oct 31, 2025" (no timezone shift)
 - TypeScript 5.9.3 + Next.js 15.5.7, React 19.1.2, Convex 1.31.3 (013-chat-action-cards)
 - Convex (existing tables: invoices, accounting_entries, conversations, messages) (013-chat-action-cards)
 - TypeScript 5.9.3 / Node.js 20.x + Next.js 15.5.7, React 19.1.2, Convex 1.31.3, Radix UI Tabs, Clerk 6.30.0, lucide-react (015-ar-ap-tab-restructure)
+- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, Stripe SDK 20.1.0, Clerk 6.30.0 (001-usage-tracking)
 
 ## Recent Changes
 - 001-category-3-mcp: Added MCP Server with API key management

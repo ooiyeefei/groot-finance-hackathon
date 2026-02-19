@@ -745,6 +745,44 @@ export default defineSchema({
     .index("by_businessId_month", ["businessId", "month"])
     .index("by_legacyId", ["legacyId"]),
 
+  ai_message_usage: defineTable({
+    businessId: v.id("businesses"),
+    month: v.string(),                      // "YYYY-MM" format
+    messagesUsed: v.number(),
+    planLimit: v.number(),                  // -1 = unlimited
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_month", ["businessId", "month"]),
+
+  einvoice_usage: defineTable({
+    businessId: v.id("businesses"),
+    month: v.string(),                      // "YYYY-MM" format
+    submissionsUsed: v.number(),
+    planLimit: v.number(),                  // -1 = unlimited
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_month", ["businessId", "month"]),
+
+  credit_packs: defineTable({
+    businessId: v.id("businesses"),
+    packType: v.string(),                   // "ai_credits" | "ocr_credits"
+    packName: v.string(),                   // "boost" | "power" | "extra_ocr"
+    totalCredits: v.number(),
+    creditsUsed: v.number(),
+    creditsRemaining: v.number(),
+    purchasedAt: v.number(),
+    expiresAt: v.number(),
+    status: v.string(),                     // "active" | "depleted" | "expired"
+    stripePaymentIntentId: v.optional(v.string()),
+    stripeSessionId: v.optional(v.string()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_packType", ["businessId", "packType"])
+    .index("by_businessId_status", ["businessId", "status"])
+    .index("by_status_expiresAt", ["status", "expiresAt"]),
+
   // ============================================
   // AUDIT DOMAIN: Compliance & Activity Tracking
   // ============================================

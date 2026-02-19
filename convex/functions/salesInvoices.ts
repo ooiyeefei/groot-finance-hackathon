@@ -295,14 +295,42 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const { user } = await requireFinanceAdmin(ctx, args.businessId);
 
+    // Pre-flight: check sales invoice limit
+    const business = await ctx.db.get(args.businessId);
+    if (!business) throw new Error("Business not found");
+
+    const planName = business.planName;
+    const invoiceLimit =
+      planName === "starter" ? 10 :
+      planName === "pro" ? -1 :
+      planName === "enterprise" ? -1 :
+      -1; // Trial and unknown = Pro limits (unlimited)
+
+    if (invoiceLimit !== -1) {
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime();
+
+      const existingInvoices = await ctx.db
+        .query("sales_invoices")
+        .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+        .collect();
+
+      const monthlyCount = existingInvoices.filter(
+        (inv) => inv._creationTime >= monthStart && inv._creationTime < monthEnd
+      ).length;
+
+      if (monthlyCount >= invoiceLimit) {
+        throw new Error(
+          "Sales invoice limit reached for this month. Upgrade to Pro for unlimited invoices."
+        );
+      }
+    }
+
     // Validate
     if (args.lineItems.length === 0) {
       throw new Error("At least one line item is required");
     }
-
-    // Get business for invoice number
-    const business = await ctx.db.get(args.businessId);
-    if (!business) throw new Error("Business not found");
 
     const settings = business.invoiceSettings;
     const prefix = settings?.invoiceNumberPrefix ?? "INV";
