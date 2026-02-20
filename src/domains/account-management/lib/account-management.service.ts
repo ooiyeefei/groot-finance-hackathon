@@ -75,6 +75,22 @@ export interface BusinessProfile {
   address?: string | null
   contact_email?: string | null
   contact_phone?: string | null
+  // e-inv-ui-forms: LHDN compliance fields
+  lhdn_tin?: string | null
+  business_registration_number?: string | null
+  msic_code?: string | null
+  msic_description?: string | null
+  sst_registration_number?: string | null
+  lhdn_client_id?: string | null
+  peppol_participant_id?: string | null
+  // e-inv-ui-forms: Structured address
+  address_line1?: string | null
+  address_line2?: string | null
+  address_line3?: string | null
+  city?: string | null
+  state_code?: string | null
+  postal_code?: string | null
+  country_code?: string | null
 }
 
 export interface UpdateMembershipRequest {
@@ -415,6 +431,22 @@ export async function getBusinessProfile(clerkUserId: string): Promise<BusinessP
     address: profile.address || null,
     contact_email: profile.contact_email || null,
     contact_phone: profile.contact_phone || null,
+    // e-inv-ui-forms: LHDN compliance fields
+    lhdn_tin: profile.lhdn_tin || null,
+    business_registration_number: profile.business_registration_number || null,
+    msic_code: profile.msic_code || null,
+    msic_description: profile.msic_description || null,
+    sst_registration_number: profile.sst_registration_number || null,
+    lhdn_client_id: profile.lhdn_client_id || null,
+    peppol_participant_id: profile.peppol_participant_id || null,
+    // e-inv-ui-forms: Structured address
+    address_line1: profile.address_line1 || null,
+    address_line2: profile.address_line2 || null,
+    address_line3: profile.address_line3 || null,
+    city: profile.city || null,
+    state_code: profile.state_code || null,
+    postal_code: profile.postal_code || null,
+    country_code: profile.country_code || null,
   }
 }
 
@@ -424,9 +456,25 @@ export async function getBusinessProfile(clerkUserId: string): Promise<BusinessP
  */
 export async function updateBusinessProfile(
   clerkUserId: string,
-  updates: { name?: string; logo_url?: string; logo_fallback_color?: string; home_currency?: string; address?: string; contact_email?: string; contact_phone?: string }
+  updates: {
+    name?: string; logo_url?: string; logo_fallback_color?: string; home_currency?: string;
+    address?: string; contact_email?: string; contact_phone?: string;
+    // e-inv-ui-forms: LHDN compliance fields
+    lhdn_tin?: string; business_registration_number?: string; msic_code?: string;
+    msic_description?: string; sst_registration_number?: string; lhdn_client_id?: string;
+    // e-inv-ui-forms: Peppol
+    peppol_participant_id?: string;
+    // e-inv-ui-forms: Structured address
+    address_line1?: string; address_line2?: string; address_line3?: string;
+    city?: string; state_code?: string; postal_code?: string; country_code?: string;
+  }
 ): Promise<BusinessProfile> {
-  const { name, logo_url, logo_fallback_color, home_currency, address, contact_email, contact_phone } = updates
+  const {
+    name, logo_url, logo_fallback_color, home_currency, address, contact_email, contact_phone,
+    lhdn_tin, business_registration_number, msic_code, msic_description, sst_registration_number,
+    lhdn_client_id, peppol_participant_id,
+    address_line1, address_line2, address_line3, city, state_code, postal_code, country_code,
+  } = updates
 
   // Validate input
   if (name !== undefined && (!name || name.trim().length === 0)) {
@@ -454,6 +502,23 @@ export async function updateBusinessProfile(
     address,
     contact_email,
     contact_phone,
+    // e-inv-ui-forms: LHDN compliance fields
+    lhdn_tin,
+    business_registration_number,
+    msic_code,
+    msic_description,
+    sst_registration_number,
+    lhdn_client_id,
+    // e-inv-ui-forms: Peppol
+    peppol_participant_id,
+    // e-inv-ui-forms: Structured address
+    address_line1,
+    address_line2,
+    address_line3,
+    city,
+    state_code,
+    postal_code,
+    country_code,
   })
 
   // Fetch updated profile
@@ -470,6 +535,22 @@ export async function updateBusinessProfile(
     address: profile?.address || address || null,
     contact_email: profile?.contact_email || contact_email || null,
     contact_phone: profile?.contact_phone || contact_phone || null,
+    // e-inv-ui-forms: LHDN compliance fields
+    lhdn_tin: profile?.lhdn_tin || lhdn_tin || null,
+    business_registration_number: profile?.business_registration_number || business_registration_number || null,
+    msic_code: profile?.msic_code || msic_code || null,
+    msic_description: profile?.msic_description || msic_description || null,
+    sst_registration_number: profile?.sst_registration_number || sst_registration_number || null,
+    lhdn_client_id: profile?.lhdn_client_id || lhdn_client_id || null,
+    peppol_participant_id: profile?.peppol_participant_id || peppol_participant_id || null,
+    // e-inv-ui-forms: Structured address
+    address_line1: profile?.address_line1 || address_line1 || null,
+    address_line2: profile?.address_line2 || address_line2 || null,
+    address_line3: profile?.address_line3 || address_line3 || null,
+    city: profile?.city || city || null,
+    state_code: profile?.state_code || state_code || null,
+    postal_code: profile?.postal_code || postal_code || null,
+    country_code: profile?.country_code || country_code || null,
   }
 }
 

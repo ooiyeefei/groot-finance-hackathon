@@ -608,6 +608,21 @@ export const getBusinessProfileByStringId = query({
         : null,
       custom_expense_categories: business.customExpenseCategories || null,
       custom_cogs_categories: (business.customCogsCategories as Array<unknown>) || null,
+      // e-inv-ui-forms: LHDN compliance fields
+      lhdn_tin: business.lhdnTin || null,
+      business_registration_number: business.businessRegistrationNumber || null,
+      msic_code: business.msicCode || null,
+      msic_description: business.msicDescription || null,
+      sst_registration_number: business.sstRegistrationNumber || null,
+      lhdn_client_id: business.lhdnClientId || null,
+      peppol_participant_id: business.peppolParticipantId || null,
+      // e-inv-ui-forms: Structured address
+      address_line1: business.addressLine1 || null,
+      address_line2: business.addressLine2 || null,
+      address_line3: business.addressLine3 || null,
+      city: business.city || null,
+      state_code: business.stateCode || null,
+      postal_code: business.postalCode || null,
       created_at: new Date(business._creationTime).toISOString(),
       updated_at: business.updatedAt
         ? new Date(business.updatedAt).toISOString()
@@ -632,6 +647,22 @@ export const updateBusinessByStringId = mutation({
     country_code: v.optional(v.string()),
     logo_url: v.optional(v.string()),
     logo_fallback_color: v.optional(v.string()),
+    // e-inv-ui-forms: LHDN compliance fields
+    lhdn_tin: v.optional(v.string()),
+    business_registration_number: v.optional(v.string()),
+    msic_code: v.optional(v.string()),
+    msic_description: v.optional(v.string()),
+    sst_registration_number: v.optional(v.string()),
+    lhdn_client_id: v.optional(v.string()),
+    // e-inv-ui-forms: Peppol
+    peppol_participant_id: v.optional(v.string()),
+    // e-inv-ui-forms: Structured address
+    address_line1: v.optional(v.string()),
+    address_line2: v.optional(v.string()),
+    address_line3: v.optional(v.string()),
+    city: v.optional(v.string()),
+    state_code: v.optional(v.string()),
+    postal_code: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -680,6 +711,22 @@ export const updateBusinessByStringId = mutation({
     if (args.country_code !== undefined) updates.countryCode = args.country_code;
     if (args.logo_url !== undefined) updates.logoStoragePath = args.logo_url;
     if (args.logo_fallback_color !== undefined) updates.logoFallbackColor = args.logo_fallback_color;
+    // e-inv-ui-forms: LHDN compliance fields
+    if (args.lhdn_tin !== undefined) updates.lhdnTin = args.lhdn_tin;
+    if (args.business_registration_number !== undefined) updates.businessRegistrationNumber = args.business_registration_number;
+    if (args.msic_code !== undefined) updates.msicCode = args.msic_code;
+    if (args.msic_description !== undefined) updates.msicDescription = args.msic_description;
+    if (args.sst_registration_number !== undefined) updates.sstRegistrationNumber = args.sst_registration_number;
+    if (args.lhdn_client_id !== undefined) updates.lhdnClientId = args.lhdn_client_id;
+    // e-inv-ui-forms: Peppol
+    if (args.peppol_participant_id !== undefined) updates.peppolParticipantId = args.peppol_participant_id;
+    // e-inv-ui-forms: Structured address
+    if (args.address_line1 !== undefined) updates.addressLine1 = args.address_line1;
+    if (args.address_line2 !== undefined) updates.addressLine2 = args.address_line2;
+    if (args.address_line3 !== undefined) updates.addressLine3 = args.address_line3;
+    if (args.city !== undefined) updates.city = args.city;
+    if (args.state_code !== undefined) updates.stateCode = args.state_code;
+    if (args.postal_code !== undefined) updates.postalCode = args.postal_code;
 
     await ctx.db.patch(business._id, updates);
 

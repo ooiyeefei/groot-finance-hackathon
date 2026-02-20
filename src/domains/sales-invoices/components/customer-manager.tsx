@@ -82,8 +82,17 @@ export default function CustomerManager() {
       contactPerson?: string
       email: string
       phone?: string
-      address?: string
-      taxId?: string
+      tin?: string
+      brn?: string
+      sstRegistration?: string
+      peppolParticipantId?: string
+      addressLine1?: string
+      addressLine2?: string
+      addressLine3?: string
+      city?: string
+      stateCode?: string
+      postalCode?: string
+      countryCode?: string
     }) => {
       if (!businessId) return
       await createCustomer({
@@ -101,8 +110,17 @@ export default function CustomerManager() {
       contactPerson?: string
       email: string
       phone?: string
-      address?: string
-      taxId?: string
+      tin?: string
+      brn?: string
+      sstRegistration?: string
+      peppolParticipantId?: string
+      addressLine1?: string
+      addressLine2?: string
+      addressLine3?: string
+      city?: string
+      stateCode?: string
+      postalCode?: string
+      countryCode?: string
     }) => {
       if (formMode.kind !== 'edit') return
       await updateCustomer({

@@ -20,6 +20,7 @@ import { InvoiceStatusBadge } from './invoice-status-badge'
 import CustomerSelector from './customer-selector'
 import { CatalogSearchInput } from './catalog-search-input'
 import { formatCurrency } from '@/lib/utils/format-number'
+import { formatAddress, hasStructuredAddress } from '@/lib/utils/format-address'
 import {
   SUPPORTED_CURRENCIES,
   PAYMENT_TERMS_LABELS,
@@ -90,9 +91,30 @@ export function SalesInvoiceForm() {
   // Build business info from profile for invoice preview & PDF
   const businessInfo = businessProfile ? {
     companyName: businessProfile.name,
-    companyAddress: businessProfile.address || undefined,
+    companyAddress: hasStructuredAddress({
+      addressLine1: businessProfile.address_line1 ?? undefined,
+      addressLine2: businessProfile.address_line2 ?? undefined,
+      addressLine3: businessProfile.address_line3 ?? undefined,
+      city: businessProfile.city ?? undefined,
+      stateCode: businessProfile.state_code ?? undefined,
+      postalCode: businessProfile.postal_code ?? undefined,
+      countryCode: businessProfile.country_code ?? undefined,
+    })
+      ? formatAddress({
+          addressLine1: businessProfile.address_line1 ?? undefined,
+          addressLine2: businessProfile.address_line2 ?? undefined,
+          addressLine3: businessProfile.address_line3 ?? undefined,
+          city: businessProfile.city ?? undefined,
+          stateCode: businessProfile.state_code ?? undefined,
+          postalCode: businessProfile.postal_code ?? undefined,
+          countryCode: businessProfile.country_code ?? undefined,
+        }, 'multiline')
+      : (businessProfile.address || undefined),
     companyPhone: businessProfile.contact_phone || undefined,
     companyEmail: businessProfile.contact_email || undefined,
+    registrationNumber: businessProfile.business_registration_number || undefined,
+    taxId: businessProfile.lhdn_tin || undefined,
+    sstRegistrationNumber: businessProfile.sst_registration_number || undefined,
   } : undefined
 
   // Data bundle for @react-pdf/renderer

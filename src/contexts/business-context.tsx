@@ -41,6 +41,22 @@ interface BusinessProfile {
   address?: string | null
   contact_email?: string | null
   contact_phone?: string | null
+  // e-inv-ui-forms: LHDN compliance fields
+  lhdn_tin?: string | null
+  business_registration_number?: string | null
+  msic_code?: string | null
+  msic_description?: string | null
+  sst_registration_number?: string | null
+  lhdn_client_id?: string | null
+  peppol_participant_id?: string | null
+  // e-inv-ui-forms: Structured address
+  address_line1?: string | null
+  address_line2?: string | null
+  address_line3?: string | null
+  city?: string | null
+  state_code?: string | null
+  postal_code?: string | null
+  country_code?: string | null
 }
 
 interface BusinessContextState {
