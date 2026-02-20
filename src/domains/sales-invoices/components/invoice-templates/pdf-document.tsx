@@ -60,6 +60,8 @@ export interface PdfInvoiceData {
   footer?: string
   customFields?: Array<{ key: string; value: string }>
   showTaxId?: boolean
+  lhdnLongId?: string
+  lhdnQrDataUrl?: string
 }
 
 export interface PdfBusinessInfo {
@@ -406,6 +408,21 @@ export function InvoicePdfDocument({ invoice, businessInfo }: InvoicePdfDocument
                 <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold' }}>{field.value}</Text>
               </View>
             ))}
+          </View>
+        )}
+
+        {/* ── LHDN e-Invoice QR Code ── */}
+        {invoice.lhdnQrDataUrl && invoice.lhdnLongId && (
+          <View style={[s.footerSection, { marginTop: 12, flexDirection: 'row', alignItems: 'flex-start', gap: 8 }]}>
+            <Image src={invoice.lhdnQrDataUrl} style={{ width: 60, height: 60 }} />
+            <View style={{ flex: 1, paddingTop: 2 }}>
+              <Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold', color: C.foreground, marginBottom: 2 }}>
+                LHDN e-Invoice Verification
+              </Text>
+              <Text style={{ fontSize: 7, color: C.muted }}>
+                {`https://myinvois.hasil.gov.my/${invoice.lhdnLongId}/share`}
+              </Text>
+            </View>
           </View>
         )}
 

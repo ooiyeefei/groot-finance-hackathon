@@ -27,6 +27,7 @@ import { useUser } from '@clerk/nextjs'
 import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
 import { useSalesInvoices, useSalesInvoiceMutations, useInvoiceDefaults } from '../hooks/use-sales-invoices'
 import { InvoiceStatusBadge } from './invoice-status-badge'
+import { LhdnStatusBadge } from './lhdn-status-badge'
 import { PeppolStatusBadge } from './peppol-status-badge'
 import type { SalesInvoice, SalesInvoiceStatus } from '../types'
 import { SALES_INVOICE_STATUSES } from '../types'
@@ -323,6 +324,9 @@ export default function SalesInvoiceList() {
                   <th className="px-4 py-3 text-center font-medium text-muted-foreground">
                     Status
                   </th>
+                  <th className="px-4 py-3 text-center font-medium text-muted-foreground">
+                    e-Invoice
+                  </th>
                   <th className="px-4 py-3 text-right font-medium text-muted-foreground">
                     Actions
                   </th>
@@ -363,6 +367,9 @@ export default function SalesInvoiceList() {
                           <PeppolStatusBadge status={(invoice as any).peppolStatus as PeppolStatus} />
                         )}
                       </div>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <LhdnStatusBadge status={invoice.lhdnStatus} />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
@@ -460,7 +467,7 @@ export default function SalesInvoiceList() {
                   {/* Inline delete confirmation */}
                   {confirmDeleteId === invoice._id && (
                     <tr>
-                      <td colSpan={7} className="px-4 py-3 bg-destructive/5 border-b border-destructive/20">
+                      <td colSpan={8} className="px-4 py-3 bg-destructive/5 border-b border-destructive/20">
                         <div className="flex items-center justify-between">
                           <p className="text-sm text-foreground">
                             Delete <span className="font-medium">{invoice.invoiceNumber}</span>? This draft will be permanently removed.
@@ -514,8 +521,11 @@ export default function SalesInvoiceList() {
                       {invoice.customerSnapshot.businessName}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex flex-col items-end gap-1">
                     <InvoiceStatusBadge status={invoice.status} />
+                    {invoice.lhdnStatus && (
+                      <LhdnStatusBadge status={invoice.lhdnStatus} />
+                    )}
                     {(invoice as any).peppolStatus && (
                       <PeppolStatusBadge status={(invoice as any).peppolStatus as PeppolStatus} />
                     )}

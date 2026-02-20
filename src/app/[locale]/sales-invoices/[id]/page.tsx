@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { ArrowLeft, Pencil, Send, RotateCw, CreditCard, Ban, Download, Loader2, Trash2 } from 'lucide-react'
@@ -20,6 +20,8 @@ import { formatBusinessDate } from '@/lib/utils'
 import { SALES_INVOICE_STATUSES } from '@/domains/sales-invoices/types'
 import type { SalesInvoiceStatus } from '@/domains/sales-invoices/types'
 import { PaymentHistory } from '@/domains/sales-invoices/components/payment-history'
+import { LhdnDetailSection } from '@/domains/sales-invoices/components/lhdn-detail-section'
+import { generateLhdnQrDataUrl } from '@/domains/sales-invoices/components/lhdn-qr-code'
 import { PeppolTransmissionPanel } from '@/domains/sales-invoices/components/peppol-transmission-panel'
 import { useToast } from '@/components/ui/toast'
 import { useQuery } from 'convex/react'
@@ -62,6 +64,14 @@ export default function SalesInvoiceDetailPage() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [showVoidConfirm, setShowVoidConfirm] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [lhdnQrDataUrl, setLhdnQrDataUrl] = useState<string | undefined>(undefined)
+
+  useEffect(() => {
+    if (!invoice?.lhdnLongId) return
+    generateLhdnQrDataUrl(invoice.lhdnLongId)
+      .then(setLhdnQrDataUrl)
+      .catch(() => console.error('Failed to generate LHDN QR for PDF'))
+  }, [invoice?.lhdnLongId])
 
   if (isLoading) {
     return (
@@ -255,6 +265,8 @@ export default function SalesInvoiceDetailPage() {
       paymentTerms: invoice.paymentTerms,
       signatureName: invoice.signatureName,
       status: invoice.status,
+      lhdnLongId: invoice.lhdnLongId,
+      lhdnQrDataUrl,
     },
     businessInfo,
     templateId: invoice.templateId,
@@ -520,6 +532,9 @@ export default function SalesInvoiceDetailPage() {
             currency={invoice.currency}
             invoiceStatus={invoice.status}
           />
+
+          {/* LHDN e-Invoice section */}
+          <LhdnDetailSection invoice={invoice as any} />
 
           {/* Peppol InvoiceNow transmission */}
           <PeppolTransmissionPanel

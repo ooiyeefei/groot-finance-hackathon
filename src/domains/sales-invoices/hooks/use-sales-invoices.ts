@@ -102,6 +102,8 @@ export function useSalesInvoiceMutations() {
   const removeInvoice = useMutation(api.functions.salesInvoices.remove)
   const generateUploadUrl = useMutation(api.functions.salesInvoices.generateUploadUrl)
   const storePdfStorageId = useMutation(api.functions.salesInvoices.storePdfStorageId)
+  const submitToLhdn = useMutation(api.functions.salesInvoices.submitToLhdn)
+  const resubmitToLhdn = useMutation(api.functions.salesInvoices.resubmitToLhdn)
   const initiatePeppolTransmission = useMutation(api.functions.salesInvoices.initiatePeppolTransmission)
   const retryPeppolTransmission = useMutation(api.functions.salesInvoices.retryPeppolTransmission)
 
@@ -114,6 +116,8 @@ export function useSalesInvoiceMutations() {
     removeInvoice,
     generateUploadUrl,
     storePdfStorageId,
+    submitToLhdn,
+    resubmitToLhdn,
     initiatePeppolTransmission,
     retryPeppolTransmission,
   }
