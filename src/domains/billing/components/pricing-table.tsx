@@ -22,6 +22,16 @@ import { useSubscription } from '../hooks/use-subscription'
 import { useCatalog, type CatalogPlan } from '../hooks/use-catalog'
 import { cn } from '@/lib/utils'
 
+/**
+ * Launch list prices (marketing decoration only — not charged in Stripe).
+ * Shown as strikethrough "original" price next to the actual launch price.
+ * Remove this config when transitioning to regular pricing post-launch.
+ */
+const LAUNCH_LIST_PRICES: Record<string, Record<string, number>> = {
+  starter: { MYR: 299, SGD: 179 },
+  pro:     { MYR: 699, SGD: 399 },
+}
+
 interface PricingTableProps {
   /** Show current plan badge (requires connected mode) */
   showCurrentPlan?: boolean
@@ -211,12 +221,28 @@ export function PricingTable({
                     <p className="text-2xl font-bold text-foreground">Custom pricing</p>
                   ) : plan.price === 0 ? (
                     <p className="text-2xl font-bold text-foreground">Free</p>
-                  ) : (
-                    <p className="text-2xl font-bold text-foreground">
-                      {formatPrice(plan.price, plan.currency)}
-                      <span className="text-sm font-normal text-muted-foreground">/mo</span>
-                    </p>
-                  )}
+                  ) : (() => {
+                    const listPrice = LAUNCH_LIST_PRICES[name]?.[plan.currency]
+                    const savings = listPrice ? listPrice - plan.price : 0
+                    return (
+                      <div>
+                        {listPrice && (
+                          <p className="text-sm text-muted-foreground line-through">
+                            {formatPrice(listPrice, plan.currency)}/mo
+                          </p>
+                        )}
+                        <p className="text-2xl font-bold text-foreground">
+                          {formatPrice(plan.price, plan.currency)}
+                          <span className="text-sm font-normal text-muted-foreground">/mo</span>
+                        </p>
+                        {savings > 0 && (
+                          <p className="text-xs font-medium text-green-600 dark:text-green-400 mt-1">
+                            Save {formatPrice(savings, plan.currency)} — Launch Special
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
 
                 <CardDescription className="text-muted-foreground">
