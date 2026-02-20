@@ -165,6 +165,15 @@ export default defineSchema({
     // 016-e-invoice-schema-change: Peppol
     peppolParticipantId: v.optional(v.string()),
 
+    // e-inv-ui-forms: Structured address (LHDN supplier address requirement)
+    addressLine1: v.optional(v.string()),
+    addressLine2: v.optional(v.string()),
+    addressLine3: v.optional(v.string()),
+    city: v.optional(v.string()),
+    stateCode: v.optional(v.string()),
+    postalCode: v.optional(v.string()),
+    // Note: countryCode already exists on businesses table (line ~92)
+
     // Timestamps
     updatedAt: v.optional(v.number()),
   })

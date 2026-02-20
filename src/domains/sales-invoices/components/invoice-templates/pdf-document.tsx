@@ -69,6 +69,7 @@ export interface PdfBusinessInfo {
   companyEmail?: string
   registrationNumber?: string
   taxId?: string
+  sstRegistrationNumber?: string
   logoUrl?: string
   paymentMethods?: Array<{
     id: string
@@ -216,7 +217,10 @@ export function InvoicePdfDocument({ invoice, businessInfo }: InvoicePdfDocument
               <Text style={s.companyDetail}>Reg: {businessInfo.registrationNumber}</Text>
             )}
             {businessInfo?.taxId && (
-              <Text style={s.companyDetail}>Tax ID: {businessInfo.taxId}</Text>
+              <Text style={s.companyDetail}>TIN: {businessInfo.taxId}</Text>
+            )}
+            {businessInfo?.sstRegistrationNumber && (
+              <Text style={s.companyDetail}>SST Reg: {businessInfo.sstRegistrationNumber}</Text>
             )}
           </View>
           <View>
