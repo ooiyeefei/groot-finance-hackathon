@@ -19,9 +19,14 @@ export function LhdnDetailSection({ invoice }: LhdnDetailSectionProps) {
     <Card className="bg-card border-border">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            LHDN e-Invoice
-          </CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              LHDN e-Invoice
+            </CardTitle>
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 animate-pulse">
+              Coming Soon
+            </span>
+          </div>
           {hasLhdnData && <LhdnStatusBadge status={invoice.lhdnStatus} />}
         </div>
       </CardHeader>

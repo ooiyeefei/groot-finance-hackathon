@@ -287,7 +287,14 @@ export function PricingTable({
                           {displayFeatures.map((feature, index) => (
                             <li key={index} className="flex items-start gap-2.5">
                               <Check className="w-5 h-5 mt-0.5 text-green-600 dark:text-green-400 flex-shrink-0" />
-                              <span className="text-foreground text-base">{feature}</span>
+                              <span className="text-foreground text-base">
+                                {feature}
+                                {/e-invoice|einvoice|lhdn|peppol/i.test(feature) && (
+                                  <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 animate-pulse">
+                                    Coming Soon
+                                  </span>
+                                )}
+                              </span>
                             </li>
                           ))}
                         </ul>

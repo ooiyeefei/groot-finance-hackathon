@@ -9,7 +9,6 @@ import { StatusTimeline, type TimelineStep } from '@/components/ui/status-timeli
 import { Send, Loader2, CheckCircle2 } from 'lucide-react'
 import { formatBusinessDate } from '@/lib/utils'
 import { PEPPOL_STATUSES, type PeppolStatus } from '@/lib/constants/statuses'
-import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 
 interface PeppolTransmissionPanelProps {
   peppolStatus?: PeppolStatus
@@ -124,60 +123,28 @@ export function PeppolTransmissionPanel({
     return (
       <Card className="bg-card border-border">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            Peppol InvoiceNow
-          </CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Peppol InvoiceNow
+            </CardTitle>
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 animate-pulse">
+              Coming Soon
+            </span>
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          {isDraftOrVoid ? (
-            <p className="text-sm text-muted-foreground">
-              Invoice must be sent before transmitting via Peppol.
-            </p>
-          ) : !businessHasPeppolId ? (
-            <p className="text-sm text-muted-foreground">
-              Your business does not have a Peppol participant ID configured.
-            </p>
-          ) : !customerHasPeppolId ? (
-            <p className="text-sm text-muted-foreground">
-              The customer does not have a Peppol participant ID configured.
-            </p>
-          ) : (
-            <>
-              <p className="text-sm text-muted-foreground">
-                Transmit this invoice to the recipient via the Peppol InvoiceNow network.
-              </p>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => setShowConfirm(true)}
-                disabled={isTransmitting}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground"
-              >
-                {isTransmitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Transmitting...
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-4 w-4 mr-2" />
-                    Transmit via Peppol
-                  </>
-                )}
-              </Button>
-            </>
-          )}
-
-          <ConfirmationDialog
-            isOpen={showConfirm}
-            onClose={() => setShowConfirm(false)}
-            onConfirm={handleTransmit}
-            title="Transmit via Peppol"
-            message="This will submit the invoice to the Peppol InvoiceNow network for delivery to the recipient. This action cannot be undone."
-            confirmText="Transmit"
-            confirmVariant="primary"
-            isLoading={isTransmitting}
-          />
+          <p className="text-sm text-muted-foreground">
+            Peppol InvoiceNow is on the launchpad — coming soon!
+          </p>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled
+            className="bg-primary/60 text-primary-foreground cursor-not-allowed"
+          >
+            <Send className="h-4 w-4 mr-2" />
+            Transmit via Peppol
+          </Button>
         </CardContent>
       </Card>
     )
@@ -188,9 +155,14 @@ export function PeppolTransmissionPanel({
     <Card className="bg-card border-border">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            Peppol InvoiceNow
-          </CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Peppol InvoiceNow
+            </CardTitle>
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 animate-pulse">
+              Coming Soon
+            </span>
+          </div>
           <PeppolStatusBadge status={peppolStatus} />
         </div>
       </CardHeader>
