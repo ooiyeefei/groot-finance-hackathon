@@ -1,4 +1,5 @@
 import { auth } from '@clerk/nextjs/server'
+import { headers } from 'next/headers'
 import Link from 'next/link'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'
@@ -6,6 +7,7 @@ import { ClientProviders } from '@/components/providers/client-providers'
 import { PricingTable } from '@/domains/billing/components/pricing-table'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
+import { COUNTRY_TO_CURRENCY } from '@/lib/stripe/catalog'
 
 export const metadata = {
   title: 'Pricing - FinanSEAL',
@@ -15,6 +17,11 @@ export const metadata = {
 export default async function PricingPage() {
   // Check if user is authenticated (optional for pricing page)
   const { userId } = await auth()
+
+  // Detect default currency from geo-IP
+  const headersList = await headers()
+  const country = headersList.get('x-vercel-ip-country')
+  const defaultCurrency = (country && COUNTRY_TO_CURRENCY[country]) || undefined
 
   return (
     <ClientProviders>
@@ -54,16 +61,19 @@ export default async function PricingPage() {
               </div>
 
               {/* Pricing Table */}
-              <PricingTable showCurrentPlan={!!userId} />
+              <PricingTable
+                showCurrentPlan={!!userId}
+                defaultCurrency={defaultCurrency}
+              />
 
               {/* FAQ or Additional Info */}
               <div className="mt-12 text-center">
                 <p className="text-sm text-muted-foreground">
-                  All prices in Malaysian Ringgit (MYR). Billed monthly.
+                  Prices shown in your selected currency. Billed monthly.
                 </p>
                 <p className="text-sm text-muted-foreground mt-1">
                   Need a custom plan?{' '}
-                  <a href="mailto:support@finanseal.com" className="text-primary hover:underline">
+                  <a href="mailto:support@hellogroot.com" className="text-primary hover:underline">
                     Contact us
                   </a>
                 </p>
