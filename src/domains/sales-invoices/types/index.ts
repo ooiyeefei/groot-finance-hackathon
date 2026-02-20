@@ -7,6 +7,7 @@
 
 import { z } from "zod";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import type { LhdnStatus, EinvoiceType } from "@/lib/constants/statuses";
 
 // ============================================
 // ENUMS & CONSTANTS
@@ -248,6 +249,16 @@ export const customerSnapshotSchema = z.object({
 });
 
 // ============================================
+// LHDN VALIDATION ERROR (017-lhdn-submission-ui)
+// ============================================
+
+export type LhdnValidationError = {
+  code: string;
+  message: string;
+  target?: string;
+};
+
+// ============================================
 // SALES INVOICE
 // ============================================
 
@@ -290,6 +301,16 @@ export interface SalesInvoice {
   isRecurringSource?: boolean;
   pdfStorageId?: string;
   accountingEntryId?: string;
+  // 017-lhdn-submission-ui: LHDN e-Invoice fields
+  lhdnSubmissionId?: string;
+  lhdnDocumentUuid?: string;
+  lhdnLongId?: string;
+  lhdnStatus?: LhdnStatus;
+  lhdnSubmittedAt?: number;
+  lhdnValidatedAt?: number;
+  lhdnValidationErrors?: LhdnValidationError[];
+  lhdnDocumentHash?: string;
+  einvoiceType?: EinvoiceType;
   deletedAt?: number;
   updatedAt?: number;
 }

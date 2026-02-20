@@ -793,6 +793,169 @@ export const remove = mutation({
 });
 
 // ============================================
+// LHDN SUBMISSION (017-lhdn-submission-ui)
+// ============================================
+
+/**
+ * Submit an invoice to LHDN MyInvois
+ * Sets lhdnStatus to "pending" and records submission timestamp.
+ * Actual LHDN API integration is handled separately (#75).
+ */
+export const submitToLhdn = mutation({
+  args: {
+    invoiceId: v.id("sales_invoices"),
+    businessId: v.id("businesses"),
+    useGeneralTin: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    // Auth: owner or finance_admin only
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) throw new Error("User not found");
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      throw new Error("Not a member of this business");
+    }
+
+    if (!["owner", "finance_admin"].includes(membership.role)) {
+      throw new Error("Not authorized: owner or finance admin required");
+    }
+
+    // Validate invoice
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice || invoice.businessId !== args.businessId || invoice.deletedAt) {
+      throw new Error("Invoice not found");
+    }
+
+    if (invoice.status !== "sent") {
+      throw new Error("Invoice must be sent before submitting to LHDN");
+    }
+
+    if (invoice.lhdnStatus !== undefined) {
+      throw new Error("Invoice already submitted to LHDN");
+    }
+
+    // Validate business LHDN config
+    const business = await ctx.db.get(args.businessId);
+    if (!business) throw new Error("Business not found");
+
+    const missingFields: string[] = [];
+    if (!business.lhdnTin) missingFields.push("lhdnTin");
+    if (!business.businessRegistrationNumber) missingFields.push("businessRegistrationNumber");
+    if (!business.msicCode) missingFields.push("msicCode");
+
+    if (missingFields.length > 0) {
+      throw new Error(`Business LHDN configuration incomplete: missing ${missingFields.join(", ")}`);
+    }
+
+    // Auto-determine einvoice type based on document (always "invoice" for sales invoices)
+    const einvoiceType = "invoice" as const;
+
+    // Set LHDN status to pending
+    await ctx.db.patch(args.invoiceId, {
+      lhdnStatus: "pending",
+      lhdnSubmittedAt: Date.now(),
+      einvoiceType,
+      updatedAt: Date.now(),
+    });
+
+    return {
+      success: true,
+      invoiceId: args.invoiceId,
+      lhdnStatus: "pending" as const,
+    };
+  },
+});
+
+/**
+ * Resubmit an invalid invoice to LHDN
+ * Clears previous validation data and resets to "pending".
+ */
+export const resubmitToLhdn = mutation({
+  args: {
+    invoiceId: v.id("sales_invoices"),
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    // Auth: owner or finance_admin only
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) throw new Error("User not found");
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      throw new Error("Not a member of this business");
+    }
+
+    if (!["owner", "finance_admin"].includes(membership.role)) {
+      throw new Error("Not authorized: owner or finance admin required");
+    }
+
+    // Validate invoice
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice || invoice.businessId !== args.businessId || invoice.deletedAt) {
+      throw new Error("Invoice not found");
+    }
+
+    if (invoice.status !== "sent") {
+      throw new Error("Invoice must be sent before submitting to LHDN");
+    }
+
+    if (invoice.lhdnStatus !== "invalid") {
+      throw new Error("Only invalid invoices can be resubmitted to LHDN");
+    }
+
+    // Validate business LHDN config
+    const business = await ctx.db.get(args.businessId);
+    if (!business) throw new Error("Business not found");
+
+    const missingFields: string[] = [];
+    if (!business.lhdnTin) missingFields.push("lhdnTin");
+    if (!business.businessRegistrationNumber) missingFields.push("businessRegistrationNumber");
+    if (!business.msicCode) missingFields.push("msicCode");
+
+    if (missingFields.length > 0) {
+      throw new Error(`Business LHDN configuration incomplete: missing ${missingFields.join(", ")}`);
+    }
+
+    // Reset LHDN fields and set to pending
+    await ctx.db.patch(args.invoiceId, {
+      lhdnStatus: "pending",
+      lhdnSubmittedAt: Date.now(),
+      lhdnValidationErrors: undefined,
+      lhdnValidatedAt: undefined,
+      lhdnDocumentUuid: undefined,
+      lhdnLongId: undefined,
+      lhdnDocumentHash: undefined,
+      updatedAt: Date.now(),
+    });
+
+    return {
+      success: true,
+      invoiceId: args.invoiceId,
+      lhdnStatus: "pending" as const,
+    };
+  },
+});
+
+// ============================================
 // PDF STORAGE
 // ============================================
 

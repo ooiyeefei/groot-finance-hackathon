@@ -98,7 +98,7 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
   }, [businessId, mode, invoiceId, createInvoice, updateInvoice])
 
   const form = useSalesInvoiceForm({
-    defaultCurrency: invoiceDefaults?.defaultCurrency ?? 'SGD',
+    defaultCurrency: invoiceDefaults?.defaultCurrency ?? (business as unknown as Record<string, unknown>)?.homeCurrency as string ?? 'MYR',
     defaultPaymentTerms: (invoiceDefaults?.defaultPaymentTerms as PaymentTerms) ?? 'net_30',
     defaultTaxMode: (invoiceDefaults?.defaultTaxMode as TaxMode) ?? 'exclusive',
     defaultPaymentInstructions: invoiceDefaults?.defaultPaymentInstructions ?? (invoiceDefaults !== undefined ? DEFAULT_PAYMENT_INSTRUCTIONS : undefined),

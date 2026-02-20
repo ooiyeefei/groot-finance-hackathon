@@ -92,6 +92,13 @@ export default defineSchema({
     countryCode: v.optional(v.string()),    // ISO country code
     businessType: v.optional(v.string()),   // e.g., "sole_proprietor", "llc"
 
+    // 016-e-invoice-schema-change: Structured address fields for LHDN compliance
+    addressLine1: v.optional(v.string()),
+    addressLine2: v.optional(v.string()),
+    city: v.optional(v.string()),
+    postalCode: v.optional(v.string()),
+    stateCode: v.optional(v.string()),
+
     // Multi-currency Support
     allowedCurrencies: v.optional(v.array(v.string())),
 

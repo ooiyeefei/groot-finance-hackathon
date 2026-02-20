@@ -108,7 +108,7 @@ export default function InvoiceSettingsForm() {
   const [settings, setSettings] = useState<InvoiceSettingsState>({
     invoicePrefix: 'INV',
     nextNumber: 1,
-    defaultCurrency: 'SGD',
+    defaultCurrency: (business as unknown as Record<string, unknown>)?.homeCurrency as string ?? 'MYR',
     defaultPaymentTerms: 'net_30',
     defaultTaxMode: 'exclusive',
     defaultPaymentInstructions: '',
@@ -126,7 +126,7 @@ export default function InvoiceSettingsForm() {
       setSettings({
         invoicePrefix: invoiceDefaults.invoiceNumberPrefix ?? 'INV',
         nextNumber: invoiceDefaults.nextInvoiceNumber ?? 1,
-        defaultCurrency: invoiceDefaults.defaultCurrency ?? 'SGD',
+        defaultCurrency: invoiceDefaults.defaultCurrency ?? (business as unknown as Record<string, unknown>)?.homeCurrency as string ?? 'MYR',
         defaultPaymentTerms: (invoiceDefaults.defaultPaymentTerms as PaymentTerms) ?? 'net_30',
         defaultTaxMode: (invoiceDefaults.defaultTaxMode as TaxMode) ?? 'exclusive',
         defaultPaymentInstructions: invoiceDefaults.defaultPaymentInstructions ?? '',
