@@ -27,8 +27,10 @@ import { useUser } from '@clerk/nextjs'
 import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
 import { useSalesInvoices, useSalesInvoiceMutations, useInvoiceDefaults } from '../hooks/use-sales-invoices'
 import { InvoiceStatusBadge } from './invoice-status-badge'
+import { PeppolStatusBadge } from './peppol-status-badge'
 import type { SalesInvoice, SalesInvoiceStatus } from '../types'
 import { SALES_INVOICE_STATUSES } from '../types'
+import type { PeppolStatus } from '@/lib/constants/statuses'
 
 // ---------------------------------------------------------------------------
 // Filter tab definitions
@@ -355,7 +357,12 @@ export default function SalesInvoiceList() {
                       {formatCurrency(invoice.totalAmount, invoice.currency)}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <InvoiceStatusBadge status={invoice.status} />
+                      <div className="flex items-center justify-center gap-1.5">
+                        <InvoiceStatusBadge status={invoice.status} />
+                        {(invoice as any).peppolStatus && (
+                          <PeppolStatusBadge status={(invoice as any).peppolStatus as PeppolStatus} />
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
@@ -507,7 +514,12 @@ export default function SalesInvoiceList() {
                       {invoice.customerSnapshot.businessName}
                     </p>
                   </div>
-                  <InvoiceStatusBadge status={invoice.status} />
+                  <div className="flex items-center gap-1.5">
+                    <InvoiceStatusBadge status={invoice.status} />
+                    {(invoice as any).peppolStatus && (
+                      <PeppolStatusBadge status={(invoice as any).peppolStatus as PeppolStatus} />
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between text-sm">
