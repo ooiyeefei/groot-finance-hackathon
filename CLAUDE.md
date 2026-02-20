@@ -138,6 +138,8 @@ formatBusinessDate('2025-10-31')  // "Oct 31, 2025" (no timezone shift)
 - TypeScript 5.9.3 / Node.js 20.x + Next.js 15.5.7, React 19.1.2, Convex 1.31.3, Radix UI Tabs, Clerk 6.30.0, lucide-react (015-ar-ap-tab-restructure)
 - TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, Stripe SDK 20.1.0, Clerk 6.30.0 (001-usage-tracking)
 - TypeScript 5.9.3 + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, Zod 3.23.8 (016-e-invoice-schema-change)
+- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, React 19.1.2, Convex 1.31.3, lucide-react (icons) (001-peppol-submission-ui)
+- Convex (document database with real-time subscriptions) — schema already deployed (001-peppol-submission-ui)
 
 ## Recent Changes
 - 001-category-3-mcp: Added MCP Server with API key management
