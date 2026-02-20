@@ -269,6 +269,7 @@ export async function GET(request: NextRequest) {
           price: plan.price,
           currency: plan.currency,
           features: plan.features,
+          highlightFeatures: plan.highlightFeatures,
         },
         subscription: {
           status: business.subscriptionStatus || 'active',

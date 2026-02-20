@@ -11,8 +11,8 @@
  * - Standalone mode: Direct checkout without hook, for onboarding flow
  */
 
-import { useState } from 'react'
-import { Check, Loader2, Users, FileText } from 'lucide-react'
+import { useState, useCallback } from 'react'
+import { Check, Loader2, Users, FileText, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -46,6 +46,19 @@ export function PricingTable({
   const subscription = standalone ? null : useSubscription()
   const [loadingPlan, setLoadingPlan] = useState<PlanKey | null>(null)
   const [standaloneLoading, setStandaloneLoading] = useState(false)
+  const [expandedPlans, setExpandedPlans] = useState<Set<PlanKey>>(new Set())
+
+  const toggleExpanded = useCallback((planName: PlanKey) => {
+    setExpandedPlans(prev => {
+      const next = new Set(prev)
+      if (next.has(planName)) {
+        next.delete(planName)
+      } else {
+        next.add(planName)
+      }
+      return next
+    })
+  }, [])
 
   const currentPlanName = subscription?.data?.plan.name || 'trial'
   const isCheckoutLoading = standalone ? standaloneLoading : subscription?.isCheckoutLoading
@@ -178,14 +191,43 @@ export function PricingTable({
                 {showLimits && (
                   <h4 className="text-sm font-medium text-muted-foreground mb-3">Features</h4>
                 )}
-                <ul className="space-y-3">
-                  {plan.features.map((feature, index) => (
-                    <li key={index} className="flex items-start gap-2">
-                      <Check className="w-4 h-4 mt-1 text-green-600 dark:text-green-400 flex-shrink-0" />
-                      <span className="text-foreground text-sm">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
+                {(() => {
+                  const isExpanded = expandedPlans.has(name)
+                  const displayFeatures = isExpanded ? plan.features : plan.highlightFeatures
+                  const hasMore = plan.features.length > plan.highlightFeatures.length
+
+                  return (
+                    <>
+                      <ul className="space-y-3">
+                        {displayFeatures.map((feature, index) => (
+                          <li key={index} className="flex items-start gap-2">
+                            <Check className="w-4 h-4 mt-1 text-green-600 dark:text-green-400 flex-shrink-0" />
+                            <span className="text-foreground text-sm">{feature}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      {hasMore && (
+                        <button
+                          type="button"
+                          onClick={() => toggleExpanded(name)}
+                          className="mt-3 flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
+                        >
+                          {isExpanded ? (
+                            <>
+                              <ChevronUp className="w-4 h-4" />
+                              Show less
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="w-4 h-4" />
+                              See all features
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
             </CardContent>
 

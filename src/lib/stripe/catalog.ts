@@ -52,6 +52,7 @@ export interface PlanConfig {
   einvoiceLimit: number // -1 for unlimited
   actionCenterLimit: number // -1 for unlimited
   features: string[]
+  highlightFeatures: string[]
   isCustomPricing: boolean
   interval: 'month' | 'year' | null
 }
@@ -122,6 +123,13 @@ const TRIAL_PLAN: PlanConfig = {
     '50 OCR scans during trial',
     'Up to 3 team members',
   ],
+  highlightFeatures: [
+    '14-day free trial',
+    '50 OCR scans',
+    'AI auto categorization',
+    'AI chat assistant',
+    'Up to 3 team members',
+  ],
   isCustomPricing: false,
   interval: null,
 }
@@ -162,6 +170,13 @@ export const FALLBACK_PLANS: Record<PlanKey, PlanConfig> = {
       '100 e-invoices/month',
       'Up to 20 team members',
     ],
+    highlightFeatures: [
+      'AI receipt scanning',
+      'AI auto categorization',
+      'AI chat assistant',
+      'LHDN e-Invoice',
+      'RAG regulatory compliance',
+    ],
     isCustomPricing: false,
     interval: 'month',
   },
@@ -196,6 +211,14 @@ export const FALLBACK_PLANS: Record<PlanKey, PlanConfig> = {
       '15 proactive insights/month',
       'Up to 50 team members',
     ],
+    highlightFeatures: [
+      'Everything in Starter, plus:',
+      'AI proactive insights',
+      'Duplicate expense detection',
+      'Full AR & AP management',
+      'Advanced analytics',
+      'Audit trail',
+    ],
     isCustomPricing: false,
     interval: 'month',
   },
@@ -213,6 +236,16 @@ export const FALLBACK_PLANS: Record<PlanKey, PlanConfig> = {
     einvoiceLimit: -1,
     actionCenterLimit: -1,
     features: [
+      'Everything in Pro, plus:',
+      'Unlimited everything',
+      'Cash flow forecasting',
+      'Financial intelligence',
+      'MCP Server / API access',
+      'Custom integrations',
+      'Dedicated account manager',
+      'SLA guarantee',
+    ],
+    highlightFeatures: [
       'Everything in Pro, plus:',
       'Unlimited everything',
       'Cash flow forecasting',
@@ -305,6 +338,10 @@ function parseProductMetadata(
   const currency = price?.currency?.toUpperCase() || 'MYR'
   const interval = price?.recurring?.interval as 'month' | 'year' | null
 
+  // Generate curated highlight features per plan tier
+  const highlightFeatures = FALLBACK_PLANS[planKey]?.highlightFeatures
+    ?? features.slice(0, 6)
+
   return {
     name: product.name.replace(/FinanSEAL/gi, 'Groot Finance'),
     planKey,
@@ -319,6 +356,7 @@ function parseProductMetadata(
     einvoiceLimit,
     actionCenterLimit,
     features,
+    highlightFeatures,
     isCustomPricing,
     interval,
   }

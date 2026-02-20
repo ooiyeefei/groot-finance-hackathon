@@ -136,6 +136,7 @@ export interface SubscriptionData {
     price: number
     currency: string
     features: string[]
+    highlightFeatures: string[]
   }
   subscription: {
     status: string
