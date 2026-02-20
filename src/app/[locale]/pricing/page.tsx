@@ -5,7 +5,7 @@ import HeaderWithUser from '@/components/ui/header-with-user'
 import { ClientProviders } from '@/components/providers/client-providers'
 import { PricingTable } from '@/domains/billing/components/pricing-table'
 import { Button } from '@/components/ui/button'
-import { CreditCard, ArrowLeft } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 
 export const metadata = {
   title: 'Pricing - FinanSEAL',
@@ -44,16 +44,12 @@ export default async function PricingPage() {
               </div>
 
               {/* Header Section */}
-              <div className="text-center mb-12">
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-primary/10 rounded-full mb-4">
-                  <CreditCard className="w-8 h-8 text-primary" />
-                </div>
-                <h1 className="text-3xl font-bold text-foreground mb-3">
-                  Simple, Transparent Pricing
+              <div className="text-center mb-8">
+                <h1 className="text-2xl font-bold text-foreground mb-1">
+                  Pricing
                 </h1>
-                <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                  Start free and upgrade as your business grows. All plans include core features
-                  with OCR limits that scale with your needs.
+                <p className="text-muted-foreground">
+                  Start free, upgrade as you grow.
                 </p>
               </div>
 
