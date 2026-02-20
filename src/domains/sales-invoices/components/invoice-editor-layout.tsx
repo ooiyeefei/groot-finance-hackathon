@@ -13,6 +13,7 @@ import { InvoiceEditorHeader } from './invoice-editor-header'
 import { InvoiceFormPanel } from './invoice-form-panel'
 import { InvoicePreviewPanel } from './invoice-preview-panel'
 import { ReviewInvoiceView } from './review-invoice-view'
+import { formatAddress, hasStructuredAddress } from '@/lib/utils/format-address'
 import type { PaymentTerms, TaxMode, SalesInvoiceFormInput } from '../types'
 import type { Id } from '../../../../convex/_generated/dataModel'
 
@@ -123,9 +124,30 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
   const enabledPaymentMethods = invoiceDefaults?.paymentMethods?.filter((m: { enabled: boolean }) => m.enabled) ?? []
   const businessInfo = businessProfile ? {
     companyName: businessProfile.name,
-    companyAddress: businessProfile.address || undefined,
+    companyAddress: hasStructuredAddress({
+      addressLine1: businessProfile.address_line1 ?? undefined,
+      addressLine2: businessProfile.address_line2 ?? undefined,
+      addressLine3: businessProfile.address_line3 ?? undefined,
+      city: businessProfile.city ?? undefined,
+      stateCode: businessProfile.state_code ?? undefined,
+      postalCode: businessProfile.postal_code ?? undefined,
+      countryCode: businessProfile.country_code ?? undefined,
+    })
+      ? formatAddress({
+          addressLine1: businessProfile.address_line1 ?? undefined,
+          addressLine2: businessProfile.address_line2 ?? undefined,
+          addressLine3: businessProfile.address_line3 ?? undefined,
+          city: businessProfile.city ?? undefined,
+          stateCode: businessProfile.state_code ?? undefined,
+          postalCode: businessProfile.postal_code ?? undefined,
+          countryCode: businessProfile.country_code ?? undefined,
+        }, 'multiline')
+      : (businessProfile.address || undefined),
     companyPhone: businessProfile.contact_phone || undefined,
     companyEmail: businessProfile.contact_email || undefined,
+    registrationNumber: businessProfile.business_registration_number || undefined,
+    taxId: businessProfile.lhdn_tin || undefined,
+    sstRegistrationNumber: businessProfile.sst_registration_number || undefined,
     paymentMethods: enabledPaymentMethods.length > 0 ? enabledPaymentMethods : undefined,
   } : undefined
 

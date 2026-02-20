@@ -2,6 +2,7 @@
 
 import { formatCurrency } from '@/lib/utils/format-number'
 import { formatBusinessDate } from '@/lib/utils'
+import { formatAddress, hasStructuredAddress } from '@/lib/utils/format-address'
 
 // ============================================
 // TYPES
@@ -19,6 +20,15 @@ interface InvoiceTemplateProps {
       phone?: string
       address?: string
       taxId?: string
+      tin?: string
+      brn?: string
+      addressLine1?: string
+      addressLine2?: string
+      addressLine3?: string
+      city?: string
+      stateCode?: string
+      postalCode?: string
+      countryCode?: string
     }
     lineItems: Array<{
       description: string
@@ -59,6 +69,7 @@ interface InvoiceTemplateProps {
     companyEmail?: string
     registrationNumber?: string
     taxId?: string
+    sstRegistrationNumber?: string
     logoUrl?: string
     paymentMethods?: Array<{
       id: string
@@ -113,7 +124,10 @@ export function ModernInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplate
             {businessInfo?.registrationNumber && (
               <p>Reg: {businessInfo.registrationNumber}</p>
             )}
-            {businessInfo?.taxId && <p>Tax ID: {businessInfo.taxId}</p>}
+            {businessInfo?.taxId && <p>TIN: {businessInfo.taxId}</p>}
+            {businessInfo?.sstRegistrationNumber && (
+              <p>SST Reg: {businessInfo.sstRegistrationNumber}</p>
+            )}
           </div>
         </div>
 
@@ -143,15 +157,24 @@ export function ModernInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplate
               {customerSnapshot.contactPerson}
             </p>
           )}
-          {customerSnapshot.address && (
+          {hasStructuredAddress(customerSnapshot) ? (
+            <p className="text-sm text-muted-foreground whitespace-pre-line mt-1">
+              {formatAddress(customerSnapshot)}
+            </p>
+          ) : customerSnapshot.address ? (
             <p className="text-sm text-muted-foreground whitespace-pre-line mt-1">
               {customerSnapshot.address}
             </p>
-          )}
+          ) : null}
           <div className="mt-1 space-y-0.5 text-sm text-muted-foreground">
             {customerSnapshot.email && <p>{customerSnapshot.email}</p>}
             {customerSnapshot.phone && <p>{customerSnapshot.phone}</p>}
-            {customerSnapshot.taxId && <p>Tax ID: {customerSnapshot.taxId}</p>}
+            {customerSnapshot.tin ? (
+              <p>TIN: {customerSnapshot.tin}</p>
+            ) : customerSnapshot.taxId ? (
+              <p>Tax ID: {customerSnapshot.taxId}</p>
+            ) : null}
+            {customerSnapshot.brn && <p>BRN: {customerSnapshot.brn}</p>}
           </div>
         </div>
 

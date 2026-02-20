@@ -421,9 +421,9 @@ export default function BillingSettingsContent() {
                       <>
                         <ul className="space-y-3">
                           {displayFeatures.map((feature, index) => (
-                            <li key={index} className="flex items-center gap-2">
-                              <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
-                              <span className="text-foreground">{feature}</span>
+                            <li key={index} className="flex items-center gap-2.5">
+                              <Check className="w-5 h-5 text-green-600 dark:text-green-400" />
+                              <span className="text-foreground text-base">{feature}</span>
                             </li>
                           ))}
                         </ul>
@@ -431,16 +431,16 @@ export default function BillingSettingsContent() {
                           <button
                             type="button"
                             onClick={() => setShowAllFeatures(!showAllFeatures)}
-                            className="mt-3 flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
+                            className="mt-3 flex items-center gap-1.5 text-base text-primary hover:text-primary/80 transition-colors"
                           >
                             {showAllFeatures ? (
                               <>
-                                <ChevronUp className="w-4 h-4" />
+                                <ChevronUp className="w-5 h-5" />
                                 Show less
                               </>
                             ) : (
                               <>
-                                <ChevronDown className="w-4 h-4" />
+                                <ChevronDown className="w-5 h-5" />
                                 See all features
                               </>
                             )}

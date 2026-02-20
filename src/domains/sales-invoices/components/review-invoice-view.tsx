@@ -52,6 +52,10 @@ interface ReviewInvoiceViewProps {
     companyAddress?: string
     companyPhone?: string
     companyEmail?: string
+    registrationNumber?: string
+    taxId?: string
+    sstRegistrationNumber?: string
+    logoUrl?: string
     paymentMethods?: Array<{
       id: string
       label: string

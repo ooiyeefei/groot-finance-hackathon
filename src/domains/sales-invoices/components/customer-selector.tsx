@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useCustomerSearch, useCustomerMutations } from '../hooks/use-customers'
 import { useActiveBusiness } from '@/contexts/business-context'
+import { MALAYSIAN_STATE_CODES } from '@/lib/data/state-codes'
+import { COUNTRY_CODES } from '@/lib/data/country-codes'
 import type { CustomerSnapshot, Customer } from '../types'
 import type { Id } from '../../../../convex/_generated/dataModel'
 
@@ -219,8 +221,12 @@ export default function CustomerSelector({
       value.email !== originalSnapshot.email ||
       (value.contactPerson ?? '') !== (originalSnapshot.contactPerson ?? '') ||
       (value.phone ?? '') !== (originalSnapshot.phone ?? '') ||
-      (value.address ?? '') !== (originalSnapshot.address ?? '') ||
-      (value.taxId ?? '') !== (originalSnapshot.taxId ?? ''))
+      (value.tin ?? '') !== (originalSnapshot.tin ?? '') ||
+      (value.addressLine1 ?? '') !== (originalSnapshot.addressLine1 ?? '') ||
+      (value.city ?? '') !== (originalSnapshot.city ?? '') ||
+      (value.stateCode ?? '') !== (originalSnapshot.stateCode ?? '') ||
+      (value.postalCode ?? '') !== (originalSnapshot.postalCode ?? '') ||
+      (value.countryCode ?? '') !== (originalSnapshot.countryCode ?? ''))
   )
 
   const handleFieldChange = useCallback(
@@ -385,7 +391,7 @@ export default function CustomerSelector({
             </div>
           </div>
 
-          {/* Phone + Tax ID */}
+          {/* Phone + TIN */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">
@@ -401,32 +407,71 @@ export default function CustomerSelector({
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Tax ID
+                TIN
               </label>
               <Input
-                value={value.taxId ?? ''}
-                onChange={(e) => handleFieldChange('taxId', e.target.value)}
-                placeholder="Tax registration number"
+                value={value.tin ?? ''}
+                onChange={(e) => handleFieldChange('tin', e.target.value)}
+                placeholder="C21638015020"
                 className="h-9 text-sm"
               />
             </div>
           </div>
 
-          {/* Address */}
+          {/* Compact Structured Address */}
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block">
               Address
             </label>
-            <div className="relative">
-              <MapPin className="absolute left-3 top-3 h-3.5 w-3.5 text-muted-foreground" />
-              <textarea
-                value={value.address ?? ''}
-                onChange={(e) => handleFieldChange('address', e.target.value)}
-                placeholder="Billing address"
-                rows={2}
-                className="flex w-full rounded-md border border-input bg-background px-3 py-2 pl-9 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-              />
+            <div className="space-y-2">
+              <div className="relative">
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  value={value.addressLine1 ?? ''}
+                  onChange={(e) => handleFieldChange('addressLine1', e.target.value)}
+                  placeholder="Street address"
+                  className="h-9 text-sm pl-9"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  value={value.city ?? ''}
+                  onChange={(e) => handleFieldChange('city', e.target.value)}
+                  placeholder="City"
+                  className="h-9 text-sm"
+                />
+                <Input
+                  value={value.postalCode ?? ''}
+                  onChange={(e) => handleFieldChange('postalCode', e.target.value)}
+                  placeholder="Postal code"
+                  className="h-9 text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <select
+                  value={value.stateCode ?? ''}
+                  onChange={(e) => handleFieldChange('stateCode', e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  <option value="">State...</option>
+                  {MALAYSIAN_STATE_CODES.map((s) => (
+                    <option key={s.code} value={s.code}>{s.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={value.countryCode ?? 'MY'}
+                  onChange={(e) => handleFieldChange('countryCode', e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  {COUNTRY_CODES.map((c) => (
+                    <option key={c.code} value={c.code}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              For BRN, SST, and Peppol fields, edit full details in the Customer Directory.
+            </p>
           </div>
 
           {/* Save buttons */}

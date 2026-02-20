@@ -7,7 +7,7 @@
 
 import { z } from "zod";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import type { LhdnStatus, EinvoiceType } from "@/lib/constants/statuses";
+import type { LhdnStatus, EinvoiceType, PeppolStatus } from "@/lib/constants/statuses";
 
 // ============================================
 // ENUMS & CONSTANTS
@@ -311,6 +311,12 @@ export interface SalesInvoice {
   lhdnValidationErrors?: LhdnValidationError[];
   lhdnDocumentHash?: string;
   einvoiceType?: EinvoiceType;
+  // Peppol e-invoice fields (016-e-invoice-schema-change)
+  peppolDocumentId?: string;
+  peppolStatus?: PeppolStatus;
+  peppolTransmittedAt?: number;
+  peppolDeliveredAt?: number;
+  peppolErrors?: Array<{ code: string; message: string }>;
   deletedAt?: number;
   updatedAt?: number;
 }

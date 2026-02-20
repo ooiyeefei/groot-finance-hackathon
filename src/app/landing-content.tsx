@@ -51,36 +51,44 @@ const FEATURES = [
   },
 ];
 
+/** Launch prices per currency. Stripe charges the `price`; `listPrice` is marketing decoration. */
+const PRICING_DATA: Record<string, { price: number; listPrice: number }[]> = {
+  MYR: [{ price: 249, listPrice: 299 }, { price: 599, listPrice: 699 }],
+  SGD: [{ price: 149, listPrice: 179 }, { price: 349, listPrice: 399 }],
+  THB: [{ price: 249, listPrice: 299 }, { price: 599, listPrice: 699 }],
+  IDR: [{ price: 249, listPrice: 299 }, { price: 599, listPrice: 699 }],
+  USD: [{ price: 249, listPrice: 299 }, { price: 599, listPrice: 699 }],
+}
+
 const PRICING_TIERS = [
   {
-    name: 'Starter',
+    name: 'Groot Finance Starter',
     subtitle: 'Perfect for small businesses',
     featured: false,
     cta: 'Start free trial',
     ctaStyle: 'beam' as const,
     features: [
-      'Custom business categories',
+      'AI receipt scanning',
       'AI auto categorization',
-      'Advanced approval workflow',
-      'Multi-currency tracking',
-      'Role-based access control',
-      '30 OCR scans/month',
-      'Up to 5 team members',
+      'AI chat assistant',
+      'LHDN e-Invoice',
+      'RAG regulatory compliance',
     ],
   },
   {
-    name: 'Pro',
+    name: 'Groot Finance Pro',
     subtitle: 'Best for growing companies',
     featured: true,
     badge: 'Most Popular',
     cta: 'Start free trial',
     ctaStyle: 'primary' as const,
     features: [
-      'Everything in Starter',
-      'AI chat assistant',
-      '100 OCR scans/month',
-      'Multi-tenancy support',
-      'Up to 13 team members',
+      'Everything in Starter, plus:',
+      'AI proactive insights',
+      'Duplicate expense detection',
+      'Full AR & AP management',
+      'Advanced analytics',
+      'Audit trail',
     ],
   },
   {
@@ -90,13 +98,14 @@ const PRICING_TIERS = [
     cta: 'Contact Us',
     ctaStyle: 'beam' as const,
     features: [
-      'Everything in Pro',
-      'Vendor management',
-      'Unlimited OCR scans',
-      'Dedicated account manager',
+      'Everything in Pro, plus:',
+      'Unlimited everything',
+      'Cash flow forecasting',
+      'Financial intelligence',
+      'MCP Server / API access',
       'Custom integrations',
+      'Dedicated account manager',
       'SLA guarantee',
-      'On-premise option',
     ],
   },
 ];
@@ -500,16 +509,28 @@ export default function LandingContent({ country }: { country: string }) {
                 <h3 className="text-lg font-semibold text-[#111111] text-center">{tier.name}</h3>
                 <p className="text-sm text-[#6B7280] font-medium text-center mb-4">{tier.subtitle}</p>
 
-                {/* Price placeholder - geo-aware */}
-                <div className="flex items-baseline gap-1 justify-center mb-5">
+                {/* Price - geo-aware with launch pricing */}
+                <div className="text-center mb-5">
                   {tier.name === 'Enterprise' ? (
-                    <span className="text-2xl font-semibold text-[#111111]">Custom</span>
-                  ) : (
-                    <>
-                      <span className="text-3xl font-semibold text-[#111111]">{currency.symbol}—</span>
-                      <span className="text-sm text-[#6B7280]">/month</span>
-                    </>
-                  )}
+                    <span className="text-2xl font-semibold text-[#111111]">Custom pricing</span>
+                  ) : (() => {
+                    const tierIndex = tier.name.includes('Starter') ? 0 : 1
+                    const prices = PRICING_DATA[currency.code] || PRICING_DATA.MYR
+                    const { price, listPrice } = prices[tierIndex]
+                    const savings = listPrice - price
+                    return (
+                      <>
+                        <p className="text-sm text-[#9CA3AF] line-through">{currency.symbol}{listPrice}/mo</p>
+                        <div className="flex items-baseline gap-1 justify-center">
+                          <span className="text-3xl font-semibold text-[#111111]">{currency.symbol}{price}</span>
+                          <span className="text-sm text-[#6B7280]">/mo</span>
+                        </div>
+                        <p className="text-xs font-medium text-green-600 mt-1">
+                          Save {currency.symbol}{savings} — Launch Special
+                        </p>
+                      </>
+                    )
+                  })()}
                 </div>
 
                 <ul className="space-y-2.5 mb-6 text-sm text-[#6B7280] font-medium flex-1">

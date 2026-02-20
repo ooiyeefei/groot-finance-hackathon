@@ -104,6 +104,8 @@ export function useSalesInvoiceMutations() {
   const storePdfStorageId = useMutation(api.functions.salesInvoices.storePdfStorageId)
   const submitToLhdn = useMutation(api.functions.salesInvoices.submitToLhdn)
   const resubmitToLhdn = useMutation(api.functions.salesInvoices.resubmitToLhdn)
+  const initiatePeppolTransmission = useMutation(api.functions.salesInvoices.initiatePeppolTransmission)
+  const retryPeppolTransmission = useMutation(api.functions.salesInvoices.retryPeppolTransmission)
 
   return {
     createInvoice,
@@ -116,6 +118,8 @@ export function useSalesInvoiceMutations() {
     storePdfStorageId,
     submitToLhdn,
     resubmitToLhdn,
+    initiatePeppolTransmission,
+    retryPeppolTransmission,
   }
 }
 

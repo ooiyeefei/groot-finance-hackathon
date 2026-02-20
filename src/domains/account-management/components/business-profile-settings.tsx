@@ -1,20 +1,22 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { X, Camera, Building2, DollarSign } from 'lucide-react'
+import { X, Camera, Building2, DollarSign, ChevronDown, ChevronRight, FileText } from 'lucide-react'
 import Image from 'next/image'
 import { useToast } from '@/components/ui/toast'
 import { useBusinessProfile } from '@/contexts/business-context'
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
 import { SUPPORTED_CURRENCIES } from '@/domains/users/hooks/use-home-currency'
 import { useRegisterUnsavedChanges } from '@/components/providers/unsaved-changes-provider'
+import { MALAYSIAN_STATE_CODES } from '@/lib/data/state-codes'
+import { COUNTRY_CODES } from '@/lib/data/country-codes'
+import { MSIC_CODES } from '@/lib/data/msic-codes'
 
 export default function BusinessProfileSettings() {
   const { profile, isLoading, updateProfile } = useBusinessProfile()
   const [isUpdating, setIsUpdating] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [businessName, setBusinessName] = useState('')
-  const [businessAddress, setBusinessAddress] = useState('')
   const [businessEmail, setBusinessEmail] = useState('')
   const [businessPhone, setBusinessPhone] = useState('')
   const [isCurrencySaving, setIsCurrencySaving] = useState(false)
@@ -22,43 +24,149 @@ export default function BusinessProfileSettings() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { addToast } = useToast()
 
+  // Structured address state
+  const [addressLine1, setAddressLine1] = useState('')
+  const [addressLine2, setAddressLine2] = useState('')
+  const [addressLine3, setAddressLine3] = useState('')
+  const [city, setCity] = useState('')
+  const [stateCode, setStateCode] = useState('')
+  const [postalCode, setPostalCode] = useState('')
+  const [countryCode, setCountryCode] = useState('MY')
+
+  // e-Invoice settings state
+  const [lhdnTin, setLhdnTin] = useState('')
+  const [businessRegistrationNumber, setBusinessRegistrationNumber] = useState('')
+  const [msicCode, setMsicCode] = useState('')
+  const [msicDescription, setMsicDescription] = useState('')
+  const [sstRegistrationNumber, setSstRegistrationNumber] = useState('')
+  const [lhdnClientId, setLhdnClientId] = useState('')
+  const [peppolParticipantId, setPeppolParticipantId] = useState('')
+
+  // MSIC combobox state
+  const [msicSearch, setMsicSearch] = useState('')
+  const [msicDropdownOpen, setMsicDropdownOpen] = useState(false)
+  const msicDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Collapsible section state
+  const [eInvoiceSectionOpen, setEInvoiceSectionOpen] = useState(false)
+
   // Track initial values for dirty state detection
   const [initialValues, setInitialValues] = useState({
     businessName: '',
-    businessAddress: '',
     businessEmail: '',
     businessPhone: '',
-    homeCurrency: 'SGD' as SupportedCurrency
+    addressLine1: '',
+    addressLine2: '',
+    addressLine3: '',
+    city: '',
+    stateCode: '',
+    postalCode: '',
+    countryCode: 'MY',
+    lhdnTin: '',
+    businessRegistrationNumber: '',
+    msicCode: '',
+    msicDescription: '',
+    sstRegistrationNumber: '',
+    lhdnClientId: '',
+    peppolParticipantId: '',
+    homeCurrency: 'SGD' as SupportedCurrency,
   })
 
   useEffect(() => {
     if (profile) {
       const initial = {
         businessName: profile.name || '',
-        businessAddress: profile.address || '',
         businessEmail: profile.contact_email || '',
         businessPhone: profile.contact_phone || '',
-        homeCurrency: (profile.home_currency || 'SGD') as SupportedCurrency
+        addressLine1: profile.address_line1 || '',
+        addressLine2: profile.address_line2 || '',
+        addressLine3: profile.address_line3 || '',
+        city: profile.city || '',
+        stateCode: profile.state_code || '',
+        postalCode: profile.postal_code || '',
+        countryCode: profile.country_code || 'MY',
+        lhdnTin: profile.lhdn_tin || '',
+        businessRegistrationNumber: profile.business_registration_number || '',
+        msicCode: profile.msic_code || '',
+        msicDescription: profile.msic_description || '',
+        sstRegistrationNumber: profile.sst_registration_number || '',
+        lhdnClientId: profile.lhdn_client_id || '',
+        peppolParticipantId: profile.peppol_participant_id || '',
+        homeCurrency: (profile.home_currency || 'SGD') as SupportedCurrency,
       }
       setInitialValues(initial)
       setBusinessName(initial.businessName)
-      setBusinessAddress(initial.businessAddress)
       setBusinessEmail(initial.businessEmail)
       setBusinessPhone(initial.businessPhone)
+      setAddressLine1(initial.addressLine1)
+      setAddressLine2(initial.addressLine2)
+      setAddressLine3(initial.addressLine3)
+      setCity(initial.city)
+      setStateCode(initial.stateCode)
+      setPostalCode(initial.postalCode)
+      setCountryCode(initial.countryCode)
+      setLhdnTin(initial.lhdnTin)
+      setBusinessRegistrationNumber(initial.businessRegistrationNumber)
+      setMsicCode(initial.msicCode)
+      setMsicDescription(initial.msicDescription)
+      setSstRegistrationNumber(initial.sstRegistrationNumber)
+      setLhdnClientId(initial.lhdnClientId)
+      setPeppolParticipantId(initial.peppolParticipantId)
+
+      // Auto-expand e-Invoice section if any fields have data
+      if (initial.lhdnTin || initial.businessRegistrationNumber || initial.msicCode ||
+          initial.sstRegistrationNumber || initial.lhdnClientId || initial.peppolParticipantId) {
+        setEInvoiceSectionOpen(true)
+      }
     }
   }, [profile])
 
   // Calculate dirty state for unsaved changes warning
   const isDirty = useMemo(() => {
     return businessName !== initialValues.businessName ||
-      businessAddress !== initialValues.businessAddress ||
       businessEmail !== initialValues.businessEmail ||
-      businessPhone !== initialValues.businessPhone
-  }, [businessName, businessAddress, businessEmail, businessPhone, initialValues])
+      businessPhone !== initialValues.businessPhone ||
+      addressLine1 !== initialValues.addressLine1 ||
+      addressLine2 !== initialValues.addressLine2 ||
+      addressLine3 !== initialValues.addressLine3 ||
+      city !== initialValues.city ||
+      stateCode !== initialValues.stateCode ||
+      postalCode !== initialValues.postalCode ||
+      countryCode !== initialValues.countryCode ||
+      lhdnTin !== initialValues.lhdnTin ||
+      businessRegistrationNumber !== initialValues.businessRegistrationNumber ||
+      msicCode !== initialValues.msicCode ||
+      msicDescription !== initialValues.msicDescription ||
+      sstRegistrationNumber !== initialValues.sstRegistrationNumber ||
+      lhdnClientId !== initialValues.lhdnClientId ||
+      peppolParticipantId !== initialValues.peppolParticipantId
+  }, [businessName, businessEmail, businessPhone, addressLine1, addressLine2, addressLine3,
+      city, stateCode, postalCode, countryCode, lhdnTin, businessRegistrationNumber,
+      msicCode, msicDescription, sstRegistrationNumber, lhdnClientId, peppolParticipantId,
+      initialValues])
 
   // Register dirty state with unsaved changes provider
   useRegisterUnsavedChanges('business-profile-settings', isDirty)
 
+  // MSIC search filtering
+  const filteredMsicCodes = useMemo(() => {
+    if (!msicSearch.trim()) return MSIC_CODES.slice(0, 50)
+    const q = msicSearch.toLowerCase()
+    return MSIC_CODES.filter(
+      (m) => m.code.includes(q) || m.description.toLowerCase().includes(q)
+    ).slice(0, 50)
+  }, [msicSearch])
+
+  // Close MSIC dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (msicDropdownRef.current && !msicDropdownRef.current.contains(event.target as Node)) {
+        setMsicDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const updateBusinessDetails = async () => {
     if (!profile || !businessName.trim()) return
@@ -79,9 +187,24 @@ export default function BusinessProfileSettings() {
         },
         body: JSON.stringify({
           name: businessName.trim(),
-          address: businessAddress.trim() || undefined,
           contact_email: businessEmail.trim() || undefined,
           contact_phone: businessPhone.trim() || undefined,
+          // Structured address
+          address_line1: addressLine1.trim() || undefined,
+          address_line2: addressLine2.trim() || undefined,
+          address_line3: addressLine3.trim() || undefined,
+          city: city.trim() || undefined,
+          state_code: stateCode || undefined,
+          postal_code: postalCode.trim() || undefined,
+          country_code: countryCode || undefined,
+          // e-Invoice fields
+          lhdn_tin: lhdnTin.trim() || undefined,
+          business_registration_number: businessRegistrationNumber.trim() || undefined,
+          msic_code: msicCode.trim() || undefined,
+          msic_description: msicDescription.trim() || undefined,
+          sst_registration_number: sstRegistrationNumber.trim() || undefined,
+          lhdn_client_id: lhdnClientId.trim() || undefined,
+          peppol_participant_id: peppolParticipantId.trim() || undefined,
         })
       })
 
@@ -92,9 +215,22 @@ export default function BusinessProfileSettings() {
         // Update initial values to match saved state, clearing dirty state
         setInitialValues({
           businessName: businessName.trim(),
-          businessAddress: businessAddress.trim(),
           businessEmail: businessEmail.trim(),
           businessPhone: businessPhone.trim(),
+          addressLine1: addressLine1.trim(),
+          addressLine2: addressLine2.trim(),
+          addressLine3: addressLine3.trim(),
+          city: city.trim(),
+          stateCode,
+          postalCode: postalCode.trim(),
+          countryCode,
+          lhdnTin: lhdnTin.trim(),
+          businessRegistrationNumber: businessRegistrationNumber.trim(),
+          msicCode: msicCode.trim(),
+          msicDescription: msicDescription.trim(),
+          sstRegistrationNumber: sstRegistrationNumber.trim(),
+          lhdnClientId: lhdnClientId.trim(),
+          peppolParticipantId: peppolParticipantId.trim(),
           homeCurrency: (result.data.home_currency || 'SGD') as SupportedCurrency
         })
         addToast({
@@ -126,7 +262,6 @@ export default function BusinessProfileSettings() {
     try {
       setIsCurrencySaving(true)
 
-      // Get CSRF token
       const csrfResponse = await fetch('/api/v1/utils/security/csrf-token')
       if (!csrfResponse.ok) {
         throw new Error('Failed to get CSRF token')
@@ -136,7 +271,6 @@ export default function BusinessProfileSettings() {
         throw new Error(csrfData.error || 'Failed to get CSRF token')
       }
 
-      // Update business profile with new home currency
       const response = await fetch('/api/v1/account-management/businesses/profile', {
         method: 'PUT',
         headers: {
@@ -280,6 +414,13 @@ export default function BusinessProfileSettings() {
     return profile?.name?.[0]?.toUpperCase() || 'B'
   }
 
+  const handleMsicSelect = (code: string, description: string) => {
+    setMsicCode(code)
+    setMsicDescription(description)
+    setMsicSearch('')
+    setMsicDropdownOpen(false)
+  }
+
   if (isLoading) {
     return (
       <div className="bg-card rounded-lg border border-border p-6">
@@ -309,7 +450,6 @@ export default function BusinessProfileSettings() {
           </label>
 
           <div className="flex items-center space-x-4">
-            {/* Logo Display */}
             <div className="relative">
               {profile?.logo_url ? (
                 <div className="w-20 h-20 rounded-lg overflow-hidden bg-muted border-2 border-border">
@@ -330,7 +470,6 @@ export default function BusinessProfileSettings() {
                 </div>
               )}
 
-              {/* Remove Logo Button */}
               {profile?.logo_url && (
                 <button
                   onClick={removeLogo}
@@ -342,7 +481,6 @@ export default function BusinessProfileSettings() {
               )}
             </div>
 
-            {/* Upload Button */}
             <div className="flex flex-col space-y-2">
               <button
                 onClick={() => fileInputRef.current?.click()}
@@ -367,7 +505,6 @@ export default function BusinessProfileSettings() {
               </p>
             </div>
 
-            {/* Hidden File Input */}
             <input
               ref={fileInputRef}
               type="file"
@@ -399,18 +536,72 @@ export default function BusinessProfileSettings() {
                 This name will appear in the sidebar and throughout the application.
               </p>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-2">
+
+            {/* Structured Address */}
+            <div className="space-y-3">
+              <label className="block text-sm font-medium text-foreground">
                 Business Address
               </label>
-              <textarea
-                value={businessAddress}
-                onChange={(e) => setBusinessAddress(e.target.value)}
-                placeholder="Enter your business address"
-                rows={2}
-                className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent resize-none"
+              <input
+                type="text"
+                value={addressLine1}
+                onChange={(e) => setAddressLine1(e.target.value)}
+                placeholder="Address Line 1 (Street address)"
+                className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
               />
+              <input
+                type="text"
+                value={addressLine2}
+                onChange={(e) => setAddressLine2(e.target.value)}
+                placeholder="Address Line 2 (Unit, building, floor)"
+                className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+              />
+              <input
+                type="text"
+                value={addressLine3}
+                onChange={(e) => setAddressLine3(e.target.value)}
+                placeholder="Address Line 3 (Optional)"
+                className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="City"
+                  className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                />
+                <input
+                  type="text"
+                  value={postalCode}
+                  onChange={(e) => setPostalCode(e.target.value)}
+                  placeholder="Postal Code"
+                  className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <select
+                  value={stateCode}
+                  onChange={(e) => setStateCode(e.target.value)}
+                  className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">Select state...</option>
+                  {MALAYSIAN_STATE_CODES.map((s) => (
+                    <option key={s.code} value={s.code}>{s.name} ({s.code})</option>
+                  ))}
+                </select>
+                <select
+                  value={countryCode}
+                  onChange={(e) => setCountryCode(e.target.value)}
+                  className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {COUNTRY_CODES.map((c) => (
+                    <option key={c.code} value={c.code}>{c.name} ({c.code})</option>
+                  ))}
+                </select>
+              </div>
             </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
@@ -437,14 +628,177 @@ export default function BusinessProfileSettings() {
                 />
               </div>
             </div>
+
+            {/* e-Invoice Settings (Collapsible) */}
+            <div className="border border-border rounded-lg">
+              <button
+                type="button"
+                onClick={() => setEInvoiceSectionOpen(!eInvoiceSectionOpen)}
+                className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors rounded-lg"
+              >
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <span>e-Invoice Settings</span>
+                </div>
+                {eInvoiceSectionOpen ? (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                )}
+              </button>
+              {eInvoiceSectionOpen && (
+                <div className="px-4 pb-4 space-y-4 border-t border-border pt-4">
+                  <p className="text-xs text-muted-foreground">
+                    Configure LHDN MyInvois and Peppol compliance fields for e-invoicing.
+                  </p>
+
+                  {/* LHDN TIN */}
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      LHDN TIN (Tax Identification Number)
+                    </label>
+                    <input
+                      type="text"
+                      value={lhdnTin}
+                      onChange={(e) => setLhdnTin(e.target.value)}
+                      placeholder="C21638015020"
+                      className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* BRN + SST side by side */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        Business Registration Number (BRN)
+                      </label>
+                      <input
+                        type="text"
+                        value={businessRegistrationNumber}
+                        onChange={(e) => setBusinessRegistrationNumber(e.target.value)}
+                        placeholder="e.g. 202001234567"
+                        className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        SST Registration Number
+                      </label>
+                      <input
+                        type="text"
+                        value={sstRegistrationNumber}
+                        onChange={(e) => setSstRegistrationNumber(e.target.value)}
+                        placeholder="e.g. B10-1234-56789012"
+                        className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+
+                  {/* MSIC Code Combobox */}
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      MSIC Code (Business Activity)
+                    </label>
+                    <div className="relative" ref={msicDropdownRef}>
+                      <input
+                        type="text"
+                        value={msicDropdownOpen ? msicSearch : (msicCode ? `${msicCode} - ${msicDescription}` : '')}
+                        onChange={(e) => {
+                          setMsicSearch(e.target.value)
+                          setMsicDropdownOpen(true)
+                        }}
+                        onFocus={() => {
+                          setMsicSearch('')
+                          setMsicDropdownOpen(true)
+                        }}
+                        placeholder="Search by code or activity description..."
+                        className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                      />
+                      {msicDropdownOpen && (
+                        <div className="absolute z-20 mt-1 w-full bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                          {filteredMsicCodes.length === 0 ? (
+                            <div className="px-4 py-3 text-sm text-muted-foreground">
+                              No matching MSIC codes. You can enter a custom code below.
+                            </div>
+                          ) : (
+                            filteredMsicCodes.map((m) => (
+                              <button
+                                key={m.code}
+                                type="button"
+                                onClick={() => handleMsicSelect(m.code, m.description)}
+                                className="w-full text-left px-4 py-2 hover:bg-muted/50 transition-colors text-sm border-b border-border last:border-b-0"
+                              >
+                                <span className="font-medium text-foreground">{m.code}</span>
+                                <span className="text-muted-foreground ml-2">{m.description}</span>
+                              </button>
+                            ))
+                          )}
+                          {msicSearch.trim() && /^\d{5}$/.test(msicSearch.trim()) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMsicCode(msicSearch.trim())
+                                setMsicDescription('')
+                                setMsicSearch('')
+                                setMsicDropdownOpen(false)
+                              }}
+                              className="w-full text-left px-4 py-2 hover:bg-muted/50 transition-colors text-sm text-primary border-t border-border"
+                            >
+                              Use custom code: {msicSearch.trim()}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {msicCode && msicDescription && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Selected: {msicCode} — {msicDescription}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* LHDN Client ID */}
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      LHDN Client ID
+                    </label>
+                    <input
+                      type="text"
+                      value={lhdnClientId}
+                      onChange={(e) => setLhdnClientId(e.target.value)}
+                      placeholder="LHDN MyInvois Client ID"
+                      className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Client secret must be configured externally via AWS Secrets Manager.
+                    </p>
+                  </div>
+
+                  {/* Peppol Participant ID */}
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      Peppol Participant ID
+                    </label>
+                    <input
+                      type="text"
+                      value={peppolParticipantId}
+                      onChange={(e) => setPeppolParticipantId(e.target.value)}
+                      placeholder="0195:T08GA1234A"
+                      className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-end">
               <button
                 onClick={updateBusinessDetails}
                 disabled={isUpdating}
-                className="px-4 py-2 bg-action-view hover:bg-action-view/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-action-view-foreground rounded-md font-medium transition-colors"
+                className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-primary-foreground rounded-md font-medium transition-colors"
               >
                 {isUpdating ? (
-                  <div className="w-4 h-4 border-2 border-action-view-foreground border-t-transparent rounded-full animate-spin"></div>
+                  <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></div>
                 ) : (
                   'Save Details'
                 )}
@@ -456,10 +810,10 @@ export default function BusinessProfileSettings() {
         {/* Currency Preferences */}
         <div>
           <div className="flex items-center space-x-3 mb-4">
-            <DollarSign className="w-5 h-5 text-action-view" />
+            <DollarSign className="w-5 h-5 text-primary" />
             <h3 className="text-lg font-medium text-foreground">Currency Preferences</h3>
             {lastCurrencySaved && (
-              <span className="text-xs text-action-view">
+              <span className="text-xs text-primary">
                 Saved {lastCurrencySaved.toLocaleTimeString()}
               </span>
             )}

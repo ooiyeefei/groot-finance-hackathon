@@ -45,6 +45,7 @@ export interface PlanConfig {
   productId: string | null
   price: number // In display currency (not cents)
   currency: string
+  currencyOptions: Record<string, number> // lowercase currency code → display amount
   ocrLimit: number // -1 for unlimited
   teamLimit: number // -1 for unlimited
   aiMessageLimit: number // -1 for unlimited
@@ -98,6 +99,81 @@ const FEATURE_METADATA_MAP: Record<string, string> = {
   feature_advanced_analytics: 'Advanced analytics',
 }
 
+/**
+ * Country code to currency mapping for geo-IP detection.
+ * Maps ISO 3166-1 alpha-2 country codes to ISO 4217 currency codes.
+ */
+export const COUNTRY_TO_CURRENCY: Record<string, string> = {
+  MY: 'MYR',
+  SG: 'SGD',
+  US: 'USD',
+  GB: 'GBP',
+  AU: 'AUD',
+  TH: 'THB',
+  ID: 'IDR',
+  PH: 'PHP',
+  VN: 'VND',
+  IN: 'INR',
+  CN: 'CNY',
+  JP: 'JPY',
+  HK: 'HKD',
+  TW: 'TWD',
+  KR: 'KRW',
+}
+
+/**
+ * Currency symbols for display formatting.
+ */
+export const CURRENCY_SYMBOLS: Record<string, string> = {
+  MYR: 'RM',
+  SGD: 'S$',
+  USD: '$',
+  GBP: '£',
+  AUD: 'A$',
+  THB: '฿',
+  IDR: 'Rp',
+  PHP: '₱',
+  VND: '₫',
+  INR: '₹',
+  CNY: '¥',
+  JPY: '¥',
+  HKD: 'HK$',
+  TWD: 'NT$',
+  KRW: '₩',
+}
+
+/**
+ * Resolve a plan's price for a given currency.
+ * Falls back to the plan's default currency if requested currency is not available.
+ */
+export function resolvePlanPrice(
+  plan: PlanConfig,
+  currency: string
+): { price: number; currency: string } {
+  const lowerCurrency = currency.toLowerCase()
+  if (plan.currencyOptions[lowerCurrency] !== undefined) {
+    return { price: plan.currencyOptions[lowerCurrency], currency: currency.toUpperCase() }
+  }
+  // Fall back to default
+  return { price: plan.price, currency: plan.currency }
+}
+
+/**
+ * Get all available currencies across all plans in the catalog.
+ */
+export function getAvailableCurrencies(plans: Record<PlanKey, PlanConfig>): string[] {
+  const currencies = new Set<string>()
+  for (const plan of Object.values(plans)) {
+    for (const cur of Object.keys(plan.currencyOptions)) {
+      currencies.add(cur.toUpperCase())
+    }
+    if (plan.currency) {
+      currencies.add(plan.currency.toUpperCase())
+    }
+  }
+  return Array.from(currencies).sort()
+}
+
 // Default trial plan (not in Stripe)
 // Trial gives access to Starter-level features with reduced limits
 const TRIAL_PLAN: PlanConfig = {
@@ -107,6 +183,7 @@ const TRIAL_PLAN: PlanConfig = {
   productId: null,
   price: 0,
   currency: 'MYR',
+  currencyOptions: { myr: 0, sgd: 0 },
   ocrLimit: 50,
   teamLimit: 3,
   aiMessageLimit: 300,  // Trial uses Pro limits (FR-015)
@@ -144,6 +221,7 @@ export const FALLBACK_PLANS: Record<PlanKey, PlanConfig> = {
     productId: null,
     price: 249,
     currency: 'MYR',
+    currencyOptions: { myr: 249, sgd: 79 },
     ocrLimit: 150,
     teamLimit: 20,
     aiMessageLimit: 30,
@@ -187,6 +265,7 @@ export const FALLBACK_PLANS: Record<PlanKey, PlanConfig> = {
     productId: null,
     price: 599,
     currency: 'MYR',
+    currencyOptions: { myr: 599, sgd: 189 },
     ocrLimit: 500,
     teamLimit: 50,
     aiMessageLimit: 300,
@@ -229,6 +308,7 @@ export const FALLBACK_PLANS: Record<PlanKey, PlanConfig> = {
     productId: null,
     price: 0,
     currency: 'MYR',
+    currencyOptions: { myr: 0, sgd: 0 },
     ocrLimit: -1,
     teamLimit: -1,
     aiMessageLimit: -1,
@@ -338,6 +418,19 @@ function parseProductMetadata(
   const currency = price?.currency?.toUpperCase() || 'MYR'
   const interval = price?.recurring?.interval as 'month' | 'year' | null
 
+  // Extract currency_options from the price object
+  const currencyOptions: Record<string, number> = {}
+  // Always include the default currency
+  currencyOptions[currency.toLowerCase()] = priceAmount
+  // Add any additional currency options from Stripe
+  if (price?.currency_options) {
+    for (const [cur, option] of Object.entries(price.currency_options)) {
+      if (option.unit_amount != null) {
+        currencyOptions[cur.toLowerCase()] = option.unit_amount / 100
+      }
+    }
+  }
+
   // Generate curated highlight features per plan tier
   const highlightFeatures = FALLBACK_PLANS[planKey]?.highlightFeatures
     ?? features.slice(0, 6)
@@ -349,6 +442,7 @@ function parseProductMetadata(
     productId: product.id,
     price: priceAmount,
     currency,
+    currencyOptions,
     ocrLimit,
     teamLimit,
     aiMessageLimit,
@@ -374,11 +468,12 @@ async function fetchCatalogFromStripe(): Promise<Record<PlanKey, PlanConfig>> {
     limit: 100,
   })
 
-  // Fetch active recurring prices
+  // Fetch active recurring prices with currency_options expanded
   const prices = await stripe.prices.list({
     active: true,
     type: 'recurring',
     limit: 100,
+    expand: ['data.currency_options'],
   })
 
   // Create price lookup by product, preferring monthly interval

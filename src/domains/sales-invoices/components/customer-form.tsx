@@ -5,8 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
-import { Loader2 } from 'lucide-react'
+import { Loader2, ChevronDown, ChevronRight } from 'lucide-react'
+import { MALAYSIAN_STATE_CODES } from '@/lib/data/state-codes'
+import { COUNTRY_CODES, DEFAULT_COUNTRY_CODE } from '@/lib/data/country-codes'
 import type { Customer } from '../types'
 
 // ---------------------------------------------------------------------------
@@ -18,8 +19,19 @@ interface CustomerFormData {
   contactPerson: string
   email: string
   phone: string
-  address: string
-  taxId: string
+  // Tax & Registration
+  tin: string
+  brn: string
+  sstRegistration: string
+  peppolParticipantId: string
+  // Structured Address
+  addressLine1: string
+  addressLine2: string
+  addressLine3: string
+  city: string
+  stateCode: string
+  postalCode: string
+  countryCode: string
 }
 
 interface CustomerFormProps {
@@ -30,8 +42,17 @@ interface CustomerFormProps {
     contactPerson?: string
     email: string
     phone?: string
-    address?: string
-    taxId?: string
+    tin?: string
+    brn?: string
+    sstRegistration?: string
+    peppolParticipantId?: string
+    addressLine1?: string
+    addressLine2?: string
+    addressLine3?: string
+    city?: string
+    stateCode?: string
+    postalCode?: string
+    countryCode?: string
   }) => Promise<void>
   onCancel: () => void
 }
@@ -46,10 +67,21 @@ function getInitialFormData(initialData?: Partial<Customer>): CustomerFormData {
     contactPerson: initialData?.contactPerson ?? '',
     email: initialData?.email ?? '',
     phone: initialData?.phone ?? '',
-    address: initialData?.address ?? '',
-    taxId: initialData?.taxId ?? '',
+    tin: initialData?.tin ?? '',
+    brn: initialData?.brn ?? '',
+    sstRegistration: initialData?.sstRegistration ?? '',
+    peppolParticipantId: initialData?.peppolParticipantId ?? '',
+    addressLine1: initialData?.addressLine1 ?? '',
+    addressLine2: initialData?.addressLine2 ?? '',
+    addressLine3: initialData?.addressLine3 ?? '',
+    city: initialData?.city ?? '',
+    stateCode: initialData?.stateCode ?? '',
+    postalCode: initialData?.postalCode ?? '',
+    countryCode: initialData?.countryCode ?? DEFAULT_COUNTRY_CODE,
   }
 }
+
+const TIN_REGEX = /^(C|IG)\d+$/
 
 // ---------------------------------------------------------------------------
 // Component
@@ -66,11 +98,21 @@ export default function CustomerForm({
   )
   const [errors, setErrors] = useState<Partial<Record<keyof CustomerFormData, string>>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [taxSectionOpen, setTaxSectionOpen] = useState(false)
+  const [addressSectionOpen, setAddressSectionOpen] = useState(false)
 
   // Reset form when initialData changes
   useEffect(() => {
-    setFormData(getInitialFormData(initialData))
+    const data = getInitialFormData(initialData)
+    setFormData(data)
     setErrors({})
+    // Auto-expand sections if they have data
+    if (data.tin || data.brn || data.sstRegistration || data.peppolParticipantId) {
+      setTaxSectionOpen(true)
+    }
+    if (data.addressLine1 || data.city || data.postalCode) {
+      setAddressSectionOpen(true)
+    }
   }, [initialData])
 
   // -------------------------------------------------------------------------
@@ -104,11 +146,14 @@ export default function CustomerForm({
     if (!formData.email.trim()) {
       newErrors.email = 'Email is required'
     } else {
-      // Simple email regex
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
       if (!emailRegex.test(formData.email.trim())) {
         newErrors.email = 'Please enter a valid email address'
       }
+    }
+
+    if (formData.tin.trim() && !TIN_REGEX.test(formData.tin.trim())) {
+      newErrors.tin = 'TIN must start with C or IG followed by digits (e.g. C21638015020)'
     }
 
     setErrors(newErrors)
@@ -131,8 +176,17 @@ export default function CustomerForm({
           contactPerson: formData.contactPerson.trim() || undefined,
           email: formData.email.trim(),
           phone: formData.phone.trim() || undefined,
-          address: formData.address.trim() || undefined,
-          taxId: formData.taxId.trim() || undefined,
+          tin: formData.tin.trim() || undefined,
+          brn: formData.brn.trim() || undefined,
+          sstRegistration: formData.sstRegistration.trim() || undefined,
+          peppolParticipantId: formData.peppolParticipantId.trim() || undefined,
+          addressLine1: formData.addressLine1.trim() || undefined,
+          addressLine2: formData.addressLine2.trim() || undefined,
+          addressLine3: formData.addressLine3.trim() || undefined,
+          city: formData.city.trim() || undefined,
+          stateCode: formData.stateCode || undefined,
+          postalCode: formData.postalCode.trim() || undefined,
+          countryCode: formData.countryCode || undefined,
         })
       } finally {
         setIsSubmitting(false)
@@ -215,31 +269,187 @@ export default function CustomerForm({
             </div>
           </div>
 
-          {/* Address */}
-          <div className="space-y-1.5">
-            <Label htmlFor="customer-address" className="text-foreground">
-              Address
-            </Label>
-            <Textarea
-              id="customer-address"
-              placeholder="Business address"
-              rows={3}
-              value={formData.address}
-              onChange={(e) => handleChange('address', e.target.value)}
-            />
+          {/* Tax & Registration (Collapsible) */}
+          <div className="border border-border rounded-lg">
+            <button
+              type="button"
+              onClick={() => setTaxSectionOpen(!taxSectionOpen)}
+              className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors rounded-lg"
+            >
+              <span>Tax & Registration</span>
+              {taxSectionOpen ? (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              )}
+            </button>
+            {taxSectionOpen && (
+              <div className="px-4 pb-4 space-y-4 border-t border-border pt-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="customer-tin" className="text-foreground">
+                    TIN (Tax Identification Number)
+                  </Label>
+                  <Input
+                    id="customer-tin"
+                    placeholder="C21638015020"
+                    value={formData.tin}
+                    onChange={(e) => handleChange('tin', e.target.value)}
+                  />
+                  {errors.tin && (
+                    <p className="text-sm text-destructive">{errors.tin}</p>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="customer-brn" className="text-foreground">
+                      Business Registration Number (BRN)
+                    </Label>
+                    <Input
+                      id="customer-brn"
+                      placeholder="e.g. 202001234567"
+                      value={formData.brn}
+                      onChange={(e) => handleChange('brn', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="customer-sstRegistration" className="text-foreground">
+                      SST Registration
+                    </Label>
+                    <Input
+                      id="customer-sstRegistration"
+                      placeholder="e.g. B10-1234-56789012"
+                      value={formData.sstRegistration}
+                      onChange={(e) => handleChange('sstRegistration', e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="customer-peppolParticipantId" className="text-foreground">
+                    Peppol Participant ID
+                  </Label>
+                  <Input
+                    id="customer-peppolParticipantId"
+                    placeholder="0195:TXXXXXXXXX"
+                    value={formData.peppolParticipantId}
+                    onChange={(e) => handleChange('peppolParticipantId', e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Tax ID */}
-          <div className="space-y-1.5">
-            <Label htmlFor="customer-taxId" className="text-foreground">
-              Tax ID
-            </Label>
-            <Input
-              id="customer-taxId"
-              placeholder="e.g. GST registration number"
-              value={formData.taxId}
-              onChange={(e) => handleChange('taxId', e.target.value)}
-            />
+          {/* Structured Address (Collapsible) */}
+          <div className="border border-border rounded-lg">
+            <button
+              type="button"
+              onClick={() => setAddressSectionOpen(!addressSectionOpen)}
+              className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors rounded-lg"
+            >
+              <span>Address</span>
+              {addressSectionOpen ? (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              )}
+            </button>
+            {addressSectionOpen && (
+              <div className="px-4 pb-4 space-y-4 border-t border-border pt-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="customer-addressLine1" className="text-foreground">
+                    Address Line 1
+                  </Label>
+                  <Input
+                    id="customer-addressLine1"
+                    placeholder="Street address"
+                    value={formData.addressLine1}
+                    onChange={(e) => handleChange('addressLine1', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="customer-addressLine2" className="text-foreground">
+                    Address Line 2
+                  </Label>
+                  <Input
+                    id="customer-addressLine2"
+                    placeholder="Unit, building, floor"
+                    value={formData.addressLine2}
+                    onChange={(e) => handleChange('addressLine2', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="customer-addressLine3" className="text-foreground">
+                    Address Line 3
+                  </Label>
+                  <Input
+                    id="customer-addressLine3"
+                    placeholder="Additional address info"
+                    value={formData.addressLine3}
+                    onChange={(e) => handleChange('addressLine3', e.target.value)}
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="customer-city" className="text-foreground">
+                      City
+                    </Label>
+                    <Input
+                      id="customer-city"
+                      placeholder="e.g. Kuala Lumpur"
+                      value={formData.city}
+                      onChange={(e) => handleChange('city', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="customer-postalCode" className="text-foreground">
+                      Postal Code
+                    </Label>
+                    <Input
+                      id="customer-postalCode"
+                      placeholder="e.g. 50000"
+                      value={formData.postalCode}
+                      onChange={(e) => handleChange('postalCode', e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="customer-stateCode" className="text-foreground">
+                      State
+                    </Label>
+                    <select
+                      id="customer-stateCode"
+                      value={formData.stateCode}
+                      onChange={(e) => handleChange('stateCode', e.target.value)}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <option value="">Select state...</option>
+                      {MALAYSIAN_STATE_CODES.map((s) => (
+                        <option key={s.code} value={s.code}>
+                          {s.name} ({s.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="customer-countryCode" className="text-foreground">
+                      Country
+                    </Label>
+                    <select
+                      id="customer-countryCode"
+                      value={formData.countryCode}
+                      onChange={(e) => handleChange('countryCode', e.target.value)}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      {COUNTRY_CODES.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.name} ({c.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Actions */}

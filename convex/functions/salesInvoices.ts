@@ -1401,6 +1401,96 @@ export const deleteInvoiceTemplate = mutation({
 // HELPER FUNCTIONS
 // ============================================
 
+// ============================================
+// PEPPOL INVOICENOW MUTATIONS
+// ============================================
+
+/**
+ * Initiate Peppol InvoiceNow transmission for a sales invoice.
+ * Sets peppolStatus to "pending" after validating prerequisites.
+ * Actual AP transmission is handled by backend integration (#196).
+ */
+export const initiatePeppolTransmission = mutation({
+  args: {
+    id: v.id("sales_invoices"),
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    await requireFinanceAdmin(ctx, args.businessId);
+
+    const invoice = await ctx.db.get(args.id);
+    if (!invoice || invoice.businessId !== args.businessId || invoice.deletedAt) {
+      throw new Error("Invoice not found");
+    }
+
+    if (invoice.status === "draft" || invoice.status === "void") {
+      throw new Error("Invoice must be sent before transmitting via Peppol");
+    }
+
+    if (invoice.peppolStatus !== undefined) {
+      throw new Error("Invoice already has a Peppol transmission in progress or completed");
+    }
+
+    // Validate sender has Peppol participant ID
+    const business = await ctx.db.get(args.businessId);
+    if (!business || !business.peppolParticipantId) {
+      throw new Error("Business does not have a Peppol participant ID configured");
+    }
+
+    // Validate receiver has Peppol participant ID
+    if (invoice.customerId) {
+      const customer = await ctx.db.get(invoice.customerId);
+      if (!customer || !customer.peppolParticipantId) {
+        throw new Error("Customer does not have a Peppol participant ID configured");
+      }
+    } else {
+      throw new Error("Customer does not have a Peppol participant ID configured");
+    }
+
+    await ctx.db.patch(args.id, {
+      peppolStatus: "pending",
+      updatedAt: Date.now(),
+    });
+
+    return args.id;
+  },
+});
+
+/**
+ * Retry a failed Peppol transmission.
+ * Resets peppolStatus to "pending" and clears previous errors.
+ */
+export const retryPeppolTransmission = mutation({
+  args: {
+    id: v.id("sales_invoices"),
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    await requireFinanceAdmin(ctx, args.businessId);
+
+    const invoice = await ctx.db.get(args.id);
+    if (!invoice || invoice.businessId !== args.businessId || invoice.deletedAt) {
+      throw new Error("Invoice not found");
+    }
+
+    if (invoice.peppolStatus !== "failed") {
+      throw new Error("Can only retry transmission for invoices with failed Peppol status");
+    }
+
+    await ctx.db.patch(args.id, {
+      peppolStatus: "pending",
+      peppolErrors: undefined,
+      updatedAt: Date.now(),
+    });
+
+    return args.id;
+  },
+});
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
 function computeNextDueDate(invoiceDate: string, paymentTerms: string): string {
   const daysMap: Record<string, number> = {
     due_on_receipt: 0,

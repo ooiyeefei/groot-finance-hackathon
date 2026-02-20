@@ -47,6 +47,11 @@ export {
   getRemainingTeamSlots,
   // Constants
   FALLBACK_PLANS,
+  COUNTRY_TO_CURRENCY,
+  CURRENCY_SYMBOLS,
+  // Multi-currency helpers
+  resolvePlanPrice,
+  getAvailableCurrencies,
   // Legacy aliases for backward compatibility
   getOcrLimitSync as getOcrLimit,
   getTeamLimitSync as getTeamLimit,

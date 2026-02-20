@@ -30,10 +30,11 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json()
-    const { planName, successUrl, isOnboarding } = body as {
+    const { planName, successUrl, isOnboarding, currency } = body as {
       planName: PlanKey
       successUrl?: string
       isOnboarding?: boolean
+      currency?: string
     }
 
     // Validate plan key
@@ -164,6 +165,7 @@ export async function POST(request: NextRequest) {
       customer: customerId,
       mode: 'subscription',
       payment_method_types: ['card'],
+      ...(currency ? { currency: currency.toLowerCase() } : {}),
       line_items: [
         {
           price: plan.priceId,

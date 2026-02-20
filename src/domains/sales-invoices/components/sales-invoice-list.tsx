@@ -28,8 +28,10 @@ import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-conte
 import { useSalesInvoices, useSalesInvoiceMutations, useInvoiceDefaults } from '../hooks/use-sales-invoices'
 import { InvoiceStatusBadge } from './invoice-status-badge'
 import { LhdnStatusBadge } from './lhdn-status-badge'
+import { PeppolStatusBadge } from './peppol-status-badge'
 import type { SalesInvoice, SalesInvoiceStatus } from '../types'
 import { SALES_INVOICE_STATUSES } from '../types'
+import type { PeppolStatus } from '@/lib/constants/statuses'
 
 // ---------------------------------------------------------------------------
 // Filter tab definitions
@@ -359,7 +361,12 @@ export default function SalesInvoiceList() {
                       {formatCurrency(invoice.totalAmount, invoice.currency)}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <InvoiceStatusBadge status={invoice.status} />
+                      <div className="flex items-center justify-center gap-1.5">
+                        <InvoiceStatusBadge status={invoice.status} />
+                        {(invoice as any).peppolStatus && (
+                          <PeppolStatusBadge status={(invoice as any).peppolStatus as PeppolStatus} />
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <LhdnStatusBadge status={invoice.lhdnStatus} />
@@ -518,6 +525,9 @@ export default function SalesInvoiceList() {
                     <InvoiceStatusBadge status={invoice.status} />
                     {invoice.lhdnStatus && (
                       <LhdnStatusBadge status={invoice.lhdnStatus} />
+                    )}
+                    {(invoice as any).peppolStatus && (
+                      <PeppolStatusBadge status={(invoice as any).peppolStatus as PeppolStatus} />
                     )}
                   </div>
                 </div>

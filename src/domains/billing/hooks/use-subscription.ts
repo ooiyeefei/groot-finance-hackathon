@@ -183,7 +183,7 @@ export interface UseSubscriptionReturn {
   isLoading: boolean
   error: string | null
   refetch: () => Promise<void>
-  createCheckout: (planName: PlanName) => Promise<string | null>
+  createCheckout: (planName: PlanName, currency?: string) => Promise<string | null>
   isCheckoutLoading: boolean
 }
 
@@ -271,7 +271,7 @@ export function useSubscription(): UseSubscriptionReturn {
   /**
    * Create a Stripe Checkout session and redirect to payment
    */
-  const createCheckout = useCallback(async (planName: PlanName): Promise<string | null> => {
+  const createCheckout = useCallback(async (planName: PlanName, currency?: string): Promise<string | null> => {
     try {
       setIsCheckoutLoading(true)
       setError(null)
@@ -281,7 +281,7 @@ export function useSubscription(): UseSubscriptionReturn {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ planName }),
+        body: JSON.stringify({ planName, ...(currency ? { currency } : {}) }),
       })
 
       const result = await response.json()

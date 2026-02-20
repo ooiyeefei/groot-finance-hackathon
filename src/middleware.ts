@@ -13,10 +13,11 @@ const isPublicRoute = createRouteMatcher([
   '/:locale/sign-up(.*)',
   '/sign-in(.*)',
   '/sign-up(.*)',
-  // Public API routes (webhooks, health checks)
+  // Public API routes (webhooks, health checks, catalog)
   '/api/webhooks(.*)',
   '/api/v1/webhooks(.*)',
   '/api/v1/billing/webhooks(.*)',
+  '/api/v1/billing/catalog(.*)',
   '/api/v1/system/webhooks(.*)',
   '/api/v1/stripe-integration/webhooks(.*)',
   '/api/health(.*)',

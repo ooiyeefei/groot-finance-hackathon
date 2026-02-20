@@ -53,6 +53,7 @@ interface InvoicePreviewProps {
     companyEmail?: string
     registrationNumber?: string
     taxId?: string
+    sstRegistrationNumber?: string
     logoUrl?: string
     paymentMethods?: Array<{
       id: string
