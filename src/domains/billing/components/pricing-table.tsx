@@ -206,7 +206,7 @@ export function PricingTable({
               {/* Trialing badge */}
               {isTrialingOnPlan && showCurrentPlan && (
                 <Badge
-                  className="absolute -top-3 left-1/2 -translate-x-1/2 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30"
+                  className="absolute -top-3 left-1/2 -translate-x-1/2 bg-yellow-500 text-white border-0"
                 >
                   Trial Active
                 </Badge>
