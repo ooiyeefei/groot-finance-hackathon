@@ -171,14 +171,14 @@ export function PricingTable({
               {/* Limits section - shown prominently in onboarding */}
               {showLimits && (
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Users className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <div className="flex items-center gap-2 text-base">
+                    <Users className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                     <span className="text-foreground">
                       {formatLimit(plan.teamLimit, 'team member', 'team members')}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <div className="flex items-center gap-2 text-base">
+                    <FileText className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                     <span className="text-foreground">
                       {formatLimit(plan.ocrLimit, 'OCR scan', 'OCR scans')}/month
                     </span>
@@ -189,7 +189,7 @@ export function PricingTable({
               {/* Features */}
               <div>
                 {showLimits && (
-                  <h4 className="text-sm font-medium text-muted-foreground mb-3">Features</h4>
+                  <h4 className="text-base font-medium text-muted-foreground mb-3">Features</h4>
                 )}
                 {(() => {
                   const isExpanded = expandedPlans.has(name)
@@ -200,9 +200,9 @@ export function PricingTable({
                     <>
                       <ul className="space-y-3">
                         {displayFeatures.map((feature, index) => (
-                          <li key={index} className="flex items-start gap-2">
-                            <Check className="w-4 h-4 mt-1 text-green-600 dark:text-green-400 flex-shrink-0" />
-                            <span className="text-foreground text-sm">{feature}</span>
+                          <li key={index} className="flex items-start gap-2.5">
+                            <Check className="w-5 h-5 mt-0.5 text-green-600 dark:text-green-400 flex-shrink-0" />
+                            <span className="text-foreground text-base">{feature}</span>
                           </li>
                         ))}
                       </ul>
@@ -210,16 +210,16 @@ export function PricingTable({
                         <button
                           type="button"
                           onClick={() => toggleExpanded(name)}
-                          className="mt-3 flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
+                          className="mt-3 flex items-center gap-1.5 text-base text-primary hover:text-primary/80 transition-colors"
                         >
                           {isExpanded ? (
                             <>
-                              <ChevronUp className="w-4 h-4" />
+                              <ChevronUp className="w-5 h-5" />
                               Show less
                             </>
                           ) : (
                             <>
-                              <ChevronDown className="w-4 h-4" />
+                              <ChevronDown className="w-5 h-5" />
                               See all features
                             </>
                           )}
