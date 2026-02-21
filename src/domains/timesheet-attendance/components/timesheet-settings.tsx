@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Clock, Plus, Edit2, Trash2, Save, Timer, Calendar, Settings, Loader2, AlertCircle, Users } from 'lucide-react'
+import { Clock, Plus, Edit2, Trash2, Save, Timer, Calendar, Settings, Loader2, AlertCircle, Users, X } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -59,6 +59,16 @@ const DEFAULT_PAY_PERIOD_FORM = {
   startDay: 1,
   confirmationDeadlineDays: 3,
 }
+
+// ============================================
+// MODAL BACKDROP STYLE
+// ============================================
+
+const BACKDROP_STYLE = {
+  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  backdropFilter: 'blur(12px)',
+  WebkitBackdropFilter: 'blur(12px)',
+} as const
 
 // ============================================
 // COMPONENT
@@ -438,22 +448,19 @@ export default function TimesheetSettings() {
                 <CardDescription>Define working hours, break times, and work days</CardDescription>
               </div>
             </div>
-            {!showScheduleForm && (
-              <Button variant="primary" size="sm" onClick={() => openScheduleForm()}>
-                <Plus className="w-4 h-4 mr-1" />
-                Add Schedule
-              </Button>
-            )}
+            <Button variant="primary" size="sm" onClick={() => openScheduleForm()}>
+              <Plus className="w-4 h-4 mr-1" />
+              Add Schedule
+            </Button>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Existing schedules list */}
+        <CardContent>
           {schedules === undefined ? (
             <div className="flex items-center gap-2 text-muted-foreground py-4">
               <Loader2 className="w-4 h-4 animate-spin" />
               Loading schedules...
             </div>
-          ) : schedules.length === 0 && !showScheduleForm ? (
+          ) : schedules.length === 0 ? (
             <div className="text-center py-6">
               <Clock className="w-10 h-10 mx-auto mb-2 text-muted-foreground opacity-50" />
               <p className="text-muted-foreground">No work schedules configured</p>
@@ -516,148 +523,6 @@ export default function TimesheetSettings() {
               ))}
             </div>
           )}
-
-          {/* Inline schedule form */}
-          {showScheduleForm && (
-            <div className="p-4 bg-muted/30 rounded-lg border border-border space-y-4">
-              <h4 className="font-medium text-foreground">
-                {editingScheduleId ? 'Edit Schedule' : 'New Work Schedule'}
-              </h4>
-
-              {(createScheduleError || updateScheduleError) && (
-                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-500/10 p-3 rounded-lg">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  {createScheduleError || updateScheduleError}
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="schedule-name" className="text-foreground font-medium">
-                    Schedule Name *
-                  </Label>
-                  <Input
-                    id="schedule-name"
-                    placeholder="e.g., Standard Office Hours"
-                    value={scheduleForm.name}
-                    onChange={(e) => setScheduleForm({ ...scheduleForm, name: e.target.value })}
-                    className="bg-input border-border text-foreground"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="start-time" className="text-foreground font-medium">
-                      Start Time
-                    </Label>
-                    <Input
-                      id="start-time"
-                      type="time"
-                      value={scheduleForm.startTime}
-                      onChange={(e) => setScheduleForm({ ...scheduleForm, startTime: e.target.value })}
-                      className="bg-input border-border text-foreground"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="end-time" className="text-foreground font-medium">
-                      End Time
-                    </Label>
-                    <Input
-                      id="end-time"
-                      type="time"
-                      value={scheduleForm.endTime}
-                      onChange={(e) => setScheduleForm({ ...scheduleForm, endTime: e.target.value })}
-                      className="bg-input border-border text-foreground"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Work Days */}
-              <div className="space-y-2">
-                <Label className="text-foreground font-medium">Work Days</Label>
-                <div className="flex flex-wrap gap-2">
-                  {DAY_INDICES.map((dayIndex) => (
-                    <button
-                      key={dayIndex}
-                      type="button"
-                      onClick={() => toggleWorkDay(dayIndex)}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
-                        scheduleForm.workDays.includes(dayIndex)
-                          ? 'bg-primary text-primary-foreground border-primary'
-                          : 'bg-input text-muted-foreground border-border hover:border-primary/50'
-                      }`}
-                    >
-                      {DAY_LABELS[dayIndex]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="break-minutes" className="text-foreground font-medium">
-                    Break (minutes)
-                  </Label>
-                  <Input
-                    id="break-minutes"
-                    type="number"
-                    min={0}
-                    value={scheduleForm.breakMinutes}
-                    onChange={(e) => setScheduleForm({ ...scheduleForm, breakMinutes: parseInt(e.target.value) || 0 })}
-                    className="bg-input border-border text-foreground"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="grace-minutes" className="text-foreground font-medium">
-                    Grace (minutes)
-                  </Label>
-                  <Input
-                    id="grace-minutes"
-                    type="number"
-                    min={0}
-                    value={scheduleForm.graceMinutes}
-                    onChange={(e) => setScheduleForm({ ...scheduleForm, graceMinutes: parseInt(e.target.value) || 0 })}
-                    className="bg-input border-border text-foreground"
-                  />
-                </div>
-                <div className="flex items-end pb-1">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={scheduleForm.isDefault}
-                      onChange={(e) => setScheduleForm({ ...scheduleForm, isDefault: e.target.checked })}
-                      className="rounded border-border"
-                    />
-                    <span className="text-sm text-foreground font-medium">Default schedule</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" size="sm" onClick={closeScheduleForm}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={handleSaveSchedule}
-                  disabled={isCreatingSchedule || isUpdatingSchedule || !scheduleForm.name}
-                >
-                  {(isCreatingSchedule || isUpdatingSchedule) ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4 mr-1" />
-                      {editingScheduleId ? 'Update' : 'Save'} Schedule
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
 
@@ -674,22 +539,19 @@ export default function TimesheetSettings() {
                 <CardDescription>Configure overtime calculation and rate tiers</CardDescription>
               </div>
             </div>
-            {!showOTForm && (
-              <Button variant="primary" size="sm" onClick={() => openOTForm()}>
-                <Plus className="w-4 h-4 mr-1" />
-                Add Rule
-              </Button>
-            )}
+            <Button variant="primary" size="sm" onClick={() => openOTForm()}>
+              <Plus className="w-4 h-4 mr-1" />
+              Add Rule
+            </Button>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Existing OT rules list */}
+        <CardContent>
           {overtimeRules === undefined ? (
             <div className="flex items-center gap-2 text-muted-foreground py-4">
               <Loader2 className="w-4 h-4 animate-spin" />
               Loading overtime rules...
             </div>
-          ) : overtimeRules.length === 0 && !showOTForm ? (
+          ) : overtimeRules.length === 0 ? (
             <div className="text-center py-6">
               <Timer className="w-10 h-10 mx-auto mb-2 text-muted-foreground opacity-50" />
               <p className="text-muted-foreground">No overtime rules configured</p>
@@ -764,164 +626,408 @@ export default function TimesheetSettings() {
               ))}
             </div>
           )}
+        </CardContent>
+      </Card>
 
-          {/* Inline OT rule form */}
-          {showOTForm && (
-            <div className="p-4 bg-muted/30 rounded-lg border border-border space-y-4">
-              <h4 className="font-medium text-foreground">
-                {editingOTRuleId ? 'Edit Overtime Rule' : 'New Overtime Rule'}
-              </h4>
+      {/* ================================================ */}
+      {/* SECTION 3: Pay Period */}
+      {/* ================================================ */}
+      <Card className="bg-card border-border">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Calendar className="w-5 h-5 text-primary" />
+              <div>
+                <CardTitle className="text-lg">Pay Period</CardTitle>
+                <CardDescription>Set payroll frequency and confirmation deadlines</CardDescription>
+              </div>
+            </div>
+            <Button variant="primary" size="sm" onClick={openPayPeriodForm}>
+              <Edit2 className="w-4 h-4 mr-1" />
+              {payPeriodConfig ? 'Edit' : 'Configure'}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {payPeriodConfig === undefined ? (
+            <div className="flex items-center gap-2 text-muted-foreground py-4">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading pay period configuration...
+            </div>
+          ) : payPeriodConfig === null ? (
+            <div className="text-center py-6">
+              <Calendar className="w-10 h-10 mx-auto mb-2 text-muted-foreground opacity-50" />
+              <p className="text-muted-foreground">Pay period not configured</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Set up your payroll frequency and confirmation deadlines
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-3 bg-muted/50 rounded-lg border border-border">
+                <p className="text-sm text-muted-foreground">Frequency</p>
+                <p className="font-medium text-foreground capitalize">{payPeriodConfig.frequency}</p>
+              </div>
+              <div className="p-3 bg-muted/50 rounded-lg border border-border">
+                <p className="text-sm text-muted-foreground">Start Day</p>
+                <p className="font-medium text-foreground">Day {payPeriodConfig.startDay}</p>
+              </div>
+              <div className="p-3 bg-muted/50 rounded-lg border border-border">
+                <p className="text-sm text-muted-foreground">Confirmation Deadline</p>
+                <p className="font-medium text-foreground">{payPeriodConfig.confirmationDeadlineDays} days</p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-              {(createOTError || updateOTError) && (
-                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-500/10 p-3 rounded-lg">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  {createOTError || updateOTError}
+      {/* ================================================ */}
+      {/* MODAL: Work Schedule Form */}
+      {/* ================================================ */}
+      {showScheduleForm && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="fixed inset-0 transition-opacity" style={BACKDROP_STYLE} onClick={closeScheduleForm} />
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="relative transform overflow-hidden rounded-xl bg-card shadow-2xl text-left transition-all w-full max-w-2xl max-h-[90vh] flex flex-col">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-border flex-shrink-0">
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground">
+                    {editingScheduleId ? 'Edit Work Schedule' : 'New Work Schedule'}
+                  </h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Define working hours, break times, and work days
+                  </p>
                 </div>
-              )}
-
-              <div className="space-y-2">
-                <Label htmlFor="ot-name" className="text-foreground font-medium">
-                  Rule Name *
-                </Label>
-                <Input
-                  id="ot-name"
-                  placeholder="e.g., Malaysia Standard OT"
-                  value={otForm.name}
-                  onChange={(e) => setOTForm({ ...otForm, name: e.target.value })}
-                  className="bg-input border-border text-foreground"
-                />
+                <button
+                  onClick={closeScheduleForm}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
-              {/* Calculation Basis */}
-              <div className="space-y-2">
-                <Label className="text-foreground font-medium">Calculation Basis</Label>
-                <div className="flex gap-4">
-                  {(['daily', 'weekly', 'both'] as const).map((basis) => (
-                    <label key={basis} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="calculationBasis"
-                        value={basis}
-                        checked={otForm.calculationBasis === basis}
-                        onChange={(e) => setOTForm({ ...otForm, calculationBasis: e.target.value as 'daily' | 'weekly' | 'both' })}
-                        className="border-border"
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                {(createScheduleError || updateScheduleError) && (
+                  <div className="flex items-center gap-2 text-sm text-red-600 bg-red-500/10 p-3 rounded-lg">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    {createScheduleError || updateScheduleError}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="schedule-name" className="text-foreground font-medium">
+                      Schedule Name *
+                    </Label>
+                    <Input
+                      id="schedule-name"
+                      placeholder="e.g., Standard Office Hours"
+                      value={scheduleForm.name}
+                      onChange={(e) => setScheduleForm({ ...scheduleForm, name: e.target.value })}
+                      className="bg-input border-border text-foreground"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="start-time" className="text-foreground font-medium">
+                        Start Time
+                      </Label>
+                      <Input
+                        id="start-time"
+                        type="time"
+                        value={scheduleForm.startTime}
+                        onChange={(e) => setScheduleForm({ ...scheduleForm, startTime: e.target.value })}
+                        className="bg-input border-border text-foreground"
                       />
-                      <span className="text-sm text-foreground capitalize">{basis}</span>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="end-time" className="text-foreground font-medium">
+                        End Time
+                      </Label>
+                      <Input
+                        id="end-time"
+                        type="time"
+                        value={scheduleForm.endTime}
+                        onChange={(e) => setScheduleForm({ ...scheduleForm, endTime: e.target.value })}
+                        className="bg-input border-border text-foreground"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Work Days */}
+                <div className="space-y-2">
+                  <Label className="text-foreground font-medium">Work Days</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {DAY_INDICES.map((dayIndex) => (
+                      <button
+                        key={dayIndex}
+                        type="button"
+                        onClick={() => toggleWorkDay(dayIndex)}
+                        className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                          scheduleForm.workDays.includes(dayIndex)
+                            ? 'bg-primary text-primary-foreground border-primary'
+                            : 'bg-input text-muted-foreground border-border hover:border-primary/50'
+                        }`}
+                      >
+                        {DAY_LABELS[dayIndex]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="break-minutes" className="text-foreground font-medium">
+                      Break (minutes)
+                    </Label>
+                    <Input
+                      id="break-minutes"
+                      type="number"
+                      min={0}
+                      value={scheduleForm.breakMinutes}
+                      onChange={(e) => setScheduleForm({ ...scheduleForm, breakMinutes: parseInt(e.target.value) || 0 })}
+                      className="bg-input border-border text-foreground"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="grace-minutes" className="text-foreground font-medium">
+                      Grace (minutes)
+                    </Label>
+                    <Input
+                      id="grace-minutes"
+                      type="number"
+                      min={0}
+                      value={scheduleForm.graceMinutes}
+                      onChange={(e) => setScheduleForm({ ...scheduleForm, graceMinutes: parseInt(e.target.value) || 0 })}
+                      className="bg-input border-border text-foreground"
+                    />
+                  </div>
+                  <div className="flex items-end pb-1">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={scheduleForm.isDefault}
+                        onChange={(e) => setScheduleForm({ ...scheduleForm, isDefault: e.target.checked })}
+                        className="rounded border-border"
+                      />
+                      <span className="text-sm text-foreground font-medium">Default schedule</span>
                     </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex justify-end gap-2 p-6 border-t border-border flex-shrink-0">
+                <Button variant="outline" size="sm" onClick={closeScheduleForm}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSaveSchedule}
+                  disabled={isCreatingSchedule || isUpdatingSchedule || !scheduleForm.name}
+                >
+                  {(isCreatingSchedule || isUpdatingSchedule) ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-1" />
+                      {editingScheduleId ? 'Update' : 'Save'} Schedule
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================ */}
+      {/* MODAL: Overtime Rule Form */}
+      {/* ================================================ */}
+      {showOTForm && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="fixed inset-0 transition-opacity" style={BACKDROP_STYLE} onClick={closeOTForm} />
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="relative transform overflow-hidden rounded-xl bg-card shadow-2xl text-left transition-all w-full max-w-2xl max-h-[90vh] flex flex-col">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-border flex-shrink-0">
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground">
+                    {editingOTRuleId ? 'Edit Overtime Rule' : 'New Overtime Rule'}
+                  </h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Configure overtime calculation and rate tiers
+                  </p>
+                </div>
+                <button
+                  onClick={closeOTForm}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                {(createOTError || updateOTError) && (
+                  <div className="flex items-center gap-2 text-sm text-red-600 bg-red-500/10 p-3 rounded-lg">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    {createOTError || updateOTError}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="ot-name" className="text-foreground font-medium">
+                    Rule Name *
+                  </Label>
+                  <Input
+                    id="ot-name"
+                    placeholder="e.g., Malaysia Standard OT"
+                    value={otForm.name}
+                    onChange={(e) => setOTForm({ ...otForm, name: e.target.value })}
+                    className="bg-input border-border text-foreground"
+                  />
+                </div>
+
+                {/* Calculation Basis */}
+                <div className="space-y-2">
+                  <Label className="text-foreground font-medium">Calculation Basis</Label>
+                  <div className="flex gap-4">
+                    {(['daily', 'weekly', 'both'] as const).map((basis) => (
+                      <label key={basis} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="calculationBasis"
+                          value={basis}
+                          checked={otForm.calculationBasis === basis}
+                          onChange={(e) => setOTForm({ ...otForm, calculationBasis: e.target.value as 'daily' | 'weekly' | 'both' })}
+                          className="border-border"
+                        />
+                        <span className="text-sm text-foreground capitalize">{basis}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Threshold fields */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {otForm.calculationBasis !== 'weekly' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="daily-threshold" className="text-foreground font-medium">
+                        Daily Threshold (hours)
+                      </Label>
+                      <Input
+                        id="daily-threshold"
+                        type="number"
+                        min={0}
+                        step={0.5}
+                        value={otForm.dailyThresholdHours}
+                        onChange={(e) => setOTForm({ ...otForm, dailyThresholdHours: parseFloat(e.target.value) || 0 })}
+                        className="bg-input border-border text-foreground"
+                      />
+                    </div>
+                  )}
+                  {otForm.calculationBasis !== 'daily' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="weekly-threshold" className="text-foreground font-medium">
+                        Weekly Threshold (hours)
+                      </Label>
+                      <Input
+                        id="weekly-threshold"
+                        type="number"
+                        min={0}
+                        step={0.5}
+                        value={otForm.weeklyThresholdHours}
+                        onChange={(e) => setOTForm({ ...otForm, weeklyThresholdHours: parseFloat(e.target.value) || 0 })}
+                        className="bg-input border-border text-foreground"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Pre-approval */}
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={otForm.requiresPreApproval}
+                    onChange={(e) => setOTForm({ ...otForm, requiresPreApproval: e.target.checked })}
+                    className="rounded border-border"
+                  />
+                  <span className="text-sm text-foreground font-medium">Requires pre-approval</span>
+                </label>
+
+                {/* Rate Tiers */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-foreground font-medium">Rate Tiers</Label>
+                    <Button variant="ghost" size="sm" onClick={addRateTier}>
+                      <Plus className="w-4 h-4 mr-1" />
+                      Add Tier
+                    </Button>
+                  </div>
+
+                  {otForm.rateTiers.map((tier, index) => (
+                    <div
+                      key={index}
+                      className="grid grid-cols-[1fr_80px_1fr_auto] gap-2 items-end"
+                    >
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Label</Label>
+                        <Input
+                          placeholder="e.g., 1.5x OT"
+                          value={tier.label}
+                          onChange={(e) => updateRateTier(index, 'label', e.target.value)}
+                          className="bg-input border-border text-foreground"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Rate</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          step={0.25}
+                          value={tier.multiplier}
+                          onChange={(e) => updateRateTier(index, 'multiplier', parseFloat(e.target.value) || 0)}
+                          className="bg-input border-border text-foreground"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Applicable On</Label>
+                        <select
+                          value={tier.applicableOn}
+                          onChange={(e) => updateRateTier(index, 'applicableOn', e.target.value)}
+                          className="flex h-10 w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                        >
+                          {APPLICABLE_ON_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeRateTier(index)}
+                        disabled={otForm.rateTiers.length <= 1}
+                        className="text-red-500 hover:text-red-600 hover:bg-red-500/10 mb-0.5"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   ))}
                 </div>
               </div>
 
-              {/* Threshold fields */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {otForm.calculationBasis !== 'weekly' && (
-                  <div className="space-y-2">
-                    <Label htmlFor="daily-threshold" className="text-foreground font-medium">
-                      Daily Threshold (hours)
-                    </Label>
-                    <Input
-                      id="daily-threshold"
-                      type="number"
-                      min={0}
-                      step={0.5}
-                      value={otForm.dailyThresholdHours}
-                      onChange={(e) => setOTForm({ ...otForm, dailyThresholdHours: parseFloat(e.target.value) || 0 })}
-                      className="bg-input border-border text-foreground"
-                    />
-                  </div>
-                )}
-                {otForm.calculationBasis !== 'daily' && (
-                  <div className="space-y-2">
-                    <Label htmlFor="weekly-threshold" className="text-foreground font-medium">
-                      Weekly Threshold (hours)
-                    </Label>
-                    <Input
-                      id="weekly-threshold"
-                      type="number"
-                      min={0}
-                      step={0.5}
-                      value={otForm.weeklyThresholdHours}
-                      onChange={(e) => setOTForm({ ...otForm, weeklyThresholdHours: parseFloat(e.target.value) || 0 })}
-                      className="bg-input border-border text-foreground"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Pre-approval */}
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={otForm.requiresPreApproval}
-                  onChange={(e) => setOTForm({ ...otForm, requiresPreApproval: e.target.checked })}
-                  className="rounded border-border"
-                />
-                <span className="text-sm text-foreground font-medium">Requires pre-approval</span>
-              </label>
-
-              {/* Rate Tiers */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-foreground font-medium">Rate Tiers</Label>
-                  <Button variant="ghost" size="sm" onClick={addRateTier}>
-                    <Plus className="w-4 h-4 mr-1" />
-                    Add Tier
-                  </Button>
-                </div>
-
-                {otForm.rateTiers.map((tier, index) => (
-                  <div
-                    key={index}
-                    className="grid grid-cols-[1fr_80px_1fr_auto] gap-2 items-end"
-                  >
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Label</Label>
-                      <Input
-                        placeholder="e.g., 1.5x OT"
-                        value={tier.label}
-                        onChange={(e) => updateRateTier(index, 'label', e.target.value)}
-                        className="bg-input border-border text-foreground"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Rate</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        step={0.25}
-                        value={tier.multiplier}
-                        onChange={(e) => updateRateTier(index, 'multiplier', parseFloat(e.target.value) || 0)}
-                        className="bg-input border-border text-foreground"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Applicable On</Label>
-                      <select
-                        value={tier.applicableOn}
-                        onChange={(e) => updateRateTier(index, 'applicableOn', e.target.value)}
-                        className="flex h-10 w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                      >
-                        {APPLICABLE_ON_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeRateTier(index)}
-                      disabled={otForm.rateTiers.length <= 1}
-                      className="text-red-500 hover:text-red-600 hover:bg-red-500/10 mb-0.5"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
+              {/* Footer */}
+              <div className="flex justify-end gap-2 p-6 border-t border-border flex-shrink-0">
                 <Button variant="outline" size="sm" onClick={closeOTForm}>
                   Cancel
                 </Button>
@@ -945,131 +1051,102 @@ export default function TimesheetSettings() {
                 </Button>
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ================================================ */}
-      {/* SECTION 3: Pay Period */}
-      {/* ================================================ */}
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Calendar className="w-5 h-5 text-primary" />
-              <div>
-                <CardTitle className="text-lg">Pay Period</CardTitle>
-                <CardDescription>Set payroll frequency and confirmation deadlines</CardDescription>
-              </div>
-            </div>
-            {!showPayPeriodForm && (
-              <Button variant="primary" size="sm" onClick={openPayPeriodForm}>
-                <Edit2 className="w-4 h-4 mr-1" />
-                {payPeriodConfig ? 'Edit' : 'Configure'}
-              </Button>
-            )}
           </div>
-        </CardHeader>
-        <CardContent>
-          {payPeriodConfig === undefined ? (
-            <div className="flex items-center gap-2 text-muted-foreground py-4">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Loading pay period configuration...
-            </div>
-          ) : !showPayPeriodForm ? (
-            payPeriodConfig === null ? (
-              <div className="text-center py-6">
-                <Calendar className="w-10 h-10 mx-auto mb-2 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground">Pay period not configured</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Set up your payroll frequency and confirmation deadlines
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="p-3 bg-muted/50 rounded-lg border border-border">
-                  <p className="text-sm text-muted-foreground">Frequency</p>
-                  <p className="font-medium text-foreground capitalize">{payPeriodConfig.frequency}</p>
-                </div>
-                <div className="p-3 bg-muted/50 rounded-lg border border-border">
-                  <p className="text-sm text-muted-foreground">Start Day</p>
-                  <p className="font-medium text-foreground">Day {payPeriodConfig.startDay}</p>
-                </div>
-                <div className="p-3 bg-muted/50 rounded-lg border border-border">
-                  <p className="text-sm text-muted-foreground">Confirmation Deadline</p>
-                  <p className="font-medium text-foreground">{payPeriodConfig.confirmationDeadlineDays} days</p>
-                </div>
-              </div>
-            )
-          ) : (
-            /* Pay period form */
-            <div className="p-4 bg-muted/30 rounded-lg border border-border space-y-4">
-              <h4 className="font-medium text-foreground">
-                {payPeriodConfig ? 'Edit Pay Period' : 'Configure Pay Period'}
-              </h4>
+        </div>
+      )}
 
-              {payPeriodError && (
-                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-500/10 p-3 rounded-lg">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  {payPeriodError}
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="pay-frequency" className="text-foreground font-medium">
-                    Frequency
-                  </Label>
-                  <select
-                    id="pay-frequency"
-                    value={payPeriodForm.frequency}
-                    onChange={(e) => setPayPeriodForm({ ...payPeriodForm, frequency: e.target.value as 'weekly' | 'biweekly' | 'monthly' })}
-                    className="flex h-10 w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="weekly">Weekly</option>
-                    <option value="biweekly">Biweekly</option>
-                    <option value="monthly">Monthly</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="start-day" className="text-foreground font-medium">
-                    Start Day
-                  </Label>
-                  <Input
-                    id="start-day"
-                    type="number"
-                    min={1}
-                    max={payPeriodForm.frequency === 'monthly' ? 28 : 7}
-                    value={payPeriodForm.startDay}
-                    onChange={(e) => setPayPeriodForm({ ...payPeriodForm, startDay: parseInt(e.target.value) || 1 })}
-                    className="bg-input border-border text-foreground"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {payPeriodForm.frequency === 'monthly'
-                      ? 'Day of month (1-28)'
-                      : 'Day of week (1=Mon, 7=Sun)'}
+      {/* ================================================ */}
+      {/* MODAL: Pay Period Form */}
+      {/* ================================================ */}
+      {showPayPeriodForm && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="fixed inset-0 transition-opacity" style={BACKDROP_STYLE} onClick={() => setShowPayPeriodForm(false)} />
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="relative transform overflow-hidden rounded-xl bg-card shadow-2xl text-left transition-all w-full max-w-lg max-h-[90vh] flex flex-col">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-border flex-shrink-0">
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground">
+                    {payPeriodConfig ? 'Edit Pay Period' : 'Configure Pay Period'}
+                  </h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Set payroll frequency and confirmation deadlines
                   </p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="deadline-days" className="text-foreground font-medium">
-                    Confirmation Deadline
-                  </Label>
-                  <Input
-                    id="deadline-days"
-                    type="number"
-                    min={1}
-                    max={14}
-                    value={payPeriodForm.confirmationDeadlineDays}
-                    onChange={(e) => setPayPeriodForm({ ...payPeriodForm, confirmationDeadlineDays: parseInt(e.target.value) || 1 })}
-                    className="bg-input border-border text-foreground"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Days after period ends to confirm timesheets
-                  </p>
+                <button
+                  onClick={() => setShowPayPeriodForm(false)}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                {payPeriodError && (
+                  <div className="flex items-center gap-2 text-sm text-red-600 bg-red-500/10 p-3 rounded-lg">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    {payPeriodError}
+                  </div>
+                )}
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="pay-frequency" className="text-foreground font-medium">
+                      Frequency
+                    </Label>
+                    <select
+                      id="pay-frequency"
+                      value={payPeriodForm.frequency}
+                      onChange={(e) => setPayPeriodForm({ ...payPeriodForm, frequency: e.target.value as 'weekly' | 'biweekly' | 'monthly' })}
+                      className="flex h-10 w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="weekly">Weekly</option>
+                      <option value="biweekly">Biweekly</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="start-day" className="text-foreground font-medium">
+                      Start Day
+                    </Label>
+                    <Input
+                      id="start-day"
+                      type="number"
+                      min={1}
+                      max={payPeriodForm.frequency === 'monthly' ? 28 : 7}
+                      value={payPeriodForm.startDay}
+                      onChange={(e) => setPayPeriodForm({ ...payPeriodForm, startDay: parseInt(e.target.value) || 1 })}
+                      className="bg-input border-border text-foreground"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {payPeriodForm.frequency === 'monthly'
+                        ? 'Day of month (1-28)'
+                        : 'Day of week (1=Mon, 7=Sun)'}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="deadline-days" className="text-foreground font-medium">
+                      Confirmation Deadline
+                    </Label>
+                    <Input
+                      id="deadline-days"
+                      type="number"
+                      min={1}
+                      max={14}
+                      value={payPeriodForm.confirmationDeadlineDays}
+                      onChange={(e) => setPayPeriodForm({ ...payPeriodForm, confirmationDeadlineDays: parseInt(e.target.value) || 1 })}
+                      className="bg-input border-border text-foreground"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Days after period ends to confirm timesheets
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              {/* Footer */}
+              <div className="flex justify-end gap-2 p-6 border-t border-border flex-shrink-0">
                 <Button variant="outline" size="sm" onClick={() => setShowPayPeriodForm(false)}>
                   Cancel
                 </Button>
@@ -1093,9 +1170,9 @@ export default function TimesheetSettings() {
                 </Button>
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
