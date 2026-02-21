@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useToast } from '@/components/ui/toast'
 import { useActiveBusiness } from '@/contexts/business-context'
 import {
   useWorkSchedules,
@@ -14,6 +15,7 @@ import {
   useDeleteWorkSchedule,
   useOvertimeRules,
   useCreateOvertimeRule,
+  useUpdateOvertimeRule,
   usePayPeriodConfig,
   useCreateOrUpdatePayPeriod,
   useMembersAttendanceStatus,
@@ -79,7 +81,9 @@ export default function TimesheetSettings() {
   const { updateWorkSchedule, isLoading: isUpdatingSchedule, error: updateScheduleError } = useUpdateWorkSchedule()
   const { deleteWorkSchedule, isLoading: isDeletingSchedule } = useDeleteWorkSchedule()
   const { createOvertimeRule, isLoading: isCreatingOT, error: createOTError } = useCreateOvertimeRule()
+  const { updateOvertimeRule, isLoading: isUpdatingOT, error: updateOTError } = useUpdateOvertimeRule()
   const { createOrUpdatePayPeriod, isLoading: isSavingPayPeriod, error: payPeriodError } = useCreateOrUpdatePayPeriod()
+  const { addToast } = useToast()
 
   // Schedule form state
   const [showScheduleForm, setShowScheduleForm] = useState(false)
@@ -88,6 +92,7 @@ export default function TimesheetSettings() {
 
   // Overtime form state
   const [showOTForm, setShowOTForm] = useState(false)
+  const [editingOTRuleId, setEditingOTRuleId] = useState<string | null>(null)
   const [otForm, setOTForm] = useState(DEFAULT_OT_FORM)
 
   // Pay period form state
@@ -155,6 +160,7 @@ export default function TimesheetSettings() {
           graceMinutes: scheduleForm.graceMinutes,
           isDefault: scheduleForm.isDefault,
         })
+        addToast({ type: 'success', title: 'Work schedule updated' })
       } else {
         await createWorkSchedule({
           businessId,
@@ -166,18 +172,20 @@ export default function TimesheetSettings() {
           graceMinutes: scheduleForm.graceMinutes,
           isDefault: scheduleForm.isDefault,
         })
+        addToast({ type: 'success', title: 'Work schedule created' })
       }
       closeScheduleForm()
-    } catch {
-      // Error is tracked in the hook
+    } catch (err) {
+      addToast({ type: 'error', title: err instanceof Error ? err.message : 'Failed to save work schedule' })
     }
   }
 
   const handleDeleteSchedule = async (id: string) => {
     try {
       await deleteWorkSchedule(id)
-    } catch {
-      // Error is tracked in the hook
+      addToast({ type: 'success', title: 'Work schedule deleted' })
+    } catch (err) {
+      addToast({ type: 'error', title: err instanceof Error ? err.message : 'Failed to delete work schedule' })
     }
   }
 
@@ -185,8 +193,35 @@ export default function TimesheetSettings() {
   // OVERTIME HANDLERS
   // ============================================
 
+  const openOTForm = (rule?: {
+    _id: string
+    name: string
+    calculationBasis: string
+    dailyThresholdHours?: number
+    weeklyThresholdHours?: number
+    requiresPreApproval: boolean
+    rateTiers: { label: string; multiplier: number; applicableOn: string }[]
+  }) => {
+    if (rule) {
+      setEditingOTRuleId(rule._id)
+      setOTForm({
+        name: rule.name,
+        calculationBasis: rule.calculationBasis as 'daily' | 'weekly' | 'both',
+        dailyThresholdHours: rule.dailyThresholdHours ?? 8,
+        weeklyThresholdHours: rule.weeklyThresholdHours ?? 40,
+        requiresPreApproval: rule.requiresPreApproval,
+        rateTiers: rule.rateTiers.map((t) => ({ ...t })),
+      })
+    } else {
+      setEditingOTRuleId(null)
+      setOTForm({ ...DEFAULT_OT_FORM, rateTiers: [{ label: 'Standard OT', multiplier: 1.5, applicableOn: 'weekday_ot' }] })
+    }
+    setShowOTForm(true)
+  }
+
   const closeOTForm = () => {
     setShowOTForm(false)
+    setEditingOTRuleId(null)
     setOTForm({ ...DEFAULT_OT_FORM, rateTiers: [{ label: 'Standard OT', multiplier: 1.5, applicableOn: 'weekday_ot' }] })
   }
 
@@ -217,18 +252,40 @@ export default function TimesheetSettings() {
     if (!businessId || !otForm.name || otForm.rateTiers.length === 0) return
 
     try {
-      await createOvertimeRule({
-        businessId,
-        name: otForm.name,
-        calculationBasis: otForm.calculationBasis,
-        dailyThresholdHours: otForm.calculationBasis !== 'weekly' ? otForm.dailyThresholdHours : undefined,
-        weeklyThresholdHours: otForm.calculationBasis !== 'daily' ? otForm.weeklyThresholdHours : undefined,
-        requiresPreApproval: otForm.requiresPreApproval,
-        rateTiers: otForm.rateTiers,
-      })
+      if (editingOTRuleId) {
+        await updateOvertimeRule(editingOTRuleId, {
+          name: otForm.name,
+          calculationBasis: otForm.calculationBasis,
+          dailyThresholdHours: otForm.calculationBasis !== 'weekly' ? otForm.dailyThresholdHours : undefined,
+          weeklyThresholdHours: otForm.calculationBasis !== 'daily' ? otForm.weeklyThresholdHours : undefined,
+          requiresPreApproval: otForm.requiresPreApproval,
+          rateTiers: otForm.rateTiers,
+        })
+        addToast({ type: 'success', title: 'Overtime rule updated' })
+      } else {
+        await createOvertimeRule({
+          businessId,
+          name: otForm.name,
+          calculationBasis: otForm.calculationBasis,
+          dailyThresholdHours: otForm.calculationBasis !== 'weekly' ? otForm.dailyThresholdHours : undefined,
+          weeklyThresholdHours: otForm.calculationBasis !== 'daily' ? otForm.weeklyThresholdHours : undefined,
+          requiresPreApproval: otForm.requiresPreApproval,
+          rateTiers: otForm.rateTiers,
+        })
+        addToast({ type: 'success', title: 'Overtime rule created' })
+      }
       closeOTForm()
-    } catch {
-      // Error is tracked in the hook
+    } catch (err) {
+      addToast({ type: 'error', title: err instanceof Error ? err.message : 'Failed to save overtime rule' })
+    }
+  }
+
+  const handleDeleteOTRule = async (id: string) => {
+    try {
+      await updateOvertimeRule(id, { isActive: false })
+      addToast({ type: 'success', title: 'Overtime rule deleted' })
+    } catch (err) {
+      addToast({ type: 'error', title: err instanceof Error ? err.message : 'Failed to delete overtime rule' })
     }
   }
 
@@ -257,9 +314,10 @@ export default function TimesheetSettings() {
         startDay: payPeriodForm.startDay,
         confirmationDeadlineDays: payPeriodForm.confirmationDeadlineDays,
       })
+      addToast({ type: 'success', title: 'Pay period saved' })
       setShowPayPeriodForm(false)
-    } catch {
-      // Error is tracked in the hook
+    } catch (err) {
+      addToast({ type: 'error', title: err instanceof Error ? err.message : 'Failed to save pay period' })
     }
   }
 
@@ -341,7 +399,14 @@ export default function TimesheetSettings() {
                       role="switch"
                       aria-checked={member.isAttendanceTracked}
                       disabled={isTogglingTracking}
-                      onClick={() => toggleAttendanceTracking(member.membershipId, !member.isAttendanceTracked)}
+                      onClick={async () => {
+                        try {
+                          await toggleAttendanceTracking(member.membershipId, !member.isAttendanceTracked)
+                          addToast({ type: 'success', title: `Tracking ${!member.isAttendanceTracked ? 'enabled' : 'disabled'} for ${member.fullName}` })
+                        } catch (err) {
+                          addToast({ type: 'error', title: err instanceof Error ? err.message : 'Failed to update tracking' })
+                        }
+                      }}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${
                         member.isAttendanceTracked ? 'bg-primary' : 'bg-muted-foreground/30'
                       } ${isTogglingTracking ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -610,7 +675,7 @@ export default function TimesheetSettings() {
               </div>
             </div>
             {!showOTForm && (
-              <Button variant="primary" size="sm" onClick={() => setShowOTForm(true)}>
+              <Button variant="primary" size="sm" onClick={() => openOTForm()}>
                 <Plus className="w-4 h-4 mr-1" />
                 Add Rule
               </Button>
@@ -648,10 +713,31 @@ export default function TimesheetSettings() {
                   className="p-4 bg-muted/50 rounded-lg border border-border space-y-2"
                 >
                   <div className="flex items-center justify-between">
-                    <p className="font-medium text-foreground">{rule.name}</p>
-                    <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full capitalize">
-                      {rule.calculationBasis}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-foreground">{rule.name}</p>
+                      <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full capitalize">
+                        {rule.calculationBasis}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openOTForm(rule)}
+                        className="text-muted-foreground hover:text-foreground"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteOTRule(rule._id)}
+                        disabled={isUpdatingOT}
+                        className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                     {rule.dailyThresholdHours != null && (
@@ -682,12 +768,14 @@ export default function TimesheetSettings() {
           {/* Inline OT rule form */}
           {showOTForm && (
             <div className="p-4 bg-muted/30 rounded-lg border border-border space-y-4">
-              <h4 className="font-medium text-foreground">New Overtime Rule</h4>
+              <h4 className="font-medium text-foreground">
+                {editingOTRuleId ? 'Edit Overtime Rule' : 'New Overtime Rule'}
+              </h4>
 
-              {createOTError && (
+              {(createOTError || updateOTError) && (
                 <div className="flex items-center gap-2 text-sm text-red-600 bg-red-500/10 p-3 rounded-lg">
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  {createOTError}
+                  {createOTError || updateOTError}
                 </div>
               )}
 
@@ -841,9 +929,9 @@ export default function TimesheetSettings() {
                   variant="primary"
                   size="sm"
                   onClick={handleSaveOTRule}
-                  disabled={isCreatingOT || !otForm.name || otForm.rateTiers.length === 0}
+                  disabled={isCreatingOT || isUpdatingOT || !otForm.name || otForm.rateTiers.length === 0}
                 >
-                  {isCreatingOT ? (
+                  {(isCreatingOT || isUpdatingOT) ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-1 animate-spin" />
                       Saving...
@@ -851,7 +939,7 @@ export default function TimesheetSettings() {
                   ) : (
                     <>
                       <Save className="w-4 h-4 mr-1" />
-                      Save Rule
+                      {editingOTRuleId ? 'Update' : 'Save'} Rule
                     </>
                   )}
                 </Button>
