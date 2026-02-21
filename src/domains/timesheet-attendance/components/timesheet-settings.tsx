@@ -688,7 +688,7 @@ export default function TimesheetSettings() {
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="fixed inset-0 transition-opacity" style={BACKDROP_STYLE} onClick={closeScheduleForm} />
           <div className="flex min-h-full items-center justify-center p-4">
-            <div className="relative transform overflow-hidden rounded-xl bg-card shadow-2xl text-left transition-all w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="relative transform overflow-hidden rounded-xl bg-card shadow-2xl text-left transition-all w-full max-w-[470px] min-h-[75vh] max-h-[95vh] flex flex-col">
               {/* Header */}
               <div className="flex items-center justify-between p-6 border-b border-border flex-shrink-0">
                 <div>
@@ -855,7 +855,7 @@ export default function TimesheetSettings() {
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="fixed inset-0 transition-opacity" style={BACKDROP_STYLE} onClick={closeOTForm} />
           <div className="flex min-h-full items-center justify-center p-4">
-            <div className="relative transform overflow-hidden rounded-xl bg-card shadow-2xl text-left transition-all w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="relative transform overflow-hidden rounded-xl bg-card shadow-2xl text-left transition-all w-full max-w-[470px] min-h-[75vh] max-h-[95vh] flex flex-col">
               {/* Header */}
               <div className="flex items-center justify-between p-6 border-b border-border flex-shrink-0">
                 <div>
