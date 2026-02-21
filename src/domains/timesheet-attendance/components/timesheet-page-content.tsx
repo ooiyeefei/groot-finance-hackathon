@@ -17,6 +17,7 @@ import {
   Calendar,
   AlertTriangle,
   CheckCircle,
+  Info,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -139,6 +140,36 @@ export default function TimesheetPageContent() {
           <p className="text-muted-foreground">
             Please select a business to view your timesheets.
           </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // ---- Tracking status still loading ----
+  if (trackingStatus === undefined) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  // ---- Attendance tracking not enabled for this employee ----
+  if (!isTracked) {
+    return (
+      <Card className="bg-card border-border">
+        <CardContent className="p-8">
+          <div className="flex flex-col items-center justify-center text-center">
+            <div className="rounded-full bg-muted p-3 mb-4">
+              <Info className="h-6 w-6 text-muted-foreground" />
+            </div>
+            <p className="text-sm font-medium text-foreground">
+              Attendance tracking is not enabled for your account
+            </p>
+            <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+              Contact your administrator to enable timesheet and attendance tracking.
+            </p>
+          </div>
         </CardContent>
       </Card>
     )
