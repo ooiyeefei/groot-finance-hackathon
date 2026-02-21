@@ -20,6 +20,7 @@ import {
   calculateTrialProgress,
 } from '@/domains/billing/hooks/use-subscription'
 import { CreditCard, Check, ExternalLink, Loader2, AlertCircle, RefreshCw, Sparkles, Star, Zap, ChevronDown, ChevronUp } from 'lucide-react'
+import { ComingSoonBadge } from '@/components/ui/coming-soon-badge'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import InvoiceList from '@/domains/billing/components/invoice-list'
@@ -420,12 +421,21 @@ export default function BillingSettingsContent() {
                     return (
                       <>
                         <ul className="space-y-3">
-                          {displayFeatures.map((feature, index) => (
-                            <li key={index} className="flex items-center gap-2.5">
-                              <Check className="w-5 h-5 text-green-600 dark:text-green-400" />
-                              <span className="text-foreground text-base">{feature}</span>
-                            </li>
-                          ))}
+                          {displayFeatures.map((feature, index) => {
+                            const isEInvoice = /e-invoice|einvoice|lhdn|peppol/i.test(feature)
+                            const displayLabel = isEInvoice
+                              ? feature.replace(/LHDN e-Invoice|e-Invoice \(Peppol\)|e-Invoice/i, 'e-Invoice')
+                              : feature
+                            return (
+                              <li key={index} className="flex items-center gap-2.5">
+                                <Check className="w-5 h-5 text-green-600 dark:text-green-400" />
+                                <span className="text-foreground text-base">
+                                  {displayLabel}
+                                  {isEInvoice && <ComingSoonBadge className="ml-1.5" />}
+                                </span>
+                              </li>
+                            )
+                          })}
                         </ul>
                         {hasMore && (
                           <button
