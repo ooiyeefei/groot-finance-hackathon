@@ -37,6 +37,11 @@ git config user.email "dev@hellogroot.com"
 ```
 **All commits must use this identity** - Vercel deployments require it.
 
+**NEVER use `gh pr merge` to merge into main.** GitHub PR merges create a merge commit authored by the GitHub account that owns the token (e.g. `ooiyeefei`), NOT the local git config. This breaks Vercel deployments which require the `grootdev-ai` author. Instead:
+1. Merge locally: `git merge --ff-only <branch>` (fast-forward, no merge commit)
+2. Or cherry-pick: `git cherry-pick <commit>` then push directly to main
+3. If a PR merge already happened with wrong author: cherry-pick the feature commit onto main and `git push --force-with-lease`
+
 ### Build-Fix Loop
 ```bash
 npm run build  # MUST pass before task completion
