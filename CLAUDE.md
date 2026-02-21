@@ -53,12 +53,26 @@ Fix errors and repeat until successful.
   - Adding new Convex modules
 - **Common failure**: Forgetting to deploy to prod after Convex changes — causes "Could not find public function" errors in production
 
-### AWS CDK
+### AWS CDK & Infrastructure (CRITICAL)
 ```bash
 cd infra
 npx cdk deploy --profile groot-finanseal --region us-west-2
 ```
-**Never make ad-hoc CLI changes** - all infrastructure via CDK.
+**Never make ad-hoc CLI changes** — all infrastructure via CDK.
+
+**Add to existing stacks**: When adding/updating AWS resources, always add to an existing CDK stack in `infra/lib/`. Do not create new stacks unless the resource is logically independent and approved.
+
+**Security — IAM authentication required on all resources**:
+- **All Lambda functions** must be secured with IAM-based invocation. No public Function URLs, no unauthenticated API Gateway endpoints.
+- **Vercel invocation**: Always use the existing OIDC role `arn:aws:iam::837224017779:role/FinanSEAL-Vercel-S3-Role`. Add `addPermission()` on the Lambda alias with this role as principal.
+- **New IAM permissions**: If a feature requires new permissions on the Vercel OIDC role (e.g., invoking a new Lambda, accessing a new S3 bucket), do NOT modify the role directly. Instead, report back to the user with the exact policy statement needed so they can update the role manually.
+- **Lambda execution role**: Use least-privilege — scope IAM actions to specific resource ARNs and add conditions where possible (e.g., `cloudwatch:namespace` condition for `PutMetricData`).
+
+**Cost optimization — free tier first**:
+- Always prefer AWS free tier and cost-optimized options when architecting solutions, balanced with performance requirements.
+- Examples: SSM Parameter Store SecureString (free) over Secrets Manager ($0.40/secret/month), CloudWatch Logs with retention limits, ARM_64 Lambda architecture (cheaper than x86_64).
+- When multiple AWS services can solve a problem, choose the cheapest option that meets performance requirements and document the cost trade-off.
+- Mark `@aws-sdk/*` as `externalModules` in Lambda bundling — use the runtime-provided SDK to reduce bundle size and cold start time.
 
 ### No Screenshots or Binary Files in Git
 - **Never commit** `.png`, `.jpg`, `.gif`, or other screenshot/image files to the repo
@@ -141,6 +155,8 @@ formatBusinessDate('2025-10-31')  // "Oct 31, 2025" (no timezone shift)
 - TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, React 19.1.2, Convex 1.31.3, lucide-react (icons) (001-peppol-submission-ui)
 - Convex (document database with real-time subscriptions) — schema already deployed (001-peppol-submission-ui)
 - TypeScript 5.9.3 + Next.js 15.5.7, React 19.1.2, Convex 1.31.3, Radix UI, Zod 3.23.8 (e-inv-ui-forms)
+- TypeScript 5.9.3, Node.js 20.x (Lambda runtime) + `node:crypto` (built-in), `@aws-sdk/client-ssm`, `aws-cdk-lib` (CDK v2.175.0) (001-digital-signature-infra)
+- AWS SSM Parameter Store SecureString (free standard tier) for private key and certificate (001-digital-signature-infra)
 
 ## Recent Changes
 - 001-category-3-mcp: Added MCP Server with API key management
