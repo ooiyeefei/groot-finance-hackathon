@@ -1488,6 +1488,317 @@ export const retryPeppolTransmission = mutation({
 });
 
 // ============================================
+// CREDIT NOTE MUTATIONS & QUERIES (001-peppol-integrate)
+// ============================================
+
+/**
+ * Create a credit note linked to a parent invoice.
+ * Generates a "CN-{originalInvoiceNumber}-{sequence}" number.
+ */
+export const createCreditNote = mutation({
+  args: {
+    originalInvoiceId: v.id("sales_invoices"),
+    businessId: v.id("businesses"),
+    lineItems: v.array(v.object({
+      lineOrder: v.number(),
+      description: v.string(),
+      quantity: v.number(),
+      unitPrice: v.number(),
+      totalAmount: v.number(),
+      taxRate: v.optional(v.number()),
+      taxAmount: v.optional(v.number()),
+      currency: v.string(),
+    })),
+    creditNoteReason: v.string(),
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireFinanceAdmin(ctx, args.businessId);
+
+    // Validate original invoice
+    const originalInvoice = await ctx.db.get(args.originalInvoiceId);
+    if (!originalInvoice || originalInvoice.businessId !== args.businessId || originalInvoice.deletedAt) {
+      throw new Error("Original invoice not found");
+    }
+
+    if (!["sent", "paid", "overdue", "partially_paid"].includes(originalInvoice.status)) {
+      throw new Error("Can only create credit notes for sent, paid, or overdue invoices");
+    }
+
+    if (args.lineItems.length === 0) {
+      throw new Error("At least one line item is required");
+    }
+
+    // Calculate credit note totals
+    const subtotal = args.lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+    const totalTax = args.lineItems.reduce((sum, item) => sum + (item.taxAmount ?? 0), 0);
+    const totalAmount = args.lineItems.reduce((sum, item) => sum + item.totalAmount, 0);
+
+    if (totalAmount <= 0) {
+      throw new Error("Credit note total must be greater than 0");
+    }
+
+    // Check total credited doesn't exceed original invoice
+    const existingCreditNotes = await ctx.db
+      .query("sales_invoices")
+      .withIndex("by_originalInvoiceId", (q) =>
+        q.eq("originalInvoiceId", args.originalInvoiceId)
+      )
+      .collect();
+
+    const totalExistingCredit = existingCreditNotes
+      .filter((cn) => !cn.deletedAt)
+      .reduce((sum, cn) => sum + cn.totalAmount, 0);
+
+    if (totalExistingCredit + totalAmount > originalInvoice.totalAmount) {
+      throw new Error(
+        `Credit note total (${totalAmount}) plus existing credits (${totalExistingCredit}) exceeds original invoice total (${originalInvoice.totalAmount})`
+      );
+    }
+
+    // Generate credit note number: CN-{originalInvoiceNumber}-{sequence}
+    const sequence = existingCreditNotes.filter((cn) => !cn.deletedAt).length + 1;
+    const creditNoteNumber = `CN-${originalInvoice.invoiceNumber}-${sequence}`;
+
+    // Create credit note
+    const creditNoteId = await ctx.db.insert("sales_invoices", {
+      businessId: args.businessId,
+      userId: user._id,
+      invoiceNumber: creditNoteNumber,
+      customerId: originalInvoice.customerId,
+      customerSnapshot: originalInvoice.customerSnapshot,
+      lineItems: args.lineItems.map((item) => ({
+        ...item,
+        discountType: undefined,
+        discountValue: undefined,
+        discountAmount: undefined,
+      })),
+      subtotal: Math.round(subtotal * 100) / 100,
+      totalTax: Math.round(totalTax * 100) / 100,
+      totalAmount: Math.round(totalAmount * 100) / 100,
+      balanceDue: Math.round(totalAmount * 100) / 100,
+      currency: originalInvoice.currency,
+      taxMode: originalInvoice.taxMode,
+      invoiceDate: new Date().toISOString().split("T")[0],
+      dueDate: new Date().toISOString().split("T")[0],
+      paymentTerms: "due_on_receipt",
+      status: "draft",
+      notes: args.notes,
+      einvoiceType: "credit_note",
+      originalInvoiceId: args.originalInvoiceId,
+      creditNoteReason: args.creditNoteReason,
+      updatedAt: Date.now(),
+    });
+
+    return { creditNoteId };
+  },
+});
+
+/**
+ * Get all credit notes linked to a parent invoice.
+ */
+export const getCreditNotesForInvoice = query({
+  args: {
+    invoiceId: v.id("sales_invoices"),
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) return [];
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") return [];
+
+    const creditNotes = await ctx.db
+      .query("sales_invoices")
+      .withIndex("by_originalInvoiceId", (q) =>
+        q.eq("originalInvoiceId", args.invoiceId)
+      )
+      .collect();
+
+    return creditNotes
+      .filter((cn) => !cn.deletedAt)
+      .map((cn) => ({
+        _id: cn._id,
+        invoiceNumber: cn.invoiceNumber,
+        totalAmount: cn.totalAmount,
+        status: cn.status,
+        peppolStatus: cn.peppolStatus,
+        creditNoteReason: cn.creditNoteReason,
+        _creationTime: cn._creationTime,
+      }));
+  },
+});
+
+/**
+ * Get net outstanding amount for an invoice (original - total credited).
+ */
+export const getNetOutstandingAmount = query({
+  args: {
+    invoiceId: v.id("sales_invoices"),
+  },
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice) return null;
+
+    const creditNotes = await ctx.db
+      .query("sales_invoices")
+      .withIndex("by_originalInvoiceId", (q) =>
+        q.eq("originalInvoiceId", args.invoiceId)
+      )
+      .collect();
+
+    const totalCredited = creditNotes
+      .filter((cn) => !cn.deletedAt)
+      .reduce((sum, cn) => sum + cn.totalAmount, 0);
+
+    return {
+      originalAmount: invoice.totalAmount,
+      totalCredited: Math.round(totalCredited * 100) / 100,
+      netOutstanding: Math.round((invoice.totalAmount - totalCredited) * 100) / 100,
+    };
+  },
+});
+
+// ============================================
+// PEPPOL STATUS UPDATE (Internal — called by webhook handler)
+// ============================================
+
+/**
+ * Update Peppol status from webhook events.
+ * Called by the Next.js webhook handler via ConvexHttpClient.
+ * Auth is handled at the API route level (webhook secret verification).
+ *
+ * Status transitions are one-directional:
+ * pending → transmitted → delivered
+ * pending → failed
+ * failed → pending (via retry)
+ *
+ * Idempotency: If invoice already has a later status, ignore earlier events.
+ */
+export const updatePeppolStatus = mutation({
+  args: {
+    peppolDocumentId: v.string(),
+    status: v.string(),
+    timestamp: v.number(),
+    errors: v.optional(v.array(v.object({
+      code: v.string(),
+      message: v.string(),
+    }))),
+  },
+  handler: async (ctx, args) => {
+    // Find invoice by peppolDocumentId
+    const invoices = await ctx.db
+      .query("sales_invoices")
+      .filter((q) =>
+        q.eq(q.field("peppolDocumentId"), args.peppolDocumentId)
+      )
+      .collect();
+
+    const invoice = invoices[0];
+    if (!invoice) {
+      console.warn(
+        `[Peppol Webhook] No invoice found for peppolDocumentId: ${args.peppolDocumentId}`
+      );
+      return;
+    }
+
+    // Status priority for idempotency
+    const statusPriority: Record<string, number> = {
+      pending: 0,
+      transmitted: 1,
+      delivered: 2,
+      failed: 1, // Same level as transmitted
+    };
+
+    const currentPriority = statusPriority[invoice.peppolStatus ?? "pending"] ?? 0;
+    const newPriority = statusPriority[args.status] ?? 0;
+
+    // Don't downgrade status (e.g., don't overwrite "delivered" with "transmitted")
+    if (
+      invoice.peppolStatus === "delivered" ||
+      (invoice.peppolStatus === "failed" && args.status !== "pending") ||
+      newPriority < currentPriority
+    ) {
+      console.log(
+        `[Peppol Webhook] Ignoring ${args.status} for invoice ${invoice._id} (current: ${invoice.peppolStatus})`
+      );
+      return;
+    }
+
+    const updates: Record<string, unknown> = {
+      peppolStatus: args.status,
+      updatedAt: Date.now(),
+    };
+
+    if (args.status === "transmitted") {
+      updates.peppolTransmittedAt = args.timestamp;
+    } else if (args.status === "delivered") {
+      updates.peppolDeliveredAt = args.timestamp;
+    } else if (args.status === "failed") {
+      updates.peppolErrors = args.errors ?? [];
+    }
+
+    await ctx.db.patch(invoice._id, updates);
+
+    console.log(
+      `[Peppol Webhook] Updated invoice ${invoice._id} peppolStatus: ${invoice.peppolStatus} → ${args.status}`
+    );
+  },
+});
+
+/**
+ * Set Peppol document ID and status after successful Storecove submission.
+ * Called by the transmit API route via ConvexHttpClient.
+ * Auth is handled at the API route level (Clerk session verification).
+ */
+export const setPeppolDocumentId = mutation({
+  args: {
+    invoiceId: v.id("sales_invoices"),
+    peppolDocumentId: v.string(),
+    peppolStatus: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.invoiceId, {
+      peppolDocumentId: args.peppolDocumentId,
+      peppolStatus: args.peppolStatus as "pending",
+      peppolTransmittedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+/**
+ * Set Peppol errors on an invoice after a failed submission attempt.
+ * Called by the transmit/retry API routes via ConvexHttpClient.
+ */
+export const setPeppolErrors = mutation({
+  args: {
+    invoiceId: v.id("sales_invoices"),
+    errors: v.array(v.object({
+      code: v.string(),
+      message: v.string(),
+    })),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.invoiceId, {
+      peppolStatus: "failed",
+      peppolErrors: args.errors,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// ============================================
 // HELPER FUNCTIONS
 // ============================================
 

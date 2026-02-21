@@ -456,3 +456,111 @@ export const EINVOICE_TYPES = {
 
 export type EinvoiceType = typeof EINVOICE_TYPES[keyof typeof EINVOICE_TYPES];
 export const EINVOICE_TYPE_VALUES = Object.values(EINVOICE_TYPES);
+
+// ============================================
+// ATTENDANCE RECORD STATUSES (018-timesheet-attendance)
+// ============================================
+
+export const ATTENDANCE_RECORD_STATUSES = {
+  COMPLETE: "complete",
+  INCOMPLETE: "incomplete",
+  FLAGGED: "flagged",
+  AUTO_CLOSED: "auto_closed",
+} as const;
+
+export type AttendanceRecordStatus = typeof ATTENDANCE_RECORD_STATUSES[keyof typeof ATTENDANCE_RECORD_STATUSES];
+export const ATTENDANCE_RECORD_STATUS_VALUES = Object.values(ATTENDANCE_RECORD_STATUSES);
+
+// ============================================
+// ATTENDANCE STATUSES (018-timesheet-attendance)
+// ============================================
+
+export const ATTENDANCE_STATUSES = {
+  PRESENT: "present",
+  LATE: "late",
+  EARLY_DEPARTURE: "early_departure",
+  ABSENT: "absent",
+} as const;
+
+export type AttendanceStatus = typeof ATTENDANCE_STATUSES[keyof typeof ATTENDANCE_STATUSES];
+export const ATTENDANCE_STATUS_VALUES = Object.values(ATTENDANCE_STATUSES);
+
+// ============================================
+// ATTENDANCE SOURCE (018-timesheet-attendance)
+// ============================================
+
+export const ATTENDANCE_SOURCES = {
+  AUTO: "auto",
+  MANUAL: "manual",
+  SYSTEM: "system",
+} as const;
+
+export type AttendanceSource = typeof ATTENDANCE_SOURCES[keyof typeof ATTENDANCE_SOURCES];
+export const ATTENDANCE_SOURCE_VALUES = Object.values(ATTENDANCE_SOURCES);
+
+// ============================================
+// TIMESHEET STATUSES (018-timesheet-attendance)
+// ============================================
+
+export const TIMESHEET_STATUSES = {
+  DRAFT: "draft",
+  CONFIRMED: "confirmed",
+  APPROVED: "approved",
+  FINALIZED: "finalized",
+  LOCKED: "locked",
+} as const;
+
+export type TimesheetStatus = typeof TIMESHEET_STATUSES[keyof typeof TIMESHEET_STATUSES];
+export const TIMESHEET_STATUS_VALUES = Object.values(TIMESHEET_STATUSES);
+
+// ============================================
+// TIMESHEET CONFIRMED BY (018-timesheet-attendance)
+// ============================================
+
+export const TIMESHEET_CONFIRMED_BY = {
+  EMPLOYEE: "employee",
+  SYSTEM: "system",
+} as const;
+
+export type TimesheetConfirmedBy = typeof TIMESHEET_CONFIRMED_BY[keyof typeof TIMESHEET_CONFIRMED_BY];
+export const TIMESHEET_CONFIRMED_BY_VALUES = Object.values(TIMESHEET_CONFIRMED_BY);
+
+// ============================================
+// PAY PERIOD FREQUENCY (018-timesheet-attendance)
+// ============================================
+
+export const PAY_PERIOD_FREQUENCIES = {
+  WEEKLY: "weekly",
+  BIWEEKLY: "biweekly",
+  MONTHLY: "monthly",
+} as const;
+
+export type PayPeriodFrequency = typeof PAY_PERIOD_FREQUENCIES[keyof typeof PAY_PERIOD_FREQUENCIES];
+export const PAY_PERIOD_FREQUENCY_VALUES = Object.values(PAY_PERIOD_FREQUENCIES);
+
+// ============================================
+// PAYROLL ADJUSTMENT TYPES (018-timesheet-attendance)
+// ============================================
+
+export const PAYROLL_ADJUSTMENT_TYPES = {
+  HOURS_ADD: "hours_add",
+  HOURS_DEDUCT: "hours_deduct",
+  OT_ADD: "ot_add",
+  OT_DEDUCT: "ot_deduct",
+} as const;
+
+export type PayrollAdjustmentType = typeof PAYROLL_ADJUSTMENT_TYPES[keyof typeof PAYROLL_ADJUSTMENT_TYPES];
+export const PAYROLL_ADJUSTMENT_TYPE_VALUES = Object.values(PAYROLL_ADJUSTMENT_TYPES);
+
+// ============================================
+// OVERTIME CALCULATION BASIS (018-timesheet-attendance)
+// ============================================
+
+export const OVERTIME_CALCULATION_BASIS = {
+  DAILY: "daily",
+  WEEKLY: "weekly",
+  BOTH: "both",
+} as const;
+
+export type OvertimeCalculationBasis = typeof OVERTIME_CALCULATION_BASIS[keyof typeof OVERTIME_CALCULATION_BASIS];
+export const OVERTIME_CALCULATION_BASIS_VALUES = Object.values(OVERTIME_CALCULATION_BASIS);

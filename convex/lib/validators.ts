@@ -41,6 +41,14 @@ import {
   LHDN_STATUS_VALUES,
   PEPPOL_STATUS_VALUES,
   EINVOICE_TYPE_VALUES,
+  ATTENDANCE_RECORD_STATUS_VALUES,
+  ATTENDANCE_STATUS_VALUES,
+  ATTENDANCE_SOURCE_VALUES,
+  TIMESHEET_STATUS_VALUES,
+  TIMESHEET_CONFIRMED_BY_VALUES,
+  PAY_PERIOD_FREQUENCY_VALUES,
+  PAYROLL_ADJUSTMENT_TYPE_VALUES,
+  OVERTIME_CALCULATION_BASIS_VALUES,
 } from "../../src/lib/constants/statuses";
 
 // ============================================
@@ -263,3 +271,55 @@ export const peppolStatusValidator = literalUnion(PEPPOL_STATUS_VALUES);
  * Classification: invoice, credit_note, debit_note, refund_note
  */
 export const einvoiceTypeValidator = literalUnion(EINVOICE_TYPE_VALUES);
+
+// ============================================
+// TIMESHEET & ATTENDANCE VALIDATORS (018-timesheet-attendance)
+// ============================================
+
+/**
+ * Attendance record status validator
+ * Lifecycle: incomplete → complete/auto_closed/flagged
+ */
+export const attendanceRecordStatusValidator = literalUnion(ATTENDANCE_RECORD_STATUS_VALUES);
+
+/**
+ * Attendance status validator
+ * Classification: present, late, early_departure, absent
+ */
+export const attendanceStatusValidator = literalUnion(ATTENDANCE_STATUS_VALUES);
+
+/**
+ * Attendance source validator
+ * How the record was created: auto (check-in), manual (employee edit), system (auto-close)
+ */
+export const attendanceSourceValidator = literalUnion(ATTENDANCE_SOURCE_VALUES);
+
+/**
+ * Timesheet status validator
+ * Lifecycle: draft → confirmed → approved → finalized → locked
+ */
+export const timesheetStatusValidator = literalUnion(TIMESHEET_STATUS_VALUES);
+
+/**
+ * Timesheet confirmed by validator
+ * employee (manual confirm) or system (auto-confirm past deadline)
+ */
+export const timesheetConfirmedByValidator = literalUnion(TIMESHEET_CONFIRMED_BY_VALUES);
+
+/**
+ * Pay period frequency validator
+ * weekly, biweekly, or monthly
+ */
+export const payPeriodFrequencyValidator = literalUnion(PAY_PERIOD_FREQUENCY_VALUES);
+
+/**
+ * Payroll adjustment type validator
+ * hours_add, hours_deduct, ot_add, ot_deduct
+ */
+export const payrollAdjustmentTypeValidator = literalUnion(PAYROLL_ADJUSTMENT_TYPE_VALUES);
+
+/**
+ * Overtime calculation basis validator
+ * daily, weekly, or both
+ */
+export const overtimeCalculationBasisValidator = literalUnion(OVERTIME_CALCULATION_BASIS_VALUES);

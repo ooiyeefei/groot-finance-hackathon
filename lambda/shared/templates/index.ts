@@ -434,6 +434,201 @@ const TEMPLATES: Record<string, string> = {
   </div>
 </body>
 </html>`,
+
+  // ── Notification Templates (018-app-email-notif) ──────────────────
+
+  notification_approval_request: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Expense Claim Requires Approval</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #1a1a1a; background-color: #f5f5f5; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
+    .card { background: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
+    .logo { text-align: center; margin-bottom: 32px; }
+    .logo-text { font-size: 24px; font-weight: 700; color: #0066cc; }
+    h1 { font-size: 24px; font-weight: 600; margin: 0 0 16px; color: #1a1a1a; }
+    p { margin: 0 0 16px; color: #4a4a4a; }
+    .highlight { background: #fff8e1; border-left: 4px solid #f59e0b; border-radius: 0 8px 8px 0; padding: 16px 20px; margin: 24px 0; }
+    .detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f0f0f0; }
+    .detail-label { color: #6b7280; font-size: 14px; }
+    .detail-value { color: #1a1a1a; font-weight: 600; font-size: 14px; }
+    .button { display: inline-block; background: #0066cc; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; margin: 24px 0; }
+    .footer { text-align: center; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e5e5; }
+    .footer p { font-size: 13px; color: #8a8a8a; }
+    .footer a { color: #0066cc; text-decoration: none; }
+    .unsubscribe { font-size: 12px; color: #999; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="logo"><span class="logo-text">Groot Finance</span></div>
+      <h1>Expense Claim Requires Your Approval</h1>
+      <p>Hi {{recipientName}},</p>
+      <p>{{submitterName}} has submitted an expense claim that requires your review and approval.</p>
+      <div class="highlight">
+        <div class="detail-row"><span class="detail-label">Submitted by</span><span class="detail-value">{{submitterName}}</span></div>
+        <div class="detail-row"><span class="detail-label">Amount</span><span class="detail-value">{{claimAmount}}</span></div>
+        <div class="detail-row"><span class="detail-label">Description</span><span class="detail-value">{{claimDescription}}</span></div>
+      </div>
+      <p style="text-align: center;">
+        <a href="{{reviewUrl}}" class="button" style="color: #ffffff !important;">Review Expense Claim →</a>
+      </p>
+      <div class="footer">
+        <p>© 2026 Groot Finance. All rights reserved.</p>
+        <p class="unsubscribe"><a href="{{unsubscribeUrl}}">Manage notification preferences</a></p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`,
+
+  notification_approval_status: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Expense Claim Update</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #1a1a1a; background-color: #f5f5f5; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
+    .card { background: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
+    .logo { text-align: center; margin-bottom: 32px; }
+    .logo-text { font-size: 24px; font-weight: 700; color: #0066cc; }
+    h1 { font-size: 24px; font-weight: 600; margin: 0 0 16px; color: #1a1a1a; }
+    p { margin: 0 0 16px; color: #4a4a4a; }
+    .status-approved { background: #ecfdf5; border-left: 4px solid #10b981; border-radius: 0 8px 8px 0; padding: 16px 20px; margin: 24px 0; }
+    .status-rejected { background: #fef2f2; border-left: 4px solid #ef4444; border-radius: 0 8px 8px 0; padding: 16px 20px; margin: 24px 0; }
+    .status-text { font-size: 18px; font-weight: 700; margin: 0 0 8px; }
+    .button { display: inline-block; background: #0066cc; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; margin: 24px 0; }
+    .footer { text-align: center; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e5e5; }
+    .footer p { font-size: 13px; color: #8a8a8a; }
+    .footer a { color: #0066cc; text-decoration: none; }
+    .unsubscribe { font-size: 12px; color: #999; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="logo"><span class="logo-text">Groot Finance</span></div>
+      <h1>Expense Claim {{status}}</h1>
+      <p>Hi {{submitterName}},</p>
+      <p>Your expense claim for {{amount}} has been <strong>{{status}}</strong> by {{approverName}}.</p>
+      {{reason}}
+      <p style="text-align: center;">
+        <a href="{{claimUrl}}" class="button" style="color: #ffffff !important;">View Expense Claim →</a>
+      </p>
+      <div class="footer">
+        <p>© 2026 Groot Finance. All rights reserved.</p>
+        <p class="unsubscribe"><a href="{{unsubscribeUrl}}">Manage notification preferences</a></p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`,
+
+  notification_critical_anomaly: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Critical Anomaly Detected</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #1a1a1a; background-color: #f5f5f5; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
+    .card { background: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
+    .logo { text-align: center; margin-bottom: 32px; }
+    .logo-text { font-size: 24px; font-weight: 700; color: #0066cc; }
+    h1 { font-size: 24px; font-weight: 600; margin: 0 0 16px; color: #1a1a1a; }
+    p { margin: 0 0 16px; color: #4a4a4a; }
+    .alert { background: #fef2f2; border-left: 4px solid #ef4444; border-radius: 0 8px 8px 0; padding: 16px 20px; margin: 24px 0; }
+    .alert-title { font-size: 16px; font-weight: 700; color: #dc2626; margin: 0 0 8px; }
+    .button { display: inline-block; background: #dc2626; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; margin: 24px 0; }
+    .footer { text-align: center; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e5e5; }
+    .footer p { font-size: 13px; color: #8a8a8a; }
+    .footer a { color: #0066cc; text-decoration: none; }
+    .unsubscribe { font-size: 12px; color: #999; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="logo"><span class="logo-text">Groot Finance</span></div>
+      <h1>Critical Anomaly Detected</h1>
+      <p>Hi {{recipientName}},</p>
+      <p>Our AI has detected a critical financial anomaly that requires your immediate attention.</p>
+      <div class="alert">
+        <p class="alert-title">{{title}}</p>
+        <p style="margin: 0; color: #4a4a4a;">{{body}}</p>
+      </div>
+      <p style="text-align: center;">
+        <a href="{{resourceUrl}}" class="button" style="color: #ffffff !important;">View Details →</a>
+      </p>
+      <div class="footer">
+        <p>© 2026 Groot Finance. All rights reserved.</p>
+        <p class="unsubscribe"><a href="{{unsubscribeUrl}}">Manage notification preferences</a></p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`,
+
+  notification_digest: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notification Digest</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #1a1a1a; background-color: #f5f5f5; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
+    .card { background: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
+    .logo { text-align: center; margin-bottom: 32px; }
+    .logo-text { font-size: 24px; font-weight: 700; color: #0066cc; }
+    h1 { font-size: 24px; font-weight: 600; margin: 0 0 16px; color: #1a1a1a; }
+    h2 { font-size: 18px; font-weight: 600; margin: 24px 0 12px; color: #1a1a1a; }
+    p { margin: 0 0 16px; color: #4a4a4a; }
+    .summary { background: #f0f9ff; border-radius: 8px; padding: 16px 20px; margin: 16px 0; text-align: center; }
+    .summary-number { font-size: 32px; font-weight: 700; color: #0066cc; margin: 0; }
+    .category-section { margin: 16px 0; border: 1px solid #f0f0f0; border-radius: 8px; overflow: hidden; }
+    .category-header { background: #f9fafb; padding: 10px 16px; font-weight: 600; font-size: 14px; color: #374151; border-bottom: 1px solid #f0f0f0; }
+    .notification-row { padding: 10px 16px; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
+    .notification-row:last-child { border-bottom: none; }
+    .notification-title { color: #1a1a1a; font-weight: 500; }
+    .notification-time { color: #9ca3af; font-size: 12px; }
+    .button { display: inline-block; background: #0066cc; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; margin: 24px 0; }
+    .footer { text-align: center; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e5e5; }
+    .footer p { font-size: 13px; color: #8a8a8a; }
+    .footer a { color: #0066cc; text-decoration: none; }
+    .unsubscribe { font-size: 12px; color: #999; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="logo"><span class="logo-text">Groot Finance</span></div>
+      <h1>Your {{digestPeriod}} Notification Digest</h1>
+      <p>Hi {{recipientName}},</p>
+      <p>Here's a summary of your unread notifications:</p>
+      <div class="summary">
+        <p class="summary-number">{{totalCount}}</p>
+        <p style="margin: 0; color: #6b7280; font-size: 14px;">unread notifications</p>
+      </div>
+      {{categoryGroups}}
+      <p style="text-align: center;">
+        <a href="{{dashboardUrl}}" class="button" style="color: #ffffff !important;">View All Notifications →</a>
+      </p>
+      <div class="footer">
+        <p>© 2026 Groot Finance. All rights reserved.</p>
+        <p class="unsubscribe"><a href="{{unsubscribeUrl}}">Manage notification preferences</a></p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`,
 };
 
 /**

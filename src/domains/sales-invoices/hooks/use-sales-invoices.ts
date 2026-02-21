@@ -124,6 +124,50 @@ export function useSalesInvoiceMutations() {
 }
 
 /**
+ * Hook for credit notes linked to a parent invoice
+ */
+export function useCreditNotes(invoiceId: string | undefined) {
+  const { businessId } = useActiveBusiness()
+
+  const result = useQuery(
+    api.functions.salesInvoices.getCreditNotesForInvoice,
+    invoiceId && businessId
+      ? {
+          invoiceId: invoiceId as Id<"sales_invoices">,
+          businessId: businessId as Id<"businesses">,
+        }
+      : "skip"
+  )
+
+  return {
+    creditNotes: result ?? [],
+    isLoading: result === undefined,
+  }
+}
+
+/**
+ * Hook for net outstanding amount (original - credited)
+ */
+export function useNetOutstandingAmount(invoiceId: string | undefined) {
+  const result = useQuery(
+    api.functions.salesInvoices.getNetOutstandingAmount,
+    invoiceId
+      ? { invoiceId: invoiceId as Id<"sales_invoices"> }
+      : "skip"
+  )
+
+  return result ?? null
+}
+
+/**
+ * Hook for credit note mutations
+ */
+export function useCreditNoteMutations() {
+  const createCreditNote = useMutation(api.functions.salesInvoices.createCreditNote)
+  return { createCreditNote }
+}
+
+/**
  * Hook for getting a stored invoice PDF URL
  */
 export function useInvoicePdfUrl(invoiceId: string | undefined) {

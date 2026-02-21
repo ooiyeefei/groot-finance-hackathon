@@ -79,7 +79,7 @@ export default function Sidebar() {
   // Group 2: Workspace (all users) — day-to-day work items + conditional manager tools
   const workspaceGroup = [
     { name: t('expenseClaims'), href: localizedHref('/expense-claims'), icon: Receipt },
-    { name: t('leaveManagement') || 'Leave Management', href: localizedHref('/leave-management'), icon: CalendarDays },
+    { name: t('leaveManagement') || 'Leave & Timesheet', href: localizedHref('/leave-management'), icon: CalendarDays },
     ...(userRole.manager || userRole.finance_admin ? [
       { name: t('managerApprovals'), href: localizedHref('/manager/approvals'), icon: FileCheck },
     ] : []),

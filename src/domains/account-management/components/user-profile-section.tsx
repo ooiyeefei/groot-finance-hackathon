@@ -15,6 +15,7 @@ import { useBusinessContext } from '@/contexts/business-context'
 import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/domains/accounting-entries/types'
 import { useToast } from '@/components/ui/toast'
 import { useRegisterUnsavedChanges } from '@/components/providers/unsaved-changes-provider'
+import { NotificationPreferencesForm } from '@/domains/notifications/components/notification-preferences-form'
 
 interface UserProfileSectionProps {
   className?: string
@@ -426,6 +427,12 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
             </div>
           )}
         </div>
+
+        {/* Divider */}
+        <div className="border-t border-border" />
+
+        {/* Notification Preferences (per-category in-app + email toggles) */}
+        <NotificationPreferencesForm />
       </div>
     </div>
   )

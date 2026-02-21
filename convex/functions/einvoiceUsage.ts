@@ -226,21 +226,27 @@ export const checkAndRecord = internalMutation({
       return { allowed: true, remaining: -1 };
     }
 
-    // Check limit
-    if (usage.submissionsUsed < planLimit) {
+    // 001-peppol-integrate: Grace buffer of 5 extra submissions
+    const GRACE_BUFFER = 5;
+    const effectiveLimit = planLimit + GRACE_BUFFER;
+
+    // Check limit with grace buffer
+    if (usage.submissionsUsed < effectiveLimit) {
       const newSubmissionsUsed = usage.submissionsUsed + 1;
       await ctx.db.patch(usage._id, {
         submissionsUsed: newSubmissionsUsed,
         updatedAt: Date.now(),
       });
 
+      const remaining = planLimit - newSubmissionsUsed;
       return {
         allowed: true,
-        remaining: planLimit - newSubmissionsUsed,
+        remaining: Math.max(0, remaining),
+        inGracePeriod: newSubmissionsUsed > planLimit,
       };
     }
 
-    // Limit reached — no credit pack fallback for e-invoices
+    // Hard limit reached (plan + grace buffer exhausted)
     return { allowed: false, remaining: 0 };
   },
 });

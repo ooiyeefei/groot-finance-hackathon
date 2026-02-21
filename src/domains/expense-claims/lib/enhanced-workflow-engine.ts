@@ -332,8 +332,13 @@ export class EnhancedWorkflowEngine {
 
     // Execute post-transition actions (Gemini Pro's hooks)
     if (transition.postTransitionActions) {
+      // Re-fetch claim to get updated fields (e.g. designatedApproverId set during updateStatus)
+      const updatedClaim = await convexClient.query(api.functions.expenseClaims.getById, {
+        id: currentClaim._id
+      }) ?? currentClaim
+
       await this.executePostTransitionActions(
-        currentClaim,
+        updatedClaim,
         transition.postTransitionActions,
         context
       )
@@ -412,8 +417,103 @@ export class EnhancedWorkflowEngine {
     }
 
     if (actions.sendNotifications) {
-      // Integration point for notification system
-      console.log(`[Enhanced Workflow] Sending notifications: ${actions.sendNotifications.join(', ')}`)
+      // Create notifications for the appropriate recipients
+      try {
+        const { client } = await getAuthenticatedConvex()
+        if (!client) return
+
+        for (const target of actions.sendNotifications) {
+          await this.sendWorkflowNotification(client, claim, target, context)
+        }
+      } catch (error) {
+        // Non-blocking: log and continue, don't fail the workflow
+        console.error(`[Enhanced Workflow] Failed to send notifications:`, error)
+      }
+    }
+  }
+
+  /**
+   * Send workflow notification based on target audience
+   */
+  private async sendWorkflowNotification(
+    client: any,
+    claim: any,
+    target: string,
+    context: WorkflowExecutionContext
+  ) {
+    const formatAmount = (amount: number | string, currency: string) =>
+      `${currency} ${Number(amount).toLocaleString()}`
+
+    const claimAmount = formatAmount(
+      claim.totalAmount || claim.processingMetadata?.financial_data?.total_amount || 0,
+      claim.originalCurrency || claim.processingMetadata?.financial_data?.original_currency || 'MYR'
+    )
+    const claimDesc = claim.description || claim.businessPurpose || 'Expense claim'
+
+    switch (target) {
+      case 'manager':
+      case 'system': {
+        // Notify the claim's designated approver about a new submission
+        if (claim.designatedApproverId) {
+          await client.mutation(api.functions.notifications.createFromWorkflow, {
+            recipientUserId: claim.designatedApproverId,
+            businessId: claim.businessId,
+            type: 'approval' as const,
+            severity: 'info' as const,
+            title: `Expense claim requires approval`,
+            body: `${claimDesc} — ${claimAmount}. Submitted for your review.`,
+            resourceType: 'expense_claim' as const,
+            resourceId: claim._id,
+            resourceUrl: `/en/expense-claims?claim=${claim._id}`,
+            sourceEvent: `approval_request_${claim._id}`,
+          })
+        }
+        break
+      }
+
+      case 'employee':
+      case 'finance': {
+        // Notify the claim submitter about status change
+        if (claim.userId) {
+          const newStatus = claim.status === 'approved' ? 'approved' :
+                           claim.status === 'reimbursed' ? 'reimbursed' : 'updated'
+          await client.mutation(api.functions.notifications.createFromWorkflow, {
+            recipientUserId: claim.userId,
+            businessId: claim.businessId,
+            type: 'approval' as const,
+            severity: 'info' as const,
+            title: `Expense claim ${newStatus}`,
+            body: `Your expense claim for ${claimAmount} has been ${newStatus}.`,
+            resourceType: 'expense_claim' as const,
+            resourceId: claim._id,
+            resourceUrl: `/en/expense-claims?claim=${claim._id}`,
+            sourceEvent: `approval_status_${claim._id}_${newStatus}`,
+          })
+        }
+        break
+      }
+
+      case 'compliance':
+      case 'audit': {
+        // Notify finance admins about compliance overrides
+        // Use createFromWorkflow for each finance admin (via business_memberships lookup)
+        // For now, notify the claim submitter's manager chain
+        if (claim.designatedApproverId) {
+          await client.mutation(api.functions.notifications.createFromWorkflow, {
+            recipientUserId: claim.designatedApproverId,
+            businessId: claim.businessId,
+            type: 'compliance' as const,
+            severity: 'warning' as const,
+            title: `Compliance override on expense claim`,
+            body: `A policy override was applied to an expense claim for ${claimAmount}.`,
+            resourceType: 'expense_claim' as const,
+            resourceId: claim._id,
+            resourceUrl: `/en/expense-claims?claim=${claim._id}`,
+            sourceEvent: `compliance_override_${claim._id}`,
+          })
+        }
+        break
+      }
     }
   }
 

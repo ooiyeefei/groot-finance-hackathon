@@ -14,7 +14,6 @@ import { useSalesInvoice, useSalesInvoiceMutations, useInvoicePdfUrl, useInvoice
 import { useInvoicePdf, type PdfRenderData } from '@/domains/sales-invoices/hooks/use-invoice-pdf'
 import { InvoicePreview } from '@/domains/sales-invoices/components/invoice-preview'
 import { InvoiceStatusBadge } from '@/domains/sales-invoices/components/invoice-status-badge'
-import { PeppolStatusBadge } from '@/domains/sales-invoices/components/peppol-status-badge'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { formatBusinessDate } from '@/lib/utils'
 import { SALES_INVOICE_STATUSES } from '@/domains/sales-invoices/types'
@@ -23,10 +22,10 @@ import { PaymentHistory } from '@/domains/sales-invoices/components/payment-hist
 import { LhdnDetailSection } from '@/domains/sales-invoices/components/lhdn-detail-section'
 import { generateLhdnQrDataUrl } from '@/domains/sales-invoices/components/lhdn-qr-code'
 import { PeppolTransmissionPanel } from '@/domains/sales-invoices/components/peppol-transmission-panel'
+import { CreditNoteList } from '@/domains/sales-invoices/components/credit-note-list'
+import { CreditNoteForm } from '@/domains/sales-invoices/components/credit-note-form'
+import { useNetOutstandingAmount } from '@/domains/sales-invoices/hooks/use-sales-invoices'
 import { useToast } from '@/components/ui/toast'
-import { useQuery } from 'convex/react'
-import { api } from '../../../../../convex/_generated/api'
-import type { PeppolStatus } from '@/lib/constants/statuses'
 
 export default function SalesInvoiceDetailPage() {
   const params = useParams()
@@ -40,23 +39,12 @@ export default function SalesInvoiceDetailPage() {
   const invoiceDefaults = useInvoiceDefaults()
   const { addToast } = useToast()
   const { invoice, isLoading } = useSalesInvoice(invoiceId)
-  const { sendInvoice, voidInvoice, removeInvoice, initiatePeppolTransmission, retryPeppolTransmission } = useSalesInvoiceMutations()
+  const { sendInvoice, voidInvoice, removeInvoice } = useSalesInvoiceMutations()
   const { generatePdf, generatePdfBlob, isGenerating } = useInvoicePdf()
   const storedPdfUrl = useInvoicePdfUrl(invoiceId)
 
-  // Fetch full business document for peppolParticipantId
-  const businessDoc = useQuery(
-    api.functions.businesses.getById,
-    business?.businessId ? { id: business.businessId } : 'skip'
-  )
-
-  // Fetch live customer record for peppolParticipantId
-  const customerRecord = useQuery(
-    api.functions.customers.getById,
-    invoice?.customerId && invoice?.businessId
-      ? { id: invoice.customerId, businessId: invoice.businessId }
-      : 'skip'
-  )
+  const [showCreditNoteForm, setShowCreditNoteForm] = useState(false)
+  const netOutstanding = useNetOutstandingAmount(invoiceId)
 
   const [isSending, setIsSending] = useState(false)
   const [isResending, setIsResending] = useState(false)
@@ -295,9 +283,6 @@ export default function SalesInvoiceDetailPage() {
             </p>
           </div>
           <InvoiceStatusBadge status={invoice.status as SalesInvoiceStatus} />
-          {(invoice as any).peppolStatus && (
-            <PeppolStatusBadge status={(invoice as any).peppolStatus as PeppolStatus} />
-          )}
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
@@ -536,28 +521,41 @@ export default function SalesInvoiceDetailPage() {
           {/* LHDN e-Invoice section */}
           <LhdnDetailSection invoice={invoice as any} />
 
-          {/* Peppol InvoiceNow transmission */}
-          <PeppolTransmissionPanel
-            peppolStatus={(invoice as any).peppolStatus as PeppolStatus | undefined}
-            peppolTransmittedAt={(invoice as any).peppolTransmittedAt}
-            peppolDeliveredAt={(invoice as any).peppolDeliveredAt}
-            peppolErrors={(invoice as any).peppolErrors}
-            invoiceStatus={invoice.status}
-            businessHasPeppolId={!!(businessDoc as any)?.peppolParticipantId}
-            customerHasPeppolId={!!customerRecord?.peppolParticipantId}
-            onTransmit={async () => {
-              await initiatePeppolTransmission({
-                id: invoice._id,
-                businessId: invoice.businessId,
-              })
-            }}
-            onRetry={async () => {
-              await retryPeppolTransmission({
-                id: invoice._id,
-                businessId: invoice.businessId,
-              })
-            }}
-          />
+          {/* Peppol InvoiceNow — Coming Soon */}
+          <PeppolTransmissionPanel />
+
+          {/* Credit Notes section */}
+          {!isDraft && !isVoid && invoice.einvoiceType !== 'credit_note' && (
+            <>
+              <CreditNoteList
+                invoiceId={invoice._id}
+                currency={invoice.currency}
+              />
+
+              {showCreditNoteForm ? (
+                <CreditNoteForm
+                  invoiceId={invoice._id}
+                  businessId={invoice.businessId as string}
+                  currency={invoice.currency}
+                  maxAmount={netOutstanding?.netOutstanding ?? invoice.totalAmount}
+                  originalLineItems={invoice.lineItems}
+                  onClose={() => setShowCreditNoteForm(false)}
+                  onSuccess={() => {
+                    addToast({ type: 'success', title: 'Credit note created', description: 'Credit note saved as draft' })
+                  }}
+                />
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowCreditNoteForm(true)}
+                  className="w-full"
+                >
+                  Create Credit Note
+                </Button>
+              )}
+            </>
+          )}
         </div>
 
         {/* Preview */}

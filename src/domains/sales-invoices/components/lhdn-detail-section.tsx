@@ -1,6 +1,7 @@
 'use client'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ComingSoonBadge } from '@/components/ui/coming-soon-badge'
 import { LhdnStatusBadge } from './lhdn-status-badge'
 import { LhdnSubmitButton } from './lhdn-submit-button'
 import { LhdnValidationErrors } from './lhdn-validation-errors'
@@ -23,9 +24,7 @@ export function LhdnDetailSection({ invoice }: LhdnDetailSectionProps) {
             <CardTitle className="text-sm font-medium text-muted-foreground">
               LHDN e-Invoice
             </CardTitle>
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 animate-pulse">
-              Coming Soon
-            </span>
+            <ComingSoonBadge />
           </div>
           {hasLhdnData && <LhdnStatusBadge status={invoice.lhdnStatus} />}
         </div>

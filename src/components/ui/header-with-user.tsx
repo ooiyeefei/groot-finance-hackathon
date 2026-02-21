@@ -5,6 +5,8 @@ import { UserButton } from '@clerk/nextjs'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { ThemeToggle } from '@/domains/utilities/components/theme-toggle'
 import { FeedbackButton } from '@/domains/feedback'
+import { NotificationBell } from '@/domains/notifications/components/notification-bell'
+import { useActiveBusiness } from '@/contexts/business-context'
 
 interface HeaderWithUserProps {
   title?: string
@@ -13,6 +15,8 @@ interface HeaderWithUserProps {
 }
 
 export default function HeaderWithUser({ title, subtitle, actions }: HeaderWithUserProps) {
+  const { businessId } = useActiveBusiness()
+
   return (
     <header className="bg-card border-b border-border px-6 py-4">
       <div className="flex items-center justify-between gap-4">
@@ -31,8 +35,9 @@ export default function HeaderWithUser({ title, subtitle, actions }: HeaderWithU
           </div>
         )}
 
-        {/* Right: Feedback, theme toggle, language switcher and user button */}
+        {/* Right: Notifications, feedback, theme toggle, language switcher and user button */}
         <div className="flex items-center gap-4">
+          <NotificationBell businessId={businessId} />
           <FeedbackButton />
           <ThemeToggle />
           <LanguageSwitcher />

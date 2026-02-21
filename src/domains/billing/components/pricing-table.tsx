@@ -21,6 +21,8 @@ import { CURRENCY_SYMBOLS } from '@/lib/stripe/catalog'
 import { useSubscription } from '../hooks/use-subscription'
 import { useCatalog, type CatalogPlan } from '../hooks/use-catalog'
 import { cn } from '@/lib/utils'
+import { ComingSoonBadge } from '@/components/ui/coming-soon-badge'
+import { localizeEInvoiceLabel } from '@/lib/utils/e-invoice-label'
 
 /**
  * Launch list prices (marketing decoration only — not charged in Stripe).
@@ -284,19 +286,23 @@ export function PricingTable({
                     return (
                       <>
                         <ul className="space-y-3">
-                          {displayFeatures.map((feature, index) => (
-                            <li key={index} className="flex items-start gap-2.5">
-                              <Check className="w-5 h-5 mt-0.5 text-green-600 dark:text-green-400 flex-shrink-0" />
-                              <span className="text-foreground text-base">
-                                {feature}
-                                {/e-invoice|einvoice|lhdn|peppol/i.test(feature) && (
-                                  <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 animate-pulse">
-                                    Coming Soon
-                                  </span>
-                                )}
-                              </span>
-                            </li>
-                          ))}
+                          {displayFeatures.map((feature, index) => {
+                            const isEInvoice = /e-invoice|einvoice|lhdn|peppol/i.test(feature)
+                            const displayLabel = isEInvoice
+                              ? feature.replace(/LHDN e-Invoice|e-Invoice \(Peppol\)|e-Invoice/i, localizeEInvoiceLabel(catalog.currency))
+                              : feature
+                            return (
+                              <li key={index} className="flex items-start gap-2.5">
+                                <Check className="w-5 h-5 mt-0.5 text-green-600 dark:text-green-400 flex-shrink-0" />
+                                <span className="text-foreground text-base">
+                                  {displayLabel}
+                                  {isEInvoice && (
+                                    <ComingSoonBadge className="ml-1.5" />
+                                  )}
+                                </span>
+                              </li>
+                            )
+                          })}
                         </ul>
                         {hasMore && (
                           <button

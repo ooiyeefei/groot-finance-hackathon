@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/badge'
 // PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
 const ExpenseAnalytics = lazy(() => import('./expense-analytics'))
 const LeaveApprovalsContent = lazy(() => import('@/domains/leave-management/components/leave-approvals-content'))
+const TimesheetApprovalsContent = lazy(() => import('@/domains/timesheet-attendance/components/timesheet-approvals-content'))
 
 interface EnhancedApprovalDashboardProps {
   userId: string
@@ -113,7 +114,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
 
       {/* Management Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className={`grid w-full h-auto p-1 gap-1 bg-muted border border-border relative z-10 ${dashboardData?.role?.finance_admin ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2 md:grid-cols-3'}`}>
+        <TabsList className={`grid w-full h-auto p-1 gap-1 bg-muted border border-border relative z-10 ${dashboardData?.role?.finance_admin ? 'grid-cols-2 md:grid-cols-5' : 'grid-cols-2 md:grid-cols-4'}`}>
           <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Overview
           </TabsTrigger>
@@ -122,6 +123,9 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
           </TabsTrigger>
           <TabsTrigger value="leave-requests" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Leave
+          </TabsTrigger>
+          <TabsTrigger value="timesheets" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            Timesheets
           </TabsTrigger>
           {dashboardData?.role?.finance_admin && (
             <TabsTrigger value="reimbursements" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
@@ -236,6 +240,16 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
             </div>
           }>
             <LeaveApprovalsContent onRefreshNeeded={fetchDashboardData} />
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="timesheets" className="space-y-4">
+          <Suspense fallback={
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          }>
+            <TimesheetApprovalsContent onRefreshNeeded={fetchDashboardData} />
           </Suspense>
         </TabsContent>
 

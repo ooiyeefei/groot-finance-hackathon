@@ -41,7 +41,7 @@ export default async function LeaveManagementPage({ params }: LeaveManagementPag
         {/* Main Content */}
         <div className="flex-1 flex flex-col min-h-0">
           {/* Header */}
-          <HeaderWithUser title="Leave Management" subtitle="Manage leave requests and view team calendar" />
+          <HeaderWithUser title="Leave & Timesheet" subtitle="Manage leave, attendance, and timesheets" />
 
           {/* Main Content Area */}
           <main

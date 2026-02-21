@@ -33,6 +33,14 @@ import {
   lhdnStatusValidator,
   peppolStatusValidator,
   einvoiceTypeValidator,
+  attendanceRecordStatusValidator,
+  attendanceStatusValidator,
+  attendanceSourceValidator,
+  timesheetStatusValidator,
+  timesheetConfirmedByValidator,
+  payPeriodFrequencyValidator,
+  payrollAdjustmentTypeValidator,
+  overtimeCalculationBasisValidator,
 } from "./lib/validators";
 
 export default defineSchema({
@@ -67,6 +75,25 @@ export default defineSchema({
       onboardingTipsEnabled: v.optional(v.boolean()),   // Default: true
       globalUnsubscribe: v.optional(v.boolean()),       // Default: false (CAN-SPAM)
       unsubscribedAt: v.optional(v.number()),           // Unix timestamp
+    })),
+    // Notification Preferences (018-app-email-notif)
+    notificationPreferences: v.optional(v.object({
+      inApp: v.optional(v.object({
+        approval: v.optional(v.boolean()),
+        anomaly: v.optional(v.boolean()),
+        compliance: v.optional(v.boolean()),
+        insight: v.optional(v.boolean()),
+        invoice_processing: v.optional(v.boolean()),
+      })),
+      email: v.optional(v.object({
+        approval: v.optional(v.boolean()),
+        anomaly: v.optional(v.boolean()),
+        compliance: v.optional(v.boolean()),
+        insight: v.optional(v.boolean()),
+        invoice_processing: v.optional(v.boolean()),
+      })),
+      digestFrequency: v.optional(v.union(v.literal("daily"), v.literal("weekly"))),
+      digestTime: v.optional(v.number()),
     })),
 
     // Timestamps (Convex adds _creationTime automatically)
@@ -196,6 +223,10 @@ export default defineSchema({
     // Maps leaveTypeId -> entitled days (overrides leave_type.defaultDays)
     // Example: { "k57abc123": 18, "k57def456": 5 }
     leaveEntitlements: v.optional(v.any()),
+
+    // Timesheet & Attendance (018-timesheet-attendance)
+    isAttendanceTracked: v.optional(v.boolean()),
+    workScheduleId: v.optional(v.id("work_schedules")),
 
     // Timestamps
     invitedAt: v.optional(v.number()),
@@ -1425,6 +1456,10 @@ export default defineSchema({
     // 016-e-invoice-schema-change: e-invoice document type
     einvoiceType: v.optional(einvoiceTypeValidator),
 
+    // 001-peppol-integrate: Credit note linking
+    originalInvoiceId: v.optional(v.id("sales_invoices")),
+    creditNoteReason: v.optional(v.string()),
+
     // Soft Delete & Timestamps
     deletedAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),
@@ -1437,7 +1472,9 @@ export default defineSchema({
     .index("by_recurringScheduleId", ["recurringScheduleId"])
     // 016-e-invoice-schema-change: e-invoice status indexes
     .index("by_businessId_lhdnStatus", ["businessId", "lhdnStatus"])
-    .index("by_businessId_peppolStatus", ["businessId", "peppolStatus"]),
+    .index("by_businessId_peppolStatus", ["businessId", "peppolStatus"])
+    // 001-peppol-integrate: Credit note lookup by parent invoice
+    .index("by_originalInvoiceId", ["originalInvoiceId"]),
 
   customers: defineTable({
     businessId: v.id("businesses"),
@@ -1598,4 +1635,222 @@ export default defineSchema({
     triggeredBy: v.string(), // Clerk user ID
   })
     .index("by_businessId", ["businessId"]),
+
+  // ── Notifications (018-app-email-notif) ─────────────────────────────
+  notifications: defineTable({
+    recipientUserId: v.id("users"),
+    businessId: v.id("businesses"),
+    type: v.union(
+      v.literal("approval"),
+      v.literal("anomaly"),
+      v.literal("compliance"),
+      v.literal("insight"),
+      v.literal("invoice_processing")
+    ),
+    severity: v.union(
+      v.literal("info"),
+      v.literal("warning"),
+      v.literal("critical")
+    ),
+    status: v.union(
+      v.literal("unread"),
+      v.literal("read"),
+      v.literal("dismissed")
+    ),
+    title: v.string(),
+    body: v.string(),
+    resourceType: v.optional(v.union(
+      v.literal("expense_claim"),
+      v.literal("invoice"),
+      v.literal("insight"),
+      v.literal("dashboard")
+    )),
+    resourceId: v.optional(v.string()),
+    resourceUrl: v.optional(v.string()),
+    sourceEvent: v.optional(v.string()),
+    emailSent: v.optional(v.boolean()),
+    emailMessageId: v.optional(v.string()),
+    createdAt: v.number(),
+    readAt: v.optional(v.number()),
+    dismissedAt: v.optional(v.number()),
+    expiresAt: v.optional(v.number()),
+  })
+    .index("by_recipient_business_status", ["recipientUserId", "businessId", "status"])
+    .index("by_recipient_business_created", ["recipientUserId", "businessId", "createdAt"])
+    .index("by_business_type", ["businessId", "type"])
+    .index("by_createdAt", ["createdAt"])
+    .index("by_sourceEvent", ["sourceEvent"]),
+
+  notification_digests: defineTable({
+    userId: v.id("users"),
+    businessId: v.id("businesses"),
+    lastDigestSentAt: v.number(),
+    lastDigestEmailMessageId: v.optional(v.string()),
+    notificationCount: v.number(),
+  })
+    .index("by_userId_businessId", ["userId", "businessId"]),
+
+  // ============================================
+  // TIMESHEET & ATTENDANCE DOMAIN (018-timesheet-attendance)
+  // ============================================
+
+  // Daily check-in/check-out records for tracked employees
+  attendance_records: defineTable({
+    businessId: v.id("businesses"),
+    userId: v.id("users"),
+    date: v.string(), // ISO date YYYY-MM-DD
+    checkInTime: v.number(), // Unix timestamp
+    checkOutTime: v.optional(v.number()), // Unix timestamp (null = incomplete)
+    totalMinutes: v.optional(v.number()), // checkOut - checkIn - breakMinutes
+    breakMinutes: v.number(), // From work schedule config
+    status: attendanceRecordStatusValidator,
+    attendanceStatus: attendanceStatusValidator,
+    latenessMinutes: v.optional(v.number()),
+    earlyDepartureMinutes: v.optional(v.number()),
+    hoursDeducted: v.optional(v.number()),
+    deductionWaived: v.optional(v.boolean()),
+    waivedBy: v.optional(v.id("users")),
+    waivedReason: v.optional(v.string()),
+    source: attendanceSourceValidator,
+    manualEditReason: v.optional(v.string()),
+    location: v.optional(v.object({
+      lat: v.number(),
+      lng: v.number(),
+      accuracy: v.number(),
+    })),
+    locationFlagged: v.optional(v.boolean()),
+    notes: v.optional(v.string()),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_userId", ["userId"])
+    .index("by_businessId_userId_date", ["businessId", "userId", "date"])
+    .index("by_businessId_date", ["businessId", "date"])
+    .index("by_businessId_status", ["businessId", "status"]),
+
+  // Configurable work schedule profiles
+  work_schedules: defineTable({
+    businessId: v.id("businesses"),
+    name: v.string(),
+    startTime: v.string(), // HH:MM format
+    endTime: v.string(), // HH:MM format
+    workDays: v.array(v.number()), // 0=Sun, 1=Mon, ..., 6=Sat
+    breakMinutes: v.number(),
+    graceMinutes: v.number(), // Grace period for lateness
+    regularHoursPerDay: v.number(), // Calculated: endTime - startTime - breakMinutes
+    overtimeRuleId: v.optional(v.id("overtime_rules")),
+    isDefault: v.boolean(),
+    isActive: v.boolean(),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_isDefault", ["businessId", "isDefault"])
+    .index("by_businessId_isActive", ["businessId", "isActive"]),
+
+  // Configurable overtime rate tiers
+  overtime_rules: defineTable({
+    businessId: v.id("businesses"),
+    name: v.string(),
+    calculationBasis: overtimeCalculationBasisValidator,
+    dailyThresholdHours: v.optional(v.number()),
+    weeklyThresholdHours: v.optional(v.number()),
+    requiresPreApproval: v.boolean(),
+    rateTiers: v.array(v.object({
+      label: v.string(), // e.g., "Standard OT", "Rest Day", "Public Holiday"
+      multiplier: v.number(), // e.g., 1.5, 2.0, 3.0
+      applicableOn: v.string(), // "weekday_ot", "rest_day", "public_holiday"
+    })),
+    isActive: v.boolean(),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_isActive", ["businessId", "isActive"]),
+
+  // Periodic summary of employee work hours for a pay period
+  timesheets: defineTable({
+    businessId: v.id("businesses"),
+    userId: v.id("users"),
+    payPeriodConfigId: v.id("pay_period_configs"),
+    periodStartDate: v.string(), // ISO date YYYY-MM-DD
+    periodEndDate: v.string(), // ISO date YYYY-MM-DD
+    dailyEntries: v.array(v.object({
+      date: v.string(),
+      attendanceRecordId: v.optional(v.string()),
+      dayType: v.string(), // workday, rest_day, public_holiday, leave
+      leaveType: v.optional(v.string()),
+      checkInTime: v.optional(v.number()),
+      checkOutTime: v.optional(v.number()),
+      regularMinutes: v.number(),
+      overtimeMinutes: v.number(),
+      overtimeTier: v.optional(v.string()),
+      attendanceStatus: v.string(),
+      latenessMinutes: v.number(),
+      earlyDepartureMinutes: v.number(),
+      hoursDeducted: v.number(),
+      deductionWaived: v.boolean(),
+      flags: v.array(v.string()),
+    })),
+    totalRegularMinutes: v.number(),
+    totalOvertimeMinutes: v.number(),
+    overtimeByTier: v.array(v.object({
+      tierLabel: v.string(),
+      multiplier: v.number(),
+      minutes: v.number(),
+    })),
+    leaveDays: v.array(v.object({
+      leaveType: v.string(),
+      days: v.number(),
+    })),
+    publicHolidayDays: v.number(),
+    attendanceDeductionMinutes: v.number(),
+    netPayableMinutes: v.number(),
+    hasAnomalies: v.boolean(),
+    anomalySummary: v.optional(v.array(v.string())),
+    status: timesheetStatusValidator,
+    confirmedAt: v.optional(v.number()),
+    confirmedBy: v.optional(timesheetConfirmedByValidator),
+    approverId: v.optional(v.id("users")),
+    approvedAt: v.optional(v.number()),
+    approverNotes: v.optional(v.string()),
+    finalizedAt: v.optional(v.number()),
+    lockedAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_userId", ["userId"])
+    .index("by_businessId_status", ["businessId", "status"])
+    .index("by_businessId_userId_periodStartDate", ["businessId", "userId", "periodStartDate"])
+    .index("by_approverId_status", ["approverId", "status"]),
+
+  // Corrections for locked pay periods, applied forward
+  payroll_adjustments: defineTable({
+    businessId: v.id("businesses"),
+    userId: v.id("users"),
+    originalTimesheetId: v.id("timesheets"),
+    originalPeriodStartDate: v.string(),
+    adjustmentType: payrollAdjustmentTypeValidator,
+    minutes: v.number(),
+    overtimeTier: v.optional(v.string()),
+    reason: v.string(),
+    createdBy: v.id("users"),
+    appliedToTimesheetId: v.optional(v.id("timesheets")),
+    appliedAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_userId", ["userId"])
+    .index("by_originalTimesheetId", ["originalTimesheetId"])
+    .index("by_businessId_appliedToTimesheetId", ["businessId", "appliedToTimesheetId"]),
+
+  // Business-level payroll cycle configuration
+  pay_period_configs: defineTable({
+    businessId: v.id("businesses"),
+    frequency: payPeriodFrequencyValidator,
+    startDay: v.number(), // 0-6 for weekly/biweekly, 1-28 for monthly
+    confirmationDeadlineDays: v.number(), // Business days after period close
+    isActive: v.boolean(),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_isActive", ["businessId", "isActive"]),
 });

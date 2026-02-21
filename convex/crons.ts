@@ -139,4 +139,65 @@ crons.daily(
   internal.functions.creditPacks.expireDaily
 );
 
+/**
+ * Notification Digest (018-app-email-notif)
+ *
+ * Runs daily at 8:00 AM UTC to send digest emails
+ * aggregating unread notifications per user.
+ */
+crons.daily(
+  "notification-digest",
+  { hourUTC: 8, minuteUTC: 0 },
+  internal.functions.notificationJobs.runDigest
+);
+
+/**
+ * Notification Cleanup (018-app-email-notif)
+ *
+ * Runs daily at 2:30 AM UTC to delete notifications older than 90 days.
+ */
+crons.daily(
+  "notification-cleanup",
+  { hourUTC: 2, minuteUTC: 30 },
+  internal.functions.notifications.deleteExpired
+);
+
+/**
+ * Attendance: Auto-Close Incomplete Sessions (018-timesheet-attendance)
+ *
+ * Runs daily at midnight UTC to close any incomplete attendance
+ * sessions (checked in but never checked out) using the
+ * employee's scheduled end time.
+ */
+crons.daily(
+  "auto-close-incomplete-sessions",
+  { hourUTC: 0, minuteUTC: 15 },
+  internal.functions.attendanceRecords.autoCloseIncompleteSessions
+);
+
+/**
+ * Timesheet: Generate Timesheets (018-timesheet-attendance)
+ *
+ * Runs daily at 1:30 AM UTC to generate draft timesheets
+ * for each tracked employee at the end of their pay period.
+ */
+crons.daily(
+  "generate-timesheets",
+  { hourUTC: 1, minuteUTC: 30 },
+  internal.functions.timesheets.generateTimesheets
+);
+
+/**
+ * Timesheet: Auto-Confirm Past Deadline (018-timesheet-attendance)
+ *
+ * Runs daily at 2:30 AM UTC to auto-confirm draft timesheets
+ * that have passed the confirmation deadline. If no anomalies,
+ * also auto-approves them.
+ */
+crons.daily(
+  "auto-confirm-past-deadline",
+  { hourUTC: 2, minuteUTC: 30 },
+  internal.functions.timesheets.autoConfirmPastDeadline
+);
+
 export default crons;

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { Bot, Radar, FileText, ScanLine, Printer, Building2, Sparkles, Check } from 'lucide-react';
+import { localizeEInvoiceLabel } from '@/lib/utils/e-invoice-label';
 
 // Finance icon SVG as base64 (provided)
 const FINANCE_ICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDQ4IDQ4Ij48ZyBmaWxsPSJub25lIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBzdHJva2Utd2lkdGg9IjQiPjxwYXRoIGZpbGw9IiMyZjg4ZmYiIHN0cm9rZT0ibm9uZSIgZD0iTTI0IDQ0QzM1LjA0NTcgNDQgNDQgMzUuMDQ1NyA0NCAyNEM0NCAxMi45NTQzIDM1LjA0NTcgNCAyNCA0QzEyLjk1NDMgNCA0IDEyLjk1NDMgNCAyNEM0IDM1LjA0NTcgMTIuOTU0MyA0NCAyNCA0NFoiLz48cGF0aCBzdHJva2U9IiNmZmYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgZD0iTTE4IDIySDMwIi8+PHBhdGggc3Ryb2tlPSIjZmZmIiBzdHJva2UtbGluZWNhcD0icm91bmQiIGQ9Ik0xOCAyOEgzMCIvPjxwYXRoIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBkPSJNMjQuMDA4MyAyMlYzNCIvPjxwYXRoIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBkPSJNMzAgMTVMMjQgMjFMMTggMTUiLz48L2c+PC9zdmc+';
@@ -534,12 +535,25 @@ export default function LandingContent({ country }: { country: string }) {
                 </div>
 
                 <ul className="space-y-2.5 mb-6 text-sm text-[#6B7280] font-medium flex-1">
-                  {tier.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2">
-                      <Check className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                      <span>{feature}</span>
-                    </li>
-                  ))}
+                  {tier.features.map((feature) => {
+                    const isEInvoice = /e-invoice|einvoice|lhdn|peppol/i.test(feature)
+                    const displayLabel = isEInvoice
+                      ? feature.replace(/LHDN e-Invoice|e-Invoice \(Peppol\)|e-Invoice/i, localizeEInvoiceLabel(currency.code))
+                      : feature
+                    return (
+                      <li key={feature} className="flex items-start gap-2">
+                        <Check className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                        <span>
+                          {displayLabel}
+                          {isEInvoice && (
+                            <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-600 border border-amber-500/30 animate-pulse">
+                              Coming Soon
+                            </span>
+                          )}
+                        </span>
+                      </li>
+                    )
+                  })}
                 </ul>
 
                 {tier.name === 'Enterprise' ? (

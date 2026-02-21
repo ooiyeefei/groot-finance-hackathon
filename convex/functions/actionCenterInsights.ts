@@ -15,7 +15,9 @@
 
 import { v } from "convex/values";
 import { query, mutation, internalMutation } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
+import { Id } from "../_generated/dataModel";
 
 // ============================================
 // QUERIES
@@ -86,6 +88,10 @@ export const list = query({
       .query("actionCenterInsights")
       .withIndex("by_business_priority", (q) => q.eq("businessId", business._id.toString()))
       .collect();
+
+    // Filter to current user's insights only (insights are created per-user)
+    const userIdStr = user._id.toString();
+    insights = insights.filter((i) => i.userId === userIdStr);
 
     // Apply filters
     if (args.status) {
@@ -261,9 +267,13 @@ export const getSummary = query({
       .withIndex("by_business_priority", (q) => q.eq("businessId", business._id.toString()))
       .collect();
 
+    // Filter to current user's insights only (insights are created per-user)
+    const userIdStr = user._id.toString();
+    const userInsights = insights.filter((i) => i.userId === userIdStr);
+
     // Filter out expired
     const now = Date.now();
-    const validInsights = insights.filter((i) => !i.expiresAt || i.expiresAt > now);
+    const validInsights = userInsights.filter((i) => !i.expiresAt || i.expiresAt > now);
 
     // Calculate statistics
     const byStatus: Record<string, number> = { new: 0, reviewed: 0, dismissed: 0, actioned: 0 };
@@ -361,6 +371,36 @@ export const internalCreate = internalMutation({
     });
 
     console.log(`[ActionCenterInsights] Created insight ${insightId}: ${args.title} (${args.priority})`);
+
+    // Create notifications for finance admins and owners (018-app-email-notif)
+    const categoryToType: Record<string, "anomaly" | "compliance" | "insight"> = {
+      anomaly: "anomaly",
+      compliance: "compliance",
+      deadline: "compliance",
+      cashflow: "anomaly",
+      optimization: "insight",
+      categorization: "insight",
+    };
+    const priorityToSeverity: Record<string, "critical" | "warning" | "info"> = {
+      critical: "critical",
+      high: "warning",
+      medium: "info",
+      low: "info",
+    };
+
+    await ctx.scheduler.runAfter(0, internal.functions.notifications.createForRole, {
+      businessId: args.businessId as Id<"businesses">,
+      targetRoles: ["owner", "finance_admin"],
+      type: categoryToType[args.category] ?? "insight",
+      severity: priorityToSeverity[args.priority] ?? "info",
+      title: args.title,
+      body: args.description,
+      resourceType: "insight",
+      resourceId: insightId,
+      resourceUrl: `/en/action-center?insight=${insightId}`,
+      sourceEvent: `insight_${insightId}`,
+    });
+
     return insightId;
   },
 });
@@ -466,13 +506,14 @@ export const batchMarkReviewed = mutation({
       throw new Error("Not authorized to access this business");
     }
 
-    // Get all new insights for this business
+    // Get all new insights for this business belonging to current user
     const newInsights = await ctx.db
       .query("actionCenterInsights")
       .withIndex("by_business_priority", (q) => q.eq("businessId", business._id.toString()))
       .collect();
 
-    const toUpdate = newInsights.filter((i) => i.status === "new");
+    const userIdStr = user._id.toString();
+    const toUpdate = newInsights.filter((i) => i.status === "new" && i.userId === userIdStr);
 
     const now = Date.now();
     let updatedCount = 0;

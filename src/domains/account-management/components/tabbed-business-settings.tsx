@@ -2,7 +2,7 @@
 
 import { Suspense, lazy, memo, useCallback } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
-import { Building2, DollarSign, Users, Key, Loader2, Calendar, Sparkles, User, Plug } from 'lucide-react'
+import { Building2, DollarSign, Users, Key, Loader2, Calendar, Sparkles, User, Plug, Clock } from 'lucide-react'
 import { usePermissions } from '@/contexts/business-context'
 import { useUser } from '@clerk/nextjs'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -16,6 +16,7 @@ const LeaveManagementSettings = lazy(() => import('@/domains/leave-management/co
 const BillingSettingsContent = lazy(() => import('@/domains/billing/components/billing-settings-content'))
 const StripeIntegrationCard = lazy(() => import('@/domains/account-management/components/stripe-integration-card'))
 const UserProfileSection = lazy(() => import('@/domains/account-management/components/user-profile-section'))
+const TimesheetSettings = lazy(() => import('@/domains/timesheet-attendance/components/timesheet-settings'))
 
 // Wrapper components for existing components that need userId
 const CategoryManagementTab = ({ userId }: { userId?: string }) => (
@@ -34,7 +35,7 @@ const TabbedBusinessSettings = memo(() => {
   const pathname = usePathname()
 
   // URL-based tab persistence: read from ?tab= query param
-  const validTabs = ['business-profile', 'category-management', 'leave-management', 'team-management', 'api-keys', 'billing', 'integrations', 'profile'] as const
+  const validTabs = ['business-profile', 'category-management', 'leave-management', 'timesheet', 'team-management', 'api-keys', 'billing', 'integrations', 'profile'] as const
   type TabValue = typeof validTabs[number]
   const tabFromUrl = searchParams.get('tab') as TabValue | null
   // Default tab: 'business-profile' for finance_admin/owner, 'profile' for everyone else
@@ -82,6 +83,16 @@ const TabbedBusinessSettings = memo(() => {
               <Calendar className="w-4 h-4 mr-2" />
               <span className="hidden sm:inline">Leave</span>
               <span className="sm:hidden">Leave</span>
+            </TabsTrigger>
+          )}
+          {isOwner && (
+            <TabsTrigger
+              value="timesheet"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+            >
+              <Clock className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Timesheet</span>
+              <span className="sm:hidden">Time</span>
             </TabsTrigger>
           )}
           {isOwner && (
@@ -175,6 +186,22 @@ const TabbedBusinessSettings = memo(() => {
                 </div>
               }>
                 <LeaveManagementSettings />
+              </Suspense>
+            </div>
+          </TabsContent>
+        )}
+
+        {/* Timesheet Settings Tab Content - Owner Only */}
+        {isOwner && (
+          <TabsContent value="timesheet" className="space-y-4">
+            <div className="bg-card rounded-lg border border-border p-6">
+              <Suspense fallback={
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  <span className="ml-2 text-muted-foreground">Loading timesheet settings...</span>
+                </div>
+              }>
+                <TimesheetSettings />
               </Suspense>
             </div>
           </TabsContent>

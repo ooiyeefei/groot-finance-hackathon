@@ -63,9 +63,8 @@ export function InsightCard({ insight, onDismiss, onAction, onReview }: InsightC
   const CategoryIcon = category.icon;
 
   const handleCardClick = () => {
-    if (insight.status === 'new' && onReview) {
-      onReview(insight._id);
-    }
+    // No-op: card click should not auto-mark insights as reviewed.
+    // Users can explicitly use "Done" or "Mark all read" buttons.
   };
 
   const handleAskAI = (e: React.MouseEvent) => {
