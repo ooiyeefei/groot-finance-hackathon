@@ -1,17 +1,8 @@
 /**
- * Returns the localized e-invoice feature label based on detected currency.
- *
- * SGD (Singapore) → Peppol InvoiceNow
- * MYR (Malaysia)  → LHDN e-Invoice
- * Others          → generic "e-Invoice"
+ * Returns the e-invoice feature label.
+ * Always returns generic "e-Invoice" — no country-specific mentions
+ * (LHDN / Peppol) in pricing or billing contexts.
  */
-export function localizeEInvoiceLabel(currency: string): string {
-  switch (currency) {
-    case 'SGD':
-      return 'e-Invoice (Peppol)'
-    case 'MYR':
-      return 'LHDN e-Invoice'
-    default:
-      return 'e-Invoice'
-  }
+export function localizeEInvoiceLabel(_currency: string): string {
+  return 'e-Invoice'
 }

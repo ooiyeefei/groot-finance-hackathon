@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { X, Camera, Building2, DollarSign, ChevronDown, ChevronRight, FileText } from 'lucide-react'
+import { ComingSoonBadge } from '@/components/ui/coming-soon-badge'
 import Image from 'next/image'
 import { useToast } from '@/components/ui/toast'
 import { useBusinessProfile } from '@/contexts/business-context'
@@ -639,6 +640,7 @@ export default function BusinessProfileSettings() {
                 <div className="flex items-center gap-2">
                   <FileText className="h-4 w-4 text-muted-foreground" />
                   <span>e-Invoice Settings</span>
+                  <ComingSoonBadge />
                 </div>
                 {eInvoiceSectionOpen ? (
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
