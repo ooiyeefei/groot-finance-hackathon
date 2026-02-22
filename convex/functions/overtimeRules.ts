@@ -39,11 +39,12 @@ export const list = query({
       throw new Error("Insufficient permissions. Manager role or higher required");
     }
 
-    // Return all overtime rules for the business
-    return await ctx.db
+    // Return all active overtime rules for the business
+    const rules = await ctx.db
       .query("overtime_rules")
       .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
       .collect();
+    return rules.filter((r) => r.isActive !== false);
   },
 });
 
