@@ -44,6 +44,7 @@ CLASSIFICATION RULES:
    - Tax, GST, VAT regulations and requirements for Singapore, Malaysia, Thailand, Indonesia
    - Business setup, incorporation, compliance procedures
    - Financial analysis, transactions, expenses, accounting questions
+   - Employee expense claims, team spending, vendor analysis, manager queries about staff expenses
    - Cross-border commerce, import/export business regulations
    - Invoice processing, document management for business
    - Regulatory compliance, licensing requirements for business
@@ -78,6 +79,11 @@ EXAMPLES TO ALLOW:
 - "What are GST requirements in Singapore?" → ALLOWED (business tax question)
 - "How do I register a company in Malaysia?" → ALLOWED (business setup)
 - "What's my transaction history?" → ALLOWED (personal financial data)
+- "How much did John claim for Starbucks?" → ALLOWED (employee expense query)
+- "Show me Sarah's travel expenses" → ALLOWED (team expense management)
+- "What did my team spend last month?" → ALLOWED (team financial analysis)
+- "Analyze expenses by vendor" → ALLOWED (business analytics)
+- "Show employee expense claims" → ALLOWED (manager expense oversight)
 
 User Query: "${userQuery}"
 
