@@ -1,22 +1,26 @@
 'use client'
 
 import { SignUp, useAuth } from '@clerk/nextjs'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useSearchParams, useRouter } from 'next/navigation'
+import { isNativePlatform } from '@/lib/capacitor/platform'
+import { NativeSignUp } from '@/components/capacitor/native-sign-in'
 
 /**
- * Sign-up page using Clerk's built-in component
- *
- * For Account Portal flow, Clerk handles the redirect and session establishment.
- * The SignUp component properly processes the callback from Account Portal
- * and establishes the client-side session.
+ * Sign-up page using Clerk's built-in component (web) or
+ * custom NativeSignUp (Capacitor) to avoid Google's WKWebView block.
  */
 export default function SignUpPage() {
   const params = useParams()
   const searchParams = useSearchParams()
   const router = useRouter()
   const { isLoaded, isSignedIn } = useAuth()
-  const locale = params?.locale || 'en'
+  const locale = (params?.locale || 'en') as string
+  const [isNative, setIsNative] = useState(false)
+
+  useEffect(() => {
+    setIsNative(isNativePlatform())
+  }, [])
 
   // Get redirect URL from query params or default to dashboard
   const redirectUrl = searchParams.get('redirect_url') || `/${locale}`
@@ -52,17 +56,22 @@ export default function SignUpPage() {
     )
   }
 
-  // Show Clerk's SignUp component - handles Account Portal redirect automatically
-  // NOTE: Appearance is configured globally in ClerkProviderWrapper.tsx for consistent dark theme
-  // Do NOT add local appearance overrides here as they conflict with the global dark theme
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
-      <SignUp
-        routing="path"
-        path={`/${locale}/sign-up`}
-        signInUrl={`/${locale}/sign-in`}
-        afterSignUpUrl={redirectUrl}
-      />
+      {isNative ? (
+        <NativeSignUp
+          locale={locale}
+          redirectUrl={redirectUrl}
+          signInUrl={`/${locale}/sign-in`}
+        />
+      ) : (
+        <SignUp
+          routing="path"
+          path={`/${locale}/sign-up`}
+          signInUrl={`/${locale}/sign-in`}
+          afterSignUpUrl={redirectUrl}
+        />
+      )}
     </div>
   )
 }

@@ -1,25 +1,27 @@
 'use client'
 
 import { SignIn, useAuth } from '@clerk/nextjs'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useSearchParams, useRouter } from 'next/navigation'
+import { isNativePlatform } from '@/lib/capacitor/platform'
+import { NativeSignIn } from '@/components/capacitor/native-sign-in'
 
 /**
- * Sign-in page using Clerk's built-in component
- *
- * For Account Portal flow, Clerk handles the redirect and session establishment.
- * The SignIn component properly processes the callback from Account Portal
- * and establishes the client-side session.
- *
- * CRITICAL: Using Clerk's component instead of raw redirect ensures
- * the __clerk_db_jwt token is properly processed and session is established.
+ * Sign-in page using Clerk's built-in component (web) or
+ * custom NativeSignIn (Capacitor) to avoid Google's WKWebView block.
  */
 export default function SignInPage() {
   const params = useParams()
   const searchParams = useSearchParams()
   const router = useRouter()
   const { isLoaded, isSignedIn } = useAuth()
-  const locale = params?.locale || 'en'
+  const locale = (params?.locale || 'en') as string
+  const [isNative, setIsNative] = useState(false)
+
+  // Detect native platform on mount (client-only)
+  useEffect(() => {
+    setIsNative(isNativePlatform())
+  }, [])
 
   // Get redirect URL from query params or default to dashboard
   const redirectUrl = searchParams.get('redirect_url') || `/${locale}`
@@ -27,7 +29,6 @@ export default function SignInPage() {
   // If already signed in, redirect to the intended destination
   useEffect(() => {
     if (isLoaded && isSignedIn) {
-      // Use router.push for client-side navigation to preserve session
       router.push(redirectUrl)
     }
   }, [isLoaded, isSignedIn, redirectUrl, router])
@@ -56,17 +57,24 @@ export default function SignInPage() {
     )
   }
 
-  // Show Clerk's SignIn component - handles Account Portal redirect automatically
-  // NOTE: Appearance is configured globally in ClerkProviderWrapper.tsx for consistent dark theme
-  // Do NOT add local appearance overrides here as they conflict with the global dark theme
+  // On native: use custom sign-in that routes OAuth through SFSafariViewController
+  // On web: use Clerk's built-in SignIn component
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
-      <SignIn
-        routing="path"
-        path={`/${locale}/sign-in`}
-        signUpUrl={`/${locale}/sign-up`}
-        afterSignInUrl={redirectUrl}
-      />
+      {isNative ? (
+        <NativeSignIn
+          locale={locale}
+          redirectUrl={redirectUrl}
+          signUpUrl={`/${locale}/sign-up`}
+        />
+      ) : (
+        <SignIn
+          routing="path"
+          path={`/${locale}/sign-in`}
+          signUpUrl={`/${locale}/sign-up`}
+          afterSignInUrl={redirectUrl}
+        />
+      )}
     </div>
   )
 }

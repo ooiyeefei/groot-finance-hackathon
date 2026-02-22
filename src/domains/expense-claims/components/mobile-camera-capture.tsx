@@ -10,6 +10,8 @@ import { Camera, X, RotateCw, Zap, ZapOff, Grid, Square, CheckCircle } from 'luc
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { isNativePlatform } from '@/lib/capacitor/platform'
+import { captureNativePhoto, CameraPermissionDeniedError } from '@/lib/capacitor/camera-bridge'
 
 interface MobileCameraCaptureProps {
   onCapture: (file: File) => void
@@ -57,8 +59,33 @@ export default function MobileCameraCapture({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
 
-  // Initialize camera on mount
+  // Handle native camera capture (Capacitor)
+  const handleNativeCapture = useCallback(async () => {
+    try {
+      setIsCapturing(true)
+      setError(null)
+      const result = await captureNativePhoto()
+      if (result) {
+        setCapturedImage(result.previewUrl)
+        setCapturedFile(result.file)
+      }
+    } catch (err) {
+      if (err instanceof CameraPermissionDeniedError) {
+        setError(err.message)
+      } else {
+        setError('Failed to capture photo. Please try again.')
+      }
+    } finally {
+      setIsCapturing(false)
+    }
+  }, [])
+
+  // On native platforms, use the native camera immediately
   useEffect(() => {
+    if (isNativePlatform()) {
+      handleNativeCapture()
+      return
+    }
     initializeCamera()
     return () => {
       cleanup()

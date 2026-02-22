@@ -138,3 +138,15 @@ PRODUCTION_MIGRATION_SCRIPT.sql
 # Binary test fixtures (large files that bloat history)
 tests/fixtures/**/*.PF3
 test/data/*.pdf
+
+# Capacitor iOS (auto-generated, managed via Xcode)
+ios/App/Pods/
+ios/App/App/public/
+ios/App/build/
+ios/capacitor-cordova-ios-plugins/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+DerivedData/
+*.ipa
+*.dSYM.zip
+*.dSYM

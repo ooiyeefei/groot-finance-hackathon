@@ -13,6 +13,7 @@
 
 import { X, Download, Share, Plus, Smartphone } from 'lucide-react';
 import { usePWAInstall } from '@/lib/hooks/use-pwa-install';
+import { isNativePlatform } from '@/lib/capacitor/platform';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
@@ -44,6 +45,11 @@ export function PWAInstallPrompt({
     showIOSInstructions,
     hideIOSInstructions,
   } = usePWAInstall();
+
+  // Don't show in Capacitor native shell — user already has the app installed
+  if (isNativePlatform()) {
+    return null;
+  }
 
   // Don't show if already installed, dismissed, OR not on mobile
   if (isInstalled || hasUserDismissed || !isMobile) {

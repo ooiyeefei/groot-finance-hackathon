@@ -1856,4 +1856,32 @@ export default defineSchema({
   })
     .index("by_businessId", ["businessId"])
     .index("by_businessId_isActive", ["businessId", "isActive"]),
+
+  // ============================================
+  // MOBILE APP: Push Notifications & App Versions
+  // ============================================
+
+  push_subscriptions: defineTable({
+    userId: v.id("users"),
+    businessId: v.id("businesses"),
+    platform: v.union(v.literal("ios"), v.literal("android")),
+    deviceToken: v.string(),
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_deviceToken", ["deviceToken"])
+    .index("by_userId_platform", ["userId", "platform"]),
+
+  app_versions: defineTable({
+    platform: v.union(v.literal("ios"), v.literal("android")),
+    minimumVersion: v.string(),
+    latestVersion: v.string(),
+    forceUpdateMessage: v.string(),
+    softUpdateMessage: v.string(),
+    updatedAt: v.number(),
+    updatedBy: v.optional(v.id("users")),
+  })
+    .index("by_platform", ["platform"]),
 });

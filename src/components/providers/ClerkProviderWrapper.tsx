@@ -33,6 +33,9 @@ export function ClerkProviderWrapper({ children }: { children: ReactNode }) {
 
     // Clerk Account Portal domain
     /^https:\/\/accounts\.hellogroot\.com(\/.*)?$/,
+
+    // Capacitor native app (WebView origin for iOS)
+    /^capacitor:\/\/localhost(\/.*)?$/,
   ]
 
   // NOTE: Clerk appearance is configured in Clerk Dashboard (Customization > Account Portal)

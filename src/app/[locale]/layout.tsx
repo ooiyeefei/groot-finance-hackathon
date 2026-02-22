@@ -8,6 +8,7 @@ import { BusinessContextProvider } from '@/contexts/business-context';
 import { ClerkProviderWrapper } from '@/components/providers/ClerkProviderWrapper';
 import { ConvexClientProvider } from '@/components/providers/ConvexClientProvider';
 import { SentryUserProvider } from '@/components/providers/SentryUserProvider';
+import { CapacitorProvider } from '@/components/providers/CapacitorProvider';
 import { PWAProvider } from '@/components/providers/PWAProvider';
 import { MobileAppShellConnected } from '@/components/ui/mobile-app-shell-connected';
 import { ChatWidget } from '@/domains/chat/components/chat-widget';
@@ -64,12 +65,14 @@ export default async function LocaleLayout({
             <NextIntlClientProvider locale={locale} messages={messages}>
               <BusinessContextProvider>
                 <SentryUserProvider>
-                  <PWAProvider>
-                    <MobileAppShellConnected>
-                      {children}
-                    </MobileAppShellConnected>
-                  </PWAProvider>
-                  <ChatWidget />
+                  <CapacitorProvider>
+                    <PWAProvider>
+                      <MobileAppShellConnected>
+                        {children}
+                      </MobileAppShellConnected>
+                    </PWAProvider>
+                    <ChatWidget />
+                  </CapacitorProvider>
                 </SentryUserProvider>
               </BusinessContextProvider>
             </NextIntlClientProvider>

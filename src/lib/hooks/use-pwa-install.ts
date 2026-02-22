@@ -12,6 +12,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { isNativePlatform } from '@/lib/capacitor/platform';
 
 // PWA Install State Interface (from specs/001-mobile-pwa/contracts/pwa-hooks.ts)
 interface PWAInstallState {
@@ -137,6 +138,9 @@ export function usePWAInstall(): UsePWAInstallReturn {
   const [hasUserDismissed, setHasUserDismissed] = useState(false);
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
 
+  // Skip all PWA install logic inside Capacitor — user already has the native app
+  const isCapacitorNative = typeof window !== 'undefined' && isNativePlatform();
+
   const isIOS = typeof window !== 'undefined' && isIOSDevice();
   const isMobile = typeof window !== 'undefined' && isMobileDevice();
   const isInstallable = deferredPrompt !== null;
@@ -150,6 +154,12 @@ export function usePWAInstall(): UsePWAInstallReturn {
     isMobile && isIOS && isSecondVisit && !isInstalled && !hasUserDismissed && isDismissExpired();
 
   useEffect(() => {
+    // Skip all PWA logic inside Capacitor native shell
+    if (isCapacitorNative) {
+      setIsInstalled(true);
+      return;
+    }
+
     // Check if already installed
     if (isStandaloneMode()) {
       setIsInstalled(true);
@@ -188,7 +198,7 @@ export function usePWAInstall(): UsePWAInstallReturn {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
     };
-  }, []);
+  }, [isCapacitorNative]);
 
   // Task T032: Trigger browser install prompt
   const promptInstall = useCallback(async () => {

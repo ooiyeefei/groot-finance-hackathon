@@ -662,6 +662,16 @@ export const create = internalMutation({
       }
     }
 
+    // Schedule push notification for approval requests
+    if (args.type === "approval") {
+      await ctx.scheduler.runAfter(0, internal.functions.notifications.sendPushNotification, {
+        recipientUserId: args.recipientUserId,
+        title: args.title,
+        body: args.body,
+        resourceUrl: args.resourceUrl,
+      });
+    }
+
     return notificationId;
   },
 });
@@ -917,6 +927,80 @@ export const updateEmailStatus = internalMutation({
       emailSent: args.emailSent,
       emailMessageId: args.emailMessageId,
     });
+  },
+});
+
+// ============================================
+// INTERNAL ACTION: Send Push Notification via APNs
+// ============================================
+
+/**
+ * Send push notification to all active device subscriptions for a user.
+ * Called via ctx.scheduler.runAfter after creating an approval notification.
+ */
+export const sendPushNotification = internalAction({
+  args: {
+    recipientUserId: v.id("users"),
+    title: v.string(),
+    body: v.string(),
+    resourceUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    try {
+      // Get active push subscriptions for the recipient
+      const subscriptions = await ctx.runQuery(
+        internal.functions.pushSubscriptions.getByUserId,
+        { userId: args.recipientUserId }
+      );
+
+      if (!subscriptions || subscriptions.length === 0) {
+        return { sent: 0, failed: 0 };
+      }
+
+      const apiUrl = process.env.APP_URL || "https://finance.hellogroot.com";
+      let sent = 0;
+      let failed = 0;
+
+      for (const sub of subscriptions) {
+        try {
+          const response = await fetch(`${apiUrl}/api/v1/notifications/send-push`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": process.env.INTERNAL_API_KEY || "",
+            },
+            body: JSON.stringify({
+              deviceToken: sub.deviceToken,
+              title: args.title,
+              body: args.body,
+              resourceUrl: args.resourceUrl,
+            }),
+          });
+
+          if (response.status === 410) {
+            // Token unregistered — deactivate subscription
+            await ctx.runMutation(
+              internal.functions.pushSubscriptions.deactivateByToken,
+              { deviceToken: sub.deviceToken }
+            );
+            failed++;
+          } else if (response.ok) {
+            sent++;
+          } else {
+            console.error(`[Push] Failed for token ${sub.deviceToken.substring(0, 10)}:`, await response.text());
+            failed++;
+          }
+        } catch (err) {
+          console.error(`[Push] Error sending to ${sub.deviceToken.substring(0, 10)}:`, err);
+          failed++;
+        }
+      }
+
+      return { sent, failed };
+    } catch (error) {
+      console.error("[Push] sendPushNotification error:", error);
+      return { sent: 0, failed: 0 };
+    }
   },
 });
 

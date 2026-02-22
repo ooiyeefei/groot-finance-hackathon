@@ -16,6 +16,7 @@ import type * as functions_admin from "../functions/admin.js";
 import type * as functions_admin_resetDatabase from "../functions/admin/resetDatabase.js";
 import type * as functions_aiMessageUsage from "../functions/aiMessageUsage.js";
 import type * as functions_analytics from "../functions/analytics.js";
+import type * as functions_appVersions from "../functions/appVersions.js";
 import type * as functions_attendanceRecords from "../functions/attendanceRecords.js";
 import type * as functions_audit from "../functions/audit.js";
 import type * as functions_businesses from "../functions/businesses.js";
@@ -50,6 +51,7 @@ import type * as functions_payPeriodConfigs from "../functions/payPeriodConfigs.
 import type * as functions_payments from "../functions/payments.js";
 import type * as functions_payrollAdjustments from "../functions/payrollAdjustments.js";
 import type * as functions_publicHolidays from "../functions/publicHolidays.js";
+import type * as functions_pushSubscriptions from "../functions/pushSubscriptions.js";
 import type * as functions_salesInvoiceUsage from "../functions/salesInvoiceUsage.js";
 import type * as functions_salesInvoices from "../functions/salesInvoices.js";
 import type * as functions_seedActionCenter from "../functions/seedActionCenter.js";
@@ -85,6 +87,7 @@ declare const fullApi: ApiFromModules<{
   "functions/admin/resetDatabase": typeof functions_admin_resetDatabase;
   "functions/aiMessageUsage": typeof functions_aiMessageUsage;
   "functions/analytics": typeof functions_analytics;
+  "functions/appVersions": typeof functions_appVersions;
   "functions/attendanceRecords": typeof functions_attendanceRecords;
   "functions/audit": typeof functions_audit;
   "functions/businesses": typeof functions_businesses;
@@ -119,6 +122,7 @@ declare const fullApi: ApiFromModules<{
   "functions/payments": typeof functions_payments;
   "functions/payrollAdjustments": typeof functions_payrollAdjustments;
   "functions/publicHolidays": typeof functions_publicHolidays;
+  "functions/pushSubscriptions": typeof functions_pushSubscriptions;
   "functions/salesInvoiceUsage": typeof functions_salesInvoiceUsage;
   "functions/salesInvoices": typeof functions_salesInvoices;
   "functions/seedActionCenter": typeof functions_seedActionCenter;

@@ -1,0 +1,31 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "TEAMID.com.hellogroot.finanseal",
+        "paths": [
+          "/en/expense-claims/*",
+          "/en/invoices/*",
+          "/en/analytics/*",
+          "/en/settings/*",
+          "/en/chat/*",
+          "/ms/expense-claims/*",
+          "/ms/invoices/*",
+          "/ms/analytics/*",
+          "/ms/settings/*",
+          "/ms/chat/*",
+          "NOT /api/*",
+          "NOT /_next/*",
+          "NOT /sign-in",
+          "NOT /sign-up"
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "TEAMID.com.hellogroot.finanseal"
+    ]
+  }
+}
