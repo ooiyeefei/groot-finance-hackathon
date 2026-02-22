@@ -44,23 +44,9 @@ export function MobileAppShell({
   const t = useTranslations('navigation')
   const { businessId } = useActiveBusiness()
 
-  // Initialize user role state (default to employee permissions)
-  const [userRole, setUserRole] = useState<UserRole>(() => {
-    // SSR-safe: return default on server
-    if (typeof window === 'undefined') {
-      return { employee: true, manager: false, finance_admin: false }
-    }
-    // Try to restore cached role from localStorage
-    try {
-      const cached = localStorage.getItem('sidebar-user-role')
-      if (cached) {
-        return JSON.parse(cached)
-      }
-    } catch {
-      // Ignore parse errors
-    }
-    return { employee: true, manager: false, finance_admin: false }
-  })
+  // Hydration-safe: always start with default role to match server render.
+  // localStorage is read in useEffect after hydration to avoid mismatch.
+  const [userRole, setUserRole] = useState<UserRole>({ employee: true, manager: false, finance_admin: false })
 
   const [hasInitialLoad, setHasInitialLoad] = useState(false)
 
@@ -70,7 +56,6 @@ export function MobileAppShell({
       const roleData = await fetchUserRoleWithCache()
       if (roleData && roleData.permissions) {
         setUserRole(roleData.permissions)
-        // Cache role in localStorage for instant restore
         try {
           localStorage.setItem('sidebar-user-role', JSON.stringify(roleData.permissions))
         } catch {
@@ -82,8 +67,16 @@ export function MobileAppShell({
     }
   }, [])
 
-  // Initial role load
+  // Initial role load — restore from localStorage first for instant UI, then fetch fresh
   useEffect(() => {
+    try {
+      const cached = localStorage.getItem('sidebar-user-role')
+      if (cached) {
+        setUserRole(JSON.parse(cached))
+      }
+    } catch {
+      // Ignore parse errors
+    }
     fetchUserRole().then(() => setHasInitialLoad(true))
   }, [fetchUserRole])
 

@@ -11,6 +11,7 @@
 
 'use client';
 
+import { useState, useEffect } from 'react';
 import { AlertTriangle, X, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -50,7 +51,15 @@ export function StaleDataWarning({
   onRefresh,
   className = '',
 }: StaleDataWarningProps) {
-  const dataAge = formatDataAge(lastRefresh);
+  // Hydration-safe: compute time-relative text only after mount to avoid server/client mismatch
+  const [dataAge, setDataAge] = useState('a while');
+
+  useEffect(() => {
+    setDataAge(formatDataAge(lastRefresh));
+    // Update every minute so the display stays fresh
+    const interval = setInterval(() => setDataAge(formatDataAge(lastRefresh)), 60_000);
+    return () => clearInterval(interval);
+  }, [lastRefresh]);
 
   return (
     <div

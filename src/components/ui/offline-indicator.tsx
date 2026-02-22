@@ -12,6 +12,7 @@
 
 'use client';
 
+import { useState, useEffect } from 'react';
 import { WifiOff, RefreshCw, Clock } from 'lucide-react';
 import { useOfflineStatus } from '@/lib/hooks/use-offline-status';
 import { Badge } from '@/components/ui/badge';
@@ -41,13 +42,21 @@ export function OfflineIndicator({
     triggerSync,
   } = useOfflineStatus();
 
+  // Hydration-safe: compute time-relative text only after mount
+  const [lastSyncedText, setLastSyncedText] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLastSyncedText(formatLastSynced(lastSyncAt));
+    const interval = setInterval(() => setLastSyncedText(formatLastSynced(lastSyncAt)), 60_000);
+    return () => clearInterval(interval);
+  }, [lastSyncAt]);
+
   // Don't show if online and no pending actions
   if (isOnline && pendingActionsCount === 0) {
     return null;
   }
 
   const positionClasses = position === 'top' ? 'top-0' : 'bottom-0';
-  const lastSyncedText = formatLastSynced(lastSyncAt);
 
   return (
     <div
