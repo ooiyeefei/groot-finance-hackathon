@@ -162,18 +162,6 @@ const nextConfig = {
   poweredByHeader: false, // Remove X-Powered-By header
   compress: true, // Enable gzip compression
 
-  // 🔒 SECURITY: Prevent path disclosure in error traces
-  // This ensures local file paths don't leak to error tracking services
-  generateBuildId: async () => {
-    // Use a short git hash for build ID, or timestamp as fallback
-    const { execSync } = require('child_process');
-    try {
-      return execSync('git rev-parse --short HEAD').toString().trim();
-    } catch {
-      return Date.now().toString(36);
-    }
-  },
-
   // ✅ PERFORMANCE OPTIMIZATION: SWC minifier enabled by default in Next.js 15.5+
   // Note: swcMinify option is deprecated - SWC is the default minifier
 

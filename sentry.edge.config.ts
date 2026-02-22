@@ -8,12 +8,14 @@ import * as Sentry from "@sentry/nextjs";
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
 
+  // Only send events in production — prevents dev server noise from polluting Sentry
+  enabled: process.env.NODE_ENV === "production",
+
   // Environment detection
   environment: process.env.NODE_ENV,
 
-  // Adjust this value in production, or use tracesSampler for greater control
-  // 10% sampling in production, 100% in development (per spec)
-  tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,
+  // 10% sampling in production
+  tracesSampleRate: 0.1,
 
   // Setting this option to true will print useful information to the console while you're setting up Sentry.
   debug: false,
