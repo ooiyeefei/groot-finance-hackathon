@@ -83,6 +83,11 @@ npx cdk deploy --profile groot-finanseal --region us-west-2
 - **Never commit** `.png`, `.jpg`, `.gif`, or other screenshot/image files to the repo
 - UAT evidence, test screenshots, and debug images belong in external tools (e.g., GitHub issues, Notion), not in source control
 
+### UAT Testing Credentials
+- **Always refer to `.env.local`** for test account credentials
+- Three roles available: `TEST_USER_ADMIN`, `TEST_USER_MANAGER`, `TEST_USER_EMPLOYEE` (each with `_PW` suffix for password)
+- Production URL: `https://finance.hellogroot.com`
+
 ### Prefer Modification Over Creation
 - Do not create new files without approval
 - Check if existing files can be modified first
