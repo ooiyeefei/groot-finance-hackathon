@@ -26,6 +26,13 @@ Sentry.init({
   integrations: [
     // Browser tracing for Core Web Vitals (automatic)
     Sentry.browserTracingIntegration(),
+    // Strip local file paths from stack traces to prevent path disclosure
+    Sentry.rewriteFramesIntegration({
+      // Remove the root path prefix from filenames
+      root: process.env.NEXT_RUNTIME === 'nodejs' ? global.__rootdir : '/',
+      // Prefix stack frames with app:// to make them clickable in Sentry
+      prefix: 'app:///',
+    }),
   ],
 
   // PII scrubbing - removes sensitive data before sending to Sentry
