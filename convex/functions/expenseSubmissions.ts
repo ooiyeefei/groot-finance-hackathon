@@ -200,13 +200,11 @@ export const getById = query({
       return null;
     }
 
-    const role = membership.role;
-    const isOwnerOrAdmin = ["owner", "finance_admin"].includes(role);
     const isSubmitter = submission.userId === user._id;
     const isDesignatedApprover = submission.designatedApproverId === user._id;
 
-    if (!isOwnerOrAdmin && !isSubmitter && !isDesignatedApprover) {
-      // Check if user is manager of the submitter
+    if (!isSubmitter && !isDesignatedApprover) {
+      // Check if user is the direct manager of the submitter
       const submitterMembership = await ctx.db
         .query("business_memberships")
         .withIndex("by_userId_businessId", (q) =>
