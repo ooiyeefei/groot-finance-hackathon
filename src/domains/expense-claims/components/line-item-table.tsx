@@ -300,7 +300,7 @@ export default function LineItemTable({
                 <span className={`text-primary font-bold text-center text-sm ${
                   isCompact ? 'col-span-2' : 'col-span-2'
                 }`}>
-                  {currency} {totalAmount.toFixed(2)}
+                  {currency} {(subtotalAmount !== undefined ? subtotalAmount + taxAmount : totalAmount).toFixed(2)}
                 </span>
                 <span className="col-span-1"></span>
               </div>
