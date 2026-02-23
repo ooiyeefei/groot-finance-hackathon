@@ -85,24 +85,8 @@ export const list = query({
     // Filter out soft-deleted
     submissions = submissions.filter((s) => !s.deletedAt);
 
-    // Role-based filtering
-    if (role === "employee") {
-      submissions = submissions.filter((s) => s.userId === user._id);
-    } else if (role === "manager") {
-      // Get direct reports
-      const directReports = await ctx.db
-        .query("business_memberships")
-        .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
-        .collect();
-      const reportUserIds = new Set(
-        directReports
-          .filter((m) => m.managerId === user._id && m.status === "active")
-          .map((m) => m.userId)
-      );
-      reportUserIds.add(user._id); // Include own
-      submissions = submissions.filter((s) => reportUserIds.has(s.userId));
-    }
-    // owners/finance_admins see all
+    // Submissions page is always per-individual — only show the current user's own submissions
+    submissions = submissions.filter((s) => s.userId === user._id);
 
     // Status filter
     if (args.status) {
