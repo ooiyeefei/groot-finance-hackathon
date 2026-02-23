@@ -6,10 +6,11 @@
 import { ModelType } from '../../tools/base-tool';
 
 /**
- * Get system prompt — language-aware wrapper around the core financial agent prompt
+ * Get system prompt — language-aware wrapper around the core financial agent prompt.
+ * Injects the current server-side date so the LLM never hallucinates temporal expressions.
  */
-export function getSystemPrompt(language: string, modelType: ModelType): string {
-  const basePrompt = getFinancialAgentPrompt(language);
+export function getSystemPrompt(language: string, modelType: ModelType, currentDate?: Date): string {
+  const basePrompt = getFinancialAgentPrompt(language, currentDate ?? new Date());
 
   const translations = {
     en: basePrompt,
@@ -23,8 +24,38 @@ export function getSystemPrompt(language: string, modelType: ModelType): string 
 /**
  * Core Financial Agent Prompt - FINANCIAL AGENT CONSTITUTION v2.0
  */
-function getFinancialAgentPrompt(language: string): string {
+function getFinancialAgentPrompt(language: string, currentDate: Date): string {
+  const isoDate = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth(); // 0-indexed
+  const monthName = currentDate.toLocaleString('en-US', { month: 'long' });
+  const lastMonthDate = new Date(year, month - 1, 1);
+  const lastMonthName = lastMonthDate.toLocaleString('en-US', { month: 'long' });
+  const lastMonthYear = lastMonthDate.getFullYear();
+  const quarterStart = Math.floor(month / 3) * 3;
+  const quarterNum = Math.floor(month / 3) + 1;
+  const dayOfWeek = currentDate.toLocaleString('en-US', { weekday: 'long' });
+
+  const temporalContext = `## TEMPORAL CONTEXT (Server-Authoritative — Do NOT override or guess)
+TODAY = ${dayOfWeek}, ${isoDate}
+This means:
+- "today"        → ${isoDate}
+- "this month"   → ${monthName} ${year} (${year}-${String(month + 1).padStart(2, '0')}-01 to ${year}-${String(month + 1).padStart(2, '0')}-${new Date(year, month + 1, 0).getDate()})
+- "last month"   → ${lastMonthName} ${lastMonthYear}
+- "this quarter" → Q${quarterNum} ${year} (starts ${year}-${String(quarterStart + 1).padStart(2, '0')}-01)
+- "this year"    → ${year}
+
+**DATE RULES — MANDATORY:**
+1. ALWAYS pass relative expressions ("this month", "last month", "this quarter", "this year") as the \`date_range\` parameter to tools — never compute or hardcode date strings yourself.
+2. If the user says "February" without a year, use ${year} (current year) unless context implies otherwise.
+3. If no date is mentioned, default date_range to "this month".
+4. NEVER guess or hallucinate dates. TODAY is ${isoDate}. This is final.
+
+`;
+
   return `# FINANCIAL AGENT CONSTITUTION v2.0
+
+${temporalContext}
 
 ### MANDATORY TOOL SELECTION DIRECTIVE
 
