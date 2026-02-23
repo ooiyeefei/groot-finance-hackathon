@@ -900,6 +900,15 @@ export const getEmployeeExpensesForManager = query({
     const limit = Math.min(filters?.limit || 50, 50);
     const limited = filtered.slice(0, limit);
 
+    // Build category ID → display name lookup from business custom categories
+    const customCategories = (business.customExpenseCategories as Array<{
+      id: string; category_name?: string; name?: string;
+    }> | undefined) || [];
+    const categoryLookup: Record<string, string> = {};
+    for (const cat of customCategories) {
+      if (cat.id) categoryLookup[cat.id] = cat.category_name || cat.name || cat.id;
+    }
+
     // Map entries to response format
     const entries = limited.map((e) => ({
       id: e._id.toString(),
@@ -910,7 +919,7 @@ export const getEmployeeExpensesForManager = query({
       homeCurrencyAmount: e.homeCurrencyAmount || e.originalAmount || 0,
       originalCurrency: e.originalCurrency || "MYR",
       homeCurrency: e.homeCurrency || business.homeCurrency || "MYR",
-      category: e.category || "",
+      category: categoryLookup[e.category || ""] || e.category || "",
       transactionType: e.transactionType,
       sourceDocumentType: e.sourceDocumentType || "",
     }));

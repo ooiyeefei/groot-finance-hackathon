@@ -264,9 +264,14 @@ export class EmployeeExpenseTool extends BaseTool {
         console.warn(`[EmployeeExpenseTool] Output schema validation warning:`, parsed.error.issues)
       }
 
+      // Derive actual display currency from entries (homeCurrency on entries may differ from business.homeCurrency)
+      const displayCurrency = result.entries.length > 0
+        ? (result.entries[0].homeCurrency || result.currency)
+        : result.currency
+
       // Format for LLM consumption
       let dataText = `Employee Expenses for ${result.employeeName}:\n\n`
-      dataText += `Summary: ${result.totalCount} transaction(s) totaling ${result.totalAmount.toFixed(2)} ${result.currency}`
+      dataText += `Summary: ${result.totalCount} transaction(s) totaling ${result.totalAmount.toFixed(2)} ${displayCurrency}`
       if (startDate && endDate) {
         dataText += ` (${startDate} to ${endDate})`
       }
@@ -278,9 +283,15 @@ export class EmployeeExpenseTool extends BaseTool {
       if (result.entries.length > 0) {
         dataText += '\nTransactions:\n'
         result.entries.forEach((e: any, i: number) => {
-          dataText += `${i + 1}. ${e.transactionDate} - ${e.description || 'No description'}\n`
-          dataText += `   Vendor: ${e.vendorName || 'Unknown'} | Amount: ${e.homeCurrencyAmount.toFixed(2)} ${e.homeCurrency}\n`
-          dataText += `   Category: ${e.category || 'Uncategorized'} | Type: ${e.transactionType}\n`
+          dataText += `${i + 1}. ${e.transactionDate} | ${e.vendorName || 'Unknown vendor'}\n`
+          // Show original currency amount; also show home currency if different
+          const origStr = `${e.originalAmount?.toFixed(2) ?? e.homeCurrencyAmount.toFixed(2)} ${e.originalCurrency || e.homeCurrency}`
+          const homeStr = `${e.homeCurrencyAmount.toFixed(2)} ${e.homeCurrency}`
+          const amountStr = (e.originalCurrency && e.originalCurrency !== e.homeCurrency)
+            ? `${origStr} (≈ ${homeStr})`
+            : homeStr
+          dataText += `   Amount: ${amountStr}\n`
+          dataText += `   Description: ${e.description || '—'} | Category: ${e.category || 'Uncategorized'}\n`
         })
       }
 
