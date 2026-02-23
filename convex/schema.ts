@@ -565,6 +565,9 @@ export default defineSchema({
     convertedImageWidth: v.optional(v.number()),
     convertedImageHeight: v.optional(v.number()),
 
+    // Domain: distinguishes AP supplier invoices from expense claim receipts accidentally stored here
+    documentDomain: v.optional(v.union(v.literal("invoices"), v.literal("expense_claims"))),
+
     // Processing Status (validator from src/lib/constants/statuses.ts)
     status: invoiceStatusValidator,
 

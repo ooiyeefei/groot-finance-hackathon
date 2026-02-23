@@ -1201,21 +1201,13 @@ export const updateStatus = mutation({
             });
 
             if (vendor) {
-              // Update accounting entry with vendorId
+              // Link accounting entry to vendor record
               await ctx.db.patch(accountingEntryId, {
                 vendorId: vendor._id,
               });
-
-              // Promote vendor from "prospective" to "active" (first accounting entry)
-              const promotionResult = await ctx.runMutation(internal.functions.vendors.promoteIfProspective, {
-                vendorId: vendor._id,
-              });
-
-              if (promotionResult.promoted) {
-                console.log(`[Convex] Promoted vendor ${vendor._id} to active status`);
-              } else {
-                console.log(`[Convex] Vendor ${vendor._id} already ${promotionResult.currentStatus}, not promoted`);
-              }
+              // NOTE: promoteIfProspective intentionally NOT called here.
+              // Expense claim merchants stay "prospective" — only supplier invoices create active vendors.
+              console.log(`[Convex] Linked vendor ${vendor._id} to accounting entry (no promotion — expense claim source)`);
             } else {
               console.log(`[Convex] No vendor found for name "${claim.vendorName}" - skipping vendor linking`);
             }

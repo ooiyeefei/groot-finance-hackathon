@@ -813,7 +813,9 @@ async function approveOneClaim(
     }
   }
 
-  // Vendor activation
+  // Vendor linking (expense claims) — link accounting entry to vendor record if found,
+  // but do NOT promote expense claim merchants to "active" vendor status.
+  // Active vendors should only come from actual AP supplier invoices, not employee receipts.
   if (claim.vendorName) {
     try {
       const vendor = await ctx.runQuery(internal.functions.vendors.getByName, {
@@ -823,12 +825,11 @@ async function approveOneClaim(
 
       if (vendor) {
         await ctx.db.patch(accountingEntryId, { vendorId: vendor._id });
-        await ctx.runMutation(internal.functions.vendors.promoteIfProspective, {
-          vendorId: vendor._id,
-        });
+        // NOTE: promoteIfProspective intentionally NOT called here.
+        // Expense claim merchants stay "prospective" — only supplier invoices create active vendors.
       }
     } catch (e) {
-      console.log(`[Submission Approve] Vendor activation skipped for "${claim.vendorName}": ${e}`);
+      console.log(`[Submission Approve] Vendor link skipped for "${claim.vendorName}": ${e}`);
     }
   }
 

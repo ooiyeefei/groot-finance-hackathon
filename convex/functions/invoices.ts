@@ -109,6 +109,14 @@ export const list = query({
       // Filter soft-deleted
       invoices = invoices.filter((inv) => !inv.deletedAt);
 
+      // Only show supplier invoices (AP domain). Exclude any records tagged as expense_claims,
+      // or any records whose storagePath indicates they came from the expense_claims pipeline.
+      invoices = invoices.filter((inv) => {
+        if (inv.documentDomain === "expense_claims") return false;
+        if (inv.storagePath && inv.storagePath.startsWith("expense_claims/")) return false;
+        return true;
+      });
+
       // Sort by creation time (newest first)
       invoices.sort((a, b) => b._creationTime - a._creationTime);
 
@@ -485,6 +493,7 @@ export const create = mutation({
       fileSize: args.fileSize,
       storagePath: args.storagePath ?? "", // Empty string if not provided
       status: args.status ?? "uploading", // Default to 'uploading' when creating
+      documentDomain: "invoices", // Tag all records created through invoices.create as supplier invoices
       updatedAt: Date.now(),
     });
 
