@@ -1551,6 +1551,129 @@ export const resetStuckLineItemsStatus = mutation({
 });
 
 // ============================================
+// ONE-TIME CLEANUP: Remove misrouted test/dev records from invoices table
+// ============================================
+
+/**
+ * DRY RUN: Lists invoice records that are candidates for cleanup.
+ * These are records NOT tagged as documentDomain:"invoices" (created before the domain tag was added)
+ * that also have classification_failed or storagePath starting with "expense_claims/".
+ * Call this first to see what would be deleted before running the actual cleanup.
+ */
+export const listMisroutedInvoices = query({
+  args: { businessId: v.string() },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) throw new Error("User not found");
+
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) throw new Error("Business not found");
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!membership || !["owner", "finance_admin"].includes(membership.role)) {
+      throw new Error("Owner/finance_admin required");
+    }
+
+    const all = await ctx.db
+      .query("invoices")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    return all
+      .filter((inv) => !inv.deletedAt)
+      .filter((inv) => {
+        // Not tagged as a proper supplier invoice
+        const notTagged = inv.documentDomain !== "invoices";
+        // Either classification_failed (rejected as non-invoice) or expense_claims storagePath
+        const isExpenseLike =
+          inv.status === "classification_failed" ||
+          (inv.storagePath && inv.storagePath.startsWith("expense_claims/")) ||
+          inv.documentDomain === "expense_claims";
+        return notTagged && isExpenseLike;
+      })
+      .map((inv) => ({
+        id: inv._id,
+        fileName: inv.fileName,
+        status: inv.status,
+        storagePath: inv.storagePath,
+        documentDomain: inv.documentDomain,
+        createdAt: new Date(inv._creationTime).toISOString(),
+      }));
+  },
+});
+
+/**
+ * CLEANUP: Soft-deletes misrouted invoice records (test data uploaded to wrong section).
+ * Run listMisroutedInvoices first to preview what will be deleted.
+ * Only deletes records that are: NOT tagged as "invoices" domain AND are classification_failed
+ * or have expense_claims storagePath.
+ */
+export const cleanupMisroutedInvoices = mutation({
+  args: { businessId: v.string(), dryRun: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) throw new Error("User not found");
+
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) throw new Error("Business not found");
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", business._id)
+      )
+      .first();
+
+    if (!membership || !["owner", "finance_admin"].includes(membership.role)) {
+      throw new Error("Owner/finance_admin required");
+    }
+
+    const all = await ctx.db
+      .query("invoices")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    const candidates = all
+      .filter((inv) => !inv.deletedAt)
+      .filter((inv) => {
+        const notTagged = inv.documentDomain !== "invoices";
+        const isExpenseLike =
+          inv.status === "classification_failed" ||
+          (inv.storagePath && inv.storagePath.startsWith("expense_claims/")) ||
+          inv.documentDomain === "expense_claims";
+        return notTagged && isExpenseLike;
+      });
+
+    const now = Date.now();
+    const results = [];
+    for (const inv of candidates) {
+      if (!args.dryRun) {
+        await ctx.db.patch(inv._id, { deletedAt: now, updatedAt: now });
+      }
+      results.push({ id: inv._id, fileName: inv.fileName, status: inv.status });
+    }
+
+    return {
+      dryRun: args.dryRun ?? false,
+      deletedCount: candidates.length,
+      records: results,
+    };
+  },
+});
+
+// ============================================
 // AI TOOL QUERIES
 // ============================================
 
