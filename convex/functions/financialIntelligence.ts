@@ -823,24 +823,29 @@ export const getEmployeeExpensesForManager = query({
     }
 
     // Authorization check
-    if (role === "employee") {
-      return { authorized: false, error: "Employees cannot query other employees' data", entries: [], totalCount: 0, totalAmount: 0, currency: "MYR", employeeName: targetEmployee.fullName || "" };
-    }
+    const isSelfQuery = targetEmployee._id === requester._id;
 
-    if (role === "manager") {
-      // Verify target is a direct report
-      const targetMembership = await ctx.db
-        .query("business_memberships")
-        .withIndex("by_userId_businessId", (q) =>
-          q.eq("userId", targetEmployee._id).eq("businessId", business._id)
-        )
-        .first();
-
-      if (!targetMembership || targetMembership.managerId !== requester._id) {
-        return { authorized: false, error: "You can only view data for your direct reports", entries: [], totalCount: 0, totalAmount: 0, currency: "MYR", employeeName: targetEmployee.fullName || "" };
+    if (!isSelfQuery) {
+      if (role === "employee") {
+        return { authorized: false, error: "Employees cannot query other employees' data", entries: [], totalCount: 0, totalAmount: 0, currency: "MYR", employeeName: targetEmployee.fullName || "" };
       }
+
+      if (role === "manager") {
+        // Verify target is a direct report
+        const targetMembership = await ctx.db
+          .query("business_memberships")
+          .withIndex("by_userId_businessId", (q) =>
+            q.eq("userId", targetEmployee._id).eq("businessId", business._id)
+          )
+          .first();
+
+        if (!targetMembership || targetMembership.managerId !== requester._id) {
+          return { authorized: false, error: "You can only view data for your direct reports", entries: [], totalCount: 0, totalAmount: 0, currency: "MYR", employeeName: targetEmployee.fullName || "" };
+        }
+      }
+      // finance_admin and owner: allowed for any employee in business
     }
-    // finance_admin and owner: allowed for any employee in business
+    // Self-query: any role can query their own expenses
 
     // Query accounting entries
     const allEntries = await ctx.db
@@ -1108,7 +1113,8 @@ export const getTeamExpenseSummary = query({
       summary: {
         totalAmount: parseFloat(totalAmount.toFixed(2)),
         currency: business.homeCurrency || "MYR",
-        employeeCount: uniqueEmployees.size,
+        employeeCount: targetUserIds.size,       // total team members in scope
+        employeesWithData: uniqueEmployees.size, // members who have transactions in this period
         recordCount: filtered.length,
       },
       breakdown,

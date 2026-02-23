@@ -1393,7 +1393,7 @@ export const resolveEmployeeByName = query({
       return { matches: [], totalDirectReports: 0 };
     }
 
-    const totalDirectReports = candidateMemberships.length;
+    const totalCandidates = candidateMemberships.length;
     const query = args.nameQuery.toLowerCase();
 
     // Match against user records
@@ -1434,6 +1434,29 @@ export const resolveEmployeeByName = query({
       }
     }
 
+    // Self-match: check if the query matches the requesting user themselves
+    // (e.g. a finance_admin asking "how much did I spend?" or using their own name)
+    const selfUser = await ctx.db.get(args.requestingUserId);
+    if (selfUser) {
+      const selfFullName = (selfUser.fullName || "").toLowerCase();
+      const selfEmail = (selfUser.email || "").toLowerCase();
+      const selfEmailPrefix = selfEmail.split("@")[0];
+      if (
+        selfFullName === query ||
+        selfFullName.includes(query) ||
+        selfEmailPrefix === query ||
+        selfEmailPrefix.includes(query)
+      ) {
+        matches.push({
+          userId: selfUser._id.toString(),
+          clerkUserId: selfUser.clerkUserId,
+          fullName: selfUser.fullName || selfUser.email || "",
+          email: selfUser.email || "",
+          confidence: selfFullName === query ? "exact" : "partial",
+        });
+      }
+    }
+
     // Sort: exact matches first, then partial
     matches.sort((a, b) => {
       const order = { exact: 0, partial: 1, ambiguous: 2 };
@@ -1447,7 +1470,7 @@ export const resolveEmployeeByName = query({
       }
     }
 
-    return { matches, totalDirectReports };
+    return { matches, totalDirectReports: totalCandidates };
   },
 });
 
