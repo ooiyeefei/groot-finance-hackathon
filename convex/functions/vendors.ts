@@ -749,6 +749,100 @@ export const promoteIfProspective = internalMutation({
 });
 
 /**
+ * Migration: Demote vendors whose only accounting activity came from expense claims
+ * back to "prospective" status. These were incorrectly promoted when expense claims
+ * were approved. AP vendors (active) should only come from actual supplier invoices.
+ *
+ * Run via Convex dashboard:
+ *   demoteExpenseClaimVendors({ businessId: "...", dryRun: true })   ← preview
+ *   demoteExpenseClaimVendors({ businessId: "..." })                  ← execute
+ */
+export const demoteExpenseClaimVendors = mutation({
+  args: {
+    businessId: v.id("businesses"),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) throw new Error("User not found");
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership || !["owner", "finance_admin"].includes(membership.role)) {
+      throw new Error("Owner/finance_admin required");
+    }
+
+    // Get all active vendors for this business
+    const activeVendors = await ctx.db
+      .query("vendors")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect()
+      .then((vs) => vs.filter((v) => v.status === "active"));
+
+    // Get all accounting entries for this business
+    const allEntries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect()
+      .then((es) => es.filter((e) => !e.deletedAt && e.vendorId));
+
+    // For each active vendor: check if it has ANY invoice-sourced accounting entry
+    const results = [];
+    const now = Date.now();
+
+    for (const vendor of activeVendors) {
+      const vendorEntries = allEntries.filter(
+        (e) => e.vendorId?.toString() === vendor._id.toString()
+      );
+
+      const hasInvoiceEntry = vendorEntries.some(
+        (e) => e.sourceDocumentType !== "expense_claim"
+      );
+
+      if (!hasInvoiceEntry) {
+        // All activity is from expense claims — demote to prospective
+        results.push({
+          vendorId: vendor._id,
+          name: vendor.name,
+          action: "demoted",
+          entryCount: vendorEntries.length,
+        });
+
+        if (!args.dryRun) {
+          await ctx.db.patch(vendor._id, {
+            status: "prospective",
+            updatedAt: now,
+          });
+        }
+      } else {
+        results.push({
+          vendorId: vendor._id,
+          name: vendor.name,
+          action: "kept_active",
+          entryCount: vendorEntries.length,
+        });
+      }
+    }
+
+    return {
+      dryRun: args.dryRun ?? false,
+      totalActive: activeVendors.length,
+      demotedCount: results.filter((r) => r.action === "demoted").length,
+      keptCount: results.filter((r) => r.action === "kept_active").length,
+      records: results,
+    };
+  },
+});
+
+/**
  * Get vendor by name (internal query)
  *
  * Case-insensitive exact match lookup.

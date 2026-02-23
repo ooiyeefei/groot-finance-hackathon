@@ -310,6 +310,7 @@ export const getAgedPayables = query({
 
     const payables = entries.filter((entry) => {
       if (entry.deletedAt) return false;
+      if (entry.sourceDocumentType === "expense_claim") return false; // AP = supplier invoices only
       if (entry.transactionType !== "Expense" && entry.transactionType !== "Cost of Goods Sold")
         return false;
       return ["pending", "overdue"].includes(entry.status);
@@ -516,6 +517,7 @@ export const getUpcomingPayments = query({
 
     const payables = entries.filter((entry) => {
       if (entry.deletedAt) return false;
+      if (entry.sourceDocumentType === "expense_claim") return false; // AP = supplier invoices only
       if (entry.transactionType !== "Expense" && entry.transactionType !== "Cost of Goods Sold")
         return false;
       return ["pending"].includes(entry.status);
@@ -761,6 +763,7 @@ export const getAgedPayablesByVendor = query({
     const payables = entries.filter(
       (e) =>
         !e.deletedAt &&
+        e.sourceDocumentType !== "expense_claim" && // AP = supplier invoices only
         (e.status === "pending" || e.status === "overdue") &&
         (e.transactionType === "Expense" || e.transactionType === "Cost of Goods Sold")
     );
@@ -876,6 +879,7 @@ export const getVendorPayablesDrilldown = query({
 
     const filtered = entries.filter((e) => {
       if (e.deletedAt) return false;
+      if (e.sourceDocumentType === "expense_claim") return false; // AP = supplier invoices only
       if (e.status !== "pending" && e.status !== "overdue") return false;
       if (e.transactionType !== "Expense" && e.transactionType !== "Cost of Goods Sold") return false;
 
@@ -958,6 +962,7 @@ export const getAPUpcomingPayments = query({
 
     const payables = entries.filter((e) => {
       if (e.deletedAt) return false;
+      if (e.sourceDocumentType === "expense_claim") return false; // AP = supplier invoices only
       if (e.status !== "pending" && e.status !== "overdue") return false;
       if (e.transactionType !== "Expense" && e.transactionType !== "Cost of Goods Sold") return false;
       if (!e.dueDate) return false;
@@ -1045,6 +1050,7 @@ export const getVendorSpendAnalytics = query({
     const spendEntries = entries.filter(
       (e) =>
         !e.deletedAt &&
+        e.sourceDocumentType !== "expense_claim" && // AP = supplier invoices only
         (e.transactionType === "Expense" || e.transactionType === "Cost of Goods Sold") &&
         (e.status === "paid" || e.status === "pending" || e.status === "overdue") &&
         e.transactionDate >= cutoffDate
