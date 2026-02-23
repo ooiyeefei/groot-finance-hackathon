@@ -170,8 +170,6 @@ formatBusinessDate('2025-10-31')  // "Oct 31, 2025" (no timezone shift)
 - TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, Clerk 6.30.0, AWS SES, lucide-react (icons), Radix UI (Sheet, Badge) (018-app-email-notif)
 - Convex (new `notifications` + `notification_digests` tables), AWS SES (email delivery) (018-app-email-notif)
 - TypeScript 5.9.3 + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, Clerk 6.30.0, Zod 3.23.8 (018-timesheet-attendance)
-- TypeScript 5.x, Node.js 20.x (both repos) (001-waitlist-management)
-- PostgreSQL via Supabase (shared instance). One new table: `waitlist_entries`. Schema change via Supabase migration in groot-admin; Prisma schema updated via `prisma db pull` in groot-reservation. (001-waitlist-management)
 
 ## Recent Changes
 - 001-category-3-mcp: Added MCP Server with API key management
