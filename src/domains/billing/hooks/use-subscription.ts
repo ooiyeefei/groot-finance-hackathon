@@ -19,12 +19,14 @@ import { useActiveBusiness } from '@/contexts/business-context'
 // ============================================================================
 
 const SUBSCRIPTION_CACHE_KEY = 'subscription-data'
+const SUBSCRIPTION_CACHE_TTL_MS = 2 * 60 * 1000 // 2 minutes — short enough to catch trial extensions
 
 /**
  * Get cached subscription data from localStorage.
  * Returns cached data if:
  * - businessId is null (use any cached data during hydration)
  * - businessId matches cached business
+ * - Cache is less than TTL old (avoids stale trial dates after admin extension)
  */
 function getCachedSubscription(businessId: string | null): SubscriptionData | null {
   if (typeof window === 'undefined') return null
@@ -32,10 +34,12 @@ function getCachedSubscription(businessId: string | null): SubscriptionData | nu
   try {
     const cached = localStorage.getItem(SUBSCRIPTION_CACHE_KEY)
     if (cached) {
-      const parsed = JSON.parse(cached) as SubscriptionData
-      // Use cache if:
-      // 1. businessId is null (during hydration, show cached data to prevent flicker)
-      // 2. businessId matches the cached business
+      const parsed = JSON.parse(cached) as SubscriptionData & { _cachedAt?: number }
+      // Reject stale cache
+      if (parsed._cachedAt && Date.now() - parsed._cachedAt > SUBSCRIPTION_CACHE_TTL_MS) {
+        localStorage.removeItem(SUBSCRIPTION_CACHE_KEY)
+        return null
+      }
       if (!businessId || parsed.business?.id === businessId) {
         return parsed
       }
@@ -54,7 +58,7 @@ function cacheSubscription(data: SubscriptionData | null): void {
 
   try {
     if (data) {
-      localStorage.setItem(SUBSCRIPTION_CACHE_KEY, JSON.stringify(data))
+      localStorage.setItem(SUBSCRIPTION_CACHE_KEY, JSON.stringify({ ...data, _cachedAt: Date.now() }))
     } else {
       localStorage.removeItem(SUBSCRIPTION_CACHE_KEY)
     }
@@ -75,8 +79,24 @@ export interface TrialInfo {
 // TRIAL CALCULATION UTILITIES (Centralized - Single Source of Truth)
 // ============================================================================
 
-/** Standard trial duration in days */
+/** Default trial duration in days — used only as fallback when dates unavailable */
 export const TRIAL_DURATION_DAYS = 14
+
+/**
+ * Calculate the actual total length of the trial in days from start to end date.
+ * Falls back to TRIAL_DURATION_DAYS if dates are missing.
+ */
+export function calculateTotalTrialDays(trial: TrialInfo): number {
+  if (trial.trialStartDate && trial.trialEndDate) {
+    const start = new Date(trial.trialStartDate)
+    const end = new Date(trial.trialEndDate)
+    const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+    const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate())
+    const total = Math.floor((endDay.getTime() - startDay.getTime()) / (1000 * 60 * 60 * 24))
+    return Math.max(TRIAL_DURATION_DAYS, total) // at least 14 days
+  }
+  return TRIAL_DURATION_DAYS
+}
 
 /**
  * Calculate days used in trial period from start date.
@@ -95,19 +115,22 @@ export function calculateTrialDaysUsed(trial: TrialInfo): number {
     const daysDiff = Math.floor((today.getTime() - startDay.getTime()) / (1000 * 60 * 60 * 24))
     return Math.max(1, daysDiff + 1) // +1 because Day 1 is the first day
   }
-  // Fallback to old calculation if no start date
-  return TRIAL_DURATION_DAYS - (trial.daysRemaining ?? 0)
+  // Fallback: derive from daysRemaining and actual total
+  const total = calculateTotalTrialDays(trial)
+  return total - (trial.daysRemaining ?? 0)
 }
 
 /**
  * Calculate trial progress as a percentage (0-100).
+ * Uses actual trial duration (start→end), not hardcoded 14.
  *
  * @param trial - The trial info object
  * @returns Progress percentage (0-100)
  */
 export function calculateTrialProgress(trial: TrialInfo): number {
   const daysUsed = calculateTrialDaysUsed(trial)
-  return Math.min(100, Math.round((daysUsed / TRIAL_DURATION_DAYS) * 100))
+  const totalDays = calculateTotalTrialDays(trial)
+  return Math.min(100, Math.round((daysUsed / totalDays) * 100))
 }
 
 export interface RenewalInfo {

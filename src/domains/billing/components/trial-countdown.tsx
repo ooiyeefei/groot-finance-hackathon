@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils'
 import {
   type TrialInfo,
   TRIAL_DURATION_DAYS,
+  calculateTotalTrialDays,
   calculateTrialDaysUsed,
   calculateTrialProgress,
 } from '../hooks/use-subscription'
@@ -45,6 +46,7 @@ export function TrialCountdown({
 
   // Use centralized utilities for consistent calculation across all components
   const daysUsed = calculateTrialDaysUsed(trial)
+  const totalTrialDays = calculateTotalTrialDays(trial)
   const progressPercentage = calculateTrialProgress(trial)
 
   // Determine urgency level
@@ -156,7 +158,7 @@ export function TrialCountdown({
             </div>
           </TooltipTrigger>
           <TooltipContent>
-            <p className="font-medium">Day {daysUsed}/{TRIAL_DURATION_DAYS}</p>
+            <p className="font-medium">Day {daysUsed}/{totalTrialDays}</p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -169,7 +171,7 @@ export function TrialCountdown({
             ? 'text-yellow-600/70 dark:text-yellow-400/70'
             : 'text-blue-600/70 dark:text-blue-400/70'
       )}>
-        <span>Day {Math.min(daysUsed, TRIAL_DURATION_DAYS)} of {TRIAL_DURATION_DAYS}</span>
+        <span>Day {Math.min(daysUsed, totalTrialDays)} of {totalTrialDays}</span>
         {trial.trialEndDate && (
           <span>Ends {new Date(trial.trialEndDate).toLocaleDateString()}</span>
         )}

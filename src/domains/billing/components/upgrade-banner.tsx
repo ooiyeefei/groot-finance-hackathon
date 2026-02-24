@@ -11,7 +11,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import {
   useSubscription,
-  TRIAL_DURATION_DAYS,
+  calculateTotalTrialDays,
   calculateTrialDaysUsed,
   calculateTrialProgress,
 } from '../hooks/use-subscription'
@@ -101,7 +101,7 @@ export function UpgradeBanner() {
                         </div>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="font-medium">Day {calculateTrialDaysUsed(data.trial)}/{TRIAL_DURATION_DAYS}</p>
+                        <p className="font-medium">Day {calculateTrialDaysUsed(data.trial)}/{calculateTotalTrialDays(data.trial)}</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
