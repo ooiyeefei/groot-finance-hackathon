@@ -150,6 +150,7 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
         throw new Error('Failed to save currency preference')
       }
 
+      setInitialValues(prev => ({ ...prev, preferredCurrency: currency }))
       addToast({
         type: 'success',
         title: 'Currency updated',
@@ -181,6 +182,7 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
         throw new Error('Failed to save timezone preference')
       }
 
+      setInitialValues(prev => ({ ...prev, timezone: tz }))
       addToast({
         type: 'success',
         title: 'Timezone updated',
@@ -215,6 +217,7 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
         throw new Error('Failed to save email preference')
       }
 
+      setInitialValues(prev => ({ ...prev, emailPreferences: { ...prev.emailPreferences, [field]: value } }))
       addToast({
         type: 'success',
         title: 'Notification settings updated',
