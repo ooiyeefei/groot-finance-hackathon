@@ -17,6 +17,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LineItem } from '@/domains/accounting-entries/hooks/use-line-items'
 import type { AdditionalCharge } from '@/domains/expense-claims/types/expense-extraction'
 
+/** Title-case a charge label while preserving short abbreviations (SST, GST, VAT, etc.) */
+function formatChargeLabel(label: string): string {
+  return label.replace(/\S+/g, (word) => {
+    // Preserve abbreviations (2-4 uppercase letters) and parenthetical content like "(10%)"
+    if (/^[A-Z]{2,4}$/.test(word) || /^\(.*\)$/.test(word)) return word
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+  })
+}
+
 // Line items extraction status (from two-phase extraction)
 export type LineItemsStatus = 'pending' | 'extracting' | 'complete' | 'skipped' | undefined
 
@@ -296,7 +305,7 @@ export default function LineItemTable({
                       <span className={`text-muted-foreground font-medium text-right text-sm ${
                         isCompact ? 'col-span-8' : 'col-span-9'
                       }`}>
-                        {charge.label}
+                        {formatChargeLabel(charge.label)}
                       </span>
                       <span className={`text-muted-foreground font-medium text-center text-sm ${
                         isCompact ? 'col-span-2' : 'col-span-2'
