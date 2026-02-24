@@ -13,10 +13,11 @@ export class GetInvoicesTool extends BaseTool {
   }
 
   getDescription(modelType?: ModelType): string {
-    return `Retrieve OCR-processed invoices that are ready to post to accounting.
-Returns completed invoices with extracted vendor name, amount, date, confidence score, and line items.
-Use this when users ask about invoices ready to post, recently processed invoices, or OCR results.
-This tool queries the invoices table (NOT accounting_entries).`
+    return `Retrieve incoming/purchase invoices (Account Payables) that have been OCR-processed.
+Returns invoices with extracted vendor name, amount, date, invoice number, confidence score, and line items.
+Use this when users ask about: "my invoices", "recent invoices", "incoming invoices", "purchase invoices",
+"invoices ready to post", "AP invoices", or any question about supplier/vendor invoices.
+This tool queries the AP invoices table (NOT accounting_entries and NOT sales invoices).`
   }
 
   getToolSchema(modelType?: ModelType): OpenAIToolSchema {

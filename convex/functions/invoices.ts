@@ -1719,13 +1719,18 @@ export const getCompletedForAI = query({
       .withIndex("by_businessId", (q) => q.eq("businessId", businessId))
       .collect();
 
-    // Filter: completed status, has extractedData, not deleted
+    // Filter: any status where OCR is done (has extractedData), not deleted, supplier invoices only
+    // "pending" = OCR done, awaiting payment. "completed"/"paid"/"overdue" = posted to accounting.
+    // Exclude expense_claim domain records and processing/failed statuses.
+    const EXCLUDED_STATUSES = new Set(["uploading", "classifying", "processing", "analyzing", "classification_failed", "failed"]);
     const completed = allInvoices
       .filter(
         (inv) =>
-          inv.status === "completed" &&
+          !inv.deletedAt &&
           inv.extractedData &&
-          !inv.deletedAt
+          !EXCLUDED_STATUSES.has(inv.status) &&
+          inv.documentDomain !== "expense_claims" &&
+          !(inv.storagePath && inv.storagePath.startsWith("expense_claims/"))
       )
       .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0))
       .slice(0, args.limit ?? 20);
