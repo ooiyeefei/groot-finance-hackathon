@@ -85,13 +85,22 @@ class ExtractedLineItem(BaseModel):
     line_total: float = Field(..., description="Total amount for this line item")
 
 
+class ReceiptAdditionalCharge(BaseModel):
+    """A single additional charge on a receipt."""
+    label: str = Field(..., description="Charge label exactly as on receipt, e.g. 'SST (6%)', 'Service Charge (10%)', 'GST 9%', 'Rounding'")
+    amount: float = Field(..., description="Charge amount. Use negative values for discounts and rounding adjustments.")
+    charge_type: Optional[str] = Field(None, description="Category: 'tax', 'service_charge', 'tip', 'rounding', 'discount', 'other'")
+
+
 class ExtractedReceiptData(BaseModel):
     vendor_name: str = Field(..., description="The name of the merchant or store")
     transaction_date: str = Field(..., description="Transaction date in YYYY-MM-DD format")
     total_amount: float = Field(..., description="Final total amount")
     currency: str = Field(..., description="Currency code in ISO 4217 format")
-    subtotal_amount: Optional[float] = Field(None, description="Subtotal before tax and tips")
-    tax_amount: Optional[float] = Field(None, description="Total tax amount")
+    subtotal_amount: Optional[float] = Field(None, description="Subtotal before any additional charges")
+    additional_charges: List[ReceiptAdditionalCharge] = Field(default_factory=list, description="All charges between subtotal and total: taxes (SST, GST, VAT), service charges, tips, rounding. Extract each with exact receipt label.")
+    service_charge_amount: Optional[float] = Field(None, description="Legacy: service charge amount")
+    tax_amount: Optional[float] = Field(None, description="Legacy: total tax amount")
     receipt_number: Optional[str] = Field(None, description="Receipt, invoice, or reference number")
     line_items: List[ExtractedLineItem] = Field(default_factory=list, description="Individual purchased items")
     selected_category: Optional[str] = Field(None, description="REQUIRED: Select ONE category_name from available_categories JSON list. Must EXACTLY match a category_name value provided.")
@@ -326,7 +335,13 @@ def process_receipt_extraction(params: Dict[str, Any]) -> Dict[str, Any]:
                 }
                 for item in extracted_data.line_items
             ],
-            "tax_amount": extracted_data.tax_amount,
+            "additional_charges": [
+                {"label": c.label, "amount": c.amount, "chargeType": c.charge_type or "other"}
+                for c in extracted_data.additional_charges or []
+            ],
+            # Legacy fields (computed from additional_charges for backward compat)
+            "tax_amount": sum(c.amount for c in extracted_data.additional_charges or [] if c.charge_type == 'tax') or extracted_data.tax_amount,
+            "service_charge_amount": sum(c.amount for c in extracted_data.additional_charges or [] if c.charge_type == 'service_charge') or extracted_data.service_charge_amount,
             "receipt_number": extracted_data.receipt_number,
             "confidence_score": extracted_data.confidence_score,
             "extraction_method": "dspy",

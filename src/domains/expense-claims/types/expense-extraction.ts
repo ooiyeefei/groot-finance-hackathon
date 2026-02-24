@@ -8,6 +8,20 @@ import { SupportedCurrency } from '@/domains/accounting-entries/types'
 import { ExpenseCategory } from './expense-claims'
 
 // ============================================================================
+// ADDITIONAL CHARGES (Dynamic tax/service charge/rounding support)
+// ============================================================================
+
+/**
+ * Represents a single additional charge on a receipt (tax, service charge, rounding, etc.)
+ * Supports SEA regional variations: SST, GST, VAT, service charge, rounding adjustments.
+ */
+export interface AdditionalCharge {
+  label: string       // As shown on receipt: "SST (6%)", "Service Charge (10%)", "Rounding"
+  amount: number      // Can be negative for rounding/discounts
+  chargeType?: 'tax' | 'service_charge' | 'tip' | 'rounding' | 'discount' | 'other'
+}
+
+// ============================================================================
 // AI SIGNATURE INTERFACES (TypeScript as Declarative Signatures)
 // ============================================================================
 
@@ -20,20 +34,24 @@ export interface ExtractedReceiptData {
   vendorName: string
   vendorAddress?: string
   vendorTaxId?: string
-  
+
   // Transaction Details (Chain-of-Thought Step 2)
   transactionDate: string // ISO 8601 format: YYYY-MM-DD
   transactionTime?: string // HH:mm:ss format
   receiptNumber?: string
   invoiceNumber?: string
-  
+
   // Financial Data (Chain-of-Thought Step 3)
   subtotalAmount?: number
   taxAmount?: number
+  serviceChargeAmount?: number
   tipAmount?: number
   totalAmount: number
   currency: string // ISO 4217 code (USD, EUR, etc.)
-  
+
+  // Dynamic additional charges (replaces fixed tax/service charge for display)
+  additionalCharges?: AdditionalCharge[]
+
   // Tax Information (Chain-of-Thought Step 4)
   taxRate?: number // e.g., 0.08 for 8%
   taxType?: string // e.g., "VAT", "GST", "Sales Tax"

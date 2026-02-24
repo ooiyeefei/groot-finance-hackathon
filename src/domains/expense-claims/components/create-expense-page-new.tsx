@@ -450,8 +450,9 @@ export default function CreateExpensePageNew({
                   showAddButton={true}
                   disabled={saving || submitting}
                   variant="compact"
-                  taxAmount={extractionResult?.extractedData.taxAmount || 0}
                   subtotalAmount={extractionResult?.extractedData.subtotalAmount}
+                  additionalCharges={formData.additional_charges}
+                  taxAmount={extractionResult?.extractedData.taxAmount || 0}
                 />
               </div>
             </div>
@@ -518,8 +519,9 @@ export default function CreateExpensePageNew({
               showAddButton={true}
               disabled={saving || submitting}
               variant="default"
-              taxAmount={extractionResult?.extractedData.taxAmount || 0}
               subtotalAmount={extractionResult?.extractedData.subtotalAmount}
+              additionalCharges={formData.additional_charges}
+              taxAmount={extractionResult?.extractedData.taxAmount || 0}
             />
           </div>
         )}

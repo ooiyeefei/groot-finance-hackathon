@@ -404,8 +404,10 @@ class ReceiptExtractionResult:
 
     # Financial breakdown
     subtotal_amount: Optional[float] = None
-    tax_amount: Optional[float] = None
-    tip_amount: Optional[float] = None
+    additional_charges: Optional[List[Dict[str, Any]]] = field(default_factory=list)
+    service_charge_amount: Optional[float] = None  # Legacy, computed from additional_charges
+    tax_amount: Optional[float] = None              # Legacy, computed from additional_charges
+    tip_amount: Optional[float] = None              # Legacy, computed from additional_charges
 
     # Line items
     line_items: List[ExtractedLineItem] = field(default_factory=list)
@@ -436,6 +438,8 @@ class ReceiptExtractionResult:
             "vendorAddress": self.vendor_address,
             "vendorContact": self.vendor_contact,
             "subtotalAmount": self.subtotal_amount,
+            "additionalCharges": self.additional_charges or [],
+            "serviceChargeAmount": self.service_charge_amount,
             "taxAmount": self.tax_amount,
             "tipAmount": self.tip_amount,
             "lineItems": [item.to_dict() for item in self.line_items],

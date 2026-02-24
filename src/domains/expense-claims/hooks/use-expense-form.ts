@@ -13,7 +13,7 @@ import { useDuplicateDetection } from './use-duplicate-detection'
 import { useHomeCurrency } from '@/domains/users/hooks/use-home-currency'
 import { formatCurrency } from '@/domains/accounting-entries/hooks/use-accounting-entries'
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
-import { AIExtractionResult } from '@/domains/expense-claims/types/expense-extraction'
+import { AIExtractionResult, AdditionalCharge } from '@/domains/expense-claims/types/expense-extraction'
 import type { DuplicateDetectionResult } from '../types/duplicate-detection'
 
 // Form data interface
@@ -29,9 +29,11 @@ export interface ExpenseFormData {
   reference_number?: string
   notes?: string
   storage_path?: string
-  // Tax information from extraction
+  // Financial breakdown from extraction
   tax_amount?: number
   subtotal_amount?: number
+  service_charge_amount?: number
+  additional_charges?: AdditionalCharge[]
   line_items?: Array<{
     description: string
     quantity: number
@@ -368,15 +370,46 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
         storagePath: claim.storage_path || claim.processing_metadata?.storage_path
       })
 
-      // Extract tax information from processing metadata
+      // Extract financial breakdown from processing metadata
       // Check multiple locations: financial_data (legacy), raw_extraction (legacy), or top-level (Lambda DSPy)
-      const taxAmount = claim.processing_metadata?.financial_data?.tax_amount ||
-                       claim.processing_metadata?.raw_extraction?.tax_amount ||
-                       claim.processing_metadata?.tax_amount ||
-                       0
-      const subtotalAmount = claim.processing_metadata?.financial_data?.subtotal_amount ||
-                            claim.processing_metadata?.raw_extraction?.subtotal_amount ||
-                            claim.processing_metadata?.subtotal_amount
+      const meta = claim.processing_metadata
+      const taxAmount = meta?.financial_data?.tax_amount || meta?.raw_extraction?.tax_amount || meta?.tax_amount || 0
+      const subtotalAmount = meta?.financial_data?.subtotal_amount || meta?.raw_extraction?.subtotal_amount || meta?.subtotal_amount
+      const receiptTotal = claim.transaction?.original_amount || claim.total_amount || 0
+
+      // Build additional_charges: prefer explicit array from metadata, else build from legacy fields
+      const rawCharges: AdditionalCharge[] | undefined =
+        meta?.financial_data?.additional_charges ||
+        meta?.raw_extraction?.additional_charges ||
+        meta?.additional_charges
+
+      let additionalCharges: AdditionalCharge[] | undefined
+      if (rawCharges && rawCharges.length > 0) {
+        additionalCharges = rawCharges
+      } else if (subtotalAmount !== undefined) {
+        // Build from legacy fields + compute remainder as service charge
+        const charges: AdditionalCharge[] = []
+        const svcCharge = meta?.financial_data?.service_charge_amount || meta?.raw_extraction?.service_charge_amount || meta?.service_charge_amount
+        if (svcCharge && svcCharge > 0) {
+          charges.push({ label: 'Service Charge', amount: svcCharge, chargeType: 'service_charge' })
+        }
+        if (taxAmount > 0) {
+          charges.push({ label: 'Tax', amount: taxAmount, chargeType: 'tax' })
+        }
+        // Check for unaccounted remainder (service charge, rounding, etc.)
+        const knownTotal = subtotalAmount + charges.reduce((s, c) => s + c.amount, 0)
+        const remainder = Math.round((receiptTotal - knownTotal) * 100) / 100
+        if (!svcCharge && Math.abs(remainder) >= 0.01) {
+          if (remainder > 0) {
+            charges.splice(0, 0, { label: 'Service Charge', amount: remainder, chargeType: 'service_charge' })
+          } else {
+            charges.push({ label: 'Rounding', amount: remainder, chargeType: 'rounding' })
+          }
+        } else if (svcCharge && Math.abs(remainder) >= 0.01 && remainder < 0) {
+          charges.push({ label: 'Rounding', amount: remainder, chargeType: 'rounding' })
+        }
+        if (charges.length > 0) additionalCharges = charges
+      }
 
       // Set form data
       // Note: expense_category from API is a NAME (e.g., 'Miscellaneous'), but dropdown uses ID
@@ -404,6 +437,7 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
         storage_path: claim.storage_path,
         tax_amount: taxAmount,
         subtotal_amount: subtotalAmount,
+        additional_charges: additionalCharges,
         line_items: lineItems
       })
 
@@ -443,6 +477,7 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
         storage_path: '', // Storage path comes from the processing pipeline, not extraction data
         tax_amount: extractionResult.extractedData.taxAmount || 0,
         subtotal_amount: extractionResult.extractedData.subtotalAmount,
+        additional_charges: extractionResult.extractedData.additionalCharges,
         line_items: extractionResult.extractedData.lineItems?.map(item => {
           // Apply same robust calculation logic as edit mode's mapLineItem
           const qty = item.quantity || 1

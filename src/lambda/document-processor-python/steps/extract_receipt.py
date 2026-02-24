@@ -39,6 +39,13 @@ class ReceiptLineItem(BaseModel):
     line_total: float = Field(..., description="Total for this line")
 
 
+class ReceiptAdditionalCharge(BaseModel):
+    """A single additional charge on a receipt (tax, service charge, rounding, etc.)."""
+    label: str = Field(..., description="Charge label exactly as on receipt, e.g. 'SST (6%)', 'Service Charge (10%)', 'GST 9%', 'Rounding', 'Discount'")
+    amount: float = Field(..., description="Charge amount. Use negative values for discounts and rounding adjustments.")
+    charge_type: Optional[str] = Field(None, description="Category: 'tax', 'service_charge', 'tip', 'rounding', 'discount', 'other'")
+
+
 # =============================================================================
 # Two-Phase Extraction Schemas
 # Phase 1 (CoreReceiptData): Core fields only - NO line_items (~3-4s)
@@ -57,9 +64,16 @@ class CoreReceiptData(BaseModel):
     receipt_number: Optional[str] = Field(None, description="Receipt/invoice number")
 
     # Financial breakdown
-    subtotal_amount: Optional[float] = Field(None, description="Subtotal before tax")
-    tax_amount: Optional[float] = Field(None, description="Tax amount")
-    tip_amount: Optional[float] = Field(None, description="Tip amount if applicable")
+    subtotal_amount: Optional[float] = Field(None, description="Subtotal before any additional charges (tax, service charge, etc.)")
+    additional_charges: List[ReceiptAdditionalCharge] = Field(
+        default_factory=list,
+        description="All additional charges after subtotal: taxes (SST, GST, VAT), service charges, tips, rounding adjustments, discounts. Extract each as a separate entry with the exact label from the receipt."
+    )
+
+    # Legacy fields (kept for backward compat, will be computed from additional_charges)
+    service_charge_amount: Optional[float] = Field(None, description="Service charge amount (deprecated: use additional_charges instead)")
+    tax_amount: Optional[float] = Field(None, description="Tax amount (deprecated: use additional_charges instead)")
+    tip_amount: Optional[float] = Field(None, description="Tip amount (deprecated: use additional_charges instead)")
 
     # Category - selected from available_categories
     expense_category: Optional[str] = Field(
@@ -106,9 +120,16 @@ class ReceiptData(BaseModel):
     vendor_contact: Optional[str] = Field(None, description="Store phone/contact")
 
     # Financial breakdown
-    subtotal_amount: Optional[float] = Field(None, description="Subtotal before tax")
-    tax_amount: Optional[float] = Field(None, description="Tax amount")
-    tip_amount: Optional[float] = Field(None, description="Tip amount")
+    subtotal_amount: Optional[float] = Field(None, description="Subtotal before any additional charges (tax, service charge, etc.)")
+    additional_charges: List[ReceiptAdditionalCharge] = Field(
+        default_factory=list,
+        description="All additional charges after subtotal: taxes (SST, GST, VAT), service charges, tips, rounding adjustments, discounts. Extract each as a separate entry with the exact label from the receipt."
+    )
+
+    # Legacy fields (kept for backward compat)
+    service_charge_amount: Optional[float] = Field(None, description="Service charge amount (deprecated: use additional_charges)")
+    tax_amount: Optional[float] = Field(None, description="Tax amount (deprecated: use additional_charges)")
+    tip_amount: Optional[float] = Field(None, description="Tip amount (deprecated: use additional_charges)")
 
     # Payment
     payment_method: Optional[str] = Field(
@@ -166,14 +187,22 @@ class ReceiptExtractionSignature(dspy.Signature):
     1. MULTI-PAGE HANDLING: If multiple images are provided, they are consecutive pages of the SAME receipt.
        - Use PAGE 1 for: vendor name, vendor address, vendor contact, receipt number, date
        - COMBINE from ALL PAGES: line items (concatenate all line items from all pages)
-       - Use LAST PAGE for: total_amount, subtotal_amount, tax_amount, tip_amount (final totals)
+       - Use LAST PAGE for: total_amount, subtotal_amount, additional_charges (final totals)
        - Payment method may appear on any page - extract from wherever found
 
-    2. ERROR HANDLING: If image quality is poor or critical information is missing, provide:
+    2. ADDITIONAL CHARGES: Extract ALL charges between subtotal and total as additional_charges:
+       - Taxes: SST, GST, VAT, Sales Tax, Service Tax — use charge_type='tax'
+       - Service charges: 10% service charge, etc. — use charge_type='service_charge'
+       - Tips: gratuity, tip — use charge_type='tip'
+       - Rounding: bill rounding adjustments (often negative) — use charge_type='rounding'
+       - Discounts: member discounts, promotions (negative amounts) — use charge_type='discount'
+       Use the EXACT label from the receipt (e.g., 'SST (6%)', 'Service Charge (10%)', 'Rounding Adj')
+
+    3. ERROR HANDLING: If image quality is poor or critical information is missing, provide:
        - A clear user_message explaining the issue
        - Actionable suggestions for improvement (e.g., 'Take a clearer photo', 'Ensure entire receipt is visible')
 
-    3. CATEGORY: Select the BEST matching category from available_categories.
+    4. CATEGORY: Select the BEST matching category from available_categories.
        If no good match, leave as null.
     """
 
@@ -187,14 +216,14 @@ class ReceiptExtractionSignature(dspy.Signature):
 
     extracted_data: ReceiptData = dspy.OutputField(
         desc="""Complete structured receipt data. Extract vendor name, address, items,
-        subtotal, tax, tip, and payment method. For currency: determine from vendor
+        subtotal, additional_charges, and payment method. For currency: determine from vendor
         location and symbols. Select expense_category from available_categories list.
         Set extraction_quality based on image clarity. If quality is 'low' or
         critical fields are missing, provide user_message and suggestions.
 
-        IMPORTANT: Generate 'description' (concise expense summary like 'Lunch at ABC Restaurant')
-        and 'business_purpose' (business justification like 'Client meeting lunch').
-        For receipt_number: Look for 'Check #', 'Invoice #', 'Receipt #', 'Ref #', 'No.' or similar."""
+        IMPORTANT: Generate 'description' and 'business_purpose' for the expense claim.
+        For receipt_number: Look for 'Check #', 'Invoice #', 'Receipt #', 'Ref #', 'No.' or similar.
+        IMPORTANT: Extract ALL charges between subtotal and total into additional_charges with exact receipt labels."""
     )
 
 
@@ -211,8 +240,16 @@ class CoreReceiptExtractionSignature(dspy.Signature):
     can render immediately while Phase 2 extracts line items in background.
 
     Extract: vendor_name, transaction_date, total_amount, currency, receipt_number,
-    subtotal_amount, tax_amount, tip_amount, expense_category, description,
-    business_purpose, confidence_score, extraction_quality.
+    subtotal_amount, additional_charges, expense_category, description, business_purpose,
+    confidence_score, extraction_quality.
+
+    ADDITIONAL CHARGES: Extract ALL charges between subtotal and total into additional_charges:
+    - Taxes (SST, GST, VAT) → charge_type='tax'
+    - Service charges → charge_type='service_charge'
+    - Tips → charge_type='tip'
+    - Rounding adjustments (often negative) → charge_type='rounding'
+    - Discounts (negative) → charge_type='discount'
+    Use the EXACT label from the receipt.
 
     DO NOT extract: line_items (Phase 2 handles this separately).
     """
@@ -228,10 +265,11 @@ class CoreReceiptExtractionSignature(dspy.Signature):
     extracted_data: CoreReceiptData = dspy.OutputField(
         desc="""Extract CORE receipt data only (NO line_items):
         vendor_name, transaction_date, total_amount, currency, receipt_number,
-        subtotal_amount, tax_amount, tip_amount, expense_category.
+        subtotal_amount, additional_charges, expense_category.
         Generate 'description' and 'business_purpose' for the expense claim.
-        Set confidence_score and extraction_quality based on image clarity.
-        IMPORTANT: Do NOT extract line_items - that happens in Phase 2."""
+        IMPORTANT: Extract ALL charges between subtotal and total into additional_charges
+        with exact labels from the receipt (e.g., 'SST (6%)', 'Service Charge (10%)', 'Rounding').
+        Do NOT extract line_items - that happens in Phase 2."""
     )
 
 
@@ -645,8 +683,14 @@ def extract_receipt_step(
 
             # Financial breakdown
             "subtotal_amount": getattr(extracted, 'subtotal_amount', None) or 0.0,
-            "tax_amount": getattr(extracted, 'tax_amount', None) or 0.0,
-            "tip_amount": getattr(extracted, 'tip_amount', None) or 0.0,
+            "additional_charges": [
+                {"label": c.label, "amount": c.amount, "chargeType": c.charge_type or "other"}
+                for c in getattr(extracted, 'additional_charges', []) or []
+            ],
+            # Legacy fields (computed from additional_charges for backward compat)
+            "service_charge_amount": sum(c.amount for c in getattr(extracted, 'additional_charges', []) or [] if c.charge_type == 'service_charge') or getattr(extracted, 'service_charge_amount', None) or 0.0,
+            "tax_amount": sum(c.amount for c in getattr(extracted, 'additional_charges', []) or [] if c.charge_type == 'tax') or getattr(extracted, 'tax_amount', None) or 0.0,
+            "tip_amount": sum(c.amount for c in getattr(extracted, 'additional_charges', []) or [] if c.charge_type == 'tip') or getattr(extracted, 'tip_amount', None) or 0.0,
 
             # Payment
             "payment_method": getattr(extracted, 'payment_method', None) or "",
@@ -882,8 +926,14 @@ def extract_receipt_phase1_step(
 
             # Financial breakdown
             "subtotal_amount": extracted.subtotal_amount or 0.0,
-            "tax_amount": extracted.tax_amount or 0.0,
-            "tip_amount": extracted.tip_amount or 0.0,
+            "additional_charges": [
+                {"label": c.label, "amount": c.amount, "chargeType": c.charge_type or "other"}
+                for c in extracted.additional_charges or []
+            ],
+            # Legacy fields (computed from additional_charges for backward compat)
+            "service_charge_amount": sum(c.amount for c in extracted.additional_charges or [] if c.charge_type == 'service_charge') or extracted.service_charge_amount or 0.0,
+            "tax_amount": sum(c.amount for c in extracted.additional_charges or [] if c.charge_type == 'tax') or extracted.tax_amount or 0.0,
+            "tip_amount": sum(c.amount for c in extracted.additional_charges or [] if c.charge_type == 'tip') or extracted.tip_amount or 0.0,
 
             # Quality
             "confidence": extracted.confidence_score,

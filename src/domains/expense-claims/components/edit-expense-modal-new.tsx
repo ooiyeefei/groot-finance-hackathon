@@ -691,8 +691,9 @@ export default function EditExpenseModalNew({
                             showAddButton={true}
                             disabled={saving || submitting || isReprocessing}
                             variant="compact"
-                            taxAmount={formData.tax_amount || 0}
                             subtotalAmount={formData.subtotal_amount}
+                            additionalCharges={formData.additional_charges}
+                            taxAmount={formData.tax_amount || 0}
                             lineItemsStatus={lineItemsStatus}
                           />
                         </CardContent>
