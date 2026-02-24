@@ -3,8 +3,7 @@
 /**
  * Export Filters Component
  *
- * Date range and status filters for export data selection.
- * Uses simplified UI components available in the project.
+ * Date range, status, and module-specific filters for export data selection.
  */
 
 import { useCallback } from 'react';
@@ -28,9 +27,7 @@ interface ExportFiltersProps {
   disabled?: boolean;
 }
 
-// Status options based on module
-// Must match actual database status values
-const STATUS_OPTIONS = {
+const STATUS_OPTIONS: Record<ExportModule, { value: string; label: string }[]> = {
   expense: [
     { value: 'all', label: 'All statuses' },
     { value: 'draft', label: 'Draft' },
@@ -47,9 +44,25 @@ const STATUS_OPTIONS = {
     { value: 'rejected', label: 'Rejected' },
     { value: 'cancelled', label: 'Cancelled' },
   ],
+  accounting: [
+    { value: 'all', label: 'All statuses' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'paid', label: 'Paid' },
+    { value: 'overdue', label: 'Overdue' },
+    { value: 'cancelled', label: 'Cancelled' },
+    { value: 'disputed', label: 'Disputed' },
+  ],
+  invoice: [
+    { value: 'all', label: 'All statuses' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'completed', label: 'Completed' },
+    { value: 'paid', label: 'Paid' },
+    { value: 'overdue', label: 'Overdue' },
+    { value: 'draft', label: 'Draft' },
+    { value: 'sent', label: 'Sent' },
+  ],
 };
 
-// Quick date presets
 const DATE_PRESETS = [
   { value: '7', label: 'Last 7 days' },
   { value: '30', label: 'Last 30 days' },
@@ -66,10 +79,7 @@ export function ExportFilters({
 }: ExportFiltersProps) {
   const handlePresetChange = useCallback(
     (value: string) => {
-      if (value === 'custom') {
-        // Keep existing dates or clear them
-        return;
-      }
+      if (value === 'custom') return;
       const days = parseInt(value, 10);
       const endDate = new Date();
       const startDate = new Date();
@@ -86,29 +96,40 @@ export function ExportFilters({
 
   const handleStartDateChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      onChange({
-        ...filters,
-        startDate: e.target.value || undefined,
-      });
+      onChange({ ...filters, startDate: e.target.value || undefined });
     },
     [filters, onChange]
   );
 
   const handleEndDateChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      onChange({
-        ...filters,
-        endDate: e.target.value || undefined,
-      });
+      onChange({ ...filters, endDate: e.target.value || undefined });
     },
     [filters, onChange]
   );
 
   const handleStatusChange = useCallback(
     (value: string) => {
+      onChange({ ...filters, statusFilter: value === 'all' ? undefined : [value] });
+    },
+    [filters, onChange]
+  );
+
+  const handleInvoiceTypeChange = useCallback(
+    (value: string) => {
       onChange({
         ...filters,
-        statusFilter: value === 'all' ? undefined : [value],
+        invoiceType: value as "AP" | "AR" | "All",
+      });
+    },
+    [filters, onChange]
+  );
+
+  const handleTransactionTypeChange = useCallback(
+    (value: string) => {
+      onChange({
+        ...filters,
+        transactionTypeFilter: value as "expense_claim" | "invoice" | "all",
       });
     },
     [filters, onChange]
@@ -118,7 +139,13 @@ export function ExportFilters({
     onChange({});
   }, [onChange]);
 
-  const hasFilters = filters.startDate || filters.endDate || filters.statusFilter;
+  const hasFilters =
+    filters.startDate ||
+    filters.endDate ||
+    filters.statusFilter ||
+    filters.invoiceType ||
+    filters.transactionTypeFilter;
+
   const statusOptions = STATUS_OPTIONS[module];
 
   return (
@@ -204,6 +231,48 @@ export function ExportFilters({
             </SelectContent>
           </Select>
         </div>
+
+        {/* Invoice Type Filter — only for invoice module */}
+        {module === 'invoice' && (
+          <div className="space-y-2">
+            <Label className="text-sm">Invoice Type</Label>
+            <Select
+              value={filters.invoiceType || 'All'}
+              onValueChange={handleInvoiceTypeChange}
+              disabled={disabled}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All invoices" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Invoices</SelectItem>
+                <SelectItem value="AP">AP (Purchases)</SelectItem>
+                <SelectItem value="AR">AR (Sales)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Transaction Type Filter — only for accounting module */}
+        {module === 'accounting' && (
+          <div className="space-y-2">
+            <Label className="text-sm">Source Type</Label>
+            <Select
+              value={filters.transactionTypeFilter || 'all'}
+              onValueChange={handleTransactionTypeChange}
+              disabled={disabled}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All sources" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sources</SelectItem>
+                <SelectItem value="expense_claim">Expense Claims</SelectItem>
+                <SelectItem value="invoice">Invoices</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
     </div>
   );

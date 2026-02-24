@@ -100,6 +100,11 @@ export function useExportTemplate(
             description: prebuilt.description,
             module: prebuilt.module,
             fieldMappings: prebuilt.fieldMappings,
+            masterFields: prebuilt.masterFields,
+            detailFields: prebuilt.detailFields,
+            formatType: prebuilt.formatType,
+            delimiter: prebuilt.delimiter,
+            fileExtension: prebuilt.fileExtension,
             defaultDateFormat: prebuilt.defaultDateFormat,
             defaultDecimalPlaces: prebuilt.defaultDecimalPlaces,
             isPrebuilt: true,
@@ -110,7 +115,7 @@ export function useExportTemplate(
     };
   }
 
-  // For custom templates, use the queried data
+  // For custom templates, use the queried data (always flat CSV)
   return {
     template: customTemplate
       ? {
@@ -119,6 +124,9 @@ export function useExportTemplate(
           description: customTemplate.description,
           module: customTemplate.module,
           fieldMappings: customTemplate.fieldMappings,
+          formatType: 'flat' as const,
+          delimiter: ',',
+          fileExtension: '.csv',
           defaultDateFormat: customTemplate.defaultDateFormat,
           defaultDecimalPlaces: customTemplate.defaultDecimalPlaces,
           defaultThousandSeparator: customTemplate.defaultThousandSeparator,

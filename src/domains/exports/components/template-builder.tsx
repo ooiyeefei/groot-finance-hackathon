@@ -105,7 +105,7 @@ export function TemplateBuilder({
       addToast({
         type: 'error',
         title: 'Validation error',
-        description: 'Please select a module (Expenses or Leave).',
+        description: 'Please select an export module.',
       });
       return;
     }
@@ -266,12 +266,21 @@ export function TemplateBuilder({
                     </span>
                   </div>
                 ) : (
-                  <FieldMapper
-                    availableFields={availableFields as FieldDefinition[]}
-                    mappings={fieldMappings}
-                    onChange={setFieldMappings}
-                    disabled={isSaving}
-                  />
+                  <>
+                    <FieldMapper
+                      availableFields={availableFields as FieldDefinition[]}
+                      mappings={fieldMappings}
+                      onChange={setFieldMappings}
+                      disabled={isSaving}
+                    />
+                    {(module === 'accounting' || module === 'invoice') &&
+                      fieldMappings.some((m) => m.sourceField.startsWith('lineItem.')) && (
+                      <p className="mt-3 text-xs text-muted-foreground border-t border-border pt-3">
+                        Line item fields selected — the export will produce one row per line item,
+                        with header-level fields repeated on each row.
+                      </p>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>

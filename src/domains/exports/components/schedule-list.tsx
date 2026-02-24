@@ -12,10 +12,17 @@ import { cn } from '@/lib/utils';
 import type { ExportFrequency } from '../types';
 import type { Id } from '../../../../convex/_generated/dataModel';
 
+const MODULE_LABELS: Record<string, string> = {
+  expense: 'Expense Claims',
+  invoice: 'Invoices',
+  leave: 'Leave Records',
+  accounting: 'Accounting Records',
+};
+
 interface ScheduleItem {
   _id: Id<'export_schedules'>;
   templateName: string;
-  module: 'expense' | 'leave';
+  module: 'expense' | 'invoice' | 'leave' | 'accounting';
   frequency: ExportFrequency;
   hourUtc: number;
   minuteUtc?: number;
@@ -144,7 +151,7 @@ export function ScheduleList({
             <div>
               <h4 className="font-medium text-foreground">{schedule.templateName}</h4>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span className="capitalize">{schedule.module}</span>
+                <span>{MODULE_LABELS[schedule.module] || schedule.module}</span>
                 <span>•</span>
                 <span>{formatSchedule(schedule)}</span>
               </div>

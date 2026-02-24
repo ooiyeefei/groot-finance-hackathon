@@ -11,7 +11,8 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 // COMMON TYPES
 // ============================================
 
-export type ExportModule = "expense" | "leave";
+export type ExportModule = "expense" | "invoice" | "leave" | "accounting";
+export type ExportFormatType = "flat" | "hierarchical";
 export type ExportTemplateType = "custom" | "cloned";
 export type ExportFrequency = "daily" | "weekly" | "monthly";
 export type ExportHistoryStatus = "completed" | "failed" | "archived";
@@ -97,6 +98,12 @@ export interface CloneTemplateInput {
 // PRE-BUILT TEMPLATE
 // ============================================
 
+export interface ExportFormatConfig {
+  formatType: ExportFormatType;
+  delimiter: string;
+  fileExtension: string;
+}
+
 export interface PrebuiltTemplate {
   id: string;
   name: string;
@@ -104,7 +111,12 @@ export interface PrebuiltTemplate {
   module: ExportModule;
   version: string;
   targetSystem: string;
+  formatType: ExportFormatType;
+  delimiter: string;
+  fileExtension: string;
   fieldMappings: FieldMapping[];
+  masterFields?: FieldMapping[];
+  detailFields?: FieldMapping[];
   defaultDateFormat?: string;
   defaultDecimalPlaces?: number;
 }
@@ -113,12 +125,17 @@ export interface PrebuiltTemplate {
 // EXPORT FILTERS
 // ============================================
 
+export type InvoiceTypeFilter = "AP" | "AR" | "All";
+export type TransactionTypeFilter = "expense_claim" | "invoice" | "all";
+
 export interface ExportFilters {
   startDate?: string;
   endDate?: string;
   statusFilter?: string[];
   employeeIds?: string[];
   dateRangeType?: DateRangeType;
+  invoiceType?: InvoiceTypeFilter;
+  transactionTypeFilter?: TransactionTypeFilter;
 }
 
 /**

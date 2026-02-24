@@ -4,14 +4,16 @@
  * Export Execution Hooks
  *
  * Hooks for previewing and executing exports.
- * CSV generation happens client-side to avoid Convex action complexity.
+ * Uses the unified export engine for client-side file generation
+ * supporting both flat CSV and hierarchical MASTER/DETAIL formats.
  */
 
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import { Id } from '../../../../convex/_generated/dataModel';
-import type { ExportModule, ExportFilters, FieldMapping } from '../types';
+import type { ExportModule, ExportFilters, FieldMapping, ExportFormatType } from '../types';
+import { generateExport, generateFlatExport, generateExportFilename, calculateFileSize } from '../lib/export-engine';
 
 // ============================================
 // PREVIEW HOOK
@@ -43,6 +45,8 @@ export function useExportPreview(
                 endDate: filters.endDate,
                 statusFilter: filters.statusFilter,
                 employeeIds: filters.employeeIds,
+                invoiceType: filters.invoiceType,
+                transactionTypeFilter: filters.transactionTypeFilter,
               }
             : undefined,
           limit,
@@ -75,106 +79,21 @@ export function useAvailableFields(module: ExportModule | undefined) {
 }
 
 // ============================================
-// CSV GENERATION UTILITIES
+// TEMPLATE CONFIG TYPE
 // ============================================
 
-function extractValue(record: Record<string, unknown>, path: string): unknown {
-  const parts = path.split('.');
-  let current: unknown = record;
-
-  for (const part of parts) {
-    if (current === null || current === undefined) {
-      return undefined;
-    }
-    if (typeof current === 'object') {
-      current = (current as Record<string, unknown>)[part];
-    } else {
-      return undefined;
-    }
-  }
-
-  return current;
-}
-
-function formatValue(
-  value: unknown,
-  mapping: { dateFormat?: string; decimalPlaces?: number }
-): string {
-  if (value === null || value === undefined) {
-    return '';
-  }
-
-  // Format dates
-  if (typeof value === 'number' && value > 1000000000000) {
-    // Timestamp
-    const date = new Date(value);
-    if (!isNaN(date.getTime())) {
-      return formatDate(date, mapping.dateFormat);
-    }
-  }
-
-  // Format numbers
-  if (typeof value === 'number') {
-    const decimals = mapping.decimalPlaces ?? 2;
-    return value.toFixed(decimals);
-  }
-
-  return String(value);
-}
-
-function formatDate(date: Date, format?: string): string {
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(date.getUTCDate()).padStart(2, '0');
-
-  switch (format) {
-    case 'DD/MM/YYYY':
-      return `${day}/${month}/${year}`;
-    case 'DD-MM-YYYY':
-      return `${day}-${month}-${year}`;
-    case 'MM/DD/YYYY':
-      return `${month}/${day}/${year}`;
-    case 'YYYY-MM-DD':
-    default:
-      return `${year}-${month}-${day}`;
-  }
-}
-
-function escapeCsv(value: string): string {
-  const str = String(value);
-  const needsEscaping =
-    str.includes(',') ||
-    str.includes('"') ||
-    str.includes('\n') ||
-    str.includes('\r');
-
-  if (needsEscaping) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
-
-function generateCsv(
-  records: Record<string, unknown>[],
-  fieldMappings: FieldMapping[]
-): string {
-  const sortedMappings = [...fieldMappings].sort((a, b) => a.order - b.order);
-
-  // Header row
-  const headers = sortedMappings.map((m) => escapeCsv(m.targetColumn));
-
-  // Data rows
-  const rows = records.map((record) => {
-    return sortedMappings
-      .map((mapping) => {
-        const value = extractValue(record, mapping.sourceField);
-        const formatted = formatValue(value, mapping);
-        return escapeCsv(formatted);
-      })
-      .join(',');
-  });
-
-  return [headers.join(','), ...rows].join('\n');
+/** Template config for export generation — works for both prebuilt and custom templates */
+interface ExportTemplateConfig {
+  name: string;
+  module: ExportModule;
+  formatType: ExportFormatType;
+  delimiter: string;
+  fileExtension: string;
+  fieldMappings: FieldMapping[];
+  masterFields?: FieldMapping[];
+  detailFields?: FieldMapping[];
+  defaultDateFormat?: string;
+  defaultDecimalPlaces?: number;
 }
 
 // ============================================
@@ -184,7 +103,7 @@ function generateCsv(
 export type ExportStatus = 'idle' | 'executing' | 'completed' | 'failed';
 
 /**
- * Execute an export and generate CSV client-side
+ * Execute an export and generate file client-side using the unified export engine
  */
 export function useExecuteExport() {
   const executeMutation = useMutation(api.functions.exportJobs.execute);
@@ -221,6 +140,8 @@ export function useExecuteExport() {
                 endDate: input.filters.endDate,
                 statusFilter: input.filters.statusFilter,
                 employeeIds: input.filters.employeeIds,
+                invoiceType: input.filters.invoiceType,
+                transactionTypeFilter: input.filters.transactionTypeFilter,
               }
             : undefined,
         });
@@ -239,41 +160,74 @@ export function useExecuteExport() {
   );
 
   /**
-   * Generate CSV and trigger download
-   * This fetches records and generates CSV client-side
+   * Generate export file and trigger download.
+   * Uses the unified export engine — supports flat CSV and hierarchical MASTER/DETAIL.
    */
   const getDownloadUrl = useCallback(
     async (
       exportHistoryId: Id<'export_history'>,
       options?: {
         records?: Record<string, unknown>[];
+        template?: ExportTemplateConfig;
+        /** @deprecated Use template instead */
         fieldMappings?: FieldMapping[];
+        /** @deprecated Use template instead */
         templateName?: string;
       }
     ) => {
       try {
-        if (!options?.records || !options?.fieldMappings) {
-          throw new Error('Records and field mappings are required for download');
+        if (!options?.records) {
+          throw new Error('Records are required for download');
         }
 
-        // Generate CSV
-        const csvContent = generateCsv(options.records, options.fieldMappings);
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
+        let content: string;
+        let filename: string;
+        let mimeType: string;
 
-        // Generate filename
-        const timestamp = new Date().toISOString().split('T')[0];
-        const safeName = (options.templateName || 'export')
-          .replace(/[^a-zA-Z0-9]/g, '-')
-          .toLowerCase();
-        const filename = `${safeName}-${timestamp}.csv`;
+        if (options.template) {
+          // New path: use unified export engine with full template config
+          const templateConfig = {
+            ...options.template,
+            id: 'export',
+            description: '',
+            version: '1.0.0',
+            targetSystem: 'export',
+          };
+
+          content = generateExport(options.records, templateConfig);
+
+          filename = generateExportFilename(
+            options.template.module,
+            options.template.name,
+            options.template.fileExtension
+          );
+
+          mimeType = options.template.fileExtension === '.txt'
+            ? 'text/plain;charset=utf-8;'
+            : 'text/csv;charset=utf-8;';
+        } else if (options.fieldMappings) {
+          // Legacy fallback: flat CSV using fieldMappings directly
+          content = generateFlatExport(options.records, options.fieldMappings);
+
+          const timestamp = new Date().toISOString().split('T')[0];
+          const safeName = (options.templateName || 'export')
+            .replace(/[^a-zA-Z0-9]/g, '-')
+            .toLowerCase();
+          filename = `${safeName}-${timestamp}.csv`;
+          mimeType = 'text/csv;charset=utf-8;';
+        } else {
+          throw new Error('Template or field mappings are required for download');
+        }
+
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
 
         // Update history with completion status
         await updateHistoryMutation({
           historyId: exportHistoryId,
           status: 'completed',
           recordCount: options.records.length,
-          fileSize: blob.size,
+          fileSize: calculateFileSize(content),
         });
 
         setDownloadUrl(url);
@@ -284,7 +238,7 @@ export function useExecuteExport() {
         await updateHistoryMutation({
           historyId: exportHistoryId,
           status: 'failed',
-          errorMessage: err instanceof Error ? err.message : 'Failed to generate CSV',
+          errorMessage: err instanceof Error ? err.message : 'Failed to generate export file',
         });
 
         setError(err instanceof Error ? err.message : 'Failed to get download URL');

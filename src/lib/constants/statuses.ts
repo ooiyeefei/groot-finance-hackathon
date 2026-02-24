@@ -330,7 +330,9 @@ export const LEAVE_REQUEST_STATUS_VALUES = Object.values(LEAVE_REQUEST_STATUSES)
 
 export const EXPORT_MODULES = {
   EXPENSE: "expense",
+  INVOICE: "invoice",
   LEAVE: "leave",
+  ACCOUNTING: "accounting",
 } as const;
 
 export type ExportModule = typeof EXPORT_MODULES[keyof typeof EXPORT_MODULES];

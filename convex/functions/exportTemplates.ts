@@ -18,7 +18,7 @@ import {
 
 // Pre-built templates are defined in frontend code
 // These IDs are used to reference them
-const PREBUILT_TEMPLATE_IDS = {
+const PREBUILT_TEMPLATE_IDS: Record<string, string[]> = {
   expense: [
     "sql-payroll-expense",
     "xero-expense",
@@ -32,6 +32,17 @@ const PREBUILT_TEMPLATE_IDS = {
     "briohr-leave",
     "kakitangan-leave",
     "generic-leave",
+  ],
+  accounting: [
+    "sql-accounting-gl-je",
+    "autocount-journal",
+    "generic-accounting",
+  ],
+  invoice: [
+    "sql-accounting-ap-pi",
+    "sql-accounting-ar-iv",
+    "autocount-invoice",
+    "generic-invoice",
   ],
 };
 
@@ -287,22 +298,21 @@ export const clonePrebuilt = mutation({
       throw new Error("Only owners and finance admins can clone templates");
     }
 
-    // Validate prebuilt ID
-    const allPrebuiltIds = [
-      ...PREBUILT_TEMPLATE_IDS.expense,
-      ...PREBUILT_TEMPLATE_IDS.leave,
-    ];
-    if (!allPrebuiltIds.includes(args.prebuiltId)) {
+    // Validate prebuilt ID and determine module
+    let module: "expense" | "invoice" | "leave" | "accounting" | undefined;
+    for (const [mod, ids] of Object.entries(PREBUILT_TEMPLATE_IDS)) {
+      if (ids.includes(args.prebuiltId)) {
+        module = mod as "expense" | "invoice" | "leave" | "accounting";
+        break;
+      }
+    }
+
+    if (!module) {
       throw new Error("Invalid pre-built template ID");
     }
 
-    // Determine module from prebuilt ID
-    const module = PREBUILT_TEMPLATE_IDS.expense.includes(args.prebuiltId)
-      ? "expense"
-      : "leave";
-
-    // Create a cloned template
-    // The field mappings will be populated from frontend when user first uses
+    // Create a cloned template (always flat CSV — hierarchical templates are
+    // cloned as flat CSV since custom templates don't support MASTER/DETAIL)
     const templateId = await ctx.db.insert("export_templates", {
       businessId: business._id,
       name: args.name,

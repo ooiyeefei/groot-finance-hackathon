@@ -53,6 +53,13 @@ import type { ExportModule, ExportFilters as ExportFiltersType } from '../types'
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { getPrebuiltTemplateById } from '../lib/prebuilt-templates';
 
+const MODULE_LABELS: Record<string, string> = {
+  expense: 'Expense Claims',
+  invoice: 'Invoices',
+  leave: 'Leave Records',
+  accounting: 'Accounting Records',
+};
+
 export default function ExportsPageContent() {
   const [activeTab, setActiveTab] = useState('reports');
   const { addToast } = useToast();
@@ -241,11 +248,21 @@ export default function ExportsPageContent() {
         filters,
       });
 
-      // Generate CSV and trigger download using full export records
+      // Generate export file and trigger download using full export records
       const result = await getDownloadUrl(newHistoryId, {
         records: exportRecords as Record<string, unknown>[],
-        fieldMappings: template.fieldMappings,
-        templateName: template.name,
+        template: {
+          name: template.name,
+          module: selectedModule,
+          formatType: template.formatType,
+          delimiter: template.delimiter,
+          fileExtension: template.fileExtension,
+          fieldMappings: template.fieldMappings,
+          masterFields: template.masterFields,
+          detailFields: template.detailFields,
+          defaultDateFormat: template.defaultDateFormat,
+          defaultDecimalPlaces: template.defaultDecimalPlaces,
+        },
       });
 
       // Trigger download
@@ -522,6 +539,9 @@ export default function ExportsPageContent() {
                     <ExportPreview
                       records={previewRecords}
                       fieldMappings={template.fieldMappings}
+                      masterFields={template.masterFields}
+                      detailFields={template.detailFields}
+                      formatType={template.formatType}
                       totalCount={totalCount}
                       previewCount={previewCount}
                       isLoading={previewLoading}
@@ -636,7 +656,7 @@ export default function ExportsPageContent() {
                         <div>
                           <h4 className="font-medium text-foreground">{item.templateName}</h4>
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <span className="capitalize">{item.module}</span>
+                            <span>{MODULE_LABELS[item.module] || item.module}</span>
                             <span>•</span>
                             <span>{item.recordCount} records</span>
                             <span>•</span>

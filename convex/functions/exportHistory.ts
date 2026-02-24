@@ -267,12 +267,10 @@ export const getStats = query({
     );
 
     // Count by module
-    const expenseExports = periodHistory.filter(
-      (h) => h.module === "expense"
-    ).length;
-    const leaveExports = periodHistory.filter(
-      (h) => h.module === "leave"
-    ).length;
+    const moduleCounts: Record<string, number> = {};
+    for (const h of periodHistory) {
+      moduleCounts[h.module] = (moduleCounts[h.module] || 0) + 1;
+    }
 
     // Most used templates
     const templateCounts: Record<string, number> = {};
@@ -291,8 +289,10 @@ export const getStats = query({
       failedExports,
       totalRecordsExported,
       exportsByModule: {
-        expense: expenseExports,
-        leave: leaveExports,
+        expense: moduleCounts["expense"] || 0,
+        leave: moduleCounts["leave"] || 0,
+        invoice: moduleCounts["invoice"] || 0,
+        accounting: moduleCounts["accounting"] || 0,
       },
       mostUsedTemplates,
     };

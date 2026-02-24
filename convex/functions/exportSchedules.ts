@@ -81,7 +81,7 @@ export const list = query({
     const enrichedSchedules = await Promise.all(
       schedules.map(async (schedule) => {
         let templateName = "Unknown Template";
-        let module: "expense" | "leave" = "expense";
+        let module: "expense" | "invoice" | "leave" | "accounting" = "expense";
 
         if (schedule.templateId) {
           const template = await ctx.db.get(schedule.templateId);
@@ -93,9 +93,15 @@ export const list = query({
           // Pre-built template name will be resolved on frontend
           // Module is inferred from prebuiltId prefix
           templateName = schedule.prebuiltTemplateId;
-          module = schedule.prebuiltTemplateId.startsWith("leave-")
-            ? "leave"
-            : "expense";
+          if (schedule.prebuiltTemplateId.includes("-leave")) {
+            module = "leave";
+          } else if (schedule.prebuiltTemplateId.includes("-accounting") || schedule.prebuiltTemplateId.includes("-journal") || schedule.prebuiltTemplateId.startsWith("sql-accounting-gl")) {
+            module = "accounting";
+          } else if (schedule.prebuiltTemplateId.includes("-invoice") || schedule.prebuiltTemplateId.startsWith("sql-accounting-a")) {
+            module = "invoice";
+          } else {
+            module = "expense";
+          }
         }
 
         const creator = schedule.createdBy
@@ -487,7 +493,7 @@ export const runScheduledExports = internalMutation({
     for (const schedule of dueSchedules) {
       try {
         // Get module from template
-        let module: "expense" | "leave" = "expense";
+        let module: "expense" | "invoice" | "leave" | "accounting" = "expense";
         let templateName = "Scheduled Export";
         if (schedule.templateId) {
           const template = await ctx.db.get(schedule.templateId);

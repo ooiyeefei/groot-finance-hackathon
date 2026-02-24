@@ -7,15 +7,18 @@
  * Uses div-based table layout instead of Table component.
  */
 
-import { useMemo } from 'react';
+import { useMemo, Fragment } from 'react';
 import { FileDown, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { FieldMapping } from '../types';
+import type { FieldMapping, ExportFormatType } from '../types';
 
 interface ExportPreviewProps {
   records: Record<string, unknown>[];
   fieldMappings: FieldMapping[];
+  masterFields?: FieldMapping[];
+  detailFields?: FieldMapping[];
+  formatType?: ExportFormatType;
   totalCount: number;
   previewCount: number;
   isLoading: boolean;
@@ -27,6 +30,9 @@ interface ExportPreviewProps {
 export function ExportPreview({
   records,
   fieldMappings,
+  masterFields,
+  detailFields,
+  formatType,
   totalCount,
   previewCount,
   isLoading,
@@ -34,6 +40,7 @@ export function ExportPreview({
   isExporting,
   templateName,
 }: ExportPreviewProps) {
+  const isHierarchical = formatType === 'hierarchical' && masterFields && detailFields;
   // Sort field mappings by order
   const sortedMappings = useMemo(
     () => [...fieldMappings].sort((a, b) => a.order - b.order),
@@ -99,44 +106,53 @@ export function ExportPreview({
         </Button>
       </div>
 
-      {/* Preview Table using proper table layout */}
+      {/* Hierarchical format legend */}
+      {isHierarchical && (
+        <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
+          <p className="font-medium text-foreground">MASTER/DETAIL Format</p>
+          <p>Each record produces a <span className="font-semibold">MASTER</span> row (header) followed by one or more <span className="font-semibold">DETAIL</span> rows (line items). Delimiter: semicolon (;)</p>
+        </div>
+      )}
+
+      {/* Preview Table */}
       <div className="rounded-lg border border-border overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            {/* Table Header */}
-            <thead className="bg-muted/50 border-b border-border">
-              <tr>
-                {sortedMappings.map((mapping) => (
-                  <th
-                    key={mapping.sourceField}
-                    className="px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap"
-                  >
-                    {mapping.targetColumn}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-
-            {/* Table Body */}
-            <tbody className="divide-y divide-border">
-              {previewData.map((row, index) => (
-                <tr key={index} className="hover:bg-muted/30">
+          {isHierarchical ? (
+            <HierarchicalPreview records={records} masterFields={masterFields!} detailFields={detailFields!} />
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 border-b border-border">
+                <tr>
                   {sortedMappings.map((mapping) => (
-                    <td
+                    <th
                       key={mapping.sourceField}
-                      className={cn(
-                        'px-4 py-3 text-foreground max-w-[200px] truncate',
-                        typeof row[mapping.targetColumn] === 'number' && !isTimestamp(row[mapping.targetColumn]) && 'text-right'
-                      )}
-                      title={formatCellValue(row[mapping.targetColumn], mapping.sourceField)}
+                      className="px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap"
                     >
-                      {formatCellValue(row[mapping.targetColumn], mapping.sourceField)}
-                    </td>
+                      {mapping.targetColumn}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {previewData.map((row, index) => (
+                  <tr key={index} className="hover:bg-muted/30">
+                    {sortedMappings.map((mapping) => (
+                      <td
+                        key={mapping.sourceField}
+                        className={cn(
+                          'px-4 py-3 text-foreground max-w-[200px] truncate',
+                          typeof row[mapping.targetColumn] === 'number' && !isTimestamp(row[mapping.targetColumn]) && 'text-right'
+                        )}
+                        title={formatCellValue(row[mapping.targetColumn], mapping.sourceField)}
+                      >
+                        {formatCellValue(row[mapping.targetColumn], mapping.sourceField)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
@@ -220,4 +236,96 @@ function formatCellValue(value: unknown, fieldName?: string): string {
   }
 
   return String(value);
+}
+
+// Hierarchical preview for MASTER/DETAIL formats
+function HierarchicalPreview({
+  records,
+  masterFields,
+  detailFields,
+}: {
+  records: Record<string, unknown>[];
+  masterFields: FieldMapping[];
+  detailFields: FieldMapping[];
+}) {
+  const sortedMaster = [...masterFields].sort((a, b) => a.order - b.order);
+  const sortedDetail = [...detailFields].sort((a, b) => a.order - b.order);
+
+  // Use the wider set of columns for the header
+  const maxCols = Math.max(sortedMaster.length, sortedDetail.length);
+
+  return (
+    <table className="w-full text-sm">
+      <thead className="bg-muted/50 border-b border-border">
+        <tr>
+          <th className="px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap w-20">
+            Row Type
+          </th>
+          {Array.from({ length: maxCols }, (_, i) => (
+            <th key={i} className="px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap">
+              Col {i + 1}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-border">
+        {records.slice(0, 5).map((record, rIdx) => {
+          const lines = (record.journalLines || record.lineItems || []) as Record<string, unknown>[];
+          return (
+            <Fragment key={rIdx}>
+              {/* MASTER row */}
+              <tr className="bg-muted/40 font-semibold">
+                <td className="px-4 py-2 text-primary whitespace-nowrap">MASTER</td>
+                {sortedMaster.map((m, cIdx) => {
+                  const val = extractValue(record, m.sourceField.replace(/^"|"$/g, ''));
+                  const display = m.sourceField.startsWith('"')
+                    ? m.sourceField.slice(1, -1)
+                    : formatCellValue(val, m.sourceField);
+                  return (
+                    <td key={cIdx} className="px-4 py-2 text-foreground max-w-[150px] truncate" title={display}>
+                      {display}
+                    </td>
+                  );
+                })}
+                {/* Fill remaining columns */}
+                {Array.from({ length: maxCols - sortedMaster.length }, (_, i) => (
+                  <td key={`mpad-${i}`} className="px-4 py-2" />
+                ))}
+              </tr>
+              {/* DETAIL rows */}
+              {lines.slice(0, 3).map((line, lIdx) => {
+                const merged = { ...record, lineItem: line };
+                return (
+                  <tr key={`d-${rIdx}-${lIdx}`} className="hover:bg-muted/20">
+                    <td className="px-4 py-2 text-muted-foreground whitespace-nowrap pl-8">DETAIL</td>
+                    {sortedDetail.map((d, cIdx) => {
+                      const val = extractValue(merged, d.sourceField.replace(/^"|"$/g, ''));
+                      const display = d.sourceField.startsWith('"')
+                        ? d.sourceField.slice(1, -1)
+                        : formatCellValue(val, d.sourceField);
+                      return (
+                        <td key={cIdx} className="px-4 py-2 text-foreground max-w-[150px] truncate" title={display}>
+                          {display}
+                        </td>
+                      );
+                    })}
+                    {Array.from({ length: maxCols - sortedDetail.length }, (_, i) => (
+                      <td key={`dpad-${i}`} className="px-4 py-2" />
+                    ))}
+                  </tr>
+                );
+              })}
+              {lines.length > 3 && (
+                <tr>
+                  <td colSpan={maxCols + 1} className="px-4 py-1 text-xs text-muted-foreground text-center">
+                    ... {lines.length - 3} more detail rows
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          );
+        })}
+      </tbody>
+    </table>
+  );
 }
