@@ -250,7 +250,7 @@ export default function AccountingEntriesClient({
         {/* Floating Action Button */}
         <button
           onClick={() => setShowCreateModal(true)}
-          className="fixed bottom-6 right-6 z-50 bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg transition-all duration-200 ease-in-out flex items-center justify-center"
+          className="fixed bottom-20 right-6 z-50 bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg transition-all duration-200 ease-in-out flex items-center justify-center"
           aria-label="Add new transaction"
         >
           <Plus className="w-6 h-6" />

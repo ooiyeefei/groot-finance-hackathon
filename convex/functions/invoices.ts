@@ -1735,22 +1735,47 @@ export const getCompletedForAI = query({
       .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0))
       .slice(0, args.limit ?? 20);
 
-    // Map to AI-friendly shape
+    // Check which invoices already have accounting entries posted
+    const invoiceIds = new Set(completed.map((inv) => inv._id.toString()));
+    const allEntries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", businessId))
+      .collect();
+    const postedInvoiceIds = new Set(
+      allEntries
+        .filter((e) => !e.deletedAt && e.sourceDocumentType === "invoice" && e.sourceRecordId)
+        .map((e) => e.sourceRecordId!.toString())
+        .filter((id) => invoiceIds.has(id))
+    );
+
+    // Map to AI-friendly shape with normalized camelCase line items
     return {
       invoices: completed.map((inv) => {
         const extracted = inv.extractedData as Record<string, unknown> | undefined;
+        const isPosted = postedInvoiceIds.has(inv._id.toString());
+
+        // Normalize line items: OCR returns snake_case, card expects camelCase
+        type RawLineItem = { item_description?: string; description?: string; quantity?: number; unit_price?: number; total_amount?: number };
+        const rawLineItems = ((extracted?.line_items ?? extracted?.lineItems) as RawLineItem[] | undefined) ?? [];
+        const lineItems = rawLineItems.map((item) => ({
+          description: item.item_description ?? item.description ?? "",
+          quantity: item.quantity ?? 1,
+          unitPrice: item.unit_price ?? 0,
+          totalAmount: item.total_amount ?? 0,
+        }));
+
         return {
           _id: inv._id,
           fileName: inv.fileName,
-          status: inv.status,
+          status: isPosted ? "posted" : "ready",  // card-friendly status, not payment status
+          isPosted,
           confidenceScore: inv.confidenceScore ?? 0.5,
-          extractedData: extracted ?? {},
-          vendorName: (extracted?.vendorName as string) ?? (extracted?.vendor_name as string) ?? "Unknown",
-          amount: (extracted?.totalAmount as number) ?? (extracted?.total_amount as number) ?? 0,
-          currency: (extracted?.currency as string) ?? "SGD",
-          invoiceDate: (extracted?.invoiceDate as string) ?? (extracted?.invoice_date as string) ?? "",
-          invoiceNumber: (extracted?.invoiceNumber as string) ?? (extracted?.invoice_number as string),
-          lineItems: (extracted?.lineItems as unknown[]) ?? (extracted?.line_items as unknown[]) ?? [],
+          vendorName: (extracted?.vendor_name as string) ?? (extracted?.vendorName as string) ?? "Unknown",
+          amount: (extracted?.total_amount as number) ?? (extracted?.totalAmount as number) ?? 0,
+          currency: (extracted?.currency as string) ?? "MYR",
+          invoiceDate: (extracted?.invoice_date as string) ?? (extracted?.invoiceDate as string) ?? "",
+          invoiceNumber: (extracted?.invoice_number as string) ?? (extracted?.invoiceNumber as string),
+          lineItems,
           processedAt: inv.processedAt,
         };
       }),
