@@ -46,7 +46,7 @@ export default function VendorManager() {
   const bizId = businessId as Id<'businesses'>
 
   const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [createForm, setCreateForm] = useState<CreateVendorForm>({

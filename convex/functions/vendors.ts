@@ -828,6 +828,65 @@ export const demoteExpenseClaimVendors = internalMutation({
 });
 
 /**
+ * Cleanup: delete vendor_price_history records for expense-claim-only vendors.
+ * Run after demoteExpenseClaimVendors to remove the price history noise.
+ * Pass vendorIds from the demote result (the "demoted" records).
+ *
+ * dryRun: true  → preview count only
+ * dryRun: false → actually delete
+ */
+export const cleanupExpenseClaimPriceHistory = internalMutation({
+  args: {
+    businessId: v.id("businesses"),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    // Find all active/prospective vendors for this business
+    const vendors = await ctx.db
+      .query("vendors")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    const results = [];
+
+    for (const vendor of vendors) {
+      // Get all price history for this vendor
+      const priceHistory = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_vendorId", (q) => q.eq("vendorId", vendor._id))
+        .collect();
+
+      const expenseClaimEntries = priceHistory.filter(
+        (p) => p.sourceType === "expense_claim"
+      );
+
+      if (expenseClaimEntries.length > 0) {
+        results.push({
+          vendorName: vendor.name,
+          vendorStatus: vendor.status,
+          expenseClaimPriceHistoryCount: expenseClaimEntries.length,
+          invoicePriceHistoryCount: priceHistory.length - expenseClaimEntries.length,
+        });
+
+        if (!args.dryRun) {
+          for (const entry of expenseClaimEntries) {
+            await ctx.db.delete(entry._id);
+          }
+        }
+      }
+    }
+
+    const totalDeleted = results.reduce((s, r) => s + r.expenseClaimPriceHistoryCount, 0);
+    return {
+      dryRun: args.dryRun ?? false,
+      vendorsAffected: results.length,
+      priceHistoryDeleted: totalDeleted,
+      records: results,
+    };
+  },
+});
+
+/**
  * Get vendor by name (internal query)
  *
  * Case-insensitive exact match lookup.
