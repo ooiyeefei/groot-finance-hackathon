@@ -887,6 +887,74 @@ export const cleanupExpenseClaimPriceHistory = internalMutation({
 });
 
 /**
+ * Cleanup: hard-delete all vendors that have ONLY expense_claim activity
+ * (no invoice-sourced accounting entries). These are merchant names auto-created
+ * from employee expense receipts and do not belong in the AP vendor list.
+ * Also deletes their vendor_price_history records.
+ *
+ * Run via Convex dashboard:
+ *   deleteExpenseOnlyVendors({ businessId: "...", dryRun: true })  ← preview
+ *   deleteExpenseOnlyVendors({ businessId: "..." })                 ← execute
+ */
+export const deleteExpenseOnlyVendors = internalMutation({
+  args: {
+    businessId: v.id("businesses"),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const vendors = await ctx.db
+      .query("vendors")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    const allEntries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect()
+      .then((es) => es.filter((e) => !e.deletedAt && e.vendorId));
+
+    const results = [];
+
+    for (const vendor of vendors) {
+      if (vendor.status === "inactive") continue; // leave manually managed vendors alone
+
+      const vendorEntries = allEntries.filter(
+        (e) => e.vendorId?.toString() === vendor._id.toString()
+      );
+
+      const hasInvoiceEntry = vendorEntries.some(
+        (e) => e.sourceDocumentType !== "expense_claim"
+      );
+
+      if (!hasInvoiceEntry) {
+        // Delete price history first
+        const priceHistory = await ctx.db
+          .query("vendor_price_history")
+          .withIndex("by_vendorId", (q) => q.eq("vendorId", vendor._id))
+          .collect();
+
+        results.push({
+          name: vendor.name,
+          status: vendor.status,
+          entriesDeleted: priceHistory.length,
+        });
+
+        if (!args.dryRun) {
+          for (const ph of priceHistory) await ctx.db.delete(ph._id);
+          await ctx.db.delete(vendor._id);
+        }
+      }
+    }
+
+    return {
+      dryRun: args.dryRun ?? false,
+      vendorsDeleted: results.length,
+      records: results,
+    };
+  },
+});
+
+/**
  * Get vendor by name (internal query)
  *
  * Case-insensitive exact match lookup.
