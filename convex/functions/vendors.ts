@@ -757,28 +757,13 @@ export const promoteIfProspective = internalMutation({
  *   demoteExpenseClaimVendors({ businessId: "...", dryRun: true })   ← preview
  *   demoteExpenseClaimVendors({ businessId: "..." })                  ← execute
  */
-export const demoteExpenseClaimVendors = mutation({
+export const demoteExpenseClaimVendors = internalMutation({
   args: {
     businessId: v.id("businesses"),
     dryRun: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
-
-    const user = await resolveUserByClerkId(ctx.db, identity.subject);
-    if (!user) throw new Error("User not found");
-
-    const membership = await ctx.db
-      .query("business_memberships")
-      .withIndex("by_userId_businessId", (q) =>
-        q.eq("userId", user._id).eq("businessId", args.businessId)
-      )
-      .first();
-
-    if (!membership || !["owner", "finance_admin"].includes(membership.role)) {
-      throw new Error("Owner/finance_admin required");
-    }
+    // Internal mutation — no auth needed, callable from Convex dashboard
 
     // Get all active vendors for this business
     const activeVendors = await ctx.db
