@@ -198,6 +198,15 @@ export default function AccountingEntriesClient({
           <HeaderWithUser
             title="Accounting Records"
             subtitle="View and manage your financial transactions across multiple currencies"
+            actions={
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-primary hover:bg-primary/90 text-primary-foreground transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Add Transaction
+              </button>
+            }
           />
 
           {/* Main Content Area */}
@@ -247,14 +256,6 @@ export default function AccountingEntriesClient({
           />
         )}
 
-        {/* Floating Action Button */}
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="fixed bottom-20 right-6 z-50 bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg transition-all duration-200 ease-in-out flex items-center justify-center"
-          aria-label="Add new transaction"
-        >
-          <Plus className="w-6 h-6" />
-        </button>
       </div>
     </ClientProviders>
   )
