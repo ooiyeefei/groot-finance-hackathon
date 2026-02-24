@@ -21,7 +21,7 @@ import { lazy, Suspense } from 'react';
 
 // Lazy load MonthlyReportGenerator for performance
 const MonthlyReportGenerator = lazy(() => import('@/domains/expense-claims/components/monthly-report-generator'));
-import { useActiveBusiness } from '@/contexts/business-context';
+import { useActiveBusiness, usePermissions } from '@/contexts/business-context';
 import { useLocale } from 'next-intl';
 import { ModuleSelector } from './module-selector';
 import { TemplateList } from './template-list';
@@ -69,6 +69,10 @@ export default function ExportsPageContent() {
   const { businessId: rawBusinessId, isLoading: businessLoading } = useActiveBusiness();
   // Convert null to undefined for hook compatibility
   const businessId = rawBusinessId ?? undefined;
+
+  // Role-based access: only owner/manager can access export tabs
+  const { isManager } = usePermissions();
+  const canExport = isManager;
 
   // Export tab state
   const [selectedModule, setSelectedModule] = useState<ExportModule | undefined>();
@@ -389,27 +393,31 @@ export default function ExportsPageContent() {
   return (
     <div className="space-y-6">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5 h-auto p-1 gap-1 bg-muted border border-border lg:w-[600px]">
+        <TabsList className={`grid w-full h-auto p-1 gap-1 bg-muted border border-border ${canExport ? 'grid-cols-5 lg:w-[600px]' : 'grid-cols-1 lg:w-[150px]'}`}>
           <TabsTrigger value="reports" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
             <span className="hidden sm:inline">Reports</span>
           </TabsTrigger>
-          <TabsTrigger value="export" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2">
-            <FileSpreadsheet className="h-4 w-4" />
-            <span className="hidden sm:inline">Export</span>
-          </TabsTrigger>
-          <TabsTrigger value="templates" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            <span className="hidden sm:inline">Templates</span>
-          </TabsTrigger>
-          <TabsTrigger value="schedules" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2">
-            <Clock className="h-4 w-4" />
-            <span className="hidden sm:inline">Schedules</span>
-          </TabsTrigger>
-          <TabsTrigger value="history" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2">
-            <History className="h-4 w-4" />
-            <span className="hidden sm:inline">History</span>
-          </TabsTrigger>
+          {canExport && (
+            <>
+              <TabsTrigger value="export" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2">
+                <FileSpreadsheet className="h-4 w-4" />
+                <span className="hidden sm:inline">Export</span>
+              </TabsTrigger>
+              <TabsTrigger value="templates" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                <span className="hidden sm:inline">Templates</span>
+              </TabsTrigger>
+              <TabsTrigger value="schedules" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                <span className="hidden sm:inline">Schedules</span>
+              </TabsTrigger>
+              <TabsTrigger value="history" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2">
+                <History className="h-4 w-4" />
+                <span className="hidden sm:inline">History</span>
+              </TabsTrigger>
+            </>
+          )}
         </TabsList>
 
         {/* Reports Tab */}
@@ -455,8 +463,8 @@ export default function ExportsPageContent() {
           </div>
         </TabsContent>
 
-        {/* Export Tab */}
-        <TabsContent value="export" className="mt-6">
+        {/* Export Tab (owner/manager only) */}
+        {canExport && <TabsContent value="export" className="mt-6">
           <div className="space-y-6">
             {/* Step 1: Module Selection */}
             <Card className="bg-card border-border">
@@ -554,10 +562,10 @@ export default function ExportsPageContent() {
               </Card>
             )}
           </div>
-        </TabsContent>
+        </TabsContent>}
 
-        {/* Templates Tab */}
-        <TabsContent value="templates" className="mt-6">
+        {/* Templates Tab (owner/manager only) */}
+        {canExport && <TabsContent value="templates" className="mt-6">
           <Card className="bg-card border-border">
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -584,10 +592,10 @@ export default function ExportsPageContent() {
               />
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent>}
 
-        {/* Schedules Tab */}
-        <TabsContent value="schedules" className="mt-6">
+        {/* Schedules Tab (owner/manager only) */}
+        {canExport && <TabsContent value="schedules" className="mt-6">
           <Card className="bg-card border-border">
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -613,10 +621,10 @@ export default function ExportsPageContent() {
               />
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent>}
 
-        {/* History Tab */}
-        <TabsContent value="history" className="mt-6">
+        {/* History Tab (owner/manager only) */}
+        {canExport && <TabsContent value="history" className="mt-6">
           <Card className="bg-card border-border">
             <CardHeader>
               <CardTitle className="text-foreground">Export History</CardTitle>
@@ -694,7 +702,7 @@ export default function ExportsPageContent() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent>}
       </Tabs>
 
       {/* Template Builder Modal */}
