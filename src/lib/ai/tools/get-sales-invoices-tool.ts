@@ -93,14 +93,36 @@ This queries the sales_invoices table, NOT incoming/purchase invoices.`
 
         console.log(`[GetSalesInvoicesTool] Found ${result.invoices.length} sales invoice(s), summary: ${JSON.stringify(result.summary)}`)
 
+        const invoices = result.invoices
+        const summary = result.summary
+
+        // Summary header
+        let dataText = `**Sales Invoices (AR) — ${invoices.length} invoice(s)**\n\n`
+        if (summary) {
+          dataText += `**Summary**\n`
+          dataText += `- Total outstanding: ${summary.totalOutstanding?.toFixed(2) ?? '0.00'}\n`
+          dataText += `- Total overdue: ${summary.totalOverdue?.toFixed(2) ?? '0.00'}\n\n`
+        }
+
+        invoices.forEach((inv: any, i: number) => {
+          const statusEmoji: Record<string, string> = {
+            paid: '✓ Paid', sent: '📤 Sent', overdue: '⚠️ Overdue',
+            draft: '📝 Draft', partially_paid: '🔵 Partially Paid', void: '🚫 Void'
+          }
+          const statusLabel = statusEmoji[inv.status] ?? inv.status
+          dataText += `### ${i + 1}. ${inv.clientName || inv.client_name || 'Customer'}\n`
+          dataText += `- **Invoice #**: ${inv.invoiceNumber || inv.invoice_number || '—'}\n`
+          dataText += `- **Amount**: ${inv.total?.toFixed(2) ?? inv.amount?.toFixed(2) ?? '—'} ${inv.currency ?? ''}\n`
+          dataText += `- **Status**: ${statusLabel}\n`
+          if (inv.dueDate || inv.due_date) dataText += `- **Due**: ${inv.dueDate ?? inv.due_date}\n`
+          if (inv.invoiceDate || inv.invoice_date) dataText += `- **Date**: ${inv.invoiceDate ?? inv.invoice_date}\n`
+          dataText += '\n'
+        })
+
         return {
           success: true,
-          data: result,
-          metadata: {
-            resultsCount: result.invoices.length,
-            totalCount: result.totalCount,
-            summary: result.summary,
-          }
+          data: dataText,
+          metadata: { resultsCount: invoices.length, totalCount: result.totalCount, summary }
         }
       } catch (error) {
         lastError = error

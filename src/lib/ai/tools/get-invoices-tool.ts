@@ -83,12 +83,35 @@ This tool queries the AP invoices table (NOT accounting_entries and NOT sales in
 
         console.log(`[GetInvoicesTool] Found ${result.invoices.length} completed invoice(s)`)
 
+        // Format as structured text so LLM produces clean markdown output
+        const invoices = result.invoices
+        let dataText = `Found ${invoices.length} invoice(s):\n\n`
+
+        invoices.forEach((inv: any, i: number) => {
+          const status = inv.isPosted ? '✓ Posted to Accounting' : '⏳ Pending — not yet posted'
+          dataText += `### ${i + 1}. ${inv.vendorName}\n`
+          dataText += `- **Invoice #**: ${inv.invoiceNumber || '—'}\n`
+          dataText += `- **Date**: ${inv.invoiceDate || '—'}\n`
+          dataText += `- **Total**: ${inv.amount?.toFixed(2)} ${inv.currency}\n`
+          dataText += `- **Status**: ${status}\n`
+          dataText += `- **OCR Confidence**: ${Math.round((inv.confidenceScore ?? 0) * 100)}%\n`
+
+          if (inv.lineItems && inv.lineItems.length > 0) {
+            dataText += `- **Line items**:\n`
+            inv.lineItems.forEach((item: any) => {
+              const amt = item.totalAmount ?? item.total_amount ?? 0
+              const desc = item.description ?? item.item_description ?? 'Item'
+              const qty = item.quantity ?? 1
+              dataText += `  - ${desc} × ${qty} — ${amt.toFixed(2)} ${inv.currency}\n`
+            })
+          }
+          dataText += '\n'
+        })
+
         return {
           success: true,
-          data: result,
-          metadata: {
-            resultsCount: result.invoices.length,
-          }
+          data: dataText,
+          metadata: { resultsCount: invoices.length }
         }
       } catch (error) {
         lastError = error
