@@ -1425,3 +1425,58 @@ export const migrateDraftClaims = internalMutation({
     return { migratedCount };
   },
 });
+
+/**
+ * DIAGNOSTIC: Run from Convex dashboard to identify why a manager's approval queue is empty.
+ * Checks for ID mismatches between what's stored in memberships vs what the manager resolves to.
+ *
+ * Usage: diagnosePendingApprovals({ businessId: "..." })
+ */
+export const diagnosePendingApprovals = query({
+  args: { businessId: v.string() },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) return { error: "Business not found" };
+
+    // Who is the current user?
+    const loggedInUser = identity
+      ? await resolveUserByClerkId(ctx.db, identity.subject)
+      : null;
+
+    // All submitted submissions for this business
+    const allSubmissions = await ctx.db
+      .query("expense_submissions")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    const submitted = allSubmissions.filter((s) => s.status === "submitted" && !s.deletedAt);
+
+    // What user IDs are stored as designatedApproverIds?
+    const approverIds = [...new Set(submitted.map((s) => s.designatedApproverId?.toString()).filter(Boolean))];
+
+    // Resolve approver names
+    const approverDetails = await Promise.all(
+      approverIds.map(async (id) => {
+        const user = await ctx.db.get(id as Id<"users">);
+        return { id, name: user?.fullName || user?.email, clerkUserId: user?.clerkUserId };
+      })
+    );
+
+    return {
+      loggedInClerkId: identity?.subject,
+      loggedInConvexId: loggedInUser?._id?.toString(),
+      loggedInName: loggedInUser?.fullName,
+      submittedCount: submitted.length,
+      submissions: submitted.map((s) => ({
+        id: s._id,
+        title: s.title,
+        designatedApproverId: s.designatedApproverId?.toString(),
+        status: s.status,
+      })),
+      approverIdsInSubmissions: approverDetails,
+      // KEY CHECK: does loggedInConvexId match any designatedApproverId?
+      isMatchFound: approverIds.includes(loggedInUser?._id?.toString() ?? ""),
+    };
+  },
+});
