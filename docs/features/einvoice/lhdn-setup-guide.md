@@ -196,39 +196,82 @@ If the tenant purchases from vendors who are exempt from e-invoicing (small vend
 
 ---
 
-## 5. Authentication Architecture (Hybrid Model)
+## 5. Authentication Architecture
 
-Groot Finance uses a **hybrid intermediary model** (same approach as SQL Accounting with 270,000+ users):
+### The Simple Version
 
-### How It Works
+There are only **two things** that matter:
 
 ```
-SUBMISSION (core — always intermediary)
-├── Groot Finance authenticates with platform Client ID/Secret
-├── Passes onbehalfof: {tenant_TIN} header
-├── Signs document with platform digital certificate
-├── Submits to LHDN on behalf of tenant
-└── One credential set + one cert covers all tenants
-
-READ ACCESS (future — optional, per-tenant)
-├── Tenant's own Client ID (from Business Settings lhdnClientId field)
-├── Gives "full view" of ALL their documents on MyInvois
-├── Including documents submitted by other ERPs/intermediaries
-└── Nice-to-have for tenants using multiple accounting systems
+┌─────────────────────────────────────────────────────────────────────┐
+│                                                                     │
+│   GROOT FINANCE (the platform) has:                                 │
+│   ├── 1 Client ID + 1 Client Secret  (from MyInvois Portal)        │
+│   ├── 1 Digital Certificate           (from MCMC-licensed CA)       │
+│   └── These cover ALL tenants. Not per-tenant. ONE set.             │
+│                                                                     │
+│   EACH TENANT BUSINESS just needs to:                               │
+│   ├── Authorize Groot Finance on MyInvois Portal (one-time click)   │
+│   └── Fill in their TIN + BRN in Business Settings                  │
+│                                                                     │
+│   That's it. Tenant never touches API secrets or certificates.      │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Why Intermediary for Submissions
+### How Submission Works
+
+```
+Tenant clicks "Submit to LHDN" in Groot Finance
+    ↓
+Groot Finance authenticates with its OWN Client ID/Secret
+    + passes header: onbehalfof: {tenant's TIN}
+    ↓
+Groot Finance signs the document with its OWN digital certificate
+    ↓
+Groot Finance submits to LHDN API on behalf of tenant
+    ↓
+LHDN validates and returns result → shown to tenant in app
+```
+
+**Key point**: Groot Finance's one set of credentials works for all tenants. Each tenant just grants permission.
+
+### Why This Is the Right Approach
 
 | Benefit | Explanation |
 |---------|-------------|
 | **Security** | Tenants never handle API secrets or signing certificates |
 | **Simplicity** | Tenants just authorize on MyInvois Portal — no credential management |
-| **Cost** | One digital certificate for entire platform, not per-tenant |
+| **Cost** | One digital certificate (~RM200-500/year) for entire platform, not per-tenant |
 | **Reliability** | Centralized pipeline with monitoring, retry logic, rate limiting |
 
-### When Tenant's Own Client ID Matters
+### What About "Direct" Mode / Tenant's Own Client ID?
 
-The `lhdnClientId` field in Business Settings exists for future **read-only access** — it lets tenants see ALL their e-invoices across ALL ERPs/intermediaries, not just ones submitted through Groot Finance. This is a nice-to-have feature for enterprise tenants who use multiple accounting systems. It is **not required** for e-invoice submission.
+LHDN also allows businesses to register their own "ERP system" and get their own Client ID/Secret for direct API access. This is how standalone accounting software (like SQL Accounting desktop) works.
+
+**For Groot Finance, this is NOT needed and NOT the default.** Here's why:
+
+| Approach | What It Does | Who Needs It | Groot Finance? |
+|----------|-------------|-------------|---------------|
+| **Intermediary** (our approach) | Platform submits on behalf of tenants using ONE credential | SaaS platforms | **Yes — this is what we use** |
+| **Direct** (tenant registers own ERP) | Each tenant has own credentials, manages own submissions | Standalone desktop accounting software | **No — nice-to-have only** |
+
+The **only** scenario where a tenant's own Client ID adds value is if the tenant uses **multiple** accounting systems and wants to see ALL their e-invoices (from all sources) in one place. Groot Finance is not a full accounting ledger — we submit invoices, not aggregate records from other systems. So this is purely optional and future.
+
+The `lhdnClientId` field in Business Settings exists for this future read-only access. It is **not required** for e-invoice submission.
+
+### Common Confusion: Personal Taxpayer vs. Intermediary Credentials
+
+**These are NOT the same thing:**
+
+| Registration | Portal Section | What You Get | Use Case |
+|-------------|---------------|-------------|----------|
+| **Personal taxpayer** registers "my ERP" | "Register ERP System" | Client ID/Secret scoped to YOUR TIN only | Direct mode — submit only for yourself |
+| **Groot Finance** registers as intermediary | "Register Intermediary" | Client ID/Secret that works with `onbehalfof` for ANY authorized tenant | Intermediary mode — submit for all tenants |
+
+**For sandbox testing**: Register Groot Finance (or SuperScrat, whichever entity runs the platform) as an **intermediary** on the MyInvois sandbox portal. Do NOT use personal taxpayer credentials — they won't work with the `onbehalfof` header that our code uses.
+
+Sandbox portal: `https://preprod-myinvois.hasil.gov.my`
 
 ---
 
@@ -247,10 +290,14 @@ The `lhdnClientId` field in Business Settings exists for future **read-only acce
 
 ### AWS SSM Parameters
 
-| Parameter Path | Type | Purpose |
-|---------------|------|---------|
-| `/finanseal/production/digital-signature/private-key` | SecureString | RSA private key for document signing |
-| `/finanseal/production/digital-signature/certificate` | SecureString | X.509 certificate from MCMC-licensed CA |
+| Parameter Path | Type | Status | Purpose |
+|---------------|------|--------|---------|
+| `/finanseal/sandbox/digital-signature/private-key` | SecureString | **Stored** (self-signed) | RSA private key for sandbox testing |
+| `/finanseal/sandbox/digital-signature/certificate` | SecureString | **Stored** (self-signed) | X.509 self-signed cert for sandbox testing |
+| `/finanseal/production/digital-signature/private-key` | SecureString | Not yet | RSA private key from MCMC CA cert |
+| `/finanseal/production/digital-signature/certificate` | SecureString | Not yet | X.509 certificate from MCMC-licensed CA |
+
+The signing Lambda reads from `/finanseal/${LHDN_ENVIRONMENT}/digital-signature/*`. When `LHDN_ENVIRONMENT=sandbox`, it uses the sandbox params. When `production`, it uses production params.
 
 ---
 
