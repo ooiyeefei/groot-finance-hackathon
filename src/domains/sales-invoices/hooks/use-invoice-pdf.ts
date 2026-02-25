@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useState, createElement } from 'react'
+import { downloadBlob } from '@/lib/capacitor/native-download'
 import type { PdfInvoiceData, PdfBusinessInfo } from '../components/invoice-templates/pdf-document'
 
 export interface PdfRenderData {
@@ -51,15 +52,7 @@ export function useInvoicePdf() {
       const blob = await renderToBlob(data)
       const filename = `${invoiceNumber}.pdf`
 
-      // Trigger browser download
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      await downloadBlob(blob, filename)
 
       return { success: true, filename }
     } catch (error) {

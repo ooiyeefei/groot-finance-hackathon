@@ -5,6 +5,8 @@
  * Numbers formatted as plain values for spreadsheet compatibility.
  */
 
+import { downloadCsv } from '@/lib/capacitor/native-download'
+
 /**
  * Generate a CSV file and trigger browser download.
  *
@@ -12,11 +14,11 @@
  * @param headers - Column header names
  * @param rows - Data rows as arrays of string or number values
  */
-export function exportToCSV(
+export async function exportToCSV(
   filename: string,
   headers: string[],
   rows: (string | number)[][]
-): void {
+): Promise<void> {
   const escapeCell = (value: string | number): string => {
     const str = String(value)
     // Wrap in quotes if the cell contains commas, quotes, or newlines
@@ -32,17 +34,5 @@ export function exportToCSV(
   ]
 
   const csvString = csvLines.join('\n')
-  const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.style.display = 'none'
-  document.body.appendChild(link)
-  link.click()
-
-  // Cleanup
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
+  await downloadCsv(csvString, filename)
 }

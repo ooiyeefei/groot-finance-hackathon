@@ -93,14 +93,8 @@ export default function GoogleSheetsExport({ userRole }: GoogleSheetsExportProps
         // Handle CSV download
         if (response.ok) {
           const blob = await response.blob()
-          const url = window.URL.createObjectURL(blob)
-          const a = document.createElement('a')
-          a.href = url
-          a.download = `expense-report-${exportConfig.date_range.start_date}-to-${exportConfig.date_range.end_date}.csv`
-          document.body.appendChild(a)
-          a.click()
-          window.URL.revokeObjectURL(url)
-          document.body.removeChild(a)
+          const { downloadBlob } = await import('@/lib/capacitor/native-download')
+          await downloadBlob(blob, `expense-report-${exportConfig.date_range.start_date}-to-${exportConfig.date_range.end_date}.csv`)
 
           setExportResult({
             success: true,

@@ -487,7 +487,7 @@ function ReimbursementQueueContent({
   }
 
   // Handle export to CSV
-  const handleExportList = () => {
+  const handleExportList = async () => {
     if (approvedClaims.length === 0) {
       alert('No claims to export')
       return
@@ -512,14 +512,8 @@ function ReimbursementQueueContent({
 
     // Create and trigger download
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.setAttribute('href', url)
-    link.setAttribute('download', `reimbursement-queue-${new Date().toISOString().split('T')[0]}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    const { downloadBlob } = await import('@/lib/capacitor/native-download')
+    await downloadBlob(blob, `reimbursement-queue-${new Date().toISOString().split('T')[0]}.csv`)
   }
 
   return (

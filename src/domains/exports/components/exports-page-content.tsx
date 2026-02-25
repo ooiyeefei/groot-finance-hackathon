@@ -269,13 +269,19 @@ export default function ExportsPageContent() {
         },
       });
 
-      // Trigger download
-      const link = document.createElement('a');
-      link.href = result.url;
-      link.download = result.filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // Trigger download (native-safe: opens in system browser on iOS)
+      const { isNativePlatform } = await import('@/lib/capacitor/platform');
+      if (isNativePlatform()) {
+        const { Browser } = await import('@capacitor/browser');
+        await Browser.open({ url: result.url });
+      } else {
+        const link = document.createElement('a');
+        link.href = result.url;
+        link.download = result.filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
 
       addToast({
         type: 'success',

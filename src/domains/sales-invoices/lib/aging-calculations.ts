@@ -109,7 +109,7 @@ export function calculateDaysOverdue(
  * Export aging report data as CSV and trigger browser download.
  * Uses the generateCsv utility from the exports domain.
  */
-export function exportAgingReportCsv(
+export async function exportAgingReportCsv(
   reportData: {
     debtors: Array<{
       customerName: string
@@ -131,7 +131,7 @@ export function exportAgingReportCsv(
     asOfDate: string
     currency: string
   }
-): void {
+): Promise<void> {
   // Build CSV rows manually for simplicity (no dependency on export template system)
   const headers = ['Customer', 'Current', '1-30 Days', '31-60 Days', '61-90 Days', '90+ Days', 'Total']
   const rows: string[][] = []
@@ -174,12 +174,6 @@ export function exportAgingReportCsv(
 
   // Trigger download
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `ar-aging-report-${reportData.asOfDate}-${reportData.currency}.csv`
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
+  const { downloadBlob } = await import('@/lib/capacitor/native-download')
+  await downloadBlob(blob, `ar-aging-report-${reportData.asOfDate}-${reportData.currency}.csv`)
 }

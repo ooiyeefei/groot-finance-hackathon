@@ -102,7 +102,7 @@ export default function DuplicateReportPage() {
   }, [fetchReport])
 
   // Export to CSV
-  const handleExportCSV = () => {
+  const handleExportCSV = async () => {
     if (matches.length === 0) {
       return
     }
@@ -149,17 +149,8 @@ export default function DuplicateReportPage() {
 
     // Create and trigger download
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.setAttribute('href', url)
-    link.setAttribute(
-      'download',
-      `duplicate-report-${new Date().toISOString().split('T')[0]}.csv`
-    )
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    const { downloadBlob } = await import('@/lib/capacitor/native-download')
+    await downloadBlob(blob, `duplicate-report-${new Date().toISOString().split('T')[0]}.csv`)
   }
 
   // Handle view match - opens comparison panel modal
