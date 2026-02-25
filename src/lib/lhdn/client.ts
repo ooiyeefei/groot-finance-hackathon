@@ -36,13 +36,18 @@ function getConfig(): LhdnConfig {
 }
 
 /**
- * Authenticate with LHDN as intermediary on behalf of a tenant.
- * Uses client_credentials grant with the intermediary's credentials
- * and the tenant's TIN in the onbehalfof header.
+ * Authenticate with LHDN MyInvois API.
+ *
+ * Supports two modes controlled by LHDN_AUTH_MODE env var:
+ * - "intermediary" (default): Uses platform credentials + onbehalfof header
+ *   for the tenant's TIN. Requires taxpayer authorization on MyInvois portal.
+ * - "direct": Uses the taxpayer's own credentials directly, no onbehalfof
+ *   header. Useful for testing with a personal taxpayer sandbox account.
  */
 export async function authenticate(tenantTin: string): Promise<LhdnToken> {
   const config = getConfig()
   const url = `${config.baseUrl}${LHDN_API_PATHS.TOKEN}`
+  const authMode = process.env.LHDN_AUTH_MODE || "intermediary"
 
   const body = new URLSearchParams({
     client_id: config.clientId,
@@ -51,12 +56,17 @@ export async function authenticate(tenantTin: string): Promise<LhdnToken> {
     scope: "InvoicingAPI",
   })
 
+  const headers: Record<string, string> = {
+    "Content-Type": "application/x-www-form-urlencoded",
+  }
+
+  if (authMode === "intermediary") {
+    headers.onbehalfof = tenantTin
+  }
+
   const response = await fetch(url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      onbehalfof: tenantTin,
-    },
+    headers,
     body: body.toString(),
   })
 
