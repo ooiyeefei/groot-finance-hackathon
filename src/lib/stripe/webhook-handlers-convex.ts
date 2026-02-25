@@ -189,10 +189,14 @@ async function updateBusinessSubscriptionConvex(
   // Get plan details from subscription
   const priceId = subscription.items.data[0]?.price?.id
   const productId = subscription.items.data[0]?.price?.product as string
-  const planName = priceId ? await getPlanFromPriceId(priceId) : 'free'
+  const rawPlanName = priceId ? await getPlanFromPriceId(priceId) : 'free'
 
   // Map Stripe subscription status to our status
   const subscriptionStatus = mapStripeStatus(subscription.status)
+
+  // All trials are Pro trials — override plan name for trialing subscriptions
+  // This handles legacy subscriptions created with Starter price before the fix
+  const planName = subscriptionStatus === 'trialing' ? 'pro' : rawPlanName
 
   // Stripe SDK v20+ type workaround - cast to access timestamp properties
   const subscriptionData = subscription as unknown as {

@@ -117,7 +117,12 @@ export async function GET(request: NextRequest) {
 
     // Normalize plan key
     const rawPlanKey = business.planName || 'starter'
-    const planKey: PlanKey = (rawPlanKey === 'free' || rawPlanKey === 'trial') ? 'starter' : (rawPlanKey as PlanKey)
+    let planKey: PlanKey = (rawPlanKey === 'free' || rawPlanKey === 'trial') ? 'starter' : (rawPlanKey as PlanKey)
+
+    // All trials are Pro trials — override for trialing subscriptions
+    if (business.subscriptionStatus === 'trialing') {
+      planKey = 'pro'
+    }
     // Get plan from Stripe catalog (with caching/fallback)
     const plan = await getPlan(planKey)
     const ocrLimit = getOcrLimitSync(planKey)
