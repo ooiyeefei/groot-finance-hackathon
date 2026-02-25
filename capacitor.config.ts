@@ -8,11 +8,14 @@ const config: CapacitorConfig = {
     url: 'https://finance.hellogroot.com',
     allowNavigation: [
       'finance.hellogroot.com',
+      '*.hellogroot.com',
       '*.convex.cloud',
       '*.clerk.accounts.dev',
+      'capable-bobcat-22.clerk.accounts.dev',
       'accounts.clerk.dev',
       'accounts.google.com',
       'appleid.apple.com',
+      '*.clerk.com',
     ],
   },
   plugins: {
