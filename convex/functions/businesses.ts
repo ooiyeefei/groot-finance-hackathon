@@ -2262,6 +2262,51 @@ export const migrateTrialPlanToPro = internalMutation({
   },
 });
 
+/**
+ * Debug: List all businesses with subscription info
+ * For admin use only — remove after migration verification
+ */
+export const debugListSubscriptions = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const businesses = await ctx.db.query("businesses").collect();
+    return businesses.map((b) => ({
+      id: b._id,
+      name: b.name,
+      planName: b.planName,
+      subscriptionStatus: b.subscriptionStatus,
+      stripeSubscriptionId: b.stripeSubscriptionId,
+    }));
+  },
+});
+
+/**
+ * Debug: Patch a specific business planName by Convex ID
+ * For one-time admin fixes
+ */
+export const debugPatchPlan = internalMutation({
+  args: {
+    businessId: v.id("businesses"),
+    planName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const business = await ctx.db.get(args.businessId);
+    if (!business) {
+      return { success: false, error: "Business not found" };
+    }
+    await ctx.db.patch(args.businessId, {
+      planName: args.planName,
+      updatedAt: Date.now(),
+    });
+    return {
+      success: true,
+      name: business.name,
+      oldPlan: business.planName,
+      newPlan: args.planName,
+    };
+  },
+});
+
 // ============================================================================
 // ADMIN: Manual Subscription Management
 // ============================================================================

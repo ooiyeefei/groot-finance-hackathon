@@ -68,7 +68,9 @@ export function UpgradeBanner() {
               <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center">
                 <Zap className="w-3.5 h-3.5 text-primary" />
               </div>
-              <h3 className="font-semibold text-foreground">Unlock Pro Features</h3>
+              <h3 className="font-semibold text-foreground">
+                {data.plan.name === 'pro' ? 'Pro Trial Active' : 'Unlock Pro Features'}
+              </h3>
             </div>
 
             {/* Trial countdown with progress bar - inline */}
@@ -121,7 +123,9 @@ export function UpgradeBanner() {
 
         {/* Description and features */}
         <p className="text-sm text-muted-foreground mb-3">
-          Your trial includes full features. Subscribe to a plan before it expires.
+          {data.plan.name === 'pro'
+            ? 'You have full Pro access during your trial. Subscribe to a plan to continue after it ends.'
+            : 'Your trial includes full features. Subscribe to a plan before it expires.'}
         </p>
 
         {/* Feature highlights */}
