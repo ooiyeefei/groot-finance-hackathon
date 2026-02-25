@@ -295,6 +295,8 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
     setIsSwitching(true)
     setSwitchError(null)
 
+    let reloading = false
+
     try {
       const request: TSwitchBusinessRequest = { businessId }
       const response = await switchBusiness(request)
@@ -307,14 +309,14 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
         clearBusinessScopedCaches()
         clearCurrencyCache()
 
-        // Clear IndexedDB offline queue to prevent pending actions from
-        // the old business being synced under the new business context.
-        await clearOfflineQueue().catch(() => {})
+        // Fire-and-forget: clear IndexedDB offline queue to prevent pending
+        // actions from the old business replaying under the new context.
+        // Do NOT await — openDB() can hang forever when IndexedDB is blocked
+        // by another tab or the service worker, which would prevent reload.
+        clearOfflineQueue().catch(() => {})
 
-        // Full page reload ensures every component re-initializes with fresh data
-        // for the new business. Surgical in-place update is error-prone because
-        // every page's data (invoices, expenses, subscription, role, profile) must
-        // change simultaneously, and multiple independent caches must be invalidated.
+        // Full page reload ensures every component re-initializes with fresh data.
+        reloading = true
         window.location.reload()
 
         return true
@@ -331,7 +333,13 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
       log.error(' Exception switching business:', error)
       return false
     } finally {
-      setIsSwitching(false)
+      // Keep isSwitching=true during page reload so the UI stays in loading
+      // state until the browser navigates away. window.location.reload()
+      // doesn't block JS execution — without this guard, setIsSwitching(false)
+      // would flash the UI out of loading state before the page reloads.
+      if (!reloading) {
+        setIsSwitching(false)
+      }
     }
   }, [])
 
