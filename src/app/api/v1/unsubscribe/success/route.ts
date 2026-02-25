@@ -18,7 +18,7 @@ function renderSuccessPage(): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Unsubscribed - FinanSEAL</title>
+  <title>Unsubscribed - Groot Finance</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -136,7 +136,7 @@ function renderSuccessPage(): string {
     </div>
     <h1>You've been unsubscribed</h1>
     <p>Your email preferences have been updated successfully.</p>
-    <p>You will no longer receive these emails from FinanSEAL.</p>
+    <p>You will no longer receive these emails from Groot Finance.</p>
 
     <div class="note">
       <h3>Please note:</h3>
@@ -148,12 +148,12 @@ function renderSuccessPage(): string {
     </div>
 
     <div class="button-group">
-      <a href="https://finance.hellogroot.com/en" class="btn btn-primary">Go to FinanSEAL</a>
+      <a href="https://finance.hellogroot.com/en" class="btn btn-primary">Go to Groot Finance</a>
       <a href="https://finance.hellogroot.com/en/settings" class="btn btn-secondary">Manage Preferences</a>
     </div>
 
     <div class="footer">
-      <p>&copy; ${new Date().getFullYear()} FinanSEAL. All rights reserved.</p>
+      <p>&copy; ${new Date().getFullYear()} Groot Finance. All rights reserved.</p>
       <p style="margin-top: 8px;">
         <a href="https://finance.hellogroot.com/en/privacy" style="color: #999; text-decoration: none;">Privacy Policy</a>
         &nbsp;•&nbsp;

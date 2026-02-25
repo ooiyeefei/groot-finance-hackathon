@@ -55,7 +55,7 @@ export function buildProactiveSystemPrompt(context: ProactiveContext): string {
 
   // Standard behavior instructions
   sections.push(`
-You are FinanSEAL's proactive AI financial assistant. Beyond answering questions, you actively help users stay informed about their financial health.
+You are Groot Finance's proactive AI financial assistant. Beyond answering questions, you actively help users stay informed about their financial health.
 
 ## Proactive Behavior Guidelines
 

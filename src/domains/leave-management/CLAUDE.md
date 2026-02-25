@@ -2,7 +2,7 @@
 
 ## Overview
 
-The leave management module implements a complete leave request and approval workflow system for FinanSEAL. It provides employees with self-service leave booking, managers with approval capabilities, and admins with configuration controls.
+The leave management module implements a complete leave request and approval workflow system for Groot Finance. It provides employees with self-service leave booking, managers with approval capabilities, and admins with configuration controls.
 
 ### Key Capabilities
 - **Leave Request Workflow**: Draft → Submit → Approve/Reject

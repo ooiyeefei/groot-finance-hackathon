@@ -358,7 +358,7 @@ export default function UserProfileSection({ className }: UserProfileSectionProp
               {/* Onboarding Tips */}
               <ToggleRow
                 label="Onboarding Tips"
-                description="Get helpful tips to make the most of FinanSEAL"
+                description="Get helpful tips to make the most of Groot Finance"
                 checked={emailPreferences.onboardingTipsEnabled && !emailPreferences.globalUnsubscribe}
                 onChange={() => handleEmailPrefToggle('onboardingTipsEnabled')}
                 disabled={isEmailPrefSaving || emailPreferences.globalUnsubscribe}

@@ -1,5 +1,5 @@
 /**
- * CSRF Protection for FinanSEAL API
+ * CSRF Protection for Groot Finance API
  *
  * Implements CSRF protection using the Synchronizer Token Pattern.
  * For invitation and team management endpoints.

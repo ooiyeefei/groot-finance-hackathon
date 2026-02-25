@@ -8,7 +8,7 @@
 
 ## Overview
 
-FinanSEAL now uses **Redis-based distributed caching** via Upstash, replacing the previous in-memory cache system. This provides:
+Groot Finance now uses **Redis-based distributed caching** via Upstash, replacing the previous in-memory cache system. This provides:
 
 ✅ **Distributed caching** across serverless functions
 ✅ **Automatic fallback** to in-memory cache if Redis unavailable
@@ -431,7 +431,7 @@ If Redis causes issues in production:
 ---
 
 **Last Updated**: 2025-01-13
-**Maintained By**: FinanSEAL Development Team
+**Maintained By**: Groot Finance Development Team
 **Related Documentation**:
 - Security domain: `/src/domains/security/CLAUDE.md`
 - API v1 contracts: `/src/app/api/v1/CLAUDE.md`

@@ -96,7 +96,7 @@ function PlanSelectionContent() {
                   Your Free Trial Has Expired
                 </h2>
                 <p className="text-muted-foreground">
-                  Your 14-day free trial has ended. To continue using FinanSEAL and access your data,
+                  Your 14-day free trial has ended. To continue using Groot Finance and access your data,
                   please select a paid plan below. Your data is safe and will be available once you upgrade.
                 </p>
               </div>
@@ -111,7 +111,7 @@ function PlanSelectionContent() {
           </h1>
           <p className="text-lg text-muted-foreground">
             {isTrialExpired
-              ? 'Select a plan to unlock your account and continue using FinanSEAL'
+              ? 'Select a plan to unlock your account and continue using Groot Finance'
               : 'Start with a 14-day free trial or select a paid plan'
             }
           </p>

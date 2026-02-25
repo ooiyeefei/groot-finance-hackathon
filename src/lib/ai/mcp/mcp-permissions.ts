@@ -55,7 +55,7 @@ export interface McpServerPermission {
  * This configuration follows principle of least privilege:
  * - Context7 (docs): Public - useful for all users
  * - Supabase (internal operations): Internal - requires paid plan
- * - FinanSEAL Intelligence: Restricted - pro+ for advanced analytics
+ * - Groot Finance Intelligence: Restricted - pro+ for advanced analytics
  */
 const MCP_SERVER_PERMISSIONS: McpServerPermission[] = [
   {

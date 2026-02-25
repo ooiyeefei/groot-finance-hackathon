@@ -614,7 +614,7 @@ export async function createInvitation(
 
   const emailResult = await emailService.sendInvitation({
     email,
-    businessName: business?.name || 'FinanSEAL Business',
+    businessName: business?.name || 'Groot Finance Business',
     inviterName,
     role,
     invitationToken: secureToken,
@@ -771,7 +771,7 @@ export async function resendInvitation(
 
   const emailResult = await emailService.sendInvitation({
     email,
-    businessName: business?.name || 'FinanSEAL Business',
+    businessName: business?.name || 'Groot Finance Business',
     inviterName: 'Team Admin',
     role: invitation.role,
     invitationToken: secureToken,

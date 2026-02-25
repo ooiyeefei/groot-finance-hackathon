@@ -1,4 +1,4 @@
-# Modal.com Qwen3 Deployment for FinanSEAL
+# Modal.com Qwen3 Deployment for Groot Finance
 
 Cost-optimized LLM deployment using Qwen3-8B on Modal.com.
 
@@ -52,7 +52,7 @@ modal app list
 # Output: finanseal-qwen3-openai-api -> https://YOUR_USERNAME--finanseal-qwen3-openai-api.modal.run
 ```
 
-### 5. Update FinanSEAL Environment
+### 5. Update Groot Finance Environment
 
 ```bash
 # .env.local
@@ -177,7 +177,7 @@ Modal has default rate limits. For high traffic:
                           │
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  FinanSEAL (Vercel)                                         │
+│  Groot Finance (Vercel)                                         │
 │  - LangGraph Agent calls Modal endpoint                     │
 │  - Uses OpenAI-compatible format                            │
 │  - No code changes needed (just env vars)                   │

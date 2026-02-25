@@ -380,7 +380,7 @@ const AppHeader = ({ user, onMenuToggle }) => {
           </Button>
 
           <h1 className="text-foreground text-xl font-semibold">
-            FinanSEAL
+            Groot Finance
           </h1>
         </div>
 

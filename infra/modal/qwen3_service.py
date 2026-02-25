@@ -1,5 +1,5 @@
 """
-FinanSEAL Qwen3-30B-A3B Chat Service on Modal.com
+Groot Finance Qwen3-30B-A3B Chat Service on Modal.com
 
 Cost-optimized deployment on L4 GPU.
 - Model: Qwen/Qwen3-8B (~16GB VRAM in BF16)
@@ -194,7 +194,7 @@ def openai_api():
     import uuid
     import json
 
-    api = FastAPI(title="FinanSEAL Qwen3 API")
+    api = FastAPI(title="Groot Finance Qwen3 API")
 
     class Message(BaseModel):
         role: str

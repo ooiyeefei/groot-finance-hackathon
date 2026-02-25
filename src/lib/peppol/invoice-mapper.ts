@@ -1,5 +1,5 @@
 /**
- * Invoice Mapper — FinanSEAL → Storecove JSON
+ * Invoice Mapper — Groot Finance → Storecove JSON
  *
  * Maps sales invoice data from Convex to Storecove's document submission format.
  * Handles both invoices and credit notes.
@@ -141,7 +141,7 @@ function round(n: number): number {
 }
 
 /**
- * Map a FinanSEAL sales invoice to Storecove's document submission format.
+ * Map a Groot Finance sales invoice to Storecove's document submission format.
  */
 export function mapInvoiceToStorecove(
   invoice: InvoiceData,
@@ -219,7 +219,7 @@ export function mapInvoiceToStorecove(
 }
 
 /**
- * Map Storecove validation errors to FinanSEAL peppolErrors format.
+ * Map Storecove validation errors to Groot Finance peppolErrors format.
  */
 export function mapStorecoveErrorsToPeppolErrors(
   storecoveErrors: Array<{ source: string; details: string }>

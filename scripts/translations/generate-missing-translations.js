@@ -223,7 +223,7 @@ async function translateMissingKeys(targetLanguage, englishTranslations, existin
 // ===========================
 
 async function main() {
-  console.log('🌍 FinanSEAL Translation Generator');
+  console.log('🌍 Groot Finance Translation Generator');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
   // Validate command-line arguments

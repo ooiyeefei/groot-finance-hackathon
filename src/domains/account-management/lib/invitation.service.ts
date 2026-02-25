@@ -38,7 +38,7 @@ export async function validateInvitation(
       invitation: {
         email: tokenData.email,
         role: tokenData.role,
-        businessName: business?.name || 'FinanSEAL Business'
+        businessName: business?.name || 'Groot Finance Business'
       }
     }
   } catch (error) {
@@ -524,7 +524,7 @@ export async function resendInvitation(
   // Send invitation email using JWT token
   const emailResult = await emailService.sendInvitation({
     email,
-    businessName: business?.name || 'FinanSEAL Business',
+    businessName: business?.name || 'Groot Finance Business',
     inviterName,
     role,
     invitationToken: secureToken,

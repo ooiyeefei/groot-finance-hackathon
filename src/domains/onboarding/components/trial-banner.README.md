@@ -300,4 +300,4 @@ When updating this component:
 
 ## License
 
-Part of the FinanSEAL codebase. Internal use only.
+Part of the Groot Finance codebase. Internal use only.

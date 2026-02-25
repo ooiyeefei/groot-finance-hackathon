@@ -1,6 +1,6 @@
-# FinanSEAL API v1 Documentation
+# Groot Finance API v1 Documentation
 
-Comprehensive REST API documentation for FinanSEAL's backend services organized by domain.
+Comprehensive REST API documentation for Groot Finance's backend services organized by domain.
 
 **Base URL**: `/api/v1`
 **Authentication**: Clerk-based session authentication
@@ -1338,4 +1338,4 @@ expect(response.status).toBe(201)
 
 **Last Updated:** 2025-01-13
 **API Version:** v1.0.0
-**Maintained By:** FinanSEAL Development Team
+**Maintained By:** Groot Finance Development Team

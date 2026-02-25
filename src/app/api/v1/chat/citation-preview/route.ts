@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     // Fetch PDF from government server
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'FinanSEAL Bot 1.0'
+        'User-Agent': 'Groot Finance Bot 1.0'
       }
     })
 

@@ -58,6 +58,6 @@ export default async function ApprovalsPage() {
 }
 
 export const metadata = {
-  title: 'Approvals Dashboard | FinanSEAL',
+  title: 'Approvals Dashboard | Groot Finance',
   description: 'Comprehensive expense management and approval workflows for managers and administrators'
 }

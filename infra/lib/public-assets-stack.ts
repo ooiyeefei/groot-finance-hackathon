@@ -70,7 +70,7 @@ export class PublicAssetsStack extends cdk.Stack {
     // ========================================================================
     // Bucket Policy for Public Read Access with Referer Restriction
     //
-    // Security: Only allow requests from FinanSEAL domains to prevent hotlinking.
+    // Security: Only allow requests from Groot Finance domains to prevent hotlinking.
     // This is a free security measure that doesn't require CloudFront.
     // ========================================================================
     this.bucket.addToResourcePolicy(

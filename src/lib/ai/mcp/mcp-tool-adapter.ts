@@ -137,7 +137,7 @@ export function parseMcpToolName(fullName: string): { serverId: string; toolName
 /**
  * MCP Tool Wrapper (T063)
  *
- * Wraps an MCP tool to be compatible with FinanSEAL's BaseTool interface.
+ * Wraps an MCP tool to be compatible with Groot Finance's BaseTool interface.
  * Handles:
  * - Schema conversion
  * - Execution via MCP client

@@ -1,14 +1,14 @@
-# FinanSEAL MCP Server
+# Groot Finance MCP Server
 
 Financial intelligence tools for AI assistants via the Model Context Protocol (MCP).
 
-> Connect Claude Desktop, Cursor, or any MCP-compatible client to your FinanSEAL business data.
+> Connect Claude Desktop, Cursor, or any MCP-compatible client to your Groot Finance business data.
 
 ## Quick Start
 
 ### 1. Get Your API Key
 
-1. Go to **Settings > API Keys** in your FinanSEAL dashboard
+1. Go to **Settings > API Keys** in your Groot Finance dashboard
 2. Click **Create API Key**
 3. Select permissions for the tools you want to use
 4. Copy and save your key (shown only once)
@@ -362,5 +362,5 @@ This server implements the [Model Context Protocol](https://modelcontextprotocol
 ## Support
 
 - **Documentation**: This README and inline tool descriptions
-- **Issues**: Contact FinanSEAL support
+- **Issues**: Contact Groot Finance support
 - **API Key Management**: Settings > API Keys in your dashboard

@@ -1,5 +1,5 @@
 /**
- * Transaction Management Types for FinanSEAL MVP
+ * Transaction Management Types for Groot Finance MVP
  * Supporting Southeast Asian SME multi-currency operations
  */
 

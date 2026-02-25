@@ -486,7 +486,7 @@
     "subtitle": "Get intelligent financial guidance powered by AI",
     "send": "Send",
     "thinking": "Thinking...",
-    "welcome": "Welcome to FinanSEAL AI",
+    "welcome": "Welcome to Groot Finance AI",
     "welcomeSubtitle": "I'm your financial assistant for Southeast Asian businesses. Ask me about budgeting, cash flow, taxes, or any financial questions.",
     "inputPlaceholder": "Ask me about financial planning, cash flow, or any business question...",
     "inputHelp": "Press Enter to send, Shift+Enter for new line",
@@ -678,7 +678,7 @@
     "chat": "AI Assistant provides general guidance based on your data. Not professional financial advice. Consult advisors for investment decisions.",
     "ocrDocument": "AI extracted this data from your document. Please verify accuracy before proceeding with financial decisions.",
     "ocrReceipt": "AI extracted this data from your receipt. Please verify all amounts and details before submission.",
-    "general": "FinanSEAL is a financial management tool. For professional advice, consult qualified advisors."
+    "general": "Groot Finance is a financial management tool. For professional advice, consult qualified advisors."
   },
   "notifications": {
     "success": "Success",

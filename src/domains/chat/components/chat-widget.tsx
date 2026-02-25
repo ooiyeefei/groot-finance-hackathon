@@ -136,7 +136,7 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
             animate-in slide-in-from-bottom-4 fade-in duration-200"
           style={{ bottom: chatWindowBottom, right: chatWindowRight }}
           role="dialog"
-          aria-label="FinanSEAL Chat Assistant"
+          aria-label="Groot Finance Chat Assistant"
         >
           <ChatWindow
             onClose={handleClose}

@@ -117,7 +117,7 @@ export interface McpConfig {
 
 /**
  * Default MCP server configurations
- * These are the servers FinanSEAL can connect to out of the box
+ * These are the servers Groot Finance can connect to out of the box
  */
 export const DEFAULT_MCP_SERVERS: McpServerConfig[] = [
   // Supabase MCP Server (if deployed)
@@ -172,10 +172,10 @@ export const DEFAULT_MCP_SERVERS: McpServerConfig[] = [
     tags: ['documentation', 'code']
   },
 
-  // FinanSEAL's own Financial Intelligence MCP Server
+  // Groot Finance's own Financial Intelligence MCP Server
   {
     id: 'finanseal-intel',
-    name: 'FinanSEAL Intelligence',
+    name: 'Groot Finance Intelligence',
     description: 'Financial anomaly detection, forecasting, vendor risk analysis',
     transport: {
       type: 'http',

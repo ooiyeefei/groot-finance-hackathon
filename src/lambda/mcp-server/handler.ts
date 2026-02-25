@@ -1,7 +1,7 @@
 /**
  * MCP Server Lambda Handler
  *
- * Entry point for the FinanSEAL MCP Server running on AWS Lambda.
+ * Entry point for the Groot Finance MCP Server running on AWS Lambda.
  * Implements JSON-RPC 2.0 over HTTP (stateless mode) with API key authentication.
  *
  * Category 3 MCP: Domain intelligence computed server-side, not by the LLM.

@@ -47,7 +47,7 @@ function renderConfirmationPage(payload: VerifiedUnsubscribeToken): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Unsubscribe - FinanSEAL</title>
+  <title>Unsubscribe - Groot Finance</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -155,10 +155,10 @@ function renderConfirmationPage(payload: VerifiedUnsubscribeToken): string {
       <button type="submit" id="submit-btn">Unsubscribe</button>
     </form>
 
-    <a href="https://finanseal.com" class="cancel">Cancel and return to FinanSEAL</a>
+    <a href="https://finanseal.com" class="cancel">Cancel and return to Groot Finance</a>
 
     <div class="footer">
-      <p>&copy; ${new Date().getFullYear()} FinanSEAL. All rights reserved.</p>
+      <p>&copy; ${new Date().getFullYear()} Groot Finance. All rights reserved.</p>
     </div>
   </div>
 
@@ -211,7 +211,7 @@ function renderErrorPage(error: string): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Error - FinanSEAL</title>
+  <title>Error - Groot Finance</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -275,7 +275,7 @@ function renderErrorPage(error: string): string {
     </div>
     <h1>Something went wrong</h1>
     <p>${escapeHtml(error)}</p>
-    <a href="https://finanseal.com">Return to FinanSEAL</a>
+    <a href="https://finanseal.com">Return to Groot Finance</a>
   </div>
 </body>
 </html>`

@@ -4,7 +4,7 @@ import * as React from 'react'
 import { ThemeProvider as NextThemesProvider, type ThemeProviderProps } from 'next-themes'
 
 /**
- * Theme Provider for FinanSEAL
+ * Theme Provider for Groot Finance
  *
  * Wraps the next-themes provider to provide theme switching capabilities
  * across the application. Supports light/dark/system themes with no FOUC.

@@ -11,7 +11,7 @@ new PublicAssetsStack(app, 'FinansealPublicAssets', {
     account: '837224017779',
     region: 'us-west-2',
   },
-  description: 'FinanSEAL Public Assets Bucket for favicon, logos, and static files',
+  description: 'Groot Finance Public Assets Bucket for favicon, logos, and static files',
   tags: {
     Environment: 'production',
     Project: 'finanseal',

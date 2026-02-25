@@ -2,7 +2,7 @@
 
 ## Layer 1-2-3 Semantic Design System
 
-FinanSEAL implements a **3-layer semantic design system** that ensures consistent theming across light and dark modes while maintaining design flexibility and maintainability.
+Groot Finance implements a **3-layer semantic design system** that ensures consistent theming across light and dark modes while maintaining design flexibility and maintainability.
 
 ### Design Standards
 

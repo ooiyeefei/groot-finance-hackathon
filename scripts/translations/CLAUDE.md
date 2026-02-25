@@ -1,6 +1,6 @@
 # Translation Scripts Documentation
 
-This directory (`scripts/translations/`) contains automation scripts for managing internationalization (i18n) translations in the FinanSEAL application.
+This directory (`scripts/translations/`) contains automation scripts for managing internationalization (i18n) translations in the Groot Finance application.
 
 ## Overview
 
@@ -53,7 +53,7 @@ node scripts/translations/generate-missing-translations.js zh
 
 **Output Example**:
 ```
-🌍 FinanSEAL Translation Generator
+🌍 Groot Finance Translation Generator
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🎯 Target Language: Thai (th)
@@ -356,4 +356,4 @@ For questions or issues:
 ---
 
 **Last Updated**: 2025-10-13
-**Maintained By**: FinanSEAL Development Team
+**Maintained By**: Groot Finance Development Team

@@ -1,8 +1,8 @@
-# CSRF Protection for FinanSEAL
+# CSRF Protection for Groot Finance
 
 ## Overview
 
-FinanSEAL implements CSRF (Cross-Site Request Forgery) protection using the **Synchronizer Token Pattern** to prevent unauthorized state-changing operations.
+Groot Finance implements CSRF (Cross-Site Request Forgery) protection using the **Synchronizer Token Pattern** to prevent unauthorized state-changing operations.
 
 ## How It Works
 
@@ -450,7 +450,7 @@ A: Currently no. Each user/session has one active token.
 ---
 
 **Last Updated**: 2025-01-13
-**Maintained By**: FinanSEAL Security Team
+**Maintained By**: Groot Finance Security Team
 **Related Documentation**:
 - Rate Limiting: `RATE_LIMITING.md`
 - RBAC: `src/domains/security/CLAUDE.md`

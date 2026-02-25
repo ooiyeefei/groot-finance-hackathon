@@ -1,5 +1,5 @@
 /**
- * Redis Client Configuration for FinanSEAL
+ * Redis Client Configuration for Groot Finance
  *
  * Provides centralized Redis client with:
  * - Upstash Redis connection

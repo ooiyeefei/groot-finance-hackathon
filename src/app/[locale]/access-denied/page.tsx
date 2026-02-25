@@ -12,11 +12,11 @@ interface AccessDeniedPageProps {
  * Access Denied Page
  *
  * Displayed when a user is authenticated with Clerk but doesn't have
- * access to the FinanSEAL app (no record in Supabase users table).
+ * access to the Groot Finance app (no record in Supabase users table).
  *
  * Common scenarios:
  * - User signed up on staff.hellogroot.com, trying to access finance.hellogroot.com
- * - User account was removed from FinanSEAL but still has Clerk session
+ * - User account was removed from Groot Finance but still has Clerk session
  */
 export default async function AccessDeniedPage({ params }: AccessDeniedPageProps) {
   const { userId } = await auth()
@@ -44,10 +44,10 @@ export default async function AccessDeniedPage({ params }: AccessDeniedPageProps
         <CardContent className="space-y-6">
           <div className="text-center space-y-2">
             <p className="text-muted-foreground">
-              You don't have access to FinanSEAL.
+              You don't have access to Groot Finance.
             </p>
             <p className="text-sm text-muted-foreground">
-              Your account is authenticated, but you're not registered for the FinanSEAL application.
+              Your account is authenticated, but you're not registered for the Groot Finance application.
             </p>
           </div>
 
@@ -57,7 +57,7 @@ export default async function AccessDeniedPage({ params }: AccessDeniedPageProps
             </p>
             <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
               <li>You signed up for a different application (e.g., Staff Portal)</li>
-              <li>Your FinanSEAL account has been deactivated</li>
+              <li>Your Groot Finance account has been deactivated</li>
               <li>You haven't completed the sign-up process</li>
             </ul>
           </div>
@@ -69,7 +69,7 @@ export default async function AccessDeniedPage({ params }: AccessDeniedPageProps
               variant="default"
             >
               <a href={`/${locale}/sign-up`}>
-                Create FinanSEAL Account
+                Create Groot Finance Account
               </a>
             </Button>
 

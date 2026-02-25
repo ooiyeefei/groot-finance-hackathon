@@ -436,7 +436,7 @@ function parseProductMetadata(
     ?? features.slice(0, 6)
 
   return {
-    name: product.name.replace(/FinanSEAL/gi, 'Groot Finance'),
+    name: product.name.replace(/Groot Finance/gi, 'Groot Finance'),
     planKey,
     priceId: price?.id || null,
     productId: product.id,

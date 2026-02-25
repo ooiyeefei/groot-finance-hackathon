@@ -10,7 +10,7 @@ import { ArrowLeft } from 'lucide-react'
 import { COUNTRY_TO_CURRENCY } from '@/lib/stripe/catalog'
 
 export const metadata = {
-  title: 'Pricing - FinanSEAL',
+  title: 'Pricing - Groot Finance',
   description: 'Choose the right plan for your business',
 }
 

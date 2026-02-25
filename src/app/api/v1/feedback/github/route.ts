@@ -190,7 +190,7 @@ function formatIssueBody(feedback: {
 
   // Footer
   sections.push("---");
-  sections.push("*This issue was automatically created from user feedback in FinanSEAL.*");
+  sections.push("*This issue was automatically created from user feedback in Groot Finance.*");
 
   return sections.join("\n");
 }

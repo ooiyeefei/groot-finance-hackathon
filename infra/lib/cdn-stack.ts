@@ -9,7 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 /**
- * CDN Stack for FinanSEAL
+ * CDN Stack for Groot Finance
  *
  * Creates a CloudFront distribution for serving private S3 content (receipts, invoices).
  * Uses Origin Access Control (OAC) for secure S3 access.
@@ -41,7 +41,7 @@ export class CdnStack extends cdk.Stack {
     // Origin Access Control (OAC) - Modern approach for S3 access
     // ========================================================================
     const oac = new cloudfront.S3OriginAccessControl(this, 'OAC', {
-      description: 'OAC for FinanSEAL private documents',
+      description: 'OAC for Groot Finance private documents',
       originAccessControlName: 'finanseal-documents-oac',
       signing: cloudfront.Signing.SIGV4_ALWAYS,
     });
@@ -72,14 +72,14 @@ export class CdnStack extends cdk.Stack {
     const keyGroup = new cloudfront.KeyGroup(this, 'SigningKeyGroup', {
       keyGroupName: 'finanseal-cdn-key-group',
       items: [publicKey],
-      comment: 'Key group for FinanSEAL signed URLs',
+      comment: 'Key group for Groot Finance signed URLs',
     });
 
     // ========================================================================
     // CloudFront Distribution
     // ========================================================================
     this.distribution = new cloudfront.Distribution(this, 'Distribution', {
-      comment: 'FinanSEAL CDN for private documents',
+      comment: 'Groot Finance CDN for private documents',
 
       defaultBehavior: {
         origin: origins.S3BucketOrigin.withOriginAccessControl(bucket, {

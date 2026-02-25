@@ -12,7 +12,7 @@ new MCPServerStack(app, 'FinansealMCPServer', {
     account: '837224017779',
     region: 'us-west-2', // Same region as document processor for consistency
   },
-  description: 'FinanSEAL MCP Server for financial intelligence tools',
+  description: 'Groot Finance MCP Server for financial intelligence tools',
   tags: {
     Environment: 'production',
     Project: 'finanseal',

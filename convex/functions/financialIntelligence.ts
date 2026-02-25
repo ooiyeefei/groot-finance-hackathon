@@ -1,7 +1,7 @@
 /**
  * Financial Intelligence - Category 3 Domain Intelligence API
  *
- * These are PUBLIC queries that expose FinanSEAL's domain-specific intelligence
+ * These are PUBLIC queries that expose Groot Finance's domain-specific intelligence
  * for on-demand use by the AI agent. Following the Clockwise MCP model:
  *
  * "The tools themselves aren't simple CRUD operations. The scheduling

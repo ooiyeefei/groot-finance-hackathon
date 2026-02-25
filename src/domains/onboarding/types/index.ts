@@ -8,7 +8,7 @@
 import { PlanName } from '@/lib/stripe/plans'
 
 /**
- * Business types supported by FinanSEAL
+ * Business types supported by Groot Finance
  * Used to provide industry-specific category suggestions and defaults
  */
 export type BusinessType =

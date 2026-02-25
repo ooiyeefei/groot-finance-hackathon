@@ -35,9 +35,9 @@ export default function NoBusinessFallback({ className }: NoBusinessFallbackProp
 
   const handleContactSupport = () => {
     // Open email client or support system
-    const subject = encodeURIComponent('Request Business Access - FinanSEAL')
+    const subject = encodeURIComponent('Request Business Access - Groot Finance')
     const body = encodeURIComponent(
-      'Hello FinanSEAL Support,\n\n' +
+      'Hello Groot Finance Support,\n\n' +
       'I am unable to access any businesses in my account. Could you please help me:\n\n' +
       '1. Check if I have pending business invitations\n' +
       '2. Connect me with the appropriate business owner\n' +
@@ -58,7 +58,7 @@ export default function NoBusinessFallback({ className }: NoBusinessFallbackProp
           <CardTitle className="text-xl">No Business Access</CardTitle>
           <CardDescription className="text-base">
             You currently don't have access to any business accounts.
-            Let's get you connected to start using FinanSEAL.
+            Let's get you connected to start using Groot Finance.
           </CardDescription>
         </CardHeader>
 
@@ -67,7 +67,7 @@ export default function NoBusinessFallback({ className }: NoBusinessFallbackProp
             <div className="p-4 bg-gray-50 rounded-lg">
               <h4 className="font-medium text-sm mb-2 flex items-center gap-2">
                 <UserPlus className="h-4 w-4 text-green-600" />
-                New to FinanSEAL?
+                New to Groot Finance?
               </h4>
               <p className="text-sm text-gray-600 mb-3">
                 Create your first business account to get started with our financial co-pilot.

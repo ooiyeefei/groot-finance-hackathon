@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
             'price.updated',
             'price.deleted',
           ],
-          description: `FinanSEAL catalog sync for business ${businessId}`,
+          description: `Groot Finance catalog sync for business ${businessId}`,
         })
 
         webhookEndpointId = webhookEndpoint.id

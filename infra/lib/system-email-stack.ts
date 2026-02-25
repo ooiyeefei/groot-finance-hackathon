@@ -34,7 +34,7 @@ export class SystemEmailStack extends cdk.Stack {
     // SNS Topic for Email Delivery Events
     // ─────────────────────────────────────────────
     this.emailEventsTopic = new sns.Topic(this, 'EmailEventsTopic', {
-      displayName: 'FinanSEAL SES Email Delivery Events',
+      displayName: 'Groot Finance SES Email Delivery Events',
       topicName: 'finanseal-email-delivery-events',
     });
 
@@ -104,7 +104,7 @@ export class SystemEmailStack extends cdk.Stack {
 
     // SNS Topic for alarm notifications
     const alarmTopic = new sns.Topic(this, 'AlarmNotificationTopic', {
-      displayName: 'FinanSEAL Email System Alarms',
+      displayName: 'Groot Finance Email System Alarms',
       topicName: 'finanseal-email-alarms',
     });
 

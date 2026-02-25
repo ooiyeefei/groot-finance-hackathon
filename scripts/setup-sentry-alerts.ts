@@ -147,7 +147,7 @@ async function deleteAlertRule(
  */
 
 /**
- * Alert rules for FinanSEAL
+ * Alert rules for Groot Finance
  *
  * Custom alert rules for comprehensive error monitoring:
  * - New Issue: Triggers when ANY new error is first seen (catches all new bugs)
@@ -161,7 +161,7 @@ async function deleteAlertRule(
  */
 const ALERT_RULES: AlertRuleConfig[] = [
   {
-    name: "[FinanSEAL] New Issue Alert",
+    name: "[Groot Finance] New Issue Alert",
     actionMatch: "any",
     filterMatch: "all",
     conditions: [
@@ -179,7 +179,7 @@ const ALERT_RULES: AlertRuleConfig[] = [
     frequency: 30, // Don't re-trigger within 30 minutes (per issue)
   },
   {
-    name: "[FinanSEAL] Regression Alert",
+    name: "[Groot Finance] Regression Alert",
     actionMatch: "any",
     filterMatch: "all",
     conditions: [
@@ -197,7 +197,7 @@ const ALERT_RULES: AlertRuleConfig[] = [
     frequency: 30, // Don't re-trigger within 30 minutes
   },
   {
-    name: "[FinanSEAL] High Volume Alert",
+    name: "[Groot Finance] High Volume Alert",
     actionMatch: "any",
     filterMatch: "all",
     conditions: [
@@ -241,19 +241,19 @@ async function main() {
     const existingRules = await getExistingAlertRules(org, project);
     console.log(`   Found ${existingRules.length} existing rules\n`);
 
-    // Check for FinanSEAL rules that already exist
+    // Check for Groot Finance rules that already exist
     const finansealRules = existingRules.filter((r) =>
-      r.name.startsWith("[FinanSEAL]")
+      r.name.startsWith("[Groot Finance]")
     );
 
     if (finansealRules.length > 0) {
       console.log(
-        "⚠️  Found existing FinanSEAL rules. Do you want to replace them?"
+        "⚠️  Found existing Groot Finance rules. Do you want to replace them?"
       );
       console.log("   Existing rules:");
       finansealRules.forEach((r) => console.log(`   - ${r.name} (id: ${r.id})`));
       console.log(
-        "\n   Run with --force flag to delete and recreate all FinanSEAL rules"
+        "\n   Run with --force flag to delete and recreate all Groot Finance rules"
       );
 
       if (!process.argv.includes("--force")) {
@@ -261,8 +261,8 @@ async function main() {
         return;
       }
 
-      // Delete existing FinanSEAL rules
-      console.log("\n🗑️  Deleting existing FinanSEAL rules...");
+      // Delete existing Groot Finance rules
+      console.log("\n🗑️  Deleting existing Groot Finance rules...");
       for (const rule of finansealRules) {
         await deleteAlertRule(org, project, rule.id);
         console.log(`   Deleted: ${rule.name}`);

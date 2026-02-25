@@ -50,7 +50,7 @@ export class DigitalSignatureStack extends cdk.Stack {
       entry: path.join(__dirname, '../../src/lambda/digital-signature/handler.ts'),
       handler: 'handler',
       functionName: 'finanseal-digital-signature',
-      description: 'FinanSEAL LHDN e-Invoice digital signature service — signs and validates UBL 2.1 JSON documents',
+      description: 'Groot Finance LHDN e-Invoice digital signature service — signs and validates UBL 2.1 JSON documents',
       memorySize: 256,
       timeout: cdk.Duration.seconds(30),
       architecture: lambda.Architecture.ARM_64,
@@ -119,7 +119,7 @@ export class DigitalSignatureStack extends cdk.Stack {
     // ========================================================================
     const alertTopic = new sns.Topic(this, 'CertExpiryAlertTopic', {
       topicName: 'finanseal-cert-expiry-alerts',
-      displayName: 'FinanSEAL Certificate Expiry Alerts',
+      displayName: 'Groot Finance Certificate Expiry Alerts',
     });
 
     const expiryMetric = new cloudwatch.Metric({

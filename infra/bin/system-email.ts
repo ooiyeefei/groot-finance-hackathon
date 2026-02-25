@@ -10,5 +10,5 @@ new SystemEmailStack(app, 'FinansealSystemEmailStack', {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: 'us-west-2', // Hardcoded per requirement
   },
-  description: 'FinanSEAL transactional email system - Lambda Durable Functions + SES',
+  description: 'Groot Finance transactional email system - Lambda Durable Functions + SES',
 });

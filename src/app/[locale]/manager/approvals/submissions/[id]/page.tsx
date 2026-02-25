@@ -57,6 +57,6 @@ export default async function ManagerSubmissionReviewPage({ params }: PageProps)
 }
 
 export const metadata = {
-  title: 'Review Submission | FinanSEAL',
+  title: 'Review Submission | Groot Finance',
   description: 'Review and approve or reject an expense submission'
 }

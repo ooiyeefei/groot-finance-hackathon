@@ -10,7 +10,7 @@ new DigitalSignatureStack(app, 'FinansealDigitalSignature', {
     account: '837224017779',
     region: 'us-west-2',
   },
-  description: 'FinanSEAL LHDN e-Invoice digital signature service',
+  description: 'Groot Finance LHDN e-Invoice digital signature service',
   tags: {
     Environment: 'production',
     Project: 'finanseal',

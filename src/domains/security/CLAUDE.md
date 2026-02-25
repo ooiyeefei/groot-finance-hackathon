@@ -1,6 +1,6 @@
 # Security & Authentication Domain
 
-This domain handles all authentication, authorization, and security-related functionality for FinanSEAL.
+This domain handles all authentication, authorization, and security-related functionality for Groot Finance.
 
 ## Table of Contents
 
@@ -645,7 +645,7 @@ const businessId = userContext.businessContext.businessId
 ---
 
 **Last Updated**: 2025-01-13
-**Maintainer**: FinanSEAL Development Team
+**Maintainer**: Groot Finance Development Team
 **Related Documentation**:
 - Main project: `/CLAUDE.md`
 - API contracts: `/src/app/api/v1/CLAUDE.md`

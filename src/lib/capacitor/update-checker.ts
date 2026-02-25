@@ -62,7 +62,7 @@ export async function checkForUpdate(
     return {
       status: 'force',
       currentVersion,
-      message: forceUpdateMessage || 'A critical update is required. Please update to continue using FinanSEAL.',
+      message: forceUpdateMessage || 'A critical update is required. Please update to continue using Groot Finance.',
     };
   }
 
@@ -71,7 +71,7 @@ export async function checkForUpdate(
     return {
       status: 'soft',
       currentVersion,
-      message: softUpdateMessage || 'A new version of FinanSEAL is available.',
+      message: softUpdateMessage || 'A new version of Groot Finance is available.',
     };
   }
 

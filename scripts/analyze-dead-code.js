@@ -250,7 +250,7 @@ async function main() {
   const shouldFix = args.includes('--fix');
   const domainFilter = args.find(arg => arg.startsWith('--domain='))?.split('=')[1];
 
-  log('🚀 FinanSEAL Dead Code Analysis Tool', 'bold');
+  log('🚀 Groot Finance Dead Code Analysis Tool', 'bold');
   log('=' + '='.repeat(50), 'blue');
 
   if (domainFilter) {

@@ -115,7 +115,7 @@ export function NativeSignIn({ locale, redirectUrl, signUpUrl }: NativeSignInPro
   return (
     <Card className="bg-card border-border w-full max-w-sm">
       <CardHeader className="text-center">
-        <CardTitle className="text-foreground text-xl">Sign in to FinanSEAL</CardTitle>
+        <CardTitle className="text-foreground text-xl">Sign in to Groot Finance</CardTitle>
         <CardDescription className="text-muted-foreground">
           Choose your preferred sign-in method
         </CardDescription>
@@ -389,7 +389,7 @@ export function NativeSignUp({ locale, redirectUrl, signInUrl }: NativeSignUpPro
       <CardHeader className="text-center">
         <CardTitle className="text-foreground text-xl">Create Your Account</CardTitle>
         <CardDescription className="text-muted-foreground">
-          Get started with FinanSEAL
+          Get started with Groot Finance
         </CardDescription>
       </CardHeader>
 

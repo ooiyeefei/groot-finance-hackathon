@@ -34,7 +34,7 @@ export function ForceUpdatePrompt({ message, currentVersion }: UpdatePromptProps
           </div>
           <CardTitle className="text-foreground text-xl">Update Required</CardTitle>
           <CardDescription className="text-muted-foreground">
-            {message || 'A critical update is required. Please update to continue using FinanSEAL.'}
+            {message || 'A critical update is required. Please update to continue using Groot Finance.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -67,7 +67,7 @@ export function SoftUpdateBanner({ message, currentVersion }: UpdatePromptProps)
       <div className="max-w-lg mx-auto flex items-center gap-3">
         <ArrowUpCircle className="h-5 w-5 text-primary flex-shrink-0" />
         <p className="text-sm text-foreground flex-1">
-          {message || 'A new version of FinanSEAL is available.'}
+          {message || 'A new version of Groot Finance is available.'}
         </p>
         <div className="flex items-center gap-2">
           <Button

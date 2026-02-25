@@ -1,5 +1,5 @@
 /**
- * Rate Limiting System for FinanSEAL API
+ * Rate Limiting System for Groot Finance API
  *
  * ✅ PRODUCTION-READY: Redis-based distributed rate limiter with in-memory fallback
  *

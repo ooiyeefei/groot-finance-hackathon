@@ -10,5 +10,5 @@ new CdnStack(app, 'FinansealCdnStack', {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: 'us-west-2', // Same region as S3 bucket
   },
-  description: 'FinanSEAL CloudFront CDN for private document delivery',
+  description: 'Groot Finance CloudFront CDN for private document delivery',
 });

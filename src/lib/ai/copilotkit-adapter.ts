@@ -56,7 +56,7 @@ export async function invokeLangGraphAgent(
     configurable: {
       thread_id: userContext.conversationId,
     },
-    runName: `FinanSEAL CopilotKit - ${language}`,
+    runName: `Groot Finance CopilotKit - ${language}`,
     metadata: {
       userId: userContext.userId,
       businessId: userContext.businessId,
@@ -175,7 +175,7 @@ export async function* streamLangGraphAgent(
 
   const runConfig = {
     configurable: { thread_id: userContext.conversationId },
-    runName: `FinanSEAL Stream - ${language}`,
+    runName: `Groot Finance Stream - ${language}`,
     metadata: {
       userId: userContext.userId,
       businessId: userContext.businessId,

@@ -1,5 +1,5 @@
 /**
- * Sentry Helper Functions for FinanSEAL
+ * Sentry Helper Functions for Groot Finance
  *
  * Provides typed wrappers for common Sentry operations including:
  * - User context management (Clerk integration)

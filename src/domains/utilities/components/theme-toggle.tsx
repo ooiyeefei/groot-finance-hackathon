@@ -6,7 +6,7 @@ import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
 
 /**
- * Theme Toggle Component for FinanSEAL
+ * Theme Toggle Component for Groot Finance
  *
  * A clean, minimalist toggle button that switches between light and dark themes.
  * Features smooth icon transitions and integrates seamlessly with the header.

@@ -28,8 +28,8 @@ export const getAppVersion = query({
         platform: args.platform,
         minimumVersion: "1.0.0",
         latestVersion: "1.0.0",
-        forceUpdateMessage: "A critical update is required. Please update to continue using FinanSEAL.",
-        softUpdateMessage: "A new version of FinanSEAL is available.",
+        forceUpdateMessage: "A critical update is required. Please update to continue using Groot Finance.",
+        softUpdateMessage: "A new version of Groot Finance is available.",
       };
     }
 
@@ -78,8 +78,8 @@ export const updateAppVersion = mutation({
       platform: args.platform,
       minimumVersion: args.minimumVersion,
       latestVersion: args.latestVersion,
-      forceUpdateMessage: args.forceUpdateMessage ?? "A critical update is required. Please update to continue using FinanSEAL.",
-      softUpdateMessage: args.softUpdateMessage ?? "A new version of FinanSEAL is available.",
+      forceUpdateMessage: args.forceUpdateMessage ?? "A critical update is required. Please update to continue using Groot Finance.",
+      softUpdateMessage: args.softUpdateMessage ?? "A new version of Groot Finance is available.",
       updatedAt: now,
       updatedBy: user._id,
     });

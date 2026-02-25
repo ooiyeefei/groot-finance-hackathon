@@ -88,7 +88,7 @@ async function publishExpiryMetric(): Promise<void> {
   try {
     await cloudwatch.send(
       new PutMetricDataCommand({
-        Namespace: 'FinanSEAL/DigitalSignature',
+        Namespace: 'Groot Finance/DigitalSignature',
         MetricData: [
           {
             MetricName: 'CertificateExpiryDays',

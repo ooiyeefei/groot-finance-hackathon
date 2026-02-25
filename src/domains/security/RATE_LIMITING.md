@@ -2,7 +2,7 @@
 
 ## Overview
 
-FinanSEAL implements a production-ready distributed rate limiting system using **Upstash Redis** with automatic fallback to in-memory storage when Redis is not configured.
+Groot Finance implements a production-ready distributed rate limiting system using **Upstash Redis** with automatic fallback to in-memory storage when Redis is not configured.
 
 ### Features
 
@@ -570,4 +570,4 @@ describe('API Rate Limiting Integration', () => {
 
 **Last Updated:** 2025-01-13
 **Version:** 1.0.0
-**Maintained By:** FinanSEAL Security Team
+**Maintained By:** Groot Finance Security Team

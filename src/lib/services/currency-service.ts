@@ -1,5 +1,5 @@
 /**
- * Currency Conversion Service for FinanSEAL MVP
+ * Currency Conversion Service for Groot Finance MVP
  * Handles exchange rates for Southeast Asian SME transactions
  */
 

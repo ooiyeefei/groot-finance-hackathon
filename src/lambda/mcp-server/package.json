@@ -1,7 +1,7 @@
 {
   "name": "finanseal-mcp-server",
   "version": "1.0.0",
-  "description": "FinanSEAL Autonomous Finance MCP Server",
+  "description": "Groot Finance Autonomous Finance MCP Server",
   "type": "module",
   "main": "dist/handler.js",
   "scripts": {

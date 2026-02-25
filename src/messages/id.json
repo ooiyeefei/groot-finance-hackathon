@@ -581,7 +581,7 @@
     "subtitle": "Dapatkan panduan keuangan cerdas bertenaga AI",
     "send": "Kirim",
     "thinking": "Sedang berpikir...",
-    "welcome": "Selamat datang di FinanSEAL AI",
+    "welcome": "Selamat datang di Groot Finance AI",
     "welcomeSubtitle": "Saya adalah asisten keuangan untuk bisnis Asia Tenggara. Tanyakan tentang anggaran, arus kas, pajak, atau pertanyaan keuangan apa pun.",
     "inputPlaceholder": "Tanyakan tentang perencanaan keuangan, arus kas, atau pertanyaan bisnis lainnya...",
     "inputHelp": "Tekan Enter untuk kirim, Shift+Enter untuk baris baru",
@@ -772,7 +772,7 @@
     "chat": "Asisten AI memberikan panduan umum berdasarkan data Anda. Bukan nasihat keuangan profesional. Konsultasi dengan penasihat untuk keputusan investasi.",
     "ocrDocument": "AI mengekstrak data ini dari dokumen Anda. Harap verifikasi akurasi sebelum melanjutkan dengan keputusan keuangan.",
     "ocrReceipt": "AI mengekstrak data ini dari tanda terima Anda. Harap verifikasi semua jumlah dan detail sebelum mengirim.",
-    "general": "FinanSEAL adalah alat manajemen keuangan. Untuk nasihat profesional, konsultasi dengan penasihat yang berkualifikasi."
+    "general": "Groot Finance adalah alat manajemen keuangan. Untuk nasihat profesional, konsultasi dengan penasihat yang berkualifikasi."
   },
   "notifications": {
     "success": "Berhasil",

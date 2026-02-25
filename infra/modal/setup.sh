@@ -1,5 +1,5 @@
 #!/bin/bash
-# Modal.com Qwen3 Setup Script for FinanSEAL
+# Modal.com Qwen3 Setup Script for Groot Finance
 #
 # Prerequisites:
 # - Modal account with $220 credits
@@ -7,7 +7,7 @@
 
 set -e
 
-echo "🚀 FinanSEAL Modal.com Setup"
+echo "🚀 Groot Finance Modal.com Setup"
 echo "============================"
 
 # Check if modal is installed

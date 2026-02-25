@@ -3,8 +3,8 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft, BookOpen, Key, Shield, Zap, AlertTriangle, ExternalLink } from 'lucide-react'
 
 export const metadata = {
-  title: 'MCP Server Documentation - FinanSEAL',
-  description: 'Documentation for FinanSEAL MCP Server - Connect Claude Desktop, Cursor, or any MCP-compatible client to your financial data.',
+  title: 'MCP Server Documentation - Groot Finance',
+  description: 'Documentation for Groot Finance MCP Server - Connect Claude Desktop, Cursor, or any MCP-compatible client to your financial data.',
 }
 
 const MCP_ENDPOINT = 'https://kuy2a5zca8.execute-api.us-west-2.amazonaws.com/v1/mcp'
@@ -38,7 +38,7 @@ export default function MCPDocsPage() {
             <Zap className="w-8 h-8 text-primary" />
           </div>
           <h1 className="text-3xl font-bold text-foreground mb-3">
-            FinanSEAL MCP Server
+            Groot Finance MCP Server
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
             Financial intelligence tools for AI assistants via the Model Context Protocol.
@@ -63,7 +63,7 @@ export default function MCPDocsPage() {
                 <div className="flex-1">
                   <h3 className="font-semibold text-foreground mb-2">Get Your API Key</h3>
                   <p className="text-muted-foreground text-sm mb-3">
-                    Go to Settings → API Keys in your FinanSEAL dashboard, create a new key, and select the tools you want to enable.
+                    Go to Settings → API Keys in your Groot Finance dashboard, create a new key, and select the tools you want to enable.
                   </p>
                   <Link href="/en/business-settings?tab=api-keys">
                     <Button variant="outline" size="sm">
@@ -84,7 +84,7 @@ export default function MCPDocsPage() {
                 <div className="flex-1">
                   <h3 className="font-semibold text-foreground mb-2">Configure Your MCP Client</h3>
                   <p className="text-muted-foreground text-sm mb-3">
-                    Add the FinanSEAL server to your MCP client configuration.
+                    Add the Groot Finance server to your MCP client configuration.
                   </p>
 
                   {/* Claude Desktop Config */}

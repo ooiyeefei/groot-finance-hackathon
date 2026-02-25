@@ -58,8 +58,8 @@
     "title": "仪表板",
     "subtitle": "您的财务概览",
     "financialDashboard": "财务仪表板",
-    "welcome": "欢迎使用FinanSEAL",
-    "welcomePersonalized": "欢迎使用FinanSEAL，{firstName}",
+    "welcome": "欢迎使用Groot Finance",
+    "welcomePersonalized": "欢迎使用Groot Finance，{firstName}",
     "intelligentCopilot": "您的智能财务助手",
     "totalExpenses": "总支出",
     "totalIncome": "总收入",
@@ -628,7 +628,7 @@
     "subtitle": "获得由AI驱动的智能财务指导",
     "send": "发送",
     "thinking": "思考中...",
-    "welcome": "欢迎使用FinanSEAL AI",
+    "welcome": "欢迎使用Groot Finance AI",
     "welcomeSubtitle": "我是您的东南亚企业财务助手。您可以询问有关预算、现金流、税务或任何财务问题。",
     "inputPlaceholder": "询问关于财务规划、现金流或任何业务问题...",
     "inputHelp": "按Enter发送，Shift+Enter换行",
@@ -819,7 +819,7 @@
     "chat": "AI助手基于您的数据提供一般性指导。这不是专业的财务建议。投资决策请咨询顾问。",
     "ocrDocument": "AI从您的文档中提取了这些数据。在做出财务决策之前请验证准确性。",
     "ocrReceipt": "AI从您的收据中提取了这些数据。提交前请验证所有金额和详情。",
-    "general": "FinanSEAL是一个财务管理工具。如需专业建议，请咨询合格的顾问。"
+    "general": "Groot Finance是一个财务管理工具。如需专业建议，请咨询合格的顾问。"
   },
   "notifications": {
     "success": "成功",
