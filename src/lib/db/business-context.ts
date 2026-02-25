@@ -219,20 +219,15 @@ export async function switchActiveBusiness(businessId: string, userId?: string):
   }
 
   try {
-    // Verify user has access to this business first
-    const membership = await verifyBusinessMembership(businessId, clerkUserId)
-
-    if (!membership) {
-      return { success: false, error: 'Access denied to business' }
-    }
-
+    // Single authenticated client for all operations (avoids redundant auth() + getToken() calls)
     const { client } = await getAuthenticatedConvex()
     if (!client) {
       return { success: false, error: 'Failed to get authenticated client' }
     }
 
-    // Call Convex mutation to switch business
-    // Note: switchBusiness requires a Convex ID, we pass the string and let it resolve
+    // The Convex switchBusiness mutation already verifies membership internally
+    // (checks business_memberships table for active membership), so no need
+    // for a separate verifyBusinessMembership round trip.
     await client.mutation(api.functions.users.switchBusiness, {
       businessId: businessId as any // The Convex function handles ID resolution
     })
@@ -246,18 +241,17 @@ export async function switchActiveBusiness(businessId: string, userId?: string):
       console.warn('[BusinessContext] Cache invalidation failed:', cacheError)
     }
 
-    // Return the new context
-    const context = await getCurrentBusinessContext(clerkUserId)
-
-    if (!context) {
-      return { success: false, error: 'Failed to load new business context' }
-    }
-
-    return { success: true, context: context || undefined }
+    // Skip getCurrentBusinessContext — the client does window.location.reload()
+    // after a successful switch, so fetching the new context here is a wasted
+    // Convex round trip (~200ms). The reloaded page will fetch fresh context.
+    return { success: true }
 
   } catch (error) {
     console.error('[BusinessContext] Error switching business:', error)
-    return { success: false, error: 'Failed to switch business' }
+    // Map Convex mutation errors to user-friendly messages
+    const errorMsg = error instanceof Error ? error.message : 'Failed to switch business'
+    const isAccessDenied = errorMsg.includes('Not a member') || errorMsg.includes('not found')
+    return { success: false, error: isAccessDenied ? 'Access denied to business' : 'Failed to switch business' }
   }
 }
 
