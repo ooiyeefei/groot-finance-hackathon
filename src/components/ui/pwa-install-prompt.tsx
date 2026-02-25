@@ -11,11 +11,14 @@
 
 'use client';
 
-import { X, Download, Share, Plus, Smartphone } from 'lucide-react';
+import { X, Download, Smartphone } from 'lucide-react';
 import { usePWAInstall } from '@/lib/hooks/use-pwa-install';
 import { isNativePlatform } from '@/lib/capacitor/platform';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+
+// TODO: Replace with actual App Store URL after publishing
+const APP_STORE_URL = 'https://apps.apple.com/app/groot-finance/id0000000000';
 
 // Props interface (from specs/001-mobile-pwa/contracts/pwa-hooks.ts)
 export interface PWAInstallPromptProps {
@@ -68,104 +71,7 @@ export function PWAInstallPrompt({
     onDismiss?.();
   };
 
-  // iOS Installation Instructions Modal
-  if (isIOS && shouldShowIOSInstructions) {
-    return (
-      <div
-        className={`fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 ${className}`}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) {
-            hideIOSInstructions();
-            handleDismiss();
-          }
-        }}
-      >
-        <Card className="bg-card border-border max-w-md w-full">
-          <CardHeader className="relative">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="absolute right-4 top-4 h-11 w-11"
-              onClick={() => {
-                hideIOSInstructions();
-                handleDismiss();
-              }}
-              aria-label="Close"
-            >
-              <X className="h-5 w-5" />
-            </Button>
-            <div className="flex items-center gap-3 pr-12">
-              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Smartphone className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <CardTitle className="text-foreground">Add to Home Screen</CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  Install FinanSEAL for quick access
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Follow these steps to add FinanSEAL to your home screen:
-            </p>
-
-            <ol className="space-y-4">
-              <li className="flex items-start gap-3">
-                <div className="flex-shrink-0 h-8 w-8 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 font-semibold text-sm">
-                  1
-                </div>
-                <div className="flex-1 pt-1">
-                  <p className="text-sm text-foreground">
-                    Tap the <Share className="inline h-4 w-4 mx-1" /> Share button in Safari&apos;s toolbar
-                  </p>
-                </div>
-              </li>
-
-              <li className="flex items-start gap-3">
-                <div className="flex-shrink-0 h-8 w-8 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 font-semibold text-sm">
-                  2
-                </div>
-                <div className="flex-1 pt-1">
-                  <p className="text-sm text-foreground">
-                    Scroll down and tap <Plus className="inline h-4 w-4 mx-1" /> <strong>Add to Home Screen</strong>
-                  </p>
-                </div>
-              </li>
-
-              <li className="flex items-start gap-3">
-                <div className="flex-shrink-0 h-8 w-8 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 font-semibold text-sm">
-                  3
-                </div>
-                <div className="flex-1 pt-1">
-                  <p className="text-sm text-foreground">
-                    Tap <strong>Add</strong> to confirm
-                  </p>
-                </div>
-              </li>
-            </ol>
-
-            <div className="pt-2">
-              <Button
-                variant="outline"
-                className="w-full h-11"
-                onClick={() => {
-                  hideIOSInstructions();
-                  handleDismiss();
-                }}
-              >
-                Got it
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Show iOS prompt trigger (banner at bottom)
+  // iOS: Prompt to download native app from App Store
   if (isIOS) {
     return (
       <div
@@ -178,9 +84,9 @@ export function PWAInstallPrompt({
           </div>
 
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground">Install FinanSEAL</p>
+            <p className="text-sm font-medium text-foreground">Get the Groot Finance App</p>
             <p className="text-xs text-muted-foreground truncate">
-              Add to your home screen for quick access
+              Download from the App Store for the best experience
             </p>
           </div>
 
@@ -197,9 +103,12 @@ export function PWAInstallPrompt({
             <Button
               size="sm"
               className="h-11 px-4"
-              onClick={showIOSInstructions}
+              onClick={() => {
+                window.open(APP_STORE_URL, '_blank');
+                onInstall?.();
+              }}
             >
-              Install
+              Download
             </Button>
           </div>
         </div>
@@ -220,7 +129,7 @@ export function PWAInstallPrompt({
           </div>
 
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground">Install FinanSEAL</p>
+            <p className="text-sm font-medium text-foreground">Install Groot Finance</p>
             <p className="text-xs text-muted-foreground truncate">
               Add to your home screen for quick access
             </p>

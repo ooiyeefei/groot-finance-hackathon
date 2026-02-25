@@ -19,6 +19,7 @@ import { useOfflineStatus } from '@/lib/hooks/use-offline-status';
 import { initAutoSync, destroyAutoSync } from '@/lib/pwa/offline-queue';
 import { initConnectivityMonitor, destroyConnectivityMonitor } from '@/lib/pwa/connectivity-monitor';
 import { registerServiceWorker } from '@/lib/pwa/service-worker';
+import { isNativePlatform } from '@/lib/capacitor/platform';
 
 interface PWAProviderProps {
   children: React.ReactNode;
@@ -57,8 +58,11 @@ function PWAContent() {
 }
 
 export function PWAProvider({ children }: PWAProviderProps) {
-  // Initialize PWA infrastructure on mount
+  // Initialize PWA infrastructure on mount — skip in Capacitor native shell
+  // where the native app handles connectivity, caching, and install prompts.
   useEffect(() => {
+    if (isNativePlatform()) return;
+
     // Initialize connectivity monitoring
     initConnectivityMonitor();
 
@@ -83,6 +87,11 @@ export function PWAProvider({ children }: PWAProviderProps) {
       destroyAutoSync();
     };
   }, []);
+
+  // In Capacitor native shell, skip all PWA UI (install prompt, stale data, offline indicator)
+  if (isNativePlatform()) {
+    return <>{children}</>;
+  }
 
   return (
     <>
