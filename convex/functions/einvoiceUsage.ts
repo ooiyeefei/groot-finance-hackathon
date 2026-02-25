@@ -17,7 +17,6 @@ import { resolveUserByClerkId } from "../lib/resolvers";
 
 /**
  * Resolve e-invoice limit from plan name.
- * Trial businesses get Pro plan limits per spec FR-015.
  */
 function getEinvoiceLimit(planName: string | undefined): number {
   switch (planName) {
@@ -27,9 +26,8 @@ function getEinvoiceLimit(planName: string | undefined): number {
       return -1;
     case "enterprise":
       return -1;
-    case "trial":
     default:
-      return -1; // Trial and unknown plans get Pro limits (unlimited)
+      return 100; // Unknown plans get Starter limits
   }
 }
 

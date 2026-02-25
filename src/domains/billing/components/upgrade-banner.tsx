@@ -40,8 +40,8 @@ export function UpgradeBanner() {
   // Don't show while loading
   if (isLoading) return null
 
-  // Don't show if dismissed or not on trial plan
-  if (isDismissed || !data || data.plan.name !== 'trial') return null
+  // Don't show if dismissed or not trialing
+  if (isDismissed || !data || data.subscription.status !== 'trialing') return null
 
   const features = [
     { icon: FileText, text: '100+ OCR scans/month' },

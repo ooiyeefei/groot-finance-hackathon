@@ -98,11 +98,11 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Get Starter plan price (trial gives access to Starter features)
-    const starterPlan = await getPlan('starter')
+    // Get Pro plan price (trial gives full Pro access for 14 days)
+    const proPlan = await getPlan('pro')
 
-    if (!starterPlan.priceId) {
-      console.error('[Start Trial] Starter plan has no priceId configured')
+    if (!proPlan.priceId) {
+      console.error('[Start Trial] Pro plan has no priceId configured')
       return NextResponse.json(
         { error: 'Billing not configured. Please contact support.' },
         { status: 500 }
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     // Create Stripe subscription with 14-day trial (no payment required)
     const subscription = await stripe.subscriptions.create({
       customer: customerId,
-      items: [{ price: starterPlan.priceId }],
+      items: [{ price: proPlan.priceId }],
       trial_period_days: 14,
       payment_settings: {
         save_default_payment_method: 'on_subscription',
@@ -150,8 +150,8 @@ export async function POST(request: NextRequest) {
       await convex.mutation(api.functions.businesses.updateSubscriptionFromWebhook, {
         stripeCustomerId: customerId,
         stripeSubscriptionId: subscription.id,
-        stripeProductId: starterPlan.productId ?? undefined,
-        planName: 'trial',
+        stripeProductId: proPlan.productId ?? undefined,
+        planName: 'pro',
         subscriptionStatus: 'trialing',
         trialStartDate: trialStartMs,   // Store as Unix timestamp (milliseconds)
         trialEndDate: trialEndMs,       // Store as Unix timestamp (milliseconds)

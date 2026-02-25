@@ -150,8 +150,8 @@ export async function POST(request: NextRequest) {
         businessId: result.businessId,
         categoriesGenerated: result.categoriesGenerated,
         message: 'Business created successfully',
-        nextStep: body.selectedPlan === 'trial'
-          ? 'Call /api/v1/onboarding/start-trial to activate trial'
+        nextStep: (body.selectedPlan === 'trial' || body.selectedPlan === 'pro')
+          ? 'Call /api/v1/onboarding/start-trial to activate Pro trial'
           : null
       },
       { status: 201 }

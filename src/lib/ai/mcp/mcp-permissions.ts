@@ -22,7 +22,7 @@ export type ToolAccessLevel = 'public' | 'internal' | 'restricted'
 /**
  * Subscription plan types (matches catalog.ts PlanKey)
  */
-export type PlanKey = 'trial' | 'starter' | 'pro' | 'enterprise'
+export type PlanKey = 'starter' | 'pro' | 'enterprise'
 
 /**
  * User roles in the business (matches RLS roles)
@@ -60,7 +60,7 @@ export interface McpServerPermission {
 const MCP_SERVER_PERMISSIONS: McpServerPermission[] = [
   {
     serverId: 'context7',
-    minPlan: 'trial',
+    minPlan: 'starter',
     allowedRoles: [], // All roles
     accessLevel: 'public'
   },
@@ -92,10 +92,9 @@ const MCP_SERVER_PERMISSIONS: McpServerPermission[] = [
  * Plan hierarchy for comparison
  */
 const PLAN_HIERARCHY: Record<PlanKey, number> = {
-  trial: 0,
-  starter: 1,
-  pro: 2,
-  enterprise: 3
+  starter: 0,
+  pro: 1,
+  enterprise: 2
 }
 
 /**
@@ -129,8 +128,8 @@ export async function getUserPlan(userContext: UserContext): Promise<PlanKey> {
     return planFromContext
   }
 
-  // Default to trial for safety
-  return 'trial'
+  // Default to starter for safety
+  return 'starter'
 }
 
 /**

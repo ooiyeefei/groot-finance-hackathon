@@ -159,7 +159,7 @@ export interface OnboardingErrorResponse {
  * Creates a Stripe Checkout session for paid plan selection
  */
 export interface CreateCheckoutRequest {
-  readonly planName: Exclude<PlanName, 'trial'>  // 'starter' | 'pro' | 'enterprise'
+  readonly planName: PlanName  // 'starter' | 'pro' | 'enterprise'
   readonly successUrl: string   // Redirect after successful payment
   readonly cancelUrl: string    // Redirect if user cancels
 

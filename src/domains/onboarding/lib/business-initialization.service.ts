@@ -231,7 +231,7 @@ export async function initializeBusiness(
             homeCurrency: input.currency.toUpperCase(),
             businessType: businessType,
             planName: input.plan,
-            subscriptionStatus: input.plan === 'trial' ? 'trialing' : 'active',
+            subscriptionStatus: 'trialing',
             customCogsCategories: cogsCategories,
             customExpenseCategories: expenseCategories,
             allowedCurrencies: input.allowedCurrencies || [

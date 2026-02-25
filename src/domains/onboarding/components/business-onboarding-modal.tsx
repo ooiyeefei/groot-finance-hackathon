@@ -182,7 +182,7 @@ export default function BusinessOnboardingModal({
     setSubmitError(null)
 
     try {
-      const selectedPlan = wizardData.selectedPlan || 'trial'
+      const selectedPlan = wizardData.selectedPlan || 'pro'
 
       // Step 1: Create business (synchronous call)
       // forceCreateNew: true ensures we ALWAYS create a new business from the modal
@@ -211,8 +211,8 @@ export default function BusinessOnboardingModal({
 
       console.log('[BusinessOnboardingModal] Business created:', result.businessId)
 
-      // Step 2: For trial users, start the trial subscription
-      if (selectedPlan === 'trial') {
+      // Step 2: Start the Pro trial subscription for new signups
+      if (selectedPlan === 'pro') {
         console.log('[BusinessOnboardingModal] Starting trial subscription...')
         const trialResponse = await fetch('/api/v1/onboarding/start-trial', {
           method: 'POST',

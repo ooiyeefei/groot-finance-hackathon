@@ -50,10 +50,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Determine trial status using subscription_status (Stripe source of truth)
-    const isTrialPlan = business.planName === 'trial' || business.planName === 'free'
+    // Trial is a STATUS, not a plan
     const isTrialingStatus = business.subscriptionStatus === 'trialing'
     const isPausedStatus = business.subscriptionStatus === 'paused'
-    const isOnTrial = isTrialPlan || isTrialingStatus
+    const isOnTrial = isTrialingStatus
 
     // Default response for non-trial users
     if (!isOnTrial && !isPausedStatus) {

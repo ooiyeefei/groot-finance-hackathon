@@ -26,7 +26,7 @@ interface UpgradePromptProps {
 export function UpgradePrompt({
   isOpen,
   onClose,
-  currentPlan = 'trial',
+  currentPlan = 'starter',
   usageUsed = 0,
   usageLimit = 100,
   feature = 'document scanning',
@@ -40,10 +40,9 @@ export function UpgradePrompt({
 
   // Get recommended plan (next tier up)
   const getRecommendedPlan = (): PlanKey => {
-    if (currentPlan === 'trial') return 'starter'
     if (currentPlan === 'starter') return 'pro'
     if (currentPlan === 'pro') return 'enterprise'
-    return 'starter'
+    return 'pro'
   }
 
   if (!isOpen) return null

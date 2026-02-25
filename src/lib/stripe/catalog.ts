@@ -36,7 +36,7 @@ import { getStripe } from './client'
 import type Stripe from 'stripe'
 
 // Plan types
-export type PlanKey = 'trial' | 'starter' | 'pro' | 'enterprise'
+export type PlanKey = 'starter' | 'pro' | 'enterprise'
 
 export interface PlanConfig {
   name: string
@@ -174,46 +174,8 @@ export function getAvailableCurrencies(plans: Record<PlanKey, PlanConfig>): stri
   return Array.from(currencies).sort()
 }
 
-// Default trial plan (not in Stripe)
-// Trial gives access to Starter-level features with reduced limits
-const TRIAL_PLAN: PlanConfig = {
-  name: 'Trial',
-  planKey: 'trial',
-  priceId: null,
-  productId: null,
-  price: 0,
-  currency: 'MYR',
-  currencyOptions: { myr: 0, sgd: 0 },
-  ocrLimit: 50,
-  teamLimit: 3,
-  aiMessageLimit: 300,  // Trial uses Pro limits (FR-015)
-  invoiceLimit: -1,     // Trial uses Pro limits (unlimited)
-  einvoiceLimit: -1,    // Trial uses Pro limits (unlimited)
-  actionCenterLimit: 0,
-  features: [
-    '14-day free trial',
-    'Custom business categories',
-    'AI auto categorization',
-    'Approval workflow',
-    'Multi-currency tracking',
-    'Role-based access control',
-    '50 OCR scans during trial',
-    'Up to 3 team members',
-  ],
-  highlightFeatures: [
-    '14-day free trial',
-    '50 OCR scans',
-    'AI auto categorization',
-    'AI chat assistant',
-    'Up to 3 team members',
-  ],
-  isCustomPricing: false,
-  interval: null,
-}
-
 // Fallback plans when Stripe is unreachable (exported for legacy compatibility)
 export const FALLBACK_PLANS: Record<PlanKey, PlanConfig> = {
-  trial: TRIAL_PLAN,
   starter: {
     name: 'Starter',
     planKey: 'starter',
@@ -504,7 +466,6 @@ async function fetchCatalogFromStripe(): Promise<Record<PlanKey, PlanConfig>> {
 
   // Build plans from products
   const plans: Record<PlanKey, PlanConfig> = {
-    trial: TRIAL_PLAN, // Trial is always hardcoded
     starter: FALLBACK_PLANS.starter,
     pro: FALLBACK_PLANS.pro,
     enterprise: FALLBACK_PLANS.enterprise,
@@ -514,7 +475,7 @@ async function fetchCatalogFromStripe(): Promise<Record<PlanKey, PlanConfig>> {
     const price = pricesByProduct.get(product.id) || null
     const config = parseProductMetadata(product, price)
 
-    if (config && config.planKey !== 'trial') {
+    if (config) {
       plans[config.planKey] = config
     }
   }
@@ -604,7 +565,7 @@ export async function getPlanFromPriceId(priceId: string): Promise<PlanKey> {
     }
   }
 
-  return 'trial' // Default
+  return 'starter' // Default
 }
 
 /**
@@ -619,7 +580,7 @@ export async function getPlanFromProductId(productId: string): Promise<PlanKey> 
     }
   }
 
-  return 'trial' // Default
+  return 'starter' // Default
 }
 
 // ============================================
@@ -628,18 +589,18 @@ export async function getPlanFromProductId(productId: string): Promise<PlanKey> 
 // ============================================
 
 /**
- * Normalize plan key - handles legacy 'free' value
+ * Normalize plan key - handles legacy values
  */
 function normalizePlanKey(key: string): PlanKey {
-  // Map legacy 'free' to 'trial'
-  if (key === 'free') return 'trial'
+  // Map legacy values
+  if (key === 'free' || key === 'trial') return 'starter'
   // Validate known plan keys
-  if (['trial', 'starter', 'pro', 'enterprise'].includes(key)) {
+  if (['starter', 'pro', 'enterprise'].includes(key)) {
     return key as PlanKey
   }
-  // Default to trial for unknown values
-  console.warn(`Unknown plan key: ${key}, defaulting to trial`)
-  return 'trial'
+  // Default to starter for unknown values
+  console.warn(`Unknown plan key: ${key}, defaulting to starter`)
+  return 'starter'
 }
 
 /**

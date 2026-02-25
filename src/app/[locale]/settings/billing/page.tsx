@@ -364,11 +364,11 @@ function BillingContent() {
 
                         {/* Compare Plans link - visible for all users */}
                         <Button
-                          variant={data.plan.name === 'trial' || !data.subscription.stripeCustomerId ? 'default' : 'ghost'}
+                          variant={data.subscription.status === 'trialing' || !data.subscription.stripeCustomerId ? 'default' : 'ghost'}
                           className="w-full mt-2"
                           onClick={() => (window.location.href = '/en/pricing')}
                         >
-                          {data.plan.name === 'trial' || !data.subscription.stripeCustomerId
+                          {data.subscription.status === 'trialing' || !data.subscription.stripeCustomerId
                             ? 'Upgrade Your Plan'
                             : 'Compare Plans'}
                         </Button>

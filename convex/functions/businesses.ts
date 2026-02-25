@@ -1545,15 +1545,14 @@ export const getTrialStatusByClerkId = query({
       return { isExpired: true, businessId: user.businessId };
     }
 
-    // EDGE CASE: User has trial plan but no trial dates set
+    // EDGE CASE: User has no subscription and no trial dates set
     // This can happen if start-trial endpoint failed or webhooks didn't process
-    // For trial plans without proper setup, check if they should be blocked
-    const isTrialOrFreePlan = business.planName === "trial" || business.planName === "free" || !business.planName;
+    const hasNoSubscription = !business.stripeSubscriptionId;
     const hasNoTrialDates = !business.trialEndDate;
     const notTrialing = business.subscriptionStatus !== "trialing";
 
-    if (isTrialOrFreePlan && hasNoTrialDates && notTrialing) {
-      // User on trial/free plan with no trial setup and not actively trialing
+    if (hasNoSubscription && hasNoTrialDates && notTrialing) {
+      // User with no subscription and no trial setup and not actively trialing
       // This is likely an incomplete setup - they need to go through plan selection
       // But only if they completed onboarding (has a business)
       if (business.onboardingCompletedAt) {
@@ -2203,6 +2202,62 @@ export const fixExpiredTrialsWithoutDates = internalMutation({
       skippedCount,
       totalProcessed: businesses.length,
       affectedBusinesses,
+    };
+  },
+});
+
+/**
+ * Migrate businesses with planName='trial' to planName='pro'
+ *
+ * Trial is a subscription STATUS (trialing), not a plan.
+ * All trial users get Pro plan access for 14 days.
+ * This migration standardizes existing data.
+ *
+ * Run from Convex dashboard: npx convex run functions/businesses:migrateTrialPlanToPro
+ */
+export const migrateTrialPlanToPro = internalMutation({
+  args: {
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const isDryRun = args.dryRun ?? false;
+    console.log(`[Migrate Trial→Pro] Starting... (dryRun: ${isDryRun})`);
+
+    const businesses = await ctx.db.query("businesses").collect();
+
+    let migratedCount = 0;
+    const migrated: string[] = [];
+
+    for (const business of businesses) {
+      // Catch two cases:
+      // 1. Old 'trial'/'free'/null planName (legacy)
+      // 2. Trialing businesses with wrong planName (e.g. webhook overwrote to 'starter')
+      const isLegacyTrialPlan = business.planName === "trial" || business.planName === "free" || !business.planName;
+      const isTrialingWithWrongPlan = business.subscriptionStatus === "trialing" && business.planName !== "pro";
+
+      if (isLegacyTrialPlan || isTrialingWithWrongPlan) {
+        console.log(`[Migrate Trial→Pro] Found: ${business._id} (${business.name}) - planName: ${business.planName}, status: ${business.subscriptionStatus}`);
+        migrated.push(`${business._id} (${business.name})`);
+
+        if (!isDryRun) {
+          await ctx.db.patch(business._id, {
+            planName: "pro",
+            updatedAt: Date.now(),
+          });
+          migratedCount++;
+        } else {
+          migratedCount++;
+        }
+      }
+    }
+
+    console.log(`[Migrate Trial→Pro] Complete. ${isDryRun ? 'Would migrate' : 'Migrated'}: ${migratedCount}/${businesses.length}`);
+
+    return {
+      dryRun: isDryRun,
+      migratedCount,
+      totalProcessed: businesses.length,
+      migrated,
     };
   },
 });

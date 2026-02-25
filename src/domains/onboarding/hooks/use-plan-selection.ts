@@ -27,8 +27,8 @@ export function usePlanSelection() {
     setSelectedPlan(plan)
 
     try {
-      // Trial plan: Call start-trial API, then proceed to business setup
-      if (plan === 'trial') {
+      // Free trial: Call start-trial API (subscribes to Pro with 14-day trial)
+      if (plan === 'pro') {
         const trialResponse = await fetch('/api/v1/onboarding/start-trial', {
           method: 'POST',
         })

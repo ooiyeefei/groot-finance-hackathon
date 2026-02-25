@@ -60,7 +60,7 @@ const INITIAL_WIZARD_DATA: Partial<OnboardingWizardData> = {
   countryCode: '',
   customCOGSNames: [],
   customExpenseNames: [],
-  selectedPlan: 'trial', // Default to trial plan
+  selectedPlan: 'pro', // Default to Pro plan (14-day free trial)
 }
 
 /**

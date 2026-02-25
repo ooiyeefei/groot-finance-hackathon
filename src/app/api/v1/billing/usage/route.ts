@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const planName = (business.planName as PlanKey) || 'trial'
+    const planName = (business.planName as PlanKey) || 'starter'
     const limit = getOcrLimit(planName)
 
     // Get current month usage from Convex
@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const planName = (business.planName as PlanKey) || 'trial'
+    const planName = (business.planName as PlanKey) || 'starter'
 
     // Get current usage from Convex
     let currentUsage = 0

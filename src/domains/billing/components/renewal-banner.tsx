@@ -82,6 +82,9 @@ export function RenewalBanner({ className }: RenewalBannerProps) {
     )
   }
 
+  // Trial in progress — sidebar handles trial UI, no renewal banner needed
+  if (subscription.status === 'trialing') return null
+
   // Check for canceled/expired subscription
   if (subscription.status === 'canceled' || subscription.status === 'unpaid') {
     return (
@@ -106,7 +109,6 @@ export function RenewalBanner({ className }: RenewalBannerProps) {
 
   // Check renewal reminders (only for paid plans)
   if (!renewal?.needsAttention || renewal?.urgencyLevel === 'none') return null
-  if (plan.name === 'trial') return null
   if (isDismissed) return null
 
   return (

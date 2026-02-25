@@ -81,7 +81,7 @@ export function PricingTable({
     })
   }, [])
 
-  const currentPlanName = subscription?.data?.plan.name || 'trial'
+  const currentPlanName = subscription?.data?.plan.name || 'starter'
   const isTrialing = subscription?.data?.trial?.isOnTrial === true
   const isCheckoutLoading = standalone ? standaloneLoading : subscription?.isCheckoutLoading
 
@@ -126,7 +126,7 @@ export function PricingTable({
 
   const isDowngrade = (planName: PlanKey) => {
     if (standalone || isTrialing) return false
-    const planOrder: PlanKey[] = ['trial', 'starter', 'pro', 'enterprise']
+    const planOrder: PlanKey[] = ['starter', 'pro', 'enterprise']
     return planOrder.indexOf(planName) < planOrder.indexOf(currentPlanName as PlanKey)
   }
 

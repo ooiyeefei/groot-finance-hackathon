@@ -18,7 +18,6 @@ import { resolveUserByClerkId } from "../lib/resolvers";
 
 /**
  * Resolve AI message limit from plan name.
- * Trial businesses get Pro plan limits per spec FR-015.
  */
 function getAiMessageLimit(planName: string | undefined): number {
   switch (planName) {
@@ -28,9 +27,8 @@ function getAiMessageLimit(planName: string | undefined): number {
       return 300;
     case "enterprise":
       return -1;
-    case "trial":
     default:
-      return 300; // Trial and unknown plans get Pro limits
+      return 30; // Unknown plans get Starter limits
   }
 }
 

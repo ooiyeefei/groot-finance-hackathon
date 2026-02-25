@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate plan key
-    const validPlanKeys: PlanKey[] = ['trial', 'starter', 'pro', 'enterprise']
+    const validPlanKeys: PlanKey[] = ['starter', 'pro', 'enterprise']
     if (!planName || !validPlanKeys.includes(planName)) {
       return NextResponse.json(
         { success: false, error: 'Invalid plan name' },
@@ -83,9 +83,7 @@ export async function POST(request: NextRequest) {
     // Allow checkout for: no subscription, paused trials, canceled subscriptions
     const hasActiveSubscription =
       business.stripeSubscriptionId &&
-      business.subscriptionStatus === 'active' &&
-      business.planName !== 'trial' &&
-      business.planName !== 'free'
+      business.subscriptionStatus === 'active'
 
     if (hasActiveSubscription) {
       return NextResponse.json(

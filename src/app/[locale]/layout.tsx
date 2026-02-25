@@ -12,6 +12,7 @@ import { CapacitorProvider } from '@/components/providers/CapacitorProvider';
 import { PWAProvider } from '@/components/providers/PWAProvider';
 import { MobileAppShellConnected } from '@/components/ui/mobile-app-shell-connected';
 import { ChatWidget } from '@/domains/chat/components/chat-widget';
+import { SubscriptionLockOverlay } from '@/domains/billing/components/subscription-lock-overlay';
 
 interface LocaleLayoutProps {
   children: React.ReactNode;
@@ -69,6 +70,7 @@ export default async function LocaleLayout({
                     <PWAProvider>
                       <MobileAppShellConnected>
                         {children}
+                        <SubscriptionLockOverlay />
                       </MobileAppShellConnected>
                     </PWAProvider>
                     <ChatWidget />

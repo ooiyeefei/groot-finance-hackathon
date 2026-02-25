@@ -115,9 +115,9 @@ export async function GET(request: NextRequest) {
       // Continue with 0 defaults (fail-open)
     }
 
-    // Normalize plan key - 'free' maps to 'trial'
-    const rawPlanKey = business.planName || 'trial'
-    const planKey: PlanKey = rawPlanKey === 'free' ? 'trial' : (rawPlanKey as PlanKey)
+    // Normalize plan key
+    const rawPlanKey = business.planName || 'starter'
+    const planKey: PlanKey = (rawPlanKey === 'free' || rawPlanKey === 'trial') ? 'starter' : (rawPlanKey as PlanKey)
     // Get plan from Stripe catalog (with caching/fallback)
     const plan = await getPlan(planKey)
     const ocrLimit = getOcrLimitSync(planKey)
@@ -165,13 +165,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Calculate trial info
-    // Check both plan_name and subscription_status for robustness
-    // Stripe sets subscription_status='trialing' which webhook syncs to plan_name='trial'
-    const isTrialPlan = planKey === 'trial'
+    // Calculate trial info — trial is a STATUS, not a plan
     const isTrialingStatus = business.subscriptionStatus === 'trialing'
     const isPausedStatus = business.subscriptionStatus === 'paused'
-    const isOnTrial = isTrialPlan || isTrialingStatus
+    const isOnTrial = isTrialingStatus
 
     let trialInfo: {
       isOnTrial: boolean
@@ -245,7 +242,7 @@ export async function GET(request: NextRequest) {
     const periodEndTimestamp = business.subscriptionPeriodEnd ||
       (subscriptionDetails?.currentPeriodEnd ? new Date(subscriptionDetails.currentPeriodEnd).getTime() : null)
 
-    if (periodEndTimestamp && planKey !== 'trial') {
+    if (periodEndTimestamp && !isTrialingStatus) {
       const periodEnd = new Date(periodEndTimestamp)
       const now = new Date()
       const daysUntilRenewal = Math.ceil((periodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
