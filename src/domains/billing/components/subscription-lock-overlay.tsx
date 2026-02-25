@@ -6,7 +6,7 @@
  * Blur overlay over the main content area when subscription is paused
  * (trial expired without payment method). Prompts user to choose a plan.
  *
- * The sidebar remains accessible (z-[55] > overlay z-50) so users can:
+ * The sidebar remains accessible (z-[45] > overlay z-40) so users can:
  * - Switch to another business that may still be active
  * - Navigate to pricing/billing pages
  *
@@ -48,8 +48,8 @@ export function SubscriptionLockOverlay() {
   if (isUnblockedPath) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop with heavy blur — sidebar sits above this (z-[55]) */}
+    <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
+      {/* Backdrop with heavy blur — sidebar (z-[45]) and Radix portals (z-50) sit above this */}
       <div
         className="fixed inset-0"
         style={{
@@ -60,7 +60,7 @@ export function SubscriptionLockOverlay() {
       />
 
       {/* Lock card */}
-      <Card className="relative z-50 w-full max-w-md bg-card border-border shadow-2xl">
+      <Card className="relative z-40 w-full max-w-md bg-card border-border shadow-2xl">
         <CardContent className="p-8 text-center">
           {/* Lock icon */}
           <div className="mx-auto w-16 h-16 rounded-full bg-yellow-500/10 flex items-center justify-center mb-6">
