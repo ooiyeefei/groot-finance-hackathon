@@ -2,11 +2,11 @@
 
 import * as React from 'react'
 import { useState, useEffect, useCallback } from 'react'
-import { Home, Receipt, FileText, Settings, CreditCard, FileCheck, Building2, Sparkles, Palmtree, CalendarDays } from 'lucide-react'
 import { BottomNav, BottomNavSpacer, type BottomNavItem } from './bottom-nav'
 import { fetchUserRoleWithCache, clearUserRoleCache } from '@/lib/cache-utils'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { useTranslations } from 'next-intl'
+import { getNavigationItems } from '@/lib/navigation/nav-items'
 
 interface UserRole {
   employee: boolean
@@ -87,86 +87,13 @@ export function MobileAppShell({
     fetchUserRole()
   }, [businessId, fetchUserRole, hasInitialLoad])
 
-  // Check if user is employee-only (not manager or finance_admin)
-  const isEmployeeOnly = userRole.employee && !userRole.manager && !userRole.finance_admin
-
-  // Check if user is finance_admin (owner or finance_admin role - has full access)
-  const isAdmin = userRole.finance_admin
-
-  // Build navigation items based on user role
-  // Dashboard, Invoices, Accounting are admin-only (finance admin features)
-  // Managers only see expense claims and approval dashboard
-  const coreNavItems: BottomNavItem[] = [
-    // Dashboard only visible for admins (finance admin feature)
-    ...(isAdmin ? [{
-      icon: Home,
-      label: t('dashboard'),
-      href: `/${locale}`
-    }] : []),
-    // Invoices only visible for admins (finance admin feature)
-    ...(isAdmin ? [{
-      icon: FileText,
-      label: t('invoices'),
-      href: `/${locale}/invoices`
-    }] : []),
-    {
-      icon: Receipt,
-      label: t('expenseClaims'),
-      href: `/${locale}/expense-claims`,
-      badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined
-    },
-    // Accounting only visible for admins (finance admin feature)
-    ...(isAdmin ? [{
-      icon: CreditCard,
-      label: t('transactions'),
-      href: `/${locale}/accounting`
-    }] : []),
-    {
-      icon: Palmtree,
-      label: t('leave'),
-      href: `/${locale}/leave`
-    },
-    {
-      icon: CalendarDays,
-      label: t('teamCalendar'),
-      href: `/${locale}/team-calendar`
-    },
-  ]
-
-  // Manager/Finance Admin navigation items
-  const managerNavItems: BottomNavItem[] = (userRole.manager || userRole.finance_admin) ? [
-    {
-      icon: FileCheck,
-      label: t('managerApprovals'),
-      href: `/${locale}/manager/approvals`
-    },
-    {
-      icon: Building2,
-      label: t('businessSettings'),
-      href: `/${locale}/business-settings`
-    },
-    {
-      icon: Sparkles,
-      label: t('billing'),
-      href: `/${locale}/settings/billing`
-    },
-  ] : []
-
-  // Settings navigation (everyone)
-  const settingsNavItems: BottomNavItem[] = [
-    {
-      icon: Settings,
-      label: t('settings'),
-      href: `/${locale}/settings`
-    }
-  ]
-
-  // Combine all nav items
-  const navItems: BottomNavItem[] = [
-    ...coreNavItems,
-    ...managerNavItems,
-    ...settingsNavItems
-  ]
+  // Build navigation items from shared config (same source as sidebar)
+  // Change nav items in src/lib/navigation/nav-items.ts, not here.
+  const navItems: BottomNavItem[] = getNavigationItems(userRole).map(item => ({
+    icon: item.icon,
+    label: t(item.label) || item.label,
+    href: `/${locale}${item.path}`,
+  }))
 
   return (
     <>

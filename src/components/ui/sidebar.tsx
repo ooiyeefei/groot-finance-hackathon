@@ -4,7 +4,8 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@clerk/nextjs'
-import { Home, FileText, CreditCard, Receipt, MessageSquare, Settings, Menu, Users, CheckCircle, Tag, FileCheck, CalendarDays, FileSpreadsheet } from 'lucide-react'
+import { MessageSquare, Menu } from 'lucide-react'
+import { getNavigationGroups } from '@/lib/navigation/nav-items'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
 import EnhancedBusinessDisplay from '@/domains/account-management/components/enhanced-business-display'
@@ -59,40 +60,16 @@ export default function Sidebar() {
   // Helper function to create localized hrefs (our i18n feature)
   const localizedHref = (path: string) => `/${locale}${path}`
 
-  // Check if user is employee-only (not manager or finance_admin)
-  const isEmployeeOnly = userRole.employee && !userRole.manager && !userRole.finance_admin
-
-  // Check if user is finance_admin (owner or finance_admin role - has full access)
-  const isAdmin = userRole.finance_admin
-
-  // === Navigation Groups ===
-  // Items are organized into visual groups separated by subtle dividers.
-  // Empty groups (e.g. financeGroup for non-admins) are filtered out so no orphan dividers appear.
-
-  // Group 1: Finance (admin/owner only) — core financial management tools
-  const financeGroup = isAdmin ? [
-    { name: t('dashboard'), href: localizedHref('/'), icon: Home },
-    { name: t('invoices'), href: localizedHref('/invoices'), icon: FileText },
-    { name: t('transactions'), href: localizedHref('/accounting'), icon: CreditCard },
-  ] : []
-
-  // Group 2: Workspace (all users) — day-to-day work items + conditional manager tools
-  const workspaceGroup = [
-    { name: t('expenseClaims'), href: localizedHref('/expense-claims'), icon: Receipt },
-    { name: t('leaveManagement') || 'Leave & Timesheet', href: localizedHref('/leave-management'), icon: CalendarDays },
-    ...(userRole.manager || userRole.finance_admin ? [
-      { name: t('managerApprovals'), href: localizedHref('/manager/approvals'), icon: FileCheck },
-    ] : []),
-    { name: t('reporting') || 'Reporting & Exports', href: localizedHref('/reporting'), icon: FileSpreadsheet },
-  ]
-
-  // Group 3: Utility (all users) — settings only (AI Assistant removed, now floating widget)
-  const utilityGroup = [
-    { name: t('settings') || 'Settings', href: localizedHref('/business-settings'), icon: Settings },
-  ]
-
-  // Filter out empty groups, then render with separators between them
-  const navigationGroups = [financeGroup, workspaceGroup, utilityGroup].filter(g => g.length > 0)
+  // === Navigation Groups (shared source of truth) ===
+  // Items come from src/lib/navigation/nav-items.ts — change nav items there, not here.
+  const sharedGroups = getNavigationGroups(userRole)
+  const navigationGroups = sharedGroups.map(group =>
+    group.items.map(item => ({
+      name: t(item.label) || item.label,
+      href: localizedHref(item.path),
+      icon: item.icon,
+    }))
+  )
 
   // Load saved state from localStorage and fetch user role
   useEffect(() => {
