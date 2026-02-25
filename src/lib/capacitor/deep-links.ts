@@ -2,7 +2,7 @@
  * Capacitor Deep Link Handler
  *
  * Handles Universal Links (Associated Domains) on iOS. When the user
- * taps a FinanSEAL URL outside the app (email, Messages, Safari),
+ * taps a Groot Finance URL outside the app (email, Messages, Safari),
  * iOS opens the app and delivers the URL here.
  */
 
@@ -34,7 +34,7 @@ export function initDeepLinks(onDeepLink: DeepLinkHandler): void {
     // Extract path from Universal Link
     try {
       const parsed = new URL(url);
-      if (parsed.hostname === 'app.finanseal.com') {
+      if (parsed.hostname === 'finance.hellogroot.com') {
         linkHandler?.(parsed.pathname + parsed.search);
       }
     } catch {

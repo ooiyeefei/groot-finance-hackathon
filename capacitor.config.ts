@@ -2,12 +2,12 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.hellogroot.finanseal',
-  appName: 'FinanSEAL',
+  appName: 'Groot Finance',
   webDir: 'public',
   server: {
-    url: 'https://app.finanseal.com',
+    url: 'https://finance.hellogroot.com',
     allowNavigation: [
-      'app.finanseal.com',
+      'finance.hellogroot.com',
       '*.convex.cloud',
       '*.clerk.accounts.dev',
       'accounts.clerk.dev',
@@ -19,7 +19,8 @@ const config: CapacitorConfig = {
     CapacitorCookies: { enabled: true },
     CapacitorHttp: { enabled: true },
     SplashScreen: {
-      launchAutoHide: false,
+      launchAutoHide: true,
+      launchShowDuration: 2000,
       backgroundColor: '#FFFFFF',
       androidSplashResourceName: 'splash',
       showSpinner: false,
@@ -33,7 +34,7 @@ const config: CapacitorConfig = {
     },
   },
   ios: {
-    scheme: 'FinanSEAL',
+    scheme: 'App',
     contentInset: 'automatic',
   },
 };

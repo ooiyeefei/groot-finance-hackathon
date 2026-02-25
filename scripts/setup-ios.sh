@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ============================================================================
-# iOS Setup Script for FinanSEAL Capacitor App
+# iOS Setup Script for Groot Finance Capacitor App
 #
 # Run this on a macOS machine with Xcode 15+ installed.
 # This script automates tasks T006, T017, T029, T031, T048-T050, T054, T057.
@@ -21,7 +21,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 echo "============================================"
-echo " FinanSEAL iOS Setup"
+echo " Groot Finance iOS Setup"
 echo "============================================"
 echo ""
 echo "Project: $PROJECT_ROOT"
@@ -85,7 +85,7 @@ echo "--- T029: Adding camera usage description ---"
 if /usr/libexec/PlistBuddy -c "Print :NSCameraUsageDescription" "$INFO_PLIST" 2>/dev/null; then
   echo "  NSCameraUsageDescription already set."
 else
-  /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'FinanSEAL needs camera access to capture receipt photos for expense claims.'" "$INFO_PLIST"
+  /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'Groot Finance needs camera access to capture receipt photos for expense claims.'" "$INFO_PLIST"
   echo "  Added NSCameraUsageDescription."
 fi
 echo ""
@@ -97,7 +97,7 @@ echo "--- T049: Adding push notification description ---"
 if /usr/libexec/PlistBuddy -c "Print :NSUserNotificationUsageDescription" "$INFO_PLIST" 2>/dev/null; then
   echo "  NSUserNotificationUsageDescription already set."
 else
-  /usr/libexec/PlistBuddy -c "Add :NSUserNotificationUsageDescription string 'FinanSEAL sends push notifications for expense claim approvals and important updates.'" "$INFO_PLIST" 2>/dev/null || true
+  /usr/libexec/PlistBuddy -c "Add :NSUserNotificationUsageDescription string 'Groot Finance sends push notifications for expense claim approvals and important updates.'" "$INFO_PLIST" 2>/dev/null || true
   echo "  Added NSUserNotificationUsageDescription."
 fi
 echo ""

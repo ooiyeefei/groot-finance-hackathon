@@ -1,6 +1,6 @@
 # Coding Rules & Guidelines
 
-Instructions for AI coding agents working on FinanSEAL.
+Instructions for AI coding agents working on Groot Finance.
 
 ## Workflow Rules
 
@@ -13,7 +13,7 @@ Instructions for AI coding agents working on FinanSEAL.
 
 ## Project Context
 
-**FinanSEAL**: Financial co-pilot for Southeast Asian SMEs
+**Groot Finance**: Financial co-pilot for Southeast Asian SMEs
 **Stack**: Next.js 15.4.6 + Convex + AWS Lambda + Qwen3 (Modal)
 **Docs**: See `docs/README.md` for full documentation
 
