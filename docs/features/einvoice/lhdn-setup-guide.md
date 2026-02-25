@@ -117,19 +117,54 @@ The signing Lambda has CloudWatch alarms that trigger 30 days before certificate
 
 ## 3. Intermediary Registration on MyInvois Portal
 
-### Steps
+### Prerequisites — MyTax Account Setup
 
-1. Go to **MyInvois Portal** (preprod for sandbox, production for live)
-   - Sandbox: `https://preprod-myinvois.hasil.gov.my`
-   - Production: `https://myinvois.hasil.gov.my`
+**MyInvois is accessed through MyTax, not directly.** If you navigate to `preprod-myinvois.hasil.gov.my` without MyTax credentials, you'll only see a sign-in page (Microsoft Azure AD login) with no registration option.
 
-2. Log in with Groot Finance's company TIN
+| Environment | MyTax Portal | MyInvois Portal | API Base |
+|-------------|-------------|-----------------|----------|
+| **Sandbox** | `preprod-mytax.hasil.gov.my` | `preprod-myinvois.hasil.gov.my` | `preprod-api.myinvois.hasil.gov.my` |
+| **Production** | `mytax.hasil.gov.my` | `myinvois.hasil.gov.my` | `api.myinvois.hasil.gov.my` |
 
-3. Navigate to **"Register ERP System"** (or "Register Intermediary")
+**Step 0: Company director registers on MyTax**
 
-4. Self-provision a **Client ID** and **Client Secret**
+```
+Director registers personal MyTax account (preprod-mytax.hasil.gov.my)
+    ↓  Requires: IC number + LHDN activation PIN
+Director applies for "Company Director / Organization Administrator" role
+    ↓  LHDN verifies against SSM records
+Role approved → MyInvois section becomes accessible from within MyTax
+```
 
-5. Store these in Vercel environment variables:
+The **activation PIN** is either:
+- Received via email from prior e-Filing registration, OR
+- Obtained by visiting an LHDN branch with IC
+
+**Portal access roles** (for reference):
+
+| Role | For Whom | Appointed By |
+|------|----------|-------------|
+| Company Director / Organization Administrator | Companies (Sdn Bhd, etc.) | Self (verified by SSM) |
+| Business Owner | Sole proprietors | Self |
+| Business/Director Representative | Delegated staff | Business Owner or Director |
+
+For Groot Finance (Sdn Bhd), you need the **Company Director** role.
+
+### Steps (After MyTax Access)
+
+1. Log in to **MyTax Portal** (preprod for sandbox, production for live)
+   - Sandbox: `https://preprod-mytax.hasil.gov.my`
+   - Production: `https://mytax.hasil.gov.my`
+
+2. Navigate to the **MyInvois** section from within MyTax
+
+3. **Register ERP System** → Self-provision a **Client ID** and **Client Secret**
+
+4. **Register as Intermediary** (separate step from ERP registration)
+   - This enables the `onbehalfof` header in the API
+   - Without this, credentials only work for your own company (direct mode)
+
+5. Store credentials in Vercel environment variables:
    ```
    LHDN_CLIENT_ID=<platform Client ID>
    LHDN_CLIENT_SECRET=<platform Client Secret>
@@ -137,10 +172,12 @@ The signing Lambda has CloudWatch alarms that trigger 30 days before certificate
 
 ### Important Notes
 
-- Registration is self-service — no approval process required
-- Separate credentials are needed for sandbox and production environments
+- **Sandbox and production are completely separate** — you must register on both independently
+- Sandbox credentials WILL NOT work on production (returns 403 Forbidden), and vice versa
 - The Client ID/Secret are **platform-level** (Groot Finance's own), not per-tenant
 - Rate limits apply: 12 RPM for token requests, 100 RPM for submissions
+- The ERP registration is self-service — no external approval process
+- The director role application is verified against SSM records (may take a few hours)
 
 ---
 
