@@ -23,9 +23,11 @@ import { isNativePlatform, getPlatform } from '@/lib/capacitor/platform';
 import { initAuthBridge } from '@/lib/capacitor/auth-bridge';
 import { initDeepLinks } from '@/lib/capacitor/deep-links';
 import { initPushNotifications, unregisterPushNotifications } from '@/lib/capacitor/push-notifications';
+import { usePushTokenSync } from '@/lib/capacitor/use-push-token-sync';
 import { checkForUpdate, type UpdateCheckResult } from '@/lib/capacitor/update-checker';
 import { initNativeSentry } from '@/lib/capacitor/sentry-init';
 import { ForceUpdatePrompt, SoftUpdateBanner } from '@/components/ui/app-update-prompt';
+import { useActiveBusiness } from '@/contexts/business-context';
 
 interface CapacitorProviderProps {
   children: React.ReactNode;
@@ -41,6 +43,10 @@ export function CapacitorProvider({ children }: CapacitorProviderProps) {
   // Convex hooks — only active when authenticated
   const registerPushToken = useMutation(api.functions.pushSubscriptions.register);
   const unregisterPush = useMutation(api.functions.pushSubscriptions.unregister);
+
+  // Sync push token to Convex once business context is available
+  const { businessId } = useActiveBusiness();
+  usePushTokenSync(businessId);
 
   // Query app version from Convex (returns defaults if no record exists)
   const platform = isNativePlatform() ? (getPlatform() as 'ios' | 'android') : 'ios';
