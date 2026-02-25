@@ -420,6 +420,8 @@ export const update = mutation({
       routingCode: v.optional(v.string()),
       accountHolderName: v.optional(v.string()),
     })),
+    // LHDN exempt vendor flag
+    isLhdnExempt: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -489,6 +491,7 @@ export const update = mutation({
     if (updates.website !== undefined) updateData.website = updates.website;
     if (updates.notes !== undefined) updateData.notes = updates.notes;
     if (updates.bankDetails !== undefined) updateData.bankDetails = updates.bankDetails;
+    if (updates.isLhdnExempt !== undefined) updateData.isLhdnExempt = updates.isLhdnExempt;
 
     await ctx.db.patch(vendor._id, updateData);
     return vendor._id;

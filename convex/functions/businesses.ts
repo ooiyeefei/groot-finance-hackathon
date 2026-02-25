@@ -624,6 +624,8 @@ export const getBusinessProfileByStringId = query({
       city: business.city || null,
       state_code: business.stateCode || null,
       postal_code: business.postalCode || null,
+      // LHDN self-bill auto-trigger
+      auto_self_bill_exempt_vendors: business.autoSelfBillExemptVendors || false,
       created_at: new Date(business._creationTime).toISOString(),
       updated_at: business.updatedAt
         ? new Date(business.updatedAt).toISOString()
@@ -664,6 +666,8 @@ export const updateBusinessByStringId = mutation({
     city: v.optional(v.string()),
     state_code: v.optional(v.string()),
     postal_code: v.optional(v.string()),
+    // LHDN self-bill auto-trigger setting
+    auto_self_bill_exempt_vendors: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -728,6 +732,8 @@ export const updateBusinessByStringId = mutation({
     if (args.city !== undefined) updates.city = args.city;
     if (args.state_code !== undefined) updates.stateCode = args.state_code;
     if (args.postal_code !== undefined) updates.postalCode = args.postal_code;
+    // LHDN self-bill auto-trigger
+    if (args.auto_self_bill_exempt_vendors !== undefined) updates.autoSelfBillExemptVendors = args.auto_self_bill_exempt_vendors;
 
     await ctx.db.patch(business._id, updates);
 

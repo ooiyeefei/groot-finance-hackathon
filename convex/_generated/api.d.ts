@@ -36,6 +36,8 @@ import type * as functions_exportTemplates from "../functions/exportTemplates.js
 import type * as functions_feedback from "../functions/feedback.js";
 import type * as functions_financialIntelligence from "../functions/financialIntelligence.js";
 import type * as functions_invoices from "../functions/invoices.js";
+import type * as functions_lhdnJobs from "../functions/lhdnJobs.js";
+import type * as functions_lhdnTokens from "../functions/lhdnTokens.js";
 import type * as functions_leaveBalances from "../functions/leaveBalances.js";
 import type * as functions_leaveRequests from "../functions/leaveRequests.js";
 import type * as functions_leaveTypes from "../functions/leaveTypes.js";
@@ -107,6 +109,8 @@ declare const fullApi: ApiFromModules<{
   "functions/feedback": typeof functions_feedback;
   "functions/financialIntelligence": typeof functions_financialIntelligence;
   "functions/invoices": typeof functions_invoices;
+  "functions/lhdnJobs": typeof functions_lhdnJobs;
+  "functions/lhdnTokens": typeof functions_lhdnTokens;
   "functions/leaveBalances": typeof functions_leaveBalances;
   "functions/leaveRequests": typeof functions_leaveRequests;
   "functions/leaveTypes": typeof functions_leaveTypes;

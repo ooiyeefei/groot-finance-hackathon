@@ -48,6 +48,9 @@ export default function BusinessProfileSettings() {
   const [msicDropdownOpen, setMsicDropdownOpen] = useState(false)
   const msicDropdownRef = useRef<HTMLDivElement>(null)
 
+  // LHDN self-bill auto-trigger
+  const [autoSelfBillExemptVendors, setAutoSelfBillExemptVendors] = useState(false)
+
   // Collapsible section state
   const [eInvoiceSectionOpen, setEInvoiceSectionOpen] = useState(false)
 
@@ -113,6 +116,7 @@ export default function BusinessProfileSettings() {
       setSstRegistrationNumber(initial.sstRegistrationNumber)
       setLhdnClientId(initial.lhdnClientId)
       setPeppolParticipantId(initial.peppolParticipantId)
+      setAutoSelfBillExemptVendors(profile.auto_self_bill_exempt_vendors === true)
 
       // Auto-expand e-Invoice section if any fields have data
       if (initial.lhdnTin || initial.businessRegistrationNumber || initial.msicCode ||
@@ -206,6 +210,7 @@ export default function BusinessProfileSettings() {
           sst_registration_number: sstRegistrationNumber.trim() || undefined,
           lhdn_client_id: lhdnClientId.trim() || undefined,
           peppol_participant_id: peppolParticipantId.trim() || undefined,
+          auto_self_bill_exempt_vendors: autoSelfBillExemptVendors,
         })
       })
 
@@ -788,6 +793,26 @@ export default function BusinessProfileSettings() {
                       placeholder="0195:T08GA1234A"
                       className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
                     />
+                  </div>
+
+                  {/* Auto Self-Bill Setting */}
+                  <div className="border-t border-border pt-4">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={autoSelfBillExemptVendors}
+                        onChange={(e) => setAutoSelfBillExemptVendors(e.target.checked)}
+                        className="rounded border-border text-primary focus:ring-ring h-4 w-4"
+                      />
+                      <div>
+                        <span className="text-sm font-medium text-foreground">
+                          Auto-generate self-billed e-invoices for exempt vendors
+                        </span>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          When enabled, self-billed e-invoices will be automatically generated for approved expenses and AP invoices from LHDN-exempt vendors.
+                        </p>
+                      </div>
+                    </label>
                   </div>
                 </div>
               )}

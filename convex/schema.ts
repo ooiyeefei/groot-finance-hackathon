@@ -84,6 +84,7 @@ export default defineSchema({
         compliance: v.optional(v.boolean()),
         insight: v.optional(v.boolean()),
         invoice_processing: v.optional(v.boolean()),
+        lhdn_submission: v.optional(v.boolean()),
       })),
       email: v.optional(v.object({
         approval: v.optional(v.boolean()),
@@ -91,6 +92,7 @@ export default defineSchema({
         compliance: v.optional(v.boolean()),
         insight: v.optional(v.boolean()),
         invoice_processing: v.optional(v.boolean()),
+        lhdn_submission: v.optional(v.boolean()),
       })),
       digestFrequency: v.optional(v.union(v.literal("daily"), v.literal("weekly"))),
       digestTime: v.optional(v.number()),
@@ -204,6 +206,9 @@ export default defineSchema({
     stateCode: v.optional(v.string()),
     postalCode: v.optional(v.string()),
     // Note: countryCode already exists on businesses table (line ~92)
+
+    // 001-lhdn-einvoice-submission: Auto self-bill setting
+    autoSelfBillExemptVendors: v.optional(v.boolean()),
 
     // Timestamps
     updatedAt: v.optional(v.number()),
@@ -458,6 +463,22 @@ export default defineSchema({
     // Optimistic Locking / Version Control (for concurrent edit detection)
     version: v.optional(v.number()),  // Incremented on each update, used for conflict detection
 
+    // 001-lhdn-einvoice-submission: LHDN self-billed e-invoice tracking
+    lhdnSubmissionId: v.optional(v.string()),
+    lhdnDocumentUuid: v.optional(v.string()),
+    lhdnLongId: v.optional(v.string()),
+    lhdnStatus: v.optional(lhdnStatusValidator),
+    lhdnSubmittedAt: v.optional(v.number()),
+    lhdnValidatedAt: v.optional(v.number()),
+    lhdnValidationErrors: v.optional(v.array(v.object({
+      code: v.string(),
+      message: v.string(),
+      target: v.optional(v.string()),
+    }))),
+    lhdnDocumentHash: v.optional(v.string()),
+    selfBillRequired: v.optional(v.boolean()),
+    receiptQrCodeDetected: v.optional(v.boolean()),
+
     // Timestamps
     updatedAt: v.optional(v.number()),
   })
@@ -473,7 +494,9 @@ export default defineSchema({
     // Approval routing index
     .index("by_designatedApproverId", ["designatedApproverId"])
     // Batch submission index
-    .index("by_submissionId", ["submissionId"]),
+    .index("by_submissionId", ["submissionId"])
+    // LHDN self-bill index
+    .index("by_businessId_lhdnStatus", ["businessId", "lhdnStatus"]),
 
   // ============================================
   // EXPENSE SUBMISSIONS DOMAIN (009-batch-receipt-submission)
@@ -607,13 +630,29 @@ export default defineSchema({
     processingStartedAt: v.optional(v.number()),
     processedAt: v.optional(v.number()),
     failedAt: v.optional(v.number()),
+    // 001-lhdn-einvoice-submission: LHDN self-billed e-invoice tracking
+    lhdnSubmissionId: v.optional(v.string()),
+    lhdnDocumentUuid: v.optional(v.string()),
+    lhdnLongId: v.optional(v.string()),
+    lhdnStatus: v.optional(lhdnStatusValidator),
+    lhdnSubmittedAt: v.optional(v.number()),
+    lhdnValidatedAt: v.optional(v.number()),
+    lhdnValidationErrors: v.optional(v.array(v.object({
+      code: v.string(),
+      message: v.string(),
+      target: v.optional(v.string()),
+    }))),
+    lhdnDocumentHash: v.optional(v.string()),
+
     deletedAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),
   })
     .index("by_businessId", ["businessId"])
     .index("by_userId", ["userId"])
     .index("by_status", ["status"])
-    .index("by_legacyId", ["legacyId"]),
+    .index("by_legacyId", ["legacyId"])
+    // LHDN self-bill index
+    .index("by_businessId_lhdnStatus", ["businessId", "lhdnStatus"]),
 
   // ============================================
   // CHAT DOMAIN (Real-time enabled)
@@ -719,6 +758,9 @@ export default defineSchema({
       routingCode: v.optional(v.string()),
       accountHolderName: v.optional(v.string()),
     })),
+
+    // 001-lhdn-einvoice-submission: LHDN exempt vendor flag
+    isLhdnExempt: v.optional(v.boolean()),
 
     // Timestamps
     updatedAt: v.optional(v.number()),
@@ -1513,6 +1555,9 @@ export default defineSchema({
     postalCode: v.optional(v.string()),
     countryCode: v.optional(v.string()),
 
+    // 001-lhdn-einvoice-submission: LHDN exempt customer flag
+    isLhdnExempt: v.optional(v.boolean()),
+
     // Soft Delete & Timestamps
     deletedAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),
@@ -1653,7 +1698,8 @@ export default defineSchema({
       v.literal("anomaly"),
       v.literal("compliance"),
       v.literal("insight"),
-      v.literal("invoice_processing")
+      v.literal("invoice_processing"),
+      v.literal("lhdn_submission")
     ),
     severity: v.union(
       v.literal("info"),
@@ -1670,6 +1716,7 @@ export default defineSchema({
     resourceType: v.optional(v.union(
       v.literal("expense_claim"),
       v.literal("invoice"),
+      v.literal("sales_invoice"),
       v.literal("insight"),
       v.literal("dashboard")
     )),
@@ -1889,4 +1936,34 @@ export default defineSchema({
     updatedBy: v.optional(v.id("users")),
   })
     .index("by_platform", ["platform"]),
+
+  // ============================================
+  // LHDN E-INVOICE SUBMISSION (001-lhdn-einvoice-submission)
+  // ============================================
+
+  lhdn_tokens: defineTable({
+    businessId: v.id("businesses"),
+    tenantTin: v.string(),
+    accessToken: v.string(),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_businessId", ["businessId"]),
+
+  lhdn_submission_jobs: defineTable({
+    businessId: v.id("businesses"),
+    sourceType: v.string(),
+    sourceId: v.string(),
+    documentType: v.string(),
+    status: v.string(),
+    submissionUid: v.optional(v.string()),
+    pollAttempts: v.number(),
+    retryCount: v.number(),
+    lastPollAt: v.optional(v.number()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_businessId_status", ["businessId", "status"])
+    .index("by_status", ["status"]),
 });

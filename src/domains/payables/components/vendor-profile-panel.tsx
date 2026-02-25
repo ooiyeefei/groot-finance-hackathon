@@ -6,7 +6,7 @@ import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { Button } from '@/components/ui/button'
-import { Loader2, Save, User, Globe, FileText } from 'lucide-react'
+import { Loader2, Save, User, Globe, FileText, ShieldAlert } from 'lucide-react'
 import VendorBankDetails from './vendor-bank-details'
 import { PAYMENT_TERMS_OPTIONS } from '@/lib/constants/statuses'
 import { formatCurrency } from '@/lib/utils/format-number'
@@ -59,6 +59,7 @@ export default function VendorProfilePanel({ vendorId, onClose }: VendorProfileP
       routingCode: '',
       accountHolderName: '',
     },
+    isLhdnExempt: false,
   })
 
   useEffect(() => {
@@ -76,6 +77,7 @@ export default function VendorProfilePanel({ vendorId, onClose }: VendorProfileP
           routingCode: vendor.bankDetails?.routingCode ?? '',
           accountHolderName: vendor.bankDetails?.accountHolderName ?? '',
         },
+        isLhdnExempt: (vendor as Record<string, unknown>).isLhdnExempt === true,
       })
     }
   }, [vendor])
@@ -94,6 +96,7 @@ export default function VendorProfilePanel({ vendorId, onClose }: VendorProfileP
         bankDetails: (form.bankDetails.bankName || form.bankDetails.accountNumber)
           ? form.bankDetails
           : undefined,
+        isLhdnExempt: form.isLhdnExempt,
       })
       setIsEditing(false)
     } catch (err) {
@@ -258,6 +261,30 @@ export default function VendorProfilePanel({ vendorId, onClose }: VendorProfileP
             </div>
           )}
           <VendorBankDetails bankDetails={vendor.bankDetails} />
+          {(vendor as Record<string, unknown>).isLhdnExempt === true && (
+            <div className="flex items-center gap-1.5 text-sm">
+              <ShieldAlert className="w-3.5 h-3.5 text-yellow-500" />
+              <span className="text-yellow-600 dark:text-yellow-400">LHDN Exempt (self-billing required)</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* LHDN Exempt Toggle */}
+      {isEditing && (
+        <div className="space-y-1">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.isLhdnExempt}
+              onChange={(e) => setForm({ ...form, isLhdnExempt: e.target.checked })}
+              className="rounded border-border text-primary focus:ring-ring"
+            />
+            <span className="text-sm text-foreground">LHDN Exempt Vendor</span>
+          </label>
+          <p className="text-xs text-muted-foreground ml-6">
+            Self-billed e-invoices will be generated for purchases from this vendor.
+          </p>
         </div>
       )}
     </div>

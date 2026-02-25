@@ -57,6 +57,8 @@ interface BusinessProfile {
   state_code?: string | null
   postal_code?: string | null
   country_code?: string | null
+  // LHDN self-bill auto-trigger
+  auto_self_bill_exempt_vendors?: boolean
 }
 
 interface BusinessContextState {

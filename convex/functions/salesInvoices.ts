@@ -1799,6 +1799,147 @@ export const setPeppolErrors = mutation({
 });
 
 // ============================================
+// LHDN MYINVOIS MUTATIONS (001-lhdn-einvoice-submission)
+// ============================================
+
+/**
+ * Initiate LHDN e-invoice submission for a sales invoice.
+ * Validates readiness and sets lhdnStatus to "pending".
+ * The actual submission is handled by the API route.
+ */
+export const initiateLhdnSubmission = mutation({
+  args: {
+    id: v.id("sales_invoices"),
+    businessId: v.id("businesses"),
+    useGeneralBuyerTin: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    await requireFinanceAdmin(ctx, args.businessId);
+
+    const invoice = await ctx.db.get(args.id);
+    if (!invoice || invoice.businessId !== args.businessId || invoice.deletedAt) {
+      throw new Error("Invoice not found");
+    }
+
+    if (invoice.status !== "sent" && invoice.status !== "paid" && invoice.status !== "overdue" && invoice.status !== "partially_paid") {
+      throw new Error("Invoice must be sent before submitting to LHDN");
+    }
+
+    // Allow resubmission only if previously invalid
+    if (invoice.lhdnStatus && invoice.lhdnStatus !== "invalid") {
+      throw new Error("Invoice already has an LHDN submission in progress or completed");
+    }
+
+    // Validate business has LHDN config
+    const business = await ctx.db.get(args.businessId);
+    if (!business || !business.lhdnTin) {
+      throw new Error("Business does not have LHDN TIN configured");
+    }
+
+    // If buyer has no TIN and useGeneralBuyerTin is not set, require confirmation
+    const buyerTin = invoice.customerSnapshot?.tin;
+    if (!buyerTin && !args.useGeneralBuyerTin) {
+      throw new Error("BUYER_TIN_MISSING");
+    }
+
+    await ctx.db.patch(args.id, {
+      lhdnStatus: "pending",
+      lhdnSubmittedAt: Date.now(),
+      lhdnValidationErrors: undefined,
+      updatedAt: Date.now(),
+    });
+
+    return args.id;
+  },
+});
+
+/**
+ * Update LHDN status on a sales invoice after polling returns a result.
+ */
+export const updateLhdnStatus = mutation({
+  args: {
+    invoiceId: v.id("sales_invoices"),
+    lhdnStatus: v.string(),
+    lhdnDocumentUuid: v.optional(v.string()),
+    lhdnLongId: v.optional(v.string()),
+    lhdnValidatedAt: v.optional(v.number()),
+    lhdnValidationErrors: v.optional(v.array(v.object({
+      code: v.string(),
+      message: v.string(),
+      target: v.optional(v.string()),
+    }))),
+    lhdnDocumentHash: v.optional(v.string()),
+    lhdnSubmissionId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const patch: Record<string, unknown> = {
+      lhdnStatus: args.lhdnStatus,
+      updatedAt: Date.now(),
+    };
+
+    if (args.lhdnDocumentUuid !== undefined) patch.lhdnDocumentUuid = args.lhdnDocumentUuid;
+    if (args.lhdnLongId !== undefined) patch.lhdnLongId = args.lhdnLongId;
+    if (args.lhdnValidatedAt !== undefined) patch.lhdnValidatedAt = args.lhdnValidatedAt;
+    if (args.lhdnValidationErrors !== undefined) patch.lhdnValidationErrors = args.lhdnValidationErrors;
+    if (args.lhdnDocumentHash !== undefined) patch.lhdnDocumentHash = args.lhdnDocumentHash;
+    if (args.lhdnSubmissionId !== undefined) patch.lhdnSubmissionId = args.lhdnSubmissionId;
+
+    await ctx.db.patch(args.invoiceId, patch);
+  },
+});
+
+/**
+ * Cancel LHDN e-invoice within 72-hour window.
+ * Validates the cancellation window and requires a reason.
+ */
+export const cancelLhdnSubmission = mutation({
+  args: {
+    id: v.id("sales_invoices"),
+    businessId: v.id("businesses"),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireFinanceAdmin(ctx, args.businessId);
+
+    const invoice = await ctx.db.get(args.id);
+    if (!invoice || invoice.businessId !== args.businessId || invoice.deletedAt) {
+      throw new Error("Invoice not found");
+    }
+
+    if (invoice.lhdnStatus !== "valid") {
+      throw new Error("Can only cancel validated e-invoices");
+    }
+
+    if (!invoice.lhdnDocumentUuid) {
+      throw new Error("No LHDN document UUID found");
+    }
+
+    // Check 72-hour cancellation window
+    const CANCELLATION_WINDOW_MS = 72 * 60 * 60 * 1000;
+    const validatedAt = invoice.lhdnValidatedAt;
+    if (!validatedAt) {
+      throw new Error("No validation timestamp found");
+    }
+
+    const elapsed = Date.now() - validatedAt;
+    if (elapsed > CANCELLATION_WINDOW_MS) {
+      throw new Error("CANCELLATION_WINDOW_EXPIRED");
+    }
+
+    if (!args.reason.trim()) {
+      throw new Error("Cancellation reason is required");
+    }
+
+    await ctx.db.patch(args.id, {
+      lhdnStatus: "cancelled",
+      updatedAt: Date.now(),
+    });
+
+    return { documentUuid: invoice.lhdnDocumentUuid };
+  },
+});
+
+// ============================================
 // HELPER FUNCTIONS
 // ============================================
 

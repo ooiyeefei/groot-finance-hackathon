@@ -91,6 +91,8 @@ export interface BusinessProfile {
   state_code?: string | null
   postal_code?: string | null
   country_code?: string | null
+  // LHDN self-bill auto-trigger
+  auto_self_bill_exempt_vendors?: boolean
 }
 
 export interface UpdateMembershipRequest {
@@ -467,6 +469,8 @@ export async function updateBusinessProfile(
     // e-inv-ui-forms: Structured address
     address_line1?: string; address_line2?: string; address_line3?: string;
     city?: string; state_code?: string; postal_code?: string; country_code?: string;
+    // LHDN self-bill auto-trigger
+    auto_self_bill_exempt_vendors?: boolean;
   }
 ): Promise<BusinessProfile> {
   const {
@@ -474,6 +478,7 @@ export async function updateBusinessProfile(
     lhdn_tin, business_registration_number, msic_code, msic_description, sst_registration_number,
     lhdn_client_id, peppol_participant_id,
     address_line1, address_line2, address_line3, city, state_code, postal_code, country_code,
+    auto_self_bill_exempt_vendors,
   } = updates
 
   // Validate input
@@ -519,6 +524,7 @@ export async function updateBusinessProfile(
     state_code,
     postal_code,
     country_code,
+    auto_self_bill_exempt_vendors,
   })
 
   // Fetch updated profile
@@ -551,6 +557,8 @@ export async function updateBusinessProfile(
     state_code: profile?.state_code || state_code || null,
     postal_code: profile?.postal_code || postal_code || null,
     country_code: profile?.country_code || country_code || null,
+    // LHDN self-bill auto-trigger
+    auto_self_bill_exempt_vendors: profile?.auto_self_bill_exempt_vendors ?? auto_self_bill_exempt_vendors ?? false,
   }
 }
 

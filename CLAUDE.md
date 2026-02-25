@@ -176,6 +176,8 @@ formatBusinessDate('2025-10-31')  // "Oct 31, 2025" (no timezone shift)
 - Convex (existing, no new tables except `push_subscriptions` and `app_versions`), AWS SSM Parameter Store (APNs key) (001-capacitor-mobile-app)
 - TypeScript 5.9.3 + Next.js 15.5.7, Convex 1.31.3, Stripe SDK, Clerk 6.30.0, React 19.1.2 (019-country-pricing-lock)
 - Convex (document database with real-time sync), Stripe (billing source of truth) (019-country-pricing-lock)
+- TypeScript 5.9.3 / Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, AWS SDK (Lambda invocation), Clerk 6.30.0, Zod 3.23.8, qrcode (npm) (001-lhdn-einvoice-submission)
+- Convex (document database), AWS SSM Parameter Store (credentials) (001-lhdn-einvoice-submission)
 
 ## Recent Changes
 - 001-category-3-mcp: Added MCP Server with API key management

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
 import {
@@ -15,6 +15,9 @@ import {
   Loader2,
   Filter,
   Settings,
+  Upload,
+  X,
+  CheckSquare,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -31,7 +34,8 @@ import { LhdnStatusBadge } from './lhdn-status-badge'
 import { PeppolStatusBadge } from './peppol-status-badge'
 import type { SalesInvoice, SalesInvoiceStatus } from '../types'
 import { SALES_INVOICE_STATUSES } from '../types'
-import type { PeppolStatus } from '@/lib/constants/statuses'
+import type { PeppolStatus, LhdnStatus } from '@/lib/constants/statuses'
+import { useToast } from '@/components/ui/toast'
 
 // ---------------------------------------------------------------------------
 // Filter tab definitions
@@ -76,6 +80,75 @@ export default function SalesInvoiceList() {
   const [voidingIds, setVoidingIds] = useState<Set<string>>(new Set())
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+
+  // Batch LHDN submit state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [isBatchSubmitting, setIsBatchSubmitting] = useState(false)
+  const { addToast } = useToast()
+
+  // Invoices eligible for LHDN batch submit: sent/paid/overdue/partially_paid, not already submitted/valid/pending
+  const isLhdnEligible = useCallback((invoice: SalesInvoice) => {
+    const eligibleStatuses: SalesInvoiceStatus[] = ['sent', 'paid', 'overdue', 'partially_paid']
+    if (!eligibleStatuses.includes(invoice.status)) return false
+    const lhdnStatus = invoice.lhdnStatus as LhdnStatus | undefined
+    if (lhdnStatus === 'pending' || lhdnStatus === 'submitted' || lhdnStatus === 'valid' || lhdnStatus === 'cancelled') return false
+    return true // undefined or 'invalid' (resubmit)
+  }, [])
+
+  const eligibleInvoices = useMemo(
+    () => invoices.filter(isLhdnEligible),
+    [invoices, isLhdnEligible]
+  )
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds((prev) => {
+      if (prev.size === eligibleInvoices.length && eligibleInvoices.length > 0) {
+        return new Set()
+      }
+      return new Set(eligibleInvoices.map((inv) => inv._id))
+    })
+  }, [eligibleInvoices])
+
+  const handleBatchLhdnSubmit = useCallback(async () => {
+    if (selectedIds.size === 0 || !business) return
+    setIsBatchSubmitting(true)
+    try {
+      const response = await fetch('/api/v1/sales-invoices/batch/lhdn/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessId: business.businessId,
+          invoiceIds: Array.from(selectedIds),
+          useGeneralBuyerTin: true,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Batch submission failed')
+      }
+      addToast({
+        type: 'success',
+        title: `Batch submitted: ${data.data.accepted} accepted, ${data.data.rejected} rejected`,
+      })
+      setSelectedIds(new Set())
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: error instanceof Error ? error.message : 'Batch submission failed',
+      })
+    } finally {
+      setIsBatchSubmitting(false)
+    }
+  }, [selectedIds, business, addToast])
 
   // -----------------------------------------------------------------------
   // Handlers
@@ -295,6 +368,42 @@ export default function SalesInvoiceList() {
       </div>
 
       {/* ----------------------------------------------------------------- */}
+      {/* Batch LHDN submit toolbar                                        */}
+      {/* ----------------------------------------------------------------- */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center justify-between bg-primary/5 border border-primary/20 rounded-lg px-4 py-3">
+          <div className="flex items-center gap-3">
+            <CheckSquare className="h-4 w-4 text-primary" />
+            <span className="text-sm font-medium text-foreground">
+              {selectedIds.size} invoice{selectedIds.size !== 1 ? 's' : ''} selected
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedIds(new Set())}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5 mr-1" />
+              Clear
+            </Button>
+          </div>
+          <Button
+            size="sm"
+            disabled={isBatchSubmitting}
+            onClick={handleBatchLhdnSubmit}
+            className="bg-primary hover:bg-primary/90 text-primary-foreground"
+          >
+            {isBatchSubmitting ? (
+              <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+            ) : (
+              <Upload className="h-4 w-4 mr-1.5" />
+            )}
+            Submit to LHDN
+          </Button>
+        </div>
+      )}
+
+      {/* ----------------------------------------------------------------- */}
       {/* Invoice table                                                     */}
       {/* ----------------------------------------------------------------- */}
       {invoices.length === 0 ? (
@@ -306,6 +415,15 @@ export default function SalesInvoiceList() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
+                  <th className="px-3 py-3 w-10">
+                    <input
+                      type="checkbox"
+                      checked={eligibleInvoices.length > 0 && selectedIds.size === eligibleInvoices.length}
+                      onChange={toggleSelectAll}
+                      className="rounded border-border text-primary focus:ring-ring"
+                      title="Select all eligible invoices"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">
                     Invoice #
                   </th>
@@ -338,6 +456,18 @@ export default function SalesInvoiceList() {
                   <tr
                     className="hover:bg-muted/30 transition-colors"
                   >
+                    <td className="px-3 py-3">
+                      {isLhdnEligible(invoice) ? (
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(invoice._id)}
+                          onChange={() => toggleSelect(invoice._id)}
+                          className="rounded border-border text-primary focus:ring-ring"
+                        />
+                      ) : (
+                        <div className="w-4" />
+                      )}
+                    </td>
                     <td className="px-4 py-3 font-medium text-foreground">
                       {invoice.invoiceNumber}
                     </td>
@@ -467,7 +597,7 @@ export default function SalesInvoiceList() {
                   {/* Inline delete confirmation */}
                   {confirmDeleteId === invoice._id && (
                     <tr>
-                      <td colSpan={8} className="px-4 py-3 bg-destructive/5 border-b border-destructive/20">
+                      <td colSpan={9} className="px-4 py-3 bg-destructive/5 border-b border-destructive/20">
                         <div className="flex items-center justify-between">
                           <p className="text-sm text-foreground">
                             Delete <span className="font-medium">{invoice.invoiceNumber}</span>? This draft will be permanently removed.

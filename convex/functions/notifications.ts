@@ -29,7 +29,8 @@ const notificationTypeValidator = v.union(
   v.literal("anomaly"),
   v.literal("compliance"),
   v.literal("insight"),
-  v.literal("invoice_processing")
+  v.literal("invoice_processing"),
+  v.literal("lhdn_submission")
 );
 
 const severityValidator = v.union(
@@ -47,6 +48,7 @@ const statusValidator = v.union(
 const resourceTypeValidator = v.union(
   v.literal("expense_claim"),
   v.literal("invoice"),
+  v.literal("sales_invoice"),
   v.literal("insight"),
   v.literal("dashboard")
 );
@@ -59,6 +61,7 @@ const DEFAULT_PREFERENCES = {
     compliance: true,
     insight: true,
     invoice_processing: true,
+    lhdn_submission: true,
   },
   email: {
     approval: true,
@@ -66,12 +69,13 @@ const DEFAULT_PREFERENCES = {
     compliance: false,
     insight: false,
     invoice_processing: false,
+    lhdn_submission: false,
   },
   digestFrequency: "daily" as const,
   digestTime: 8, // 8 AM UTC
 };
 
-type NotificationType = "approval" | "anomaly" | "compliance" | "insight" | "invoice_processing";
+type NotificationType = "approval" | "anomaly" | "compliance" | "insight" | "invoice_processing" | "lhdn_submission";
 
 // ============================================
 // QUERIES

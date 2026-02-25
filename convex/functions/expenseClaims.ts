@@ -13,6 +13,35 @@ import { query, mutation } from "../_generated/server";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 import { Id } from "../_generated/dataModel";
 
+// Helper: require finance admin role (owner/finance_admin/manager)
+async function requireFinanceAdminForClaims(
+  ctx: { db: import("../_generated/server").DatabaseReader; auth: { getUserIdentity: () => Promise<{ subject: string } | null> } },
+  businessId: Id<"businesses">
+) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new Error("Not authenticated");
+
+  const user = await resolveUserByClerkId(ctx.db, identity.subject);
+  if (!user) throw new Error("User not found");
+
+  const membership = await ctx.db
+    .query("business_memberships")
+    .withIndex("by_userId_businessId", (q) =>
+      q.eq("userId", user._id).eq("businessId", businessId)
+    )
+    .first();
+
+  if (!membership || membership.status !== "active") {
+    throw new Error("Not a member of this business");
+  }
+
+  if (!["owner", "finance_admin", "manager"].includes(membership.role)) {
+    throw new Error("Not authorized: finance admin required");
+  }
+
+  return { user, membership };
+}
+
 // Status values for expense claims
 const EXPENSE_CLAIM_STATUSES = [
   "draft",
@@ -2831,5 +2860,137 @@ export const resubmitRejectedClaim = mutation({
       newClaimId,
       originalClaimId: args.claimId,
     };
+  },
+});
+
+// ============================================
+// LHDN SELF-BILLED E-INVOICE
+// ============================================
+
+/**
+ * Initiate self-billed e-invoice submission for an approved expense claim.
+ * Self-billing: the business (buyer) issues the invoice on behalf of the vendor (seller).
+ */
+export const initiateSelfBill = mutation({
+  args: {
+    claimId: v.id("expense_claims"),
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    await requireFinanceAdminForClaims(ctx, args.businessId);
+
+    const claim = await ctx.db.get(args.claimId);
+    if (!claim || claim.businessId !== args.businessId) {
+      throw new Error("Expense claim not found");
+    }
+
+    if (claim.status !== "approved" && claim.status !== "reimbursed") {
+      throw new Error("Expense claim must be approved before self-billing");
+    }
+
+    // Allow resubmission only if previously invalid
+    if (claim.lhdnStatus && claim.lhdnStatus !== "invalid") {
+      throw new Error("Expense claim already has an LHDN submission in progress or completed");
+    }
+
+    // Validate business has LHDN config
+    const business = await ctx.db.get(args.businessId);
+    if (!business || !business.lhdnTin) {
+      throw new Error("Business does not have LHDN TIN configured");
+    }
+
+    await ctx.db.patch(args.claimId, {
+      lhdnStatus: "pending",
+      lhdnSubmittedAt: Date.now(),
+      lhdnValidationErrors: undefined,
+      selfBillRequired: true,
+      updatedAt: Date.now(),
+    });
+
+    return args.claimId;
+  },
+});
+
+/**
+ * Update LHDN status on an expense claim after polling returns a result.
+ */
+export const updateLhdnStatus = mutation({
+  args: {
+    claimId: v.id("expense_claims"),
+    lhdnStatus: v.string(),
+    lhdnDocumentUuid: v.optional(v.string()),
+    lhdnLongId: v.optional(v.string()),
+    lhdnValidatedAt: v.optional(v.number()),
+    lhdnValidationErrors: v.optional(v.array(v.object({
+      code: v.string(),
+      message: v.string(),
+      target: v.optional(v.string()),
+    }))),
+    lhdnDocumentHash: v.optional(v.string()),
+    lhdnSubmissionId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const patch: Record<string, unknown> = {
+      lhdnStatus: args.lhdnStatus,
+      updatedAt: Date.now(),
+    };
+
+    if (args.lhdnDocumentUuid !== undefined) patch.lhdnDocumentUuid = args.lhdnDocumentUuid;
+    if (args.lhdnLongId !== undefined) patch.lhdnLongId = args.lhdnLongId;
+    if (args.lhdnValidatedAt !== undefined) patch.lhdnValidatedAt = args.lhdnValidatedAt;
+    if (args.lhdnValidationErrors !== undefined) patch.lhdnValidationErrors = args.lhdnValidationErrors;
+    if (args.lhdnDocumentHash !== undefined) patch.lhdnDocumentHash = args.lhdnDocumentHash;
+    if (args.lhdnSubmissionId !== undefined) patch.lhdnSubmissionId = args.lhdnSubmissionId;
+
+    await ctx.db.patch(args.claimId, patch);
+  },
+});
+
+/**
+ * Cancel a validated self-billed e-invoice within 72-hour window.
+ */
+export const cancelLhdnSubmission = mutation({
+  args: {
+    claimId: v.id("expense_claims"),
+    businessId: v.id("businesses"),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireFinanceAdminForClaims(ctx, args.businessId);
+
+    const claim = await ctx.db.get(args.claimId);
+    if (!claim || claim.businessId !== args.businessId) {
+      throw new Error("Expense claim not found");
+    }
+
+    if (claim.lhdnStatus !== "valid") {
+      throw new Error("Can only cancel validated e-invoices");
+    }
+
+    if (!claim.lhdnDocumentUuid) {
+      throw new Error("No LHDN document UUID found");
+    }
+
+    const CANCELLATION_WINDOW_MS = 72 * 60 * 60 * 1000;
+    const validatedAt = claim.lhdnValidatedAt;
+    if (!validatedAt) {
+      throw new Error("No validation timestamp found");
+    }
+
+    const elapsed = Date.now() - validatedAt;
+    if (elapsed > CANCELLATION_WINDOW_MS) {
+      throw new Error("CANCELLATION_WINDOW_EXPIRED");
+    }
+
+    if (!args.reason.trim()) {
+      throw new Error("Cancellation reason is required");
+    }
+
+    await ctx.db.patch(args.claimId, {
+      lhdnStatus: "cancelled",
+      updatedAt: Date.now(),
+    });
+
+    return { documentUuid: claim.lhdnDocumentUuid };
   },
 });

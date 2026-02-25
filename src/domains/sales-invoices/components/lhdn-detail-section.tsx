@@ -1,12 +1,12 @@
 'use client'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ComingSoonBadge } from '@/components/ui/coming-soon-badge'
 import { LhdnStatusBadge } from './lhdn-status-badge'
 import { LhdnSubmitButton } from './lhdn-submit-button'
 import { LhdnValidationErrors } from './lhdn-validation-errors'
 import { LhdnSubmissionTimeline } from './lhdn-submission-timeline'
 import { LhdnQrCode } from './lhdn-qr-code'
+import { LhdnCancelButton } from './lhdn-cancel-button'
 import type { SalesInvoice } from '../types'
 
 interface LhdnDetailSectionProps {
@@ -24,7 +24,6 @@ export function LhdnDetailSection({ invoice }: LhdnDetailSectionProps) {
             <CardTitle className="text-sm font-medium text-muted-foreground">
               LHDN e-Invoice
             </CardTitle>
-            <ComingSoonBadge />
           </div>
           {hasLhdnData && <LhdnStatusBadge status={invoice.lhdnStatus} />}
         </div>
@@ -73,6 +72,9 @@ export function LhdnDetailSection({ invoice }: LhdnDetailSectionProps) {
         {invoice.lhdnLongId && (
           <LhdnQrCode lhdnLongId={invoice.lhdnLongId} />
         )}
+
+        {/* Cancel button (when valid, within 72h) */}
+        <LhdnCancelButton invoice={invoice} />
 
         {/* Submit/Resubmit button */}
         <LhdnSubmitButton invoice={invoice} />

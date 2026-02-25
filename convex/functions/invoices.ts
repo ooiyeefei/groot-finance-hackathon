@@ -13,6 +13,35 @@ import { query, mutation } from "../_generated/server";
 import { Id } from "../_generated/dataModel";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 
+// Helper: require finance admin role (owner/finance_admin/manager)
+async function requireFinanceAdminForInvoices(
+  ctx: { db: import("../_generated/server").DatabaseReader; auth: { getUserIdentity: () => Promise<{ subject: string } | null> } },
+  businessId: Id<"businesses">
+) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new Error("Not authenticated");
+
+  const user = await resolveUserByClerkId(ctx.db, identity.subject);
+  if (!user) throw new Error("User not found");
+
+  const membership = await ctx.db
+    .query("business_memberships")
+    .withIndex("by_userId_businessId", (q) =>
+      q.eq("userId", user._id).eq("businessId", businessId)
+    )
+    .first();
+
+  if (!membership || membership.status !== "active") {
+    throw new Error("Not a member of this business");
+  }
+
+  if (!["owner", "finance_admin", "manager"].includes(membership.role)) {
+    throw new Error("Not authorized: finance admin required");
+  }
+
+  return { user, membership };
+}
+
 // Processing status values for invoices
 const INVOICE_STATUSES = [
   "pending",
@@ -1780,5 +1809,137 @@ export const getCompletedForAI = query({
         };
       }),
     };
+  },
+});
+
+// ============================================
+// LHDN SELF-BILLED E-INVOICE
+// ============================================
+
+/**
+ * Initiate self-billed e-invoice submission for an AP invoice.
+ * Self-billing: the business (buyer) issues the invoice on behalf of the vendor (seller).
+ */
+export const initiateSelfBill = mutation({
+  args: {
+    invoiceId: v.id("invoices"),
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    await requireFinanceAdminForInvoices(ctx, args.businessId);
+
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice || invoice.businessId !== args.businessId) {
+      throw new Error("Invoice not found");
+    }
+
+    // AP invoice must be completed/processed before self-billing
+    if (invoice.status !== "completed" && invoice.status !== "paid") {
+      throw new Error("Invoice must be completed before self-billing");
+    }
+
+    // Allow resubmission only if previously invalid
+    if (invoice.lhdnStatus && invoice.lhdnStatus !== "invalid") {
+      throw new Error("Invoice already has an LHDN submission in progress or completed");
+    }
+
+    // Validate business has LHDN config
+    const business = await ctx.db.get(args.businessId);
+    if (!business || !business.lhdnTin) {
+      throw new Error("Business does not have LHDN TIN configured");
+    }
+
+    await ctx.db.patch(args.invoiceId, {
+      lhdnStatus: "pending",
+      lhdnSubmittedAt: Date.now(),
+      lhdnValidationErrors: undefined,
+      updatedAt: Date.now(),
+    });
+
+    return args.invoiceId;
+  },
+});
+
+/**
+ * Update LHDN status on an AP invoice after polling returns a result.
+ */
+export const updateLhdnStatus = mutation({
+  args: {
+    invoiceId: v.id("invoices"),
+    lhdnStatus: v.string(),
+    lhdnDocumentUuid: v.optional(v.string()),
+    lhdnLongId: v.optional(v.string()),
+    lhdnValidatedAt: v.optional(v.number()),
+    lhdnValidationErrors: v.optional(v.array(v.object({
+      code: v.string(),
+      message: v.string(),
+      target: v.optional(v.string()),
+    }))),
+    lhdnDocumentHash: v.optional(v.string()),
+    lhdnSubmissionId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const patch: Record<string, unknown> = {
+      lhdnStatus: args.lhdnStatus,
+      updatedAt: Date.now(),
+    };
+
+    if (args.lhdnDocumentUuid !== undefined) patch.lhdnDocumentUuid = args.lhdnDocumentUuid;
+    if (args.lhdnLongId !== undefined) patch.lhdnLongId = args.lhdnLongId;
+    if (args.lhdnValidatedAt !== undefined) patch.lhdnValidatedAt = args.lhdnValidatedAt;
+    if (args.lhdnValidationErrors !== undefined) patch.lhdnValidationErrors = args.lhdnValidationErrors;
+    if (args.lhdnDocumentHash !== undefined) patch.lhdnDocumentHash = args.lhdnDocumentHash;
+    if (args.lhdnSubmissionId !== undefined) patch.lhdnSubmissionId = args.lhdnSubmissionId;
+
+    await ctx.db.patch(args.invoiceId, patch);
+  },
+});
+
+/**
+ * Cancel a validated self-billed e-invoice within 72-hour window.
+ */
+export const cancelLhdnSubmission = mutation({
+  args: {
+    invoiceId: v.id("invoices"),
+    businessId: v.id("businesses"),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireFinanceAdminForInvoices(ctx, args.businessId);
+
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice || invoice.businessId !== args.businessId) {
+      throw new Error("Invoice not found");
+    }
+
+    if (invoice.lhdnStatus !== "valid") {
+      throw new Error("Can only cancel validated e-invoices");
+    }
+
+    if (!invoice.lhdnDocumentUuid) {
+      throw new Error("No LHDN document UUID found");
+    }
+
+    const CANCELLATION_WINDOW_MS = 72 * 60 * 60 * 1000;
+    const validatedAt = invoice.lhdnValidatedAt;
+    if (!validatedAt) {
+      throw new Error("No validation timestamp found");
+    }
+
+    const elapsed = Date.now() - validatedAt;
+    if (elapsed > CANCELLATION_WINDOW_MS) {
+      throw new Error("CANCELLATION_WINDOW_EXPIRED");
+    }
+
+    if (!args.reason.trim()) {
+      throw new Error("Cancellation reason is required");
+    }
+
+    await ctx.db.patch(args.invoiceId, {
+      lhdnStatus: "cancelled",
+      updatedAt: Date.now(),
+    });
+
+    return { documentUuid: invoice.lhdnDocumentUuid };
   },
 });
