@@ -18,29 +18,29 @@ export default function HeaderWithUser({ title, subtitle, actions }: HeaderWithU
   const { businessId } = useActiveBusiness()
 
   return (
-    <header className="bg-card border-b border-border px-6 py-4">
-      <div className="flex items-center justify-between gap-4">
+    <header className="bg-card border-b border-border px-4 sm:px-6 py-3 sm:py-4">
+      <div className="flex items-center justify-between gap-2 sm:gap-4">
         {/* Left: Title and subtitle */}
-        <div className="flex-1">
-          <h1 className="text-3xl font-bold text-foreground mb-2">{title}</h1>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-xl sm:text-3xl font-bold text-foreground truncate">{title}</h1>
           {subtitle && (
-            <p className="text-muted-foreground">{subtitle}</p>
+            <p className="text-muted-foreground text-sm sm:text-base truncate">{subtitle}</p>
           )}
         </div>
 
         {/* Center: Actions */}
         {actions && (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {actions}
           </div>
         )}
 
         {/* Right: Notifications, feedback, theme toggle, language switcher and user button */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
           <NotificationBell businessId={businessId} />
-          <FeedbackButton />
+          <span className="hidden sm:inline-flex"><FeedbackButton /></span>
           <ThemeToggle />
-          <LanguageSwitcher />
+          <span className="hidden sm:inline-flex"><LanguageSwitcher /></span>
           <UserButton
             afterSignOutUrl="/"
             appearance={{
