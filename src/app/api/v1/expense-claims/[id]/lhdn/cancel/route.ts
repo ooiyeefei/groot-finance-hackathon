@@ -1,5 +1,5 @@
 /**
- * PUT /api/v1/expense-claims/[claimId]/lhdn/cancel
+ * PUT /api/v1/expense-claims/[id]/lhdn/cancel
  *
  * Cancel a validated self-billed e-invoice within the 72-hour window.
  */
@@ -28,7 +28,7 @@ async function getAuthenticatedConvexClient() {
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ claimId: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { userId } = await auth()
@@ -39,7 +39,7 @@ export async function PUT(
       )
     }
 
-    const { claimId } = await params
+    const { id: claimId } = await params
     const convex = await getAuthenticatedConvexClient()
 
     // Parse request body

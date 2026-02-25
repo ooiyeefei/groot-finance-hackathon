@@ -1,5 +1,5 @@
 /**
- * POST /api/v1/expense-claims/[claimId]/lhdn/self-bill
+ * POST /api/v1/expense-claims/[id]/lhdn/self-bill
  *
  * Submit a self-billed e-invoice (type 11) for an approved expense claim.
  * In self-billing, the business (buyer) issues the invoice on behalf of the vendor (seller).
@@ -117,7 +117,7 @@ async function signDocumentViaLambda(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ claimId: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { userId } = await auth()
@@ -128,7 +128,7 @@ export async function POST(
       )
     }
 
-    const { claimId } = await params
+    const { id: claimId } = await params
     const convex = await getAuthenticatedConvexClient()
 
     // Parse request body
