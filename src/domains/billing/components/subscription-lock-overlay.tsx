@@ -3,16 +3,21 @@
 /**
  * SubscriptionLockOverlay
  *
- * Full-screen blur overlay shown when subscription is paused (trial expired
- * without payment method). Prompts user to choose a plan to continue.
+ * Blur overlay over the main content area when subscription is paused
+ * (trial expired without payment method). Prompts user to choose a plan.
+ *
+ * The sidebar remains accessible (z-[55] > overlay z-50) so users can:
+ * - Switch to another business that may still be active
+ * - Navigate to pricing/billing pages
  *
  * Triggered by: subscription.status === 'paused'
  */
 
 import { useSubscription } from '../hooks/use-subscription'
+import { useClerk } from '@clerk/nextjs'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Lock, Zap, Shield } from 'lucide-react'
+import { Lock, Zap, Shield, LogOut } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
@@ -20,6 +25,7 @@ import { usePathname } from 'next/navigation'
 const UNBLOCKED_PATHS = [
   '/pricing',
   '/settings/billing',
+  '/settings',
   '/api/',
   '/sign-in',
   '/sign-out',
@@ -28,6 +34,7 @@ const UNBLOCKED_PATHS = [
 
 export function SubscriptionLockOverlay() {
   const { data, isLoading } = useSubscription()
+  const { signOut } = useClerk()
   const pathname = usePathname()
 
   // Don't block while loading or if no data yet
@@ -36,13 +43,13 @@ export function SubscriptionLockOverlay() {
   // Only block when subscription is paused (trial expired without payment)
   if (data.subscription.status !== 'paused') return null
 
-  // Don't block pricing/billing pages — user needs those to upgrade
+  // Don't block pricing/billing/settings pages — user needs those to upgrade
   const isUnblockedPath = UNBLOCKED_PATHS.some(path => pathname?.includes(path))
   if (isUnblockedPath) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop with heavy blur */}
+      {/* Backdrop with heavy blur — sidebar sits above this (z-[55]) */}
       <div
         className="fixed inset-0"
         style={{
@@ -82,6 +89,14 @@ export function SubscriptionLockOverlay() {
               <Shield className="w-4 h-4" />
               <span>Your data is preserved. Pick up right where you left off.</span>
             </div>
+
+            <button
+              onClick={() => signOut({ redirectUrl: '/' })}
+              className="flex items-center gap-2 justify-center w-full text-sm text-muted-foreground hover:text-foreground transition-colors pt-2"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Sign Out</span>
+            </button>
           </div>
         </CardContent>
       </Card>

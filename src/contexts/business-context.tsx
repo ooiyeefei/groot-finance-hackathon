@@ -22,8 +22,9 @@ import {
   getBusinessContext,
   switchBusiness
 } from '@/lib/api-client'
-import { prefetchUserRole, clearAllAppCaches } from '@/lib/cache-utils'
+import { prefetchUserRole, clearAllAppCaches, clearBusinessScopedCaches } from '@/lib/cache-utils'
 import { clearCurrencyCache } from '@/domains/users/hooks/use-home-currency'
+import { clearAllActions as clearOfflineQueue } from '@/lib/pwa/offline-queue'
 import { createLogger } from '@/lib/utils/logger'
 
 const log = createLogger('BusinessContext')
@@ -299,16 +300,22 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
       const response = await switchBusiness(request)
 
       if (response.success) {
-        // Update active context immediately
-        setActiveContext(response.data.context)
+        // Clear business-scoped caches before reload to prevent stale data
+        // from the old business leaking into the new business context.
+        // Preserves UI preferences (sidebar expansion). Fixes: profile stuck
+        // loading, subscription trial data cross-contamination.
+        clearBusinessScopedCaches()
+        clearCurrencyCache()
 
-        // Refresh memberships to update last_accessed_at
-        await refreshMemberships()
+        // Clear IndexedDB offline queue to prevent pending actions from
+        // the old business being synced under the new business context.
+        await clearOfflineQueue().catch(() => {})
 
-        // NOTE: Do NOT call refreshProfile() here!
-        // The useEffect hook will automatically handle profile refresh
-        // when activeContext changes and detects a mismatch with cached profile.
-        // Calling it here causes duplicate/racing API calls leading to 429 errors.
+        // Full page reload ensures every component re-initializes with fresh data
+        // for the new business. Surgical in-place update is error-prone because
+        // every page's data (invoices, expenses, subscription, role, profile) must
+        // change simultaneously, and multiple independent caches must be invalidated.
+        window.location.reload()
 
         return true
       } else {
@@ -326,7 +333,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
     } finally {
       setIsSwitching(false)
     }
-  }, [refreshMemberships])
+  }, [])
 
   const updateProfile = useCallback((updatedProfile: BusinessProfile) => {
     setProfile(updatedProfile)

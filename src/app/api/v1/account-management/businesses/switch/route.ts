@@ -9,6 +9,7 @@ import { auth } from '@clerk/nextjs/server'
 import { switchActiveBusiness } from '@/domains/account-management/lib/account-management.service'
 import { rateLimit, RATE_LIMIT_CONFIGS } from '@/domains/security/lib/rate-limit'
 import { createErrorResponse, createValidationErrorResponse, ERROR_CODES, withErrorSanitization } from '@/domains/security/lib/error-sanitizer'
+import { apiCache } from '@/lib/cache/api-cache'
 import { z } from 'zod'
 
 const SwitchBusinessSchema = z.object({
@@ -63,6 +64,11 @@ export const POST = withErrorSanitization(async (request: NextRequest) => {
       'Cannot switch to this business'
     )
   }
+
+  // Invalidate ALL server-side API caches for this user so the page reload
+  // fetches fresh data for the new business (not stale cached profile,
+  // expense claims, team members, analytics, etc.)
+  apiCache.invalidate(userId)
 
   return NextResponse.json({
     success: true,

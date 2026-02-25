@@ -111,6 +111,33 @@ export function clearAllAppCaches(): void {
 }
 
 /**
+ * Keys that hold UI preferences (not business-specific data).
+ * These are preserved during business switching to avoid UX disruption.
+ */
+const UI_PREFERENCE_KEYS: readonly string[] = [
+  cacheKeys.SIDEBAR_EXPANDED,
+]
+
+/**
+ * Clear business-specific caches — call on business switch.
+ * Preserves UI preferences (e.g. sidebar expansion state) while clearing
+ * all business-scoped data to prevent cross-tenant data leakage.
+ */
+export function clearBusinessScopedCaches(): void {
+  if (typeof window !== 'undefined') {
+    try {
+      Object.values(cacheKeys).forEach(key => {
+        if (!UI_PREFERENCE_KEYS.includes(key)) {
+          localStorage.removeItem(key)
+        }
+      })
+    } catch (error) {
+      console.warn('Failed to clear business-scoped caches:', error)
+    }
+  }
+}
+
+/**
  * Get cached user role with TTL validation
  */
 export function getCachedUserRole() {

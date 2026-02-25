@@ -229,7 +229,7 @@ export default function Sidebar() {
         ${isExpanded ? 'w-sidebar' : 'w-sidebar-collapsed'}
         bg-card border-r border-border flex flex-col
         transition-all duration-300 ease-in-out
-        ${isMobile ? 'fixed left-0 top-0 h-full z-50' : 'relative'}
+        ${isMobile ? 'fixed left-0 top-0 h-full z-[55]' : 'relative z-[55]'}
         ${shouldHideSidebar ? '-translate-x-full' : 'translate-x-0'}
       `}>
         {/* Material Design Workspace Header */}
