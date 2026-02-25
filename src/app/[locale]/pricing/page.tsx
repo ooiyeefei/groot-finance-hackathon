@@ -18,10 +18,16 @@ export default async function PricingPage() {
   // Check if user is authenticated (optional for pricing page)
   const { userId } = await auth()
 
-  // Detect default currency from geo-IP
+  // 019: For unauthenticated visitors, detect currency from geo-IP
+  // For authenticated users, the catalog API route handles currency resolution
+  // (uses subscribedCurrency if locked, or homeCurrency as fallback)
   const headersList = await headers()
   const country = headersList.get('x-vercel-ip-country')
-  const defaultCurrency = (country && COUNTRY_TO_CURRENCY[country]) || undefined
+  const geoDefaultCurrency = (country && COUNTRY_TO_CURRENCY[country]) || undefined
+
+  // Only pass geo-IP currency for unauthenticated visitors
+  // Authenticated users get their locked currency from the catalog API
+  const defaultCurrency = userId ? undefined : geoDefaultCurrency
 
   return (
     <ClientProviders>
@@ -69,7 +75,7 @@ export default async function PricingPage() {
               {/* FAQ or Additional Info */}
               <div className="mt-12 text-center">
                 <p className="text-sm text-muted-foreground">
-                  Prices shown in your selected currency. Billed monthly.
+                  Prices shown in your local currency. Billed monthly.
                 </p>
                 <p className="text-sm text-muted-foreground mt-1">
                   Need a custom plan?{' '}

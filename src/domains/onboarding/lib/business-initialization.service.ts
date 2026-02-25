@@ -19,6 +19,8 @@ import {
   getSuggestedCategories,
   type BusinessType
 } from './business-type-defaults';
+import { normalizeRegNumber } from '@/lib/validation/registration-number';
+import { COUNTRY_TO_CURRENCY } from '@/lib/stripe/catalog';
 
 // Type definitions
 type BusinessCategory = CategoryMetadata;
@@ -36,6 +38,7 @@ export interface InitializeBusinessInput {
   forceCreateNew?: boolean;  // When true, always create new business (for modal)
   customCOGSNames?: string[];  // User-provided COGS category names from onboarding wizard
   customExpenseNames?: string[];  // User-provided expense category names from onboarding wizard
+  businessRegNumber?: string;  // 019: UEN (SG) or SSM/ROC (MY) for pricing lockdown
 }
 
 export interface InitializeBusinessResult {
@@ -238,6 +241,9 @@ export async function initializeBusiness(
               'USD', 'SGD', 'MYR', 'THB', 'IDR', 'VND', 'PHP', 'CNY', 'EUR'
             ],
             forceCreateNew: input.forceCreateNew,
+            // 019: Pass registration number and compute locked currency
+            ...(input.businessRegNumber ? { businessRegNumber: normalizeRegNumber(input.businessRegNumber) } : {}),
+            ...(input.country ? { subscribedCurrency: COUNTRY_TO_CURRENCY[input.country.toUpperCase()] || 'MYR' } : {}),
           }
         );
 

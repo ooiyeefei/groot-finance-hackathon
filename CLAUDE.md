@@ -174,6 +174,8 @@ formatBusinessDate('2025-10-31')  // "Oct 31, 2025" (no timezone shift)
 - Convex (document database with real-time sync), Convex File Storage (export file storage) (001-accounting-records-export)
 - TypeScript 5.9.3 (web app), Swift (Capacitor iOS shell — auto-generated) + @capacitor/core, @capacitor/ios, @capacitor/camera, @capacitor/push-notifications, @capacitor/app, @capacitor/browser, @capacitor/status-bar, @capacitor/splash-screen, @sentry/capacitor@^2.4.1 (001-capacitor-mobile-app)
 - Convex (existing, no new tables except `push_subscriptions` and `app_versions`), AWS SSM Parameter Store (APNs key) (001-capacitor-mobile-app)
+- TypeScript 5.9.3 + Next.js 15.5.7, Convex 1.31.3, Stripe SDK, Clerk 6.30.0, React 19.1.2 (019-country-pricing-lock)
+- Convex (document database with real-time sync), Stripe (billing source of truth) (019-country-pricing-lock)
 
 ## Recent Changes
 - 001-category-3-mcp: Added MCP Server with API key management

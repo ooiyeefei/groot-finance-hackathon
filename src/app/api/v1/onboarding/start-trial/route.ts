@@ -109,10 +109,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 019: Use subscribedCurrency to set the subscription currency
+    // This ensures the trial uses the correct currency-matched price
+    const subscribedCurrency = business.subscribedCurrency as string | undefined
+
     // Create Stripe subscription with 14-day trial (no payment required)
     const subscription = await stripe.subscriptions.create({
       customer: customerId,
       items: [{ price: proPlan.priceId }],
+      ...(subscribedCurrency ? { currency: subscribedCurrency.toLowerCase() } : {}),
       trial_period_days: 14,
       payment_settings: {
         save_default_payment_method: 'on_subscription',

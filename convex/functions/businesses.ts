@@ -459,6 +459,7 @@ export const updateStripeSubscription = mutation({
     stripeSubscriptionId: v.optional(v.string()),
     subscriptionStatus: v.optional(v.string()),
     subscriptionPlan: v.optional(v.string()),
+    subscribedCurrency: v.optional(v.string()),  // 019: Lock billing currency on first checkout
   },
   handler: async (ctx, args) => {
     const { businessId, ...updates } = args;
@@ -1817,12 +1818,25 @@ export const initializeBusinessFromOnboarding = mutation({
     customExpenseCategories: v.optional(v.any()),
     allowedCurrencies: v.optional(v.array(v.string())),
     forceCreateNew: v.optional(v.boolean()), // When true, always create new business (for modal)
+    businessRegNumber: v.optional(v.string()),    // 019: UEN (SG) or SSM/ROC (MY) for pricing lockdown
+    subscribedCurrency: v.optional(v.string()),   // 019: Locked billing currency: 'SGD' | 'MYR'
   },
   handler: async (ctx, args) => {
     console.log(`[initializeBusinessFromOnboarding] ========================================`);
     console.log(`[initializeBusinessFromOnboarding] Starting for Clerk ID: ${args.clerkUserId}`);
     console.log(`[initializeBusinessFromOnboarding] forceCreateNew: ${args.forceCreateNew} (type: ${typeof args.forceCreateNew})`);
     console.log(`[initializeBusinessFromOnboarding] Business name: ${args.name}`);
+
+    // 019: Check businessRegNumber uniqueness before proceeding
+    if (args.businessRegNumber) {
+      const existing = await ctx.db
+        .query("businesses")
+        .withIndex("by_businessRegNumber", (q) => q.eq("businessRegNumber", args.businessRegNumber!))
+        .first();
+      if (existing) {
+        throw new Error("DUPLICATE_REG_NUMBER: This registration number is already associated with another business account");
+      }
+    }
 
     // Step 1: Resolve Clerk user ID to Convex user
     let user = await ctx.db
@@ -1885,6 +1899,9 @@ export const initializeBusinessFromOnboarding = mutation({
           allowedCurrencies: args.allowedCurrencies || [
             "USD", "SGD", "MYR", "THB", "IDR", "VND", "PHP", "CNY", "EUR"
           ],
+          // 019: Store registration number and locked currency
+          ...(args.businessRegNumber ? { businessRegNumber: args.businessRegNumber } : {}),
+          ...(args.subscribedCurrency ? { subscribedCurrency: args.subscribedCurrency } : {}),
           onboardingCompletedAt: Date.now(),
           updatedAt: Date.now(),
         });
@@ -1915,6 +1932,9 @@ export const initializeBusinessFromOnboarding = mutation({
       allowedCurrencies: args.allowedCurrencies || [
         "USD", "SGD", "MYR", "THB", "IDR", "VND", "PHP", "CNY", "EUR"
       ],
+      // 019: Store registration number and locked currency
+      ...(args.businessRegNumber ? { businessRegNumber: args.businessRegNumber } : {}),
+      ...(args.subscribedCurrency ? { subscribedCurrency: args.subscribedCurrency } : {}),
       onboardingCompletedAt: Date.now(),
       updatedAt: Date.now(),
     });
@@ -2416,5 +2436,164 @@ export const manuallyDeactivateSubscription = mutation({
       businessId: business._id,
       businessName: business.name,
     };
+  },
+});
+
+// ============================================
+// 019: COUNTRY-BASED PRICING LOCKDOWN
+// ============================================
+
+/**
+ * Migration: Backfill subscribedCurrency for existing businesses.
+ * Run from Convex dashboard. Use dryRun=true first to preview.
+ *
+ * Priority order:
+ * 1. Active subscribers with homeCurrency → use homeCurrency
+ * 2. Business with countryCode → map via COUNTRY_TO_CURRENCY
+ * 3. Neither → skip (handled by lazy prompt)
+ */
+const COUNTRY_TO_CURRENCY_MAP: Record<string, string> = {
+  SG: "SGD",
+  MY: "MYR",
+};
+
+export const migrateSubscribedCurrency = internalMutation({
+  args: {
+    dryRun: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const isDryRun = args.dryRun;
+    console.log(`[019 Migration] Starting subscribedCurrency migration (dryRun: ${isDryRun})`);
+
+    const businesses = await ctx.db.query("businesses").collect();
+
+    let updated = 0;
+    let skipped = 0;
+    let total = 0;
+
+    for (const business of businesses) {
+      // Skip businesses that already have subscribedCurrency set
+      if (business.subscribedCurrency) {
+        continue;
+      }
+
+      total++;
+
+      // Priority 1: Active/trialing/past_due subscribers with homeCurrency
+      const hasSubscription = business.subscriptionStatus &&
+        ["active", "trialing", "past_due"].includes(business.subscriptionStatus);
+      const homeCurrency = business.homeCurrency as string | undefined;
+
+      if (hasSubscription && homeCurrency) {
+        if (!isDryRun) {
+          await ctx.db.patch(business._id, {
+            subscribedCurrency: homeCurrency.toUpperCase(),
+            updatedAt: Date.now(),
+          });
+        }
+        updated++;
+        console.log(`[019 Migration] ${isDryRun ? "[DRY RUN]" : "Updated"} ${business.name} (${business._id}): subscribedCurrency=${homeCurrency.toUpperCase()} (from homeCurrency)`);
+        continue;
+      }
+
+      // Priority 2: Business with countryCode
+      const countryCode = business.countryCode as string | undefined;
+      if (countryCode && COUNTRY_TO_CURRENCY_MAP[countryCode]) {
+        const currency = COUNTRY_TO_CURRENCY_MAP[countryCode];
+        if (!isDryRun) {
+          await ctx.db.patch(business._id, {
+            subscribedCurrency: currency,
+            updatedAt: Date.now(),
+          });
+        }
+        updated++;
+        console.log(`[019 Migration] ${isDryRun ? "[DRY RUN]" : "Updated"} ${business.name} (${business._id}): subscribedCurrency=${currency} (from countryCode=${countryCode})`);
+        continue;
+      }
+
+      // Priority 3: Skip — no data to determine currency
+      skipped++;
+      console.log(`[019 Migration] Skipped ${business.name} (${business._id}): no homeCurrency or countryCode`);
+    }
+
+    console.log(`[019 Migration] Complete. Updated: ${updated}, Skipped: ${skipped}, Total without subscribedCurrency: ${total}`);
+    return { updated, skipped, total };
+  },
+});
+
+/**
+ * Set business region (country + registration number + currency) for existing businesses.
+ * Used by the lazy prompt flow when a business doesn't have subscribedCurrency set.
+ * Only business owners can call this. Currency lock is permanent.
+ */
+export const setBusinessRegion = mutation({
+  args: {
+    businessId: v.id("businesses"),
+    countryCode: v.string(),
+    businessRegNumber: v.string(),
+    subscribedCurrency: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Verify business exists
+    const business = await ctx.db.get(args.businessId);
+    if (!business) {
+      throw new Error("Business not found");
+    }
+
+    // Check membership — only owners can set region
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership || membership.role !== "owner") {
+      throw new Error("Only business owners can set country and currency");
+    }
+
+    // Check if already locked
+    if (business.subscribedCurrency) {
+      throw new Error("Country and currency are already locked for this business");
+    }
+
+    // Check registration number uniqueness
+    if (args.businessRegNumber) {
+      const existing = await ctx.db
+        .query("businesses")
+        .withIndex("by_businessRegNumber", (q) =>
+          q.eq("businessRegNumber", args.businessRegNumber)
+        )
+        .first();
+
+      if (existing && existing._id !== args.businessId) {
+        throw new Error("Registration number already in use");
+      }
+    }
+
+    // Update business with region data
+    await ctx.db.patch(args.businessId, {
+      countryCode: args.countryCode,
+      businessRegNumber: args.businessRegNumber,
+      subscribedCurrency: args.subscribedCurrency,
+      updatedAt: Date.now(),
+    });
+
+    console.log(
+      `[setBusinessRegion] Set region for ${business.name} (${business._id}): ` +
+      `country=${args.countryCode}, currency=${args.subscribedCurrency}, regNumber=${args.businessRegNumber}`
+    );
+
+    return { success: true };
   },
 });

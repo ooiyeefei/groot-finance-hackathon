@@ -28,29 +28,37 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const queryCurrency = searchParams.get('currency')?.toUpperCase()
 
-    // Resolve currency
-    let currency = queryCurrency || null
+    // 019: New currency resolution chain with locked currency support
+    let currency: string | null = null
+    let currencyLocked = false
 
-    // Try authenticated user's business homeCurrency
-    if (!currency) {
-      try {
-        const { userId } = await auth()
-        if (userId) {
-          const { client } = await getAuthenticatedConvex()
-          if (client) {
-            // @ts-ignore - Convex API types cause deep type error
-            const business = await client.query(api.functions.businesses.getCurrentBusiness)
-            if (business?.homeCurrency) {
-              currency = business.homeCurrency.toUpperCase()
-            }
+    // Priority 1: Authenticated user with subscribedCurrency (locked — overrides everything)
+    try {
+      const { userId } = await auth()
+      if (userId) {
+        const { client } = await getAuthenticatedConvex()
+        if (client) {
+          // @ts-ignore - Convex API types cause deep type error
+          const business = await client.query(api.functions.businesses.getCurrentBusiness)
+          if (business?.subscribedCurrency) {
+            // 019: Locked currency — ignore query param and geo-IP
+            currency = business.subscribedCurrency.toUpperCase()
+            currencyLocked = true
+          } else if (business?.homeCurrency) {
+            currency = business.homeCurrency.toUpperCase()
           }
         }
-      } catch {
-        // Auth not available (unauthenticated visitor) — continue to geo-IP
       }
+    } catch {
+      // Auth not available (unauthenticated visitor) — continue to geo-IP
     }
 
-    // Try geo-IP from Vercel header
+    // Priority 2: Query param (only if not locked)
+    if (!currency && queryCurrency) {
+      currency = queryCurrency
+    }
+
+    // Priority 3: Geo-IP from Vercel header
     if (!currency) {
       const country = request.headers.get('x-vercel-ip-country')
       if (country && COUNTRY_TO_CURRENCY[country]) {
@@ -65,12 +73,15 @@ export async function GET(request: NextRequest) {
 
     // Fetch catalog
     const catalog = await getCatalog()
-    const availableCurrencies = getAvailableCurrencies(catalog.plans)
+    const allAvailableCurrencies = getAvailableCurrencies(catalog.plans)
 
     // If requested currency isn't available, fall back to MYR
-    if (!availableCurrencies.includes(currency)) {
+    if (!allAvailableCurrencies.includes(currency)) {
       currency = 'MYR'
     }
+
+    // 019: Return single-item availableCurrencies when locked
+    const availableCurrencies = currencyLocked ? [currency] : allAvailableCurrencies
 
     // Build resolved plans array (excluding trial)
     const paidPlanKeys: PlanKey[] = ['starter', 'pro', 'enterprise']
@@ -98,6 +109,7 @@ export async function GET(request: NextRequest) {
         plans,
         currency,
         availableCurrencies,
+        currencyLocked,  // 019: New field
       },
     })
   } catch (error) {

@@ -181,6 +181,10 @@ export default defineSchema({
       bccOutgoingEmails: v.optional(v.boolean()),
     })),
 
+    // 019-country-pricing-lock: Country-based pricing lockdown
+    businessRegNumber: v.optional(v.string()),      // UEN (SG) or SSM/ROC (MY) for pricing lockdown
+    subscribedCurrency: v.optional(v.string()),     // Locked billing currency: 'SGD' | 'MYR'
+
     // 016-e-invoice-schema-change: LHDN compliance fields
     msicCode: v.optional(v.string()),
     msicDescription: v.optional(v.string()),
@@ -206,7 +210,8 @@ export default defineSchema({
   })
     .index("by_legacyId", ["legacyId"])
     .index("by_stripeCustomerId", ["stripeCustomerId"])
-    .index("by_slug", ["slug"]),
+    .index("by_slug", ["slug"])
+    .index("by_businessRegNumber", ["businessRegNumber"]),
 
   business_memberships: defineTable({
     // Relationships

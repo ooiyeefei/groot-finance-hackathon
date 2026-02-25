@@ -64,10 +64,10 @@ export function PricingTable({
   const [loadingPlan, setLoadingPlan] = useState<PlanKey | null>(null)
   const [standaloneLoading, setStandaloneLoading] = useState(false)
   const [expandedPlans, setExpandedPlans] = useState<Set<PlanKey>>(new Set())
-  const [selectedCurrency, setSelectedCurrency] = useState<string | undefined>(defaultCurrency)
 
-  // Fetch live catalog with currency
-  const catalog = useCatalog(selectedCurrency)
+  // 019: Currency is now server-determined (locked for authenticated businesses, geo-IP for visitors)
+  // No more client-side currency switching
+  const catalog = useCatalog(defaultCurrency)
 
   const toggleExpanded = useCallback((planName: PlanKey) => {
     setExpandedPlans(prev => {
@@ -147,25 +147,7 @@ export function PricingTable({
 
   return (
     <div className="space-y-4">
-      {/* Currency switcher */}
-      {catalog.availableCurrencies.length > 1 && (
-        <div className="flex justify-center">
-          <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-            <span>Currency:</span>
-            <select
-              value={catalog.currency}
-              onChange={(e) => setSelectedCurrency(e.target.value)}
-              className="bg-card border border-border rounded-md px-2 py-1 text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              {catalog.availableCurrencies.map((cur) => (
-                <option key={cur} value={cur}>
-                  {cur}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      )}
+      {/* 019: Currency is now server-determined. No dropdown shown. */}
 
       <div className={cn('grid gap-6', gridCols, className)}>
         {allPlans.map((plan) => {

@@ -22,12 +22,18 @@ import {
   calculateTrialDaysUsed,
   calculateTrialProgress,
 } from '@/domains/billing/hooks/use-subscription'
-import { CreditCard, Check, ExternalLink, Loader2, AlertCircle, RefreshCw, Sparkles, Star, Zap, ChevronDown, ChevronUp } from 'lucide-react'
+import { CreditCard, Check, ExternalLink, Loader2, AlertCircle, RefreshCw, Sparkles, Star, Zap, ChevronDown, ChevronUp, Globe } from 'lucide-react'
 import { ComingSoonBadge } from '@/components/ui/coming-soon-badge'
 import { localizeEInvoiceLabel } from '@/lib/utils/e-invoice-label'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import InvoiceList from '@/domains/billing/components/invoice-list'
+import { useQuery, useMutation } from 'convex/react'
+import { api } from '@/convex/_generated/api'
+import { isValidRegNumber, normalizeRegNumber, getRegNumberFormatHint } from '@/lib/validation/registration-number'
+import { COUNTRY_TO_CURRENCY } from '@/lib/stripe/catalog'
 
 /**
  * Confetti particle component for celebration effect
@@ -101,6 +107,117 @@ function CelebrationOverlay({ show, onComplete }: { show: boolean; onComplete: (
 }
 
 /**
+ * 019: Country declaration banner for businesses without subscribedCurrency
+ */
+function CountryDeclarationBannerStandalone({ businessId, onComplete }: {
+  businessId: string
+  onComplete: () => void
+}) {
+  const [country, setCountry] = useState<'SG' | 'MY'>('MY')
+  const [regNumber, setRegNumber] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+
+  // @ts-ignore - Convex API types cause deep type error
+  const setBusinessRegion = useMutation(api.functions.businesses.setBusinessRegion)
+
+  const isValid = regNumber.trim() && isValidRegNumber(regNumber.trim(), country)
+
+  const handleSubmit = async () => {
+    if (!isValid) return
+    setIsSubmitting(true)
+    setSubmitError(null)
+
+    try {
+      const normalized = normalizeRegNumber(regNumber)
+      const currency = COUNTRY_TO_CURRENCY[country] || 'MYR'
+      await setBusinessRegion({
+        businessId: businessId as never,
+        countryCode: country,
+        businessRegNumber: normalized,
+        subscribedCurrency: currency,
+      })
+      onComplete()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to set country'
+      setSubmitError(message)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <Card className="bg-blue-500/5 border-blue-500/20">
+      <CardHeader>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
+            <Globe className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+          </div>
+          <div>
+            <CardTitle className="text-foreground">Set Your Business Country</CardTitle>
+            <CardDescription>
+              Required to lock your billing currency. This cannot be changed later.
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label className="text-foreground font-medium">Country</Label>
+          <select
+            value={country}
+            onChange={(e) => {
+              setCountry(e.target.value as 'SG' | 'MY')
+              setRegNumber('')
+              setSubmitError(null)
+            }}
+            className="w-full h-10 rounded-md border border-border bg-input px-3 text-foreground"
+          >
+            <option value="MY">Malaysia</option>
+            <option value="SG">Singapore</option>
+          </select>
+        </div>
+        <div className="space-y-2">
+          <Label className="text-foreground font-medium">
+            Business Registration Number <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            type="text"
+            placeholder={country === 'SG' ? 'e.g. 200012345X' : 'e.g. 1234567-H'}
+            value={regNumber}
+            onChange={(e) => {
+              setRegNumber(e.target.value)
+              setSubmitError(null)
+            }}
+          />
+          <p className="text-xs text-muted-foreground">{getRegNumberFormatHint(country)}</p>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Your billing currency will be locked to <strong>{COUNTRY_TO_CURRENCY[country] || 'MYR'}</strong>
+        </p>
+        {submitError && (
+          <p className="text-sm text-destructive">{submitError}</p>
+        )}
+        <Button
+          onClick={handleSubmit}
+          disabled={!isValid || isSubmitting}
+          className="bg-primary hover:bg-primary/90 text-primary-foreground"
+        >
+          {isSubmitting ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Setting up...
+            </>
+          ) : (
+            'Confirm Country & Lock Currency'
+          )}
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
+/**
  * Inner component that uses useSearchParams (must be wrapped in Suspense)
  */
 function BillingContent() {
@@ -109,6 +226,11 @@ function BillingContent() {
   const [showCelebration, setShowCelebration] = useState(false)
   const [hasShownCelebration, setHasShownCelebration] = useState(false)
   const [showAllFeatures, setShowAllFeatures] = useState(false)
+
+  // 019: Check if business needs country declaration
+  // @ts-ignore - Convex API types cause deep type error
+  const currentBusiness = useQuery(api.functions.businesses.getCurrentBusiness)
+  const needsCountryDeclaration = currentBusiness && !currentBusiness.subscribedCurrency
 
   // Check for success/cancel from Stripe Checkout
   const success = searchParams.get('success')
@@ -234,6 +356,14 @@ function BillingContent() {
                     </p>
                   </CardContent>
                 </Card>
+              )}
+
+              {/* 019: Country declaration banner for businesses without subscribedCurrency */}
+              {needsCountryDeclaration && currentBusiness._id && (
+                <CountryDeclarationBannerStandalone
+                  businessId={currentBusiness._id}
+                  onComplete={() => refetch()}
+                />
               )}
 
               {/* Loading State */}

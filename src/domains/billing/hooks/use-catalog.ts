@@ -28,6 +28,7 @@ export interface UseCatalogReturn {
   plans: CatalogPlan[]
   currency: string
   availableCurrencies: string[]
+  currencyLocked: boolean  // 019: True if business has subscribedCurrency set
   isLoading: boolean
   error: string | null
 }
@@ -57,6 +58,7 @@ export function useCatalog(currency?: string): UseCatalogReturn {
   const [plans, setPlans] = useState<CatalogPlan[]>(() => buildFallbackPlans(currency || 'MYR'))
   const [resolvedCurrency, setResolvedCurrency] = useState(currency || 'MYR')
   const [availableCurrencies, setAvailableCurrencies] = useState<string[]>(['MYR'])
+  const [currencyLocked, setCurrencyLocked] = useState(false)  // 019
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -76,6 +78,7 @@ export function useCatalog(currency?: string): UseCatalogReturn {
       setPlans(result.data.plans)
       setResolvedCurrency(result.data.currency)
       setAvailableCurrencies(result.data.availableCurrencies)
+      setCurrencyLocked(result.data.currencyLocked ?? false)  // 019
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       setError(message)
@@ -94,6 +97,7 @@ export function useCatalog(currency?: string): UseCatalogReturn {
     plans,
     currency: resolvedCurrency,
     availableCurrencies,
+    currencyLocked,  // 019
     isLoading,
     error,
   }

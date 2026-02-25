@@ -79,6 +79,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 019: Currency mismatch validation — reject if business is locked to a different currency
+    const subscribedCurrency = business.subscribedCurrency as string | undefined
+    if (subscribedCurrency) {
+      // Determine effective checkout currency from request or plan default
+      const effectiveCurrency = currency?.toUpperCase() || plan.currency
+      if (effectiveCurrency !== subscribedCurrency) {
+        console.warn(
+          `[Billing Checkout] Currency mismatch: business ${business._id} locked to ${subscribedCurrency}, attempted ${effectiveCurrency}`
+        )
+        return NextResponse.json(
+          {
+            success: false,
+            error: `This account is configured for ${subscribedCurrency} billing. Cannot checkout with ${effectiveCurrency} pricing.`,
+          },
+          { status: 403 }
+        )
+      }
+    }
+
     // Check if already has ACTIVE paid subscription
     // Allow checkout for: no subscription, paused trials, canceled subscriptions
     const hasActiveSubscription =
@@ -192,6 +211,23 @@ export async function POST(request: NextRequest) {
     })
 
     console.log(`[Billing Checkout] Created session: ${session.id} for plan: ${planName}`)
+
+    // 019: First-checkout currency lock — permanently set subscribedCurrency if not already locked
+    if (!subscribedCurrency) {
+      const checkoutCurrency = currency?.toUpperCase() || plan.currency
+      try {
+        // @ts-ignore - Convex API types cause deep type error
+        const updateStripeFn = api.functions.businesses.updateStripeSubscription
+        await client.mutation(updateStripeFn, {
+          businessId: business._id,
+          subscribedCurrency: checkoutCurrency,
+        })
+        console.log(`[Billing Checkout] Locked currency to ${checkoutCurrency} for business ${business._id}`)
+      } catch (lockError) {
+        // Non-fatal: currency lock failure shouldn't block checkout
+        console.warn(`[Billing Checkout] Failed to lock currency:`, lockError)
+      }
+    }
 
     return NextResponse.json({
       success: true,

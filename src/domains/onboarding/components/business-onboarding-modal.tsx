@@ -55,6 +55,7 @@ import {
 } from '@/domains/onboarding/lib/country-currency-data'
 import type { BusinessType } from '@/domains/onboarding/types'
 import { cn } from '@/lib/utils'
+import { isValidRegNumber, getRegNumberFormatHint, normalizeRegNumber } from '@/lib/validation/registration-number'
 
 // Get comprehensive country and currency lists from library
 const COUNTRIES = getAllCountries()
@@ -200,6 +201,8 @@ export default function BusinessOnboardingModal({
           customExpenseNames: wizardData.customExpenseNames || [],
           selectedPlan: selectedPlan,
           forceCreateNew: mode !== 'page',  // modal: always new, page: may complete placeholder
+          // 019: Pass registration number for country-based pricing lockdown
+          ...(wizardData.businessRegNumber?.trim() ? { businessRegNumber: wizardData.businessRegNumber.trim() } : {}),
         }),
       })
 
@@ -434,6 +437,38 @@ export default function BusinessOnboardingModal({
                   </Select>
                 </div>
 
+                {/* 019: Business Registration Number - shown for SG and MY */}
+                {(wizardData.countryCode === 'SG' || wizardData.countryCode === 'MY') && (
+                  <div className="space-y-2">
+                    <Label htmlFor="businessRegNumber" className="text-base font-medium text-foreground">
+                      Business Registration Number <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="businessRegNumber"
+                      type="text"
+                      placeholder={wizardData.countryCode === 'SG' ? 'e.g. 200012345X' : 'e.g. 1234567-H'}
+                      value={wizardData.businessRegNumber || ''}
+                      onChange={(e) => updateWizardData({ businessRegNumber: e.target.value })}
+                      className={cn(
+                        "bg-input border-border text-foreground h-10",
+                        wizardData.businessRegNumber?.trim() &&
+                        !isValidRegNumber(wizardData.businessRegNumber, wizardData.countryCode as 'SG' | 'MY') &&
+                        "border-destructive focus-visible:ring-destructive"
+                      )}
+                      required
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      {getRegNumberFormatHint(wizardData.countryCode as 'SG' | 'MY')}
+                    </p>
+                    {wizardData.businessRegNumber?.trim() &&
+                      !isValidRegNumber(wizardData.businessRegNumber, wizardData.countryCode as 'SG' | 'MY') && (
+                      <p className="text-sm text-destructive">
+                        Invalid format. {getRegNumberFormatHint(wizardData.countryCode as 'SG' | 'MY')}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* Spacer to push navigation to bottom */}
                 <div className="flex-1" />
 
@@ -588,6 +623,14 @@ export default function BusinessOnboardingModal({
                         <span className="text-muted-foreground">Currency:</span>
                         <p className="font-medium text-foreground">{homeCurrency}</p>
                       </div>
+                      {wizardData.businessRegNumber && (
+                        <div>
+                          <span className="text-muted-foreground">Registration No:</span>
+                          <p className="font-medium text-foreground">
+                            {normalizeRegNumber(wizardData.businessRegNumber)}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
 

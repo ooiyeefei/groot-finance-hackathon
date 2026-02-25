@@ -28,6 +28,7 @@ export interface OnboardingWizardData {
   readonly businessType: BusinessType
   readonly customTypeDescription?: string  // Required when businessType is 'other'
   readonly countryCode: string
+  readonly businessRegNumber?: string      // 019: UEN (SG) or SSM/ROC (MY) for pricing lockdown
 
   // Step 2-3: Custom Category Names (optional)
   readonly customCOGSNames?: readonly string[]     // Max 20 items

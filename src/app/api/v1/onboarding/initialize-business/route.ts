@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { initializeBusiness } from '@/domains/onboarding/lib/business-initialization.service'
+import { isValidRegNumber, normalizeRegNumber, getRegNumberFormatHint } from '@/lib/validation/registration-number'
 
 interface InitializeBusinessRequest {
   name: string
@@ -21,6 +22,7 @@ interface InitializeBusinessRequest {
   customExpenseNames: string[]
   selectedPlan: 'trial' | 'starter' | 'pro' | 'enterprise'
   forceCreateNew?: boolean  // When true, always create new business (for modal)
+  businessRegNumber?: string  // 019: UEN (SG) or SSM/ROC (MY) for pricing lockdown
 }
 
 export async function POST(request: NextRequest) {
@@ -107,6 +109,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 019: Validate registration number for SG and MY
+    const countryUpper = body.countryCode.trim().toUpperCase()
+    if ((countryUpper === 'SG' || countryUpper === 'MY') && body.businessRegNumber) {
+      const normalized = normalizeRegNumber(body.businessRegNumber)
+      if (!isValidRegNumber(normalized, countryUpper as 'SG' | 'MY')) {
+        console.error('[Onboarding API] ❌ Invalid registration number format')
+        return NextResponse.json(
+          { success: false, error: `Invalid registration number format for ${countryUpper}. ${getRegNumberFormatHint(countryUpper as 'SG' | 'MY')}` },
+          { status: 400 }
+        )
+      }
+    }
+
     console.log('[Onboarding API] ✅ Request validation passed')
     console.log('[Onboarding API] Business name:', body.name)
     console.log('[Onboarding API] Country:', body.countryCode)
@@ -129,10 +144,18 @@ export async function POST(request: NextRequest) {
       forceCreateNew: body.forceCreateNew,
       customCOGSNames: body.customCOGSNames,
       customExpenseNames: body.customExpenseNames,
+      businessRegNumber: body.businessRegNumber,  // 019
     })
 
     if (!result.success) {
       console.error('[Onboarding API] ❌ Business initialization failed:', result.error)
+      // 019: Handle duplicate registration number error
+      if (result.error?.includes('DUPLICATE_REG_NUMBER')) {
+        return NextResponse.json(
+          { success: false, error: 'This registration number is already associated with another business account' },
+          { status: 409 }
+        )
+      }
       return NextResponse.json(
         { success: false, error: result.error },
         { status: 400 }

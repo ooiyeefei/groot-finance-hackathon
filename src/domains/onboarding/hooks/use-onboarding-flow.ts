@@ -18,6 +18,7 @@ import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import type { OnboardingWizardData, BusinessType } from '@/domains/onboarding/types'
 import { getSuggestedCategories } from '@/domains/onboarding/lib/business-type-defaults'
+import { isValidRegNumber } from '@/lib/validation/registration-number'
 
 // Hook return interface
 export interface UseOnboardingFlowReturn {
@@ -58,6 +59,7 @@ const INITIAL_WIZARD_DATA: Partial<OnboardingWizardData> = {
   businessName: '',
   businessType: undefined,
   countryCode: '',
+  businessRegNumber: '',  // 019: Registration number for pricing lockdown
   customCOGSNames: [],
   customExpenseNames: [],
   selectedPlan: 'pro', // Default to Pro plan (14-day free trial)
@@ -111,8 +113,15 @@ export function useOnboardingFlow(): UseOnboardingFlowReturn {
    */
   const validateCurrentStep = useCallback((): boolean => {
     switch (currentStep) {
-      case 1: // Business Details (name, country, currency only - type is in Step 2)
-        return !!wizardData.businessName?.trim()
+      case 1: // Business Details (name, country, currency, registration number)
+        if (!wizardData.businessName?.trim()) return false
+        // 019: Require valid registration number for SG and MY
+        if (wizardData.countryCode === 'SG' || wizardData.countryCode === 'MY') {
+          const regNum = wizardData.businessRegNumber?.trim()
+          if (!regNum) return false
+          return isValidRegNumber(regNum, wizardData.countryCode as 'SG' | 'MY')
+        }
+        return true
 
       case 2: // Business Type
         // For "other" type, require a description
