@@ -107,7 +107,7 @@ export function AccountingEntriesPageSkeleton() {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Header skeleton */}
         <div className="bg-surface border-b border-border p-6">
           <div className="flex items-center justify-between">

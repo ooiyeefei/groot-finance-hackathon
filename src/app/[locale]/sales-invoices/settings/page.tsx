@@ -27,7 +27,7 @@ export default async function InvoiceSettingsPage({ params }: { params: Promise<
       <div className="flex h-screen bg-background">
         <Sidebar />
 
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col min-w-0">
           <HeaderWithUser
             title="Invoice Settings"
             subtitle="Configure invoice defaults and numbering"

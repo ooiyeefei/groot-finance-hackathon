@@ -27,7 +27,7 @@ export default async function CustomersPage({ params }: { params: Promise<{ loca
       <div className="flex h-screen bg-background">
         <Sidebar />
 
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col min-w-0">
           <HeaderWithUser
             title="Customer Directory"
             subtitle="Manage your customer contacts"

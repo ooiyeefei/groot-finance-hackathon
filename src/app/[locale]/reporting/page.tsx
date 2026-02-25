@@ -43,7 +43,7 @@ export default async function ReportingPage({ params }: ReportingPageProps) {
         <Sidebar />
 
         {/* Main Content */}
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
           {/* Header */}
           <HeaderWithUser
             title="Reporting & Exports"

@@ -127,8 +127,8 @@ export function ProactiveActionCenter({ businessId, defaultExpanded = true }: Pr
               }}
               className="text-xs"
             >
-              <CheckCheck className="h-4 w-4 mr-1" />
-              Mark all read
+              <CheckCheck className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">Mark all read</span>
             </Button>
           )}
           {isExpanded ? (

@@ -33,7 +33,7 @@ export default async function SubmissionPage({ params }: SubmissionPageProps) {
     <ClientProviders>
       <div className="flex h-screen bg-background">
         <Sidebar />
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
           <HeaderWithUser
             title="Expense Submission"
             subtitle=""

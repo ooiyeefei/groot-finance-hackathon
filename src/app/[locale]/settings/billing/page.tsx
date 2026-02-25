@@ -198,7 +198,7 @@ function BillingContent() {
       <div className="flex h-screen bg-background">
         <Sidebar />
 
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col min-w-0">
           <HeaderWithUser
             title="Billing"
             subtitle="Manage your subscription and usage"
@@ -517,7 +517,7 @@ export default function BillingSettingsPage() {
         <ClientProviders>
           <div className="flex h-screen bg-background">
             <Sidebar />
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col min-w-0">
               <HeaderWithUser title="Billing" subtitle="Manage your subscription and usage" />
               <main className="flex-1 p-6 overflow-auto pb-24 sm:pb-6">
                 <div className="max-w-3xl mx-auto">

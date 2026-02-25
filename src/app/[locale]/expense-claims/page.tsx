@@ -39,7 +39,7 @@ export default async function ExpenseClaimsPage({ params }: ExpenseClaimsPagePro
         <Sidebar />
 
         {/* Main Content - CLS FIX: min-h-0 prevents flex container shift */}
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
           {/* Header */}
           <HeaderWithUser
             title="Expense Claims"

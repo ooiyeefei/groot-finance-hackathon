@@ -95,7 +95,7 @@ export function UpgradeBanner() {
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="flex-1 min-w-[200px] max-w-[600px] h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden cursor-pointer">
+                        <div className="flex-1 min-w-[80px] sm:min-w-[200px] max-w-[600px] h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden cursor-pointer">
                           <div
                             className="h-full rounded-full transition-all bg-primary"
                             style={{ width: `${calculateTrialProgress(data.trial)}%` }}

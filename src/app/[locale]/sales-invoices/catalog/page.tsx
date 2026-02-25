@@ -27,7 +27,7 @@ export default async function CatalogPage({ params }: { params: Promise<{ locale
       <div className="flex h-screen bg-background">
         <Sidebar />
 
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col min-w-0">
           <HeaderWithUser
             title="Product Catalog"
             subtitle="Manage your products and services"

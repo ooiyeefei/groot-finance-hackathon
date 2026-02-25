@@ -36,7 +36,7 @@ export default async function ManagerSubmissionReviewPage({ params }: PageProps)
     <ClientProviders>
       <div className="flex h-screen bg-background">
         <Sidebar />
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           <HeaderWithUser title="Review Submission" subtitle="" />
           <div className="flex-1 flex overflow-hidden">
             <ManagerSubmissionSidebar currentSubmissionId={id} />
