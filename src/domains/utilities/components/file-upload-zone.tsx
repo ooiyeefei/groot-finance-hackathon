@@ -352,8 +352,13 @@ export default function FileUploadZone({
   }, [handleFiles, uploadState.uploading])
 
   // Handle click to open file dialog
+  // Reset input value before click to ensure dialog always opens
+  // (fixes stale input after page idle/background)
   const handleClick = () => {
     if (uploadState.uploading) return
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
     fileInputRef.current?.click()
   }
 
