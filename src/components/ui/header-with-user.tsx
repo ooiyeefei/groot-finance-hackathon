@@ -1,12 +1,14 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { UserButton } from '@clerk/nextjs'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { ThemeToggle } from '@/domains/utilities/components/theme-toggle'
 import { FeedbackButton } from '@/domains/feedback'
 import { NotificationBell } from '@/domains/notifications/components/notification-bell'
 import { useActiveBusiness } from '@/contexts/business-context'
+import { isNativePlatform } from '@/lib/capacitor/platform'
+import { NativeUserButton } from '@/components/capacitor/native-user-button'
 
 interface HeaderWithUserProps {
   title?: string
@@ -16,6 +18,11 @@ interface HeaderWithUserProps {
 
 export default function HeaderWithUser({ title, subtitle, actions }: HeaderWithUserProps) {
   const { businessId } = useActiveBusiness()
+  const [isNative, setIsNative] = useState(false)
+
+  useEffect(() => {
+    setIsNative(isNativePlatform())
+  }, [])
 
   return (
     <header className="bg-card border-b border-border px-4 sm:px-6 py-3 sm:py-4">
@@ -41,14 +48,18 @@ export default function HeaderWithUser({ title, subtitle, actions }: HeaderWithU
           <span className="hidden sm:inline-flex"><FeedbackButton /></span>
           <ThemeToggle />
           <span className="hidden sm:inline-flex"><LanguageSwitcher /></span>
-          <UserButton
-            afterSignOutUrl="/"
-            appearance={{
-              elements: {
-                avatarBox: "w-8 h-8",
-              }
-            }}
-          />
+          {isNative ? (
+            <NativeUserButton />
+          ) : (
+            <UserButton
+              afterSignOutUrl="/"
+              appearance={{
+                elements: {
+                  avatarBox: "w-8 h-8",
+                }
+              }}
+            />
+          )}
         </div>
       </div>
     </header>
