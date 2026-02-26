@@ -510,10 +510,7 @@ export default defineSchema({
     // Email Matching
     einvoiceEmailRef: v.optional(v.string()),          // Unique 6-char token for + addressing
 
-    // Manual Upload
-    einvoiceManualUploadPath: v.optional(v.string()),  // Storage path for manually uploaded e-invoice
-
-    // E-Invoice from merchant email (SES → Lambda → S3)
+    // E-Invoice storage (S3) — used by both SES email pipeline and manual upload
     einvoiceStoragePath: v.optional(v.string()),       // S3 path: {bizId}/{userId}/{claimId}/einvoice/{filename}
     einvoiceRawEmailPath: v.optional(v.string()),      // S3 path: {bizId}/{userId}/{claimId}/einvoice/raw-email.eml
 

@@ -3,12 +3,14 @@
  *
  * POST /api/v1/expense-claims/[id]/upload-einvoice
  * Accepts multipart/form-data with e-invoice file (PDF, PNG, JPG, max 10MB).
- * Uploads to Convex storage and links to expense claim.
+ * Uploads to S3 under expense_claims/{bizId}/{userId}/{claimId}/einvoice/
+ * and updates Convex with the storage path.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
+import { uploadFile } from '@/lib/aws-s3'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 const ALLOWED_TYPES = [
@@ -63,35 +65,47 @@ export async function POST(
 
     console.log(`[Upload E-Invoice API] Uploading ${file.name} (${file.type}, ${file.size} bytes) for claim ${expenseClaimId}`)
 
-    // Step 1: Get upload URL from Convex
-    const uploadUrl = await client.mutation(api.functions.expenseClaims.generateEinvoiceUploadUrl, {})
-
-    // Step 2: Upload file to Convex storage
-    const fileBuffer = await file.arrayBuffer()
-    const uploadResponse = await fetch(uploadUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': file.type },
-      body: fileBuffer,
+    // Step 1: Get claim details for S3 path construction
+    const claim = await client.query(api.functions.expenseClaims.getById, {
+      id: expenseClaimId,
     })
 
-    if (!uploadResponse.ok) {
-      throw new Error(`File upload failed: ${uploadResponse.status}`)
+    if (!claim) {
+      return NextResponse.json(
+        { success: false, error: 'Expense claim not found' },
+        { status: 404 }
+      )
     }
 
-    const { storageId } = await uploadResponse.json()
+    // Step 2: Upload to S3 under einvoice/ folder
+    // Path: expense_claims/{bizId}/{userId}/{claimId}/einvoice/{filename}
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'pdf'
+    const sanitizedFilename = `einvoice-manual.${ext}`
+    const s3Path = `${claim.businessId}/${claim.userId}/${claim._id}/einvoice/${sanitizedFilename}`
 
-    // Step 3: Link upload to expense claim
-    const result = await client.mutation(api.functions.expenseClaims.markEinvoiceManualUpload, {
+    const uploadResult = await uploadFile('expense_claims', s3Path, file, file.type, {
+      source: 'manual_upload',
       claimId: expenseClaimId,
-      storagePath: storageId,
     })
 
-    console.log('[Upload E-Invoice API] Upload complete:', { expenseClaimId, storageId })
+    if (!uploadResult.success) {
+      throw new Error(`S3 upload failed: ${uploadResult.error}`)
+    }
+
+    console.log(`[Upload E-Invoice API] Uploaded to S3: ${s3Path}`)
+
+    // Step 3: Update Convex with S3 storage path
+    await client.mutation(api.functions.expenseClaims.markEinvoiceManualUpload, {
+      claimId: expenseClaimId,
+      storagePath: s3Path,
+    })
+
+    console.log('[Upload E-Invoice API] Upload complete:', { expenseClaimId, s3Path })
 
     return NextResponse.json({
       success: true,
       data: {
-        storagePath: storageId,
+        storagePath: s3Path,
         message: 'E-invoice uploaded successfully',
       }
     })

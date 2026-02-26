@@ -2507,7 +2507,6 @@ export const internalUpdateEinvoiceStatus = internalMutation({
     einvoiceAgentError: v.optional(v.string()),
     einvoiceEmailRef: v.optional(v.string()),
     einvoiceRequestedAt: v.optional(v.number()),
-    einvoiceManualUploadPath: v.optional(v.string()),
     einvoiceStoragePath: v.optional(v.string()),
     einvoiceRawEmailPath: v.optional(v.string()),
     merchantFormUrl: v.optional(v.string()),
@@ -2534,7 +2533,6 @@ export const internalUpdateEinvoiceStatus = internalMutation({
     if (args.einvoiceAgentError !== undefined) updateData.einvoiceAgentError = args.einvoiceAgentError;
     if (args.einvoiceEmailRef !== undefined) updateData.einvoiceEmailRef = args.einvoiceEmailRef;
     if (args.einvoiceRequestedAt !== undefined) updateData.einvoiceRequestedAt = args.einvoiceRequestedAt;
-    if (args.einvoiceManualUploadPath !== undefined) updateData.einvoiceManualUploadPath = args.einvoiceManualUploadPath;
     if (args.einvoiceStoragePath !== undefined) updateData.einvoiceStoragePath = args.einvoiceStoragePath;
     if (args.einvoiceRawEmailPath !== undefined) updateData.einvoiceRawEmailPath = args.einvoiceRawEmailPath;
     if (args.merchantFormUrl !== undefined) updateData.merchantFormUrl = args.merchantFormUrl;
@@ -2787,7 +2785,7 @@ export const markEinvoiceManualUpload = mutation({
 
     await ctx.db.patch(claim._id, {
       einvoiceSource: "manual_upload",
-      einvoiceManualUploadPath: args.storagePath,
+      einvoiceStoragePath: args.storagePath,
       einvoiceAttached: true,
       einvoiceRequestStatus: "received",
       einvoiceReceivedAt: Date.now(),
@@ -2798,17 +2796,6 @@ export const markEinvoiceManualUpload = mutation({
   },
 });
 
-/**
- * Generate upload URL for e-invoice manual upload
- */
-export const generateEinvoiceUploadUrl = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
-    return await ctx.storage.generateUploadUrl();
-  },
-});
 
 // ============================================
 // STUCK RECORDS MONITORING (for finance_admin operations)
