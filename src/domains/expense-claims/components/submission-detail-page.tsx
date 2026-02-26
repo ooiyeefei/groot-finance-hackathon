@@ -145,9 +145,9 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          description: '',
-          business_purpose: '',
-          original_amount: 0,
+          description: 'Manual entry',
+          business_purpose: 'To be filled',
+          original_amount: 0.01,
           original_currency: 'MYR',
           transaction_date: today,
           vendor_name: '',
