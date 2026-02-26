@@ -7,20 +7,29 @@
  * Clerk's built-in sign-out mechanism hangs in WKWebView because it
  * can't properly clear cookies. This component uses useClerk().signOut()
  * with explicit window.location.href redirect instead.
+ *
+ * Also includes business switching (multi-tenant) since the sidebar
+ * business switcher is not accessible on mobile.
  */
 
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useUser, useClerk } from '@clerk/nextjs'
 import { useLocale } from 'next-intl'
-import { LogOut, Loader2 } from 'lucide-react'
+import { useBusinessMemberships, useBusinessContext } from '@/contexts/business-context'
+import { LogOut, Loader2, Check } from 'lucide-react'
 
 export function NativeUserButton() {
   const { user } = useUser()
   const { signOut } = useClerk()
   const locale = useLocale()
+  const { memberships } = useBusinessMemberships()
+  const { switchActiveBusiness, activeContext } = useBusinessContext()
+  const activeBusinessId = activeContext?.businessId || null
+
   const [isOpen, setIsOpen] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
+  const [isSwitching, setIsSwitching] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
   // Close menu on outside click
@@ -41,8 +50,23 @@ export function NativeUserButton() {
       window.location.href = `/${locale}/sign-in`
     } catch (error) {
       console.error('[NativeUserButton] Sign out error:', error)
-      // Force redirect even if signOut fails — clear the WKWebView state
       window.location.href = `/${locale}/sign-in`
+    }
+  }
+
+  const handleSwitchBusiness = async (businessId: string) => {
+    if (businessId === activeBusinessId) return
+    setIsSwitching(businessId)
+    try {
+      const success = await switchActiveBusiness(businessId)
+      if (success) {
+        setIsOpen(false)
+        window.location.href = `/${locale}`
+      }
+    } catch (error) {
+      console.error('[NativeUserButton] Switch business error:', error)
+    } finally {
+      setIsSwitching(null)
     }
   }
 
@@ -50,6 +74,7 @@ export function NativeUserButton() {
     || user?.emailAddresses?.[0]?.emailAddress?.charAt(0)
     || '?'
   const imageUrl = user?.imageUrl
+  const hasMultipleBusinesses = memberships.length > 1
 
   return (
     <>
@@ -68,7 +93,8 @@ export function NativeUserButton() {
         </button>
 
         {isOpen && (
-          <div className="absolute right-0 top-full mt-2 w-48 bg-card border border-border rounded-lg shadow-lg z-50 py-1">
+          <div className="absolute right-0 top-full mt-2 w-64 bg-card border border-border rounded-lg shadow-lg z-50 py-1">
+            {/* User email */}
             {user?.emailAddresses?.[0]?.emailAddress && (
               <div className="px-3 py-2 border-b border-border">
                 <p className="text-xs text-muted-foreground truncate">
@@ -76,6 +102,44 @@ export function NativeUserButton() {
                 </p>
               </div>
             )}
+
+            {/* Business switcher */}
+            {hasMultipleBusinesses && (
+              <div className="border-b border-border py-1">
+                <p className="px-3 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  Businesses
+                </p>
+                {memberships.map((biz) => {
+                  const isActive = biz.id === activeBusinessId
+                  const isLoading = isSwitching === biz.id
+                  return (
+                    <button
+                      key={biz.id}
+                      onClick={() => handleSwitchBusiness(biz.id)}
+                      disabled={isActive || isSwitching !== null}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted transition-colors disabled:opacity-70"
+                    >
+                      <div
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
+                        style={{ backgroundColor: biz.logo_fallback_color || '#6366f1' }}
+                      >
+                        {biz.name.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="flex-1 text-left text-foreground truncate">
+                        {biz.name}
+                      </span>
+                      {isLoading ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground flex-shrink-0" />
+                      ) : isActive ? (
+                        <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                      ) : null}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Sign out */}
             <button
               onClick={handleSignOut}
               disabled={isSigningOut}
