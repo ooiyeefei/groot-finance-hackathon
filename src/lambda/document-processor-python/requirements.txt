@@ -33,5 +33,7 @@ litellm>=1.40.0,<2.0.0
 sentry-sdk>=2.0.0
 
 # QR code detection from receipt images (019-lhdn-einv-flow-2)
-# Using OpenCV's built-in QR detector — no system library dependencies
+# qreader: deep learning QR detector — reliable on camera photos with glare/angles
+# opencv-python-headless: required by qreader, also used for image pre-processing
+qreader>=3.14
 opencv-python-headless==4.10.0.84
