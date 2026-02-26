@@ -7,7 +7,7 @@
  * Shows current plan, usage, and link to billing management.
  */
 
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useSubscription } from '../hooks/use-subscription'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -16,6 +16,7 @@ import { Progress } from '@/components/ui/progress'
 import { Sparkles, ChevronRight, Zap, Infinity, AlertTriangle } from 'lucide-react'
 
 export function SubscriptionCard() {
+  const router = useRouter()
   const { data, isLoading, error } = useSubscription()
 
   if (isLoading) {
@@ -80,12 +81,10 @@ export function SubscriptionCard() {
             </div>
           </div>
 
-          <Link href="/en/business-settings?tab=billing">
-            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground" onClick={() => router.push('/en/business-settings?tab=billing')}>
               Manage
               <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
-          </Link>
         </div>
 
         {/* Usage Summary */}
@@ -121,12 +120,10 @@ export function SubscriptionCard() {
 
         {/* Upgrade CTA for trial users */}
         {isTrialing && (
-          <Link href="/en/pricing" className="block mt-4">
-            <Button className="w-full" variant="default" size="sm">
+          <Button className="w-full mt-4" variant="default" size="sm" onClick={() => router.push('/en/pricing')}>
               <Zap className="w-4 h-4 mr-2" />
               View Plans
             </Button>
-          </Link>
         )}
       </CardContent>
     </Card>

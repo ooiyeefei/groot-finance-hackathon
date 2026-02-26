@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   useSubscription,
   calculateTotalTrialDays,
@@ -21,6 +21,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils'
 
 export function UpgradeBanner() {
+  const router = useRouter()
   const { data, isLoading } = useSubscription()
   const [isDismissed, setIsDismissed] = useState(false)
 
@@ -113,12 +114,10 @@ export function UpgradeBanner() {
           </div>
 
           {/* CTA Button - mr-6 to avoid overlap with dismiss X button */}
-          <Link href="/en/pricing" className="flex-shrink-0 mr-6">
-            <Button size="sm" className="w-full sm:w-auto">
+          <Button size="sm" className="w-full sm:w-auto flex-shrink-0 mr-6" onClick={() => router.push('/en/pricing')}>
               <Zap className="w-3.5 h-3.5 mr-1.5" />
               View Plans
             </Button>
-          </Link>
         </div>
 
         {/* Description and features */}

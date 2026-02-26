@@ -7,6 +7,7 @@
  * Uses the useSubscription hook to fetch current usage data.
  */
 
+import { useRouter } from 'next/navigation'
 import { useSubscription } from '../hooks/use-subscription'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
@@ -21,6 +22,7 @@ interface UsageDashboardProps {
 }
 
 export function UsageDashboard({ showUpgradeButton = true, compact = false }: UsageDashboardProps) {
+  const router = useRouter()
   const { data, isLoading, error } = useSubscription()
 
   if (isLoading) {
@@ -185,12 +187,10 @@ export function UsageDashboard({ showUpgradeButton = true, compact = false }: Us
                     ? 'Upgrade your plan to continue processing documents.'
                     : 'Consider upgrading to get more OCR scans.'}
                 </p>
-                <Link href="/en/pricing" className="inline-block mt-2">
-                  <Button size="sm" variant="default">
+                <Button size="sm" variant="default" className="mt-2" onClick={() => router.push('/en/pricing')}>
                     <Zap className="w-4 h-4 mr-1" />
                     Upgrade Plan
                   </Button>
-                </Link>
               </div>
             </div>
           </div>

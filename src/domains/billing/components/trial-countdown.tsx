@@ -7,7 +7,7 @@
  * Used in sidebar, billing page, and dashboard.
  */
 
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -37,6 +37,7 @@ export function TrialCountdown({
   showUpgradeButton = false,
   className,
 }: TrialCountdownProps) {
+  const router = useRouter()
   // Don't render if not on trial or no trial end date
   if (!trial.isOnTrial || trial.daysRemaining === null) {
     return null
@@ -190,12 +191,10 @@ export function TrialCountdown({
       )}
 
       {showUpgradeButton && (
-        <Link href="/en/pricing" className="block">
-          <Button size="sm" className="w-full" variant={isExpired || isUrgent ? 'default' : 'outline'}>
+        <Button size="sm" className="w-full" variant={isExpired || isUrgent ? 'default' : 'outline'} onClick={() => router.push('/en/pricing')}>
             <Zap className="w-4 h-4 mr-2" />
             {isExpired ? 'Upgrade Now' : 'View Plans'}
           </Button>
-        </Link>
       )}
     </div>
   )

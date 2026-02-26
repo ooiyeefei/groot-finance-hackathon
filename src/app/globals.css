@@ -981,3 +981,14 @@ main .p-6 {
 .h-\[calc\(100vh-160px\)\] {
   height: calc(100vh - 100px) !important;
 }
+
+/* ========================================================
+   SAFE AREA UTILITIES - iOS Notched Devices
+   ======================================================== */
+.pb-safe-area-inset-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pt-safe-area-inset-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
