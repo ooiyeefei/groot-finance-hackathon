@@ -207,12 +207,12 @@ export default function BusinessProfileSettings() {
           state_code: stateCode || undefined,
           postal_code: postalCode.trim() || undefined,
           country_code: countryCode || undefined,
-          // e-Invoice fields
-          lhdn_tin: lhdnTin.trim() || undefined,
-          business_registration_number: businessRegistrationNumber.trim() || undefined,
+          // e-Invoice fields (send empty string to clear — undefined is a no-op in Convex patch)
+          lhdn_tin: lhdnTin.trim(),
+          business_registration_number: businessRegistrationNumber.trim(),
           msic_code: msicCode.trim() || undefined,
           msic_description: msicDescription.trim() || undefined,
-          sst_registration_number: sstRegistrationNumber.trim() || undefined,
+          sst_registration_number: sstRegistrationNumber.trim(),
           lhdn_client_id: lhdnClientId.trim() || undefined,
           // NOTE: lhdn_client_secret is NOT sent here — stored via separate SSM API call below
           peppol_participant_id: peppolParticipantId.trim() || undefined,
