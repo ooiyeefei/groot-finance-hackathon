@@ -2,15 +2,13 @@
  * Subscription Status API Route
  *
  * Returns current subscription status for the authenticated user's business.
- *
- * ✅ MIGRATED TO CONVEX (2025-01)
+ * All data served from Convex (synced by Stripe webhooks) — no live Stripe API calls.
  *
  * @route GET /api/v1/billing/subscription
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { getStripe } from '@/lib/stripe/client'
 import {
   getPlan,
   PlanKey,
@@ -130,45 +128,8 @@ export async function GET(request: NextRequest) {
     const invoiceLimit = salesInvoicesPlanLimit || getInvoiceLimitSync(planKey)
     const einvoiceLimit = einvoicesPlanLimit || getEinvoiceLimitSync(planKey)
 
-    // Build subscription response
-    let subscriptionDetails = null
-
-    // Skip Stripe API call for manual subscriptions (not real Stripe IDs)
-    const isManualSubscription = business.stripeSubscriptionId?.startsWith('manual_')
-
-    if (business.stripeSubscriptionId && !isManualSubscription) {
-      try {
-        // Stripe SDK v20+ type workaround - cast to access properties
-        const subscription = (await getStripe().subscriptions.retrieve(
-          business.stripeSubscriptionId
-        )) as unknown as {
-          id: string
-          status: string
-          current_period_start: number
-          current_period_end: number
-          cancel_at_period_end: boolean
-          cancel_at: number | null
-        }
-
-        subscriptionDetails = {
-          id: subscription.id,
-          status: subscription.status,
-          currentPeriodStart: subscription.current_period_start
-            ? new Date(subscription.current_period_start * 1000).toISOString()
-            : null,
-          currentPeriodEnd: subscription.current_period_end
-            ? new Date(subscription.current_period_end * 1000).toISOString()
-            : null,
-          cancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
-          cancelAt: subscription.cancel_at
-            ? new Date(subscription.cancel_at * 1000).toISOString()
-            : null,
-        }
-      } catch (stripeError) {
-        console.error('[Billing Subscription] Failed to fetch Stripe subscription:', stripeError)
-        // Continue without Stripe details - use database values
-      }
-    }
+    // Build subscription details entirely from Convex (synced by webhooks)
+    const periodEndTimestamp = business.subscriptionPeriodEnd ?? null
 
     // Calculate trial info — trial is a STATUS, not a plan
     const isTrialingStatus = business.subscriptionStatus === 'trialing'
@@ -243,10 +204,6 @@ export async function GET(request: NextRequest) {
       urgencyLevel: 'none',
     }
 
-    // Use period end from database (set by webhook) or from Stripe API
-    const periodEndTimestamp = business.subscriptionPeriodEnd ||
-      (subscriptionDetails?.currentPeriodEnd ? new Date(subscriptionDetails.currentPeriodEnd).getTime() : null)
-
     if (periodEndTimestamp && !isTrialingStatus) {
       const periodEnd = new Date(periodEndTimestamp)
       const now = new Date()
@@ -275,9 +232,16 @@ export async function GET(request: NextRequest) {
         },
         subscription: {
           status: business.subscriptionStatus || 'active',
-          stripeCustomerId: business.stripeCustomerId,
-          stripeSubscriptionId: business.stripeSubscriptionId,
-          ...subscriptionDetails,
+          stripeCustomerId: business.stripeCustomerId ?? null,
+          stripeSubscriptionId: business.stripeSubscriptionId ?? null,
+          currentPeriodStart: null, // Not tracked in Convex (not needed by frontend)
+          currentPeriodEnd: periodEndTimestamp
+            ? new Date(periodEndTimestamp).toISOString()
+            : null,
+          cancelAtPeriodEnd: business.cancelAtPeriodEnd ?? false,
+          cancelAt: business.cancelAt
+            ? new Date(business.cancelAt).toISOString()
+            : null,
         },
         usage: {
           ocrUsed: currentUsage,

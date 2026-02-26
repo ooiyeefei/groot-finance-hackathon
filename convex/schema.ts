@@ -139,6 +139,8 @@ export default defineSchema({
     stripeProductId: v.optional(v.string()),
     subscriptionStatus: v.optional(v.string()),
     subscriptionPeriodEnd: v.optional(v.number()), // Unix timestamp for subscription period end
+    cancelAtPeriodEnd: v.optional(v.boolean()),    // Whether subscription cancels at period end
+    cancelAt: v.optional(v.number()),              // Unix timestamp (ms) when subscription will cancel
     planName: v.optional(v.string()),         // Subscription plan name
 
     // Trial Period

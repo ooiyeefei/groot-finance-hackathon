@@ -1652,6 +1652,8 @@ export const updateSubscriptionFromWebhook = mutation({
     trialStartDate: v.optional(v.number()),  // Unix timestamp in milliseconds
     trialEndDate: v.optional(v.number()),    // Unix timestamp in milliseconds
     subscriptionPeriodEnd: v.optional(v.number()), // Unix timestamp in milliseconds - for renewal tracking
+    cancelAtPeriodEnd: v.optional(v.boolean()),
+    cancelAt: v.optional(v.number()),        // Unix timestamp in milliseconds
   },
   handler: async (ctx, args) => {
     // Find business by Stripe customer ID
@@ -1676,6 +1678,9 @@ export const updateSubscriptionFromWebhook = mutation({
       ...(args.trialEndDate !== undefined && { trialEndDate: args.trialEndDate }),
       // Store subscription period end for renewal reminders
       ...(args.subscriptionPeriodEnd !== undefined && { subscriptionPeriodEnd: args.subscriptionPeriodEnd }),
+      // Cancellation scheduling
+      ...(args.cancelAtPeriodEnd !== undefined && { cancelAtPeriodEnd: args.cancelAtPeriodEnd }),
+      ...(args.cancelAt !== undefined && { cancelAt: args.cancelAt }),
       updatedAt: Date.now(),
     });
 
@@ -1734,6 +1739,8 @@ export const updateSubscriptionFromWebhookWithBusinessId = mutation({
     trialStartDate: v.optional(v.number()),  // Unix timestamp in milliseconds
     trialEndDate: v.optional(v.number()),    // Unix timestamp in milliseconds
     subscriptionPeriodEnd: v.optional(v.number()), // Unix timestamp in milliseconds - for renewal tracking
+    cancelAtPeriodEnd: v.optional(v.boolean()),
+    cancelAt: v.optional(v.number()),        // Unix timestamp in milliseconds
   },
   handler: async (ctx, args) => {
     // Find business by ID (supports both Convex and legacy UUIDs)
@@ -1755,6 +1762,9 @@ export const updateSubscriptionFromWebhookWithBusinessId = mutation({
       ...(args.trialEndDate !== undefined && { trialEndDate: args.trialEndDate }),
       // Store subscription period end for renewal reminders
       ...(args.subscriptionPeriodEnd !== undefined && { subscriptionPeriodEnd: args.subscriptionPeriodEnd }),
+      // Cancellation scheduling
+      ...(args.cancelAtPeriodEnd !== undefined && { cancelAtPeriodEnd: args.cancelAtPeriodEnd }),
+      ...(args.cancelAt !== undefined && { cancelAt: args.cancelAt }),
       updatedAt: Date.now(),
     });
 

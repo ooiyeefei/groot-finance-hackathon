@@ -203,6 +203,8 @@ async function updateBusinessSubscriptionConvex(
     trial_start: number | null
     trial_end: number | null
     current_period_end: number
+    cancel_at_period_end: boolean
+    cancel_at: number | null
   }
 
   // Extract trial dates from Stripe subscription (CRITICAL for enforcement)
@@ -218,6 +220,12 @@ async function updateBusinessSubscriptionConvex(
   // This is when the current billing period ends (and renewal is due)
   const subscriptionPeriodEnd = subscriptionData.current_period_end
     ? subscriptionData.current_period_end * 1000  // Convert to milliseconds
+    : undefined
+
+  // Extract cancellation scheduling
+  const cancelAtPeriodEnd = subscriptionData.cancel_at_period_end ?? false
+  const cancelAt = subscriptionData.cancel_at
+    ? subscriptionData.cancel_at * 1000  // Convert to milliseconds
     : undefined
 
   console.log(
@@ -237,6 +245,8 @@ async function updateBusinessSubscriptionConvex(
       trialStartDate,
       trialEndDate,
       subscriptionPeriodEnd,
+      cancelAtPeriodEnd,
+      cancelAt,
     })
 
     console.log(
@@ -264,6 +274,8 @@ async function updateBusinessSubscriptionConvex(
       trialStartDate,
       trialEndDate,
       subscriptionPeriodEnd,
+      cancelAtPeriodEnd,
+      cancelAt,
     })
 
     console.log(

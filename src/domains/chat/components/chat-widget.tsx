@@ -12,6 +12,7 @@ import { MessageCircle, X } from 'lucide-react'
 import { ChatWindow } from './chat-window'
 import { useAuth } from '@clerk/nextjs'
 import { useActiveBusiness } from '@/contexts/business-context'
+import { useSubscription } from '@/domains/billing/hooks/use-subscription'
 
 const STORAGE_KEY = 'chat-widget-position'
 const BTN_SIZE = 56 // w-14 h-14 = 56px
@@ -32,6 +33,7 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
   const [isMinimized, setIsMinimized] = useState(false)
   const [pendingMessage, setPendingMessage] = useState<string | undefined>()
   const { isSignedIn } = useAuth()
+  const { data: subscriptionData } = useSubscription()
 
   // Draggable position — stored as { right, bottom } from viewport edges
   // Default bottom is 80px to clear the mobile bottom nav bar (~64px + spacer)
@@ -144,8 +146,9 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
     return () => window.removeEventListener('finanseal:open-chat', handleOpenChat)
   }, [])
 
-  // Don't render for unauthenticated users
+  // Don't render for unauthenticated users or when subscription is locked
   if (!isSignedIn) return null
+  if (subscriptionData?.subscription.status === 'paused') return null
 
   const chatWindowBottom = pos.bottom + BTN_SIZE + MARGIN
   const chatWindowRight = pos.right
