@@ -23,6 +23,7 @@ import {
   AlertCircle,
   Loader2,
   Upload,
+  PenLine,
 } from 'lucide-react'
 import { useExpenseCategories, getCategoryName } from '../hooks/use-expense-categories'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
@@ -128,10 +129,43 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
   const showEditModal = !!selectedClaimId && selectedClaim?.status === 'draft'
   const showViewModal = !!selectedClaimId && selectedClaim?.status !== 'draft'
 
+  const [manualEntryLoading, setManualEntryLoading] = useState(false)
+
   // Handle receipt upload success - the FileUploadZone handles the full pipeline
   const handleUploadSuccess = useCallback(() => {
     refetch()
   }, [refetch])
+
+  // Handle manual entry - creates a blank draft claim linked to submission
+  const handleManualEntry = useCallback(async () => {
+    setManualEntryLoading(true)
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const response = await fetch('/api/v1/expense-claims', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          description: '',
+          business_purpose: '',
+          original_amount: 0,
+          original_currency: 'MYR',
+          transaction_date: today,
+          vendor_name: '',
+          processing_mode: 'manual',
+          submissionId,
+        }),
+      })
+      const result = await response.json()
+      if (result.success && result.data?.expense_claim_id) {
+        await refetch()
+        setSelectedClaimId(result.data.expense_claim_id)
+      }
+    } catch (err) {
+      console.error('[Submission] Manual entry creation failed:', err)
+    } finally {
+      setManualEntryLoading(false)
+    }
+  }, [submissionId, refetch])
 
   // Handle title edit
   const handleSaveTitle = useCallback(async () => {
@@ -385,18 +419,35 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
       </div>
 
 
-      {/* Upload zone (always visible for drafts) */}
+      {/* Upload zone + manual entry (always visible for drafts) */}
       {isDraft && (
-        <Suspense fallback={<div className="flex items-center justify-center p-6"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>}>
-          <FileUploadZone
-            domain="expense-claims"
-            allowMultiple={true}
-            autoProcess={true}
-            submissionId={submissionId}
-            onUploadSuccess={handleUploadSuccess}
-            onBatchUploadSuccess={handleUploadSuccess}
-          />
-        </Suspense>
+        <div className="space-y-3">
+          <Suspense fallback={<div className="flex items-center justify-center p-6"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>}>
+            <FileUploadZone
+              domain="expense-claims"
+              allowMultiple={true}
+              autoProcess={true}
+              submissionId={submissionId}
+              onUploadSuccess={handleUploadSuccess}
+              onBatchUploadSuccess={handleUploadSuccess}
+            />
+          </Suspense>
+          <div className="flex justify-center">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleManualEntry}
+              disabled={manualEntryLoading}
+            >
+              {manualEntryLoading ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <PenLine className="h-4 w-4 mr-2" />
+              )}
+              Enter Manually
+            </Button>
+          </div>
+        </div>
       )}
 
       {/* Bulk action bar for partial approval */}
