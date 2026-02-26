@@ -78,11 +78,8 @@ export default function EinvoiceSection({
   const [pdfLoading, setPdfLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Don't show section if no e-invoice-related data at all
   const hasAnyEinvoiceData = merchantFormUrl || einvoiceRequestStatus || einvoiceAttached ||
     (pendingMatchCandidates && pendingMatchCandidates.length > 0)
-
-  if (!hasAnyEinvoiceData) return null
 
   const handleRequestEinvoice = async () => {
     setRequestLoading(true)
@@ -177,14 +174,16 @@ export default function EinvoiceSection({
       <CardHeader className="pb-3">
         <CardTitle className="text-foreground text-sm flex items-center gap-2">
           <FileCheck className="w-4 h-4 text-muted-foreground" />
-          E-Invoice Status
-          <EinvoiceStatusBadge
-            einvoiceRequestStatus={einvoiceRequestStatus}
-            einvoiceAttached={einvoiceAttached}
-            einvoiceSource={einvoiceSource}
-            merchantFormUrl={merchantFormUrl}
-            lhdnReceivedStatus={lhdnReceivedStatus}
-          />
+          E-Invoice
+          {hasAnyEinvoiceData && (
+            <EinvoiceStatusBadge
+              einvoiceRequestStatus={einvoiceRequestStatus}
+              einvoiceAttached={einvoiceAttached}
+              einvoiceSource={einvoiceSource}
+              merchantFormUrl={merchantFormUrl}
+              lhdnReceivedStatus={lhdnReceivedStatus}
+            />
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -344,57 +343,53 @@ export default function EinvoiceSection({
           </div>
         )}
 
-        {/* Action Buttons */}
-        {(canRequestEinvoice || canUploadEinvoice) && (
-          <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
-            {/* Request E-Invoice Button */}
-            {canRequestEinvoice && (
-              <Button
-                size="sm"
-                onClick={handleRequestEinvoice}
-                disabled={requestLoading}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground"
-              >
-                {requestLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin mr-1" />
-                ) : canRetry ? (
-                  <RefreshCw className="w-4 h-4 mr-1" />
-                ) : (
-                  <FileUp className="w-4 h-4 mr-1" />
-                )}
-                {canRetry ? 'Retry Request' : 'Request E-Invoice'}
-              </Button>
-            )}
+        {/* Action Buttons — always show upload, conditionally show request */}
+        <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+          {/* Request E-Invoice Button */}
+          {canRequestEinvoice && (
+            <Button
+              size="sm"
+              onClick={handleRequestEinvoice}
+              disabled={requestLoading}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
+            >
+              {requestLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-1" />
+              ) : canRetry ? (
+                <RefreshCw className="w-4 h-4 mr-1" />
+              ) : (
+                <FileUp className="w-4 h-4 mr-1" />
+              )}
+              {canRetry ? 'Retry Request' : 'Request E-Invoice'}
+            </Button>
+          )}
 
-            {/* Manual Upload Button */}
-            {canUploadEinvoice && (
-              <label>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={uploadLoading}
-                  asChild
-                >
-                  <span>
-                    {uploadLoading ? (
-                      <Loader2 className="w-4 h-4 animate-spin mr-1" />
-                    ) : (
-                      <Upload className="w-4 h-4 mr-1" />
-                    )}
-                    Upload E-Invoice
-                  </span>
-                </Button>
-                <input
-                  type="file"
-                  accept=".pdf,.png,.jpg,.jpeg"
-                  onChange={handleUploadEinvoice}
-                  className="hidden"
-                  disabled={uploadLoading}
-                />
-              </label>
-            )}
-          </div>
-        )}
+          {/* Manual Upload / Replace Button — always available */}
+          <label>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={uploadLoading}
+              asChild
+            >
+              <span>
+                {uploadLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                ) : (
+                  <Upload className="w-4 h-4 mr-1" />
+                )}
+                {einvoiceAttached ? 'Replace E-Invoice' : 'Upload E-Invoice'}
+              </span>
+            </Button>
+            <input
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg"
+              onChange={handleUploadEinvoice}
+              className="hidden"
+              disabled={uploadLoading}
+            />
+          </label>
+        </div>
       </CardContent>
     </Card>
   )

@@ -20,7 +20,8 @@ FROM public.ecr.aws/lambda/python:3.11
 USER root
 RUN yum install -y \
     poppler-utils \
-    zbar \
+    https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm \
+    && yum install -y zbar \
     && yum clean all
 
 # Copy requirements and install dependencies
