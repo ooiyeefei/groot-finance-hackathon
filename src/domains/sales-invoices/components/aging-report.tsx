@@ -64,16 +64,16 @@ export default function AgingReport() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h2 className="text-xl font-semibold text-foreground">AR Aging Report</h2>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             <Label className="text-sm text-foreground whitespace-nowrap">As of</Label>
             <Input
               type="date"
               value={asOfDate}
               onChange={(e) => setAsOfDate(e.target.value)}
-              className="w-[180px]"
+              className="w-[150px] sm:w-[180px]"
             />
           </div>
           <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={!report}>
@@ -87,7 +87,7 @@ export default function AgingReport() {
       {report && (
         <Card className="bg-card border-border">
           <CardContent className="pt-4 pb-4">
-            <div className="grid grid-cols-6 gap-4 text-center">
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 sm:gap-4 text-center">
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Current</p>
                 <p className="text-sm font-semibold text-green-600 dark:text-green-400">

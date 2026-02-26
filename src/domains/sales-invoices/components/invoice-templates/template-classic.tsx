@@ -99,7 +99,7 @@ export function ClassicInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplat
   const enabledPaymentMethods = businessInfo?.paymentMethods?.filter((m) => m.enabled && (m.details || m.qrCodeUrl)) ?? []
 
   return (
-    <div id="invoice-template" className="bg-card text-foreground p-10 max-w-[800px] mx-auto">
+    <div id="invoice-template" className="bg-card text-foreground p-4 sm:p-10 max-w-[800px] mx-auto overflow-x-auto">
       {/* Company Header - Centered */}
       <div className="text-center border-b-2 border-border pb-6 mb-6" style={{ pageBreakInside: 'avoid' }}>
         {businessInfo?.logoUrl && (
@@ -207,8 +207,8 @@ export function ClassicInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplat
       </div>
 
       {/* Line Items Table with Visible Borders */}
-      <div className="mb-8">
-        <table className="w-full border-collapse border border-border text-sm">
+      <div className="mb-8 overflow-x-auto">
+        <table className="w-full border-collapse border border-border text-sm min-w-[600px]">
           <thead>
             <tr className="bg-muted">
               <th className="border border-border px-3 py-2.5 text-left font-semibold text-muted-foreground text-xs uppercase tracking-wider">

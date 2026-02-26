@@ -551,9 +551,9 @@ const ApiKeysManagementClient = memo(() => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
-          <Shield className="w-5 h-5 text-primary" />
+          <Shield className="w-5 h-5 text-primary flex-shrink-0" />
           <div>
             <h3 className="text-lg font-semibold text-foreground">API Keys</h3>
             <p className="text-sm text-muted-foreground">
@@ -561,7 +561,7 @@ const ApiKeysManagementClient = memo(() => {
             </p>
           </div>
         </div>
-        <Button onClick={() => setShowCreateModal(true)}>
+        <Button onClick={() => setShowCreateModal(true)} className="w-full sm:w-auto">
           <Plus className="w-4 h-4 mr-2" />
           Create API Key
         </Button>
@@ -569,10 +569,10 @@ const ApiKeysManagementClient = memo(() => {
 
       {/* MCP Server Info */}
       <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+          <div className="flex-1 min-w-0">
             <h4 className="text-[15px] font-medium text-foreground mb-2">MCP Server Endpoint</h4>
-            <code className="text-[13px] font-mono text-muted-foreground bg-muted px-2 py-1 rounded block overflow-x-auto">
+            <code className="text-[12px] sm:text-[13px] font-mono text-muted-foreground bg-muted px-2 py-1 rounded block overflow-x-auto break-all">
               https://kuy2a5zca8.execute-api.us-west-2.amazonaws.com/v1/mcp
             </code>
             <p className="text-[13px] text-muted-foreground mt-2">
@@ -580,7 +580,7 @@ const ApiKeysManagementClient = memo(() => {
             </p>
           </div>
           <Link href="/en/docs/mcp" target="_blank">
-            <Button variant="outline" size="sm" className="shrink-0">
+            <Button variant="outline" size="sm" className="shrink-0 w-full sm:w-auto">
               <BookOpen className="w-4 h-4 mr-2" />
               View Documentation
               <ExternalLink className="w-3 h-3 ml-1.5" />

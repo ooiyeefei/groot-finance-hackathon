@@ -600,7 +600,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
 
       <Card className="bg-card border-border">
         <CardHeader>
-          <div className="flex justify-between items-start">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
             <div>
               <CardTitle className="text-foreground flex items-center gap-2">
                 <Shield className="w-5 h-5" />
@@ -612,7 +612,7 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
             </div>
             <Button
               onClick={() => setShowInviteDialog(true)}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground w-full sm:w-auto"
             >
               <UserPlus className="w-4 h-4 mr-2" />
               Invite Team Member
@@ -739,9 +739,9 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                     return (
                       <Card key={member.id} className="bg-muted border-border">
                         <CardContent className="p-4">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                              <div className="flex-1">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div className="flex items-start sm:items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                              <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-3">
                                   {editingName.has(member.id) ? (
                                     <div className="flex items-center gap-2">
@@ -808,30 +808,30 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                                   </div>
                                 </div>
 
-                                <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+                                <div className="flex items-center gap-2 sm:gap-4 mt-2 text-xs sm:text-sm text-muted-foreground flex-wrap">
                                   <div className="flex items-center gap-1">
-                                    <Mail className="w-3 h-3" />
-                                    <span>{member.clerk_user?.emailAddresses?.[0]?.emailAddress || member.email || 'No email'}</span>
+                                    <Mail className="w-3 h-3 flex-shrink-0" />
+                                    <span className="truncate max-w-[150px] sm:max-w-none">{member.clerk_user?.emailAddresses?.[0]?.emailAddress || member.email || 'No email'}</span>
                                   </div>
                                   <div className="flex items-center gap-1">
-                                    <Briefcase className="w-3 h-3" />
+                                    <Briefcase className="w-3 h-3 flex-shrink-0" />
                                     <span>{member.employee_id}</span>
                                   </div>
                                   {member.department && (
                                     <div className="flex items-center gap-1">
-                                      <Users className="w-3 h-3" />
+                                      <Users className="w-3 h-3 flex-shrink-0" />
                                       <span>{member.department}</span>
                                     </div>
                                   )}
                                   <div className="flex items-center gap-1">
-                                    <Calendar className="w-3 h-3" />
+                                    <Calendar className="w-3 h-3 flex-shrink-0" />
                                     <span>Joined {new Date(member.created_at).toLocaleDateString()}</span>
                                   </div>
                                 </div>
                               </div>
                             </div>
 
-                            <div className="flex items-end gap-4">
+                            <div className="flex items-end gap-3 sm:gap-4 ml-0 sm:ml-0">
                               <div className="flex flex-col">
                                 <span className="text-xs text-muted-foreground mb-1.5">Role</span>
                                 {(() => {

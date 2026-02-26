@@ -34,13 +34,15 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
   const { isSignedIn } = useAuth()
 
   // Draggable position — stored as { right, bottom } from viewport edges
+  // Default bottom is 80px to clear the mobile bottom nav bar (~64px + spacer)
+  const DEFAULT_BOTTOM = 80
   const [pos, setPos] = useState<{ right: number; bottom: number }>(() => {
-    if (typeof window === 'undefined') return { right: MARGIN, bottom: MARGIN }
+    if (typeof window === 'undefined') return { right: MARGIN, bottom: DEFAULT_BOTTOM }
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
       if (saved) return JSON.parse(saved)
     } catch {}
-    return { right: MARGIN, bottom: MARGIN }
+    return { right: MARGIN, bottom: DEFAULT_BOTTOM }
   })
 
   const isDragging = useRef(false)
@@ -54,6 +56,13 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
     e.preventDefault()
   }, [pos])
 
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0]
+    isDragging.current = true
+    hasMoved.current = false
+    dragStart.current = { mouseX: touch.clientX, mouseY: touch.clientY, right: pos.right, bottom: pos.bottom }
+  }, [pos])
+
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
       if (!isDragging.current || !dragStart.current) return
@@ -64,7 +73,17 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
       const newBottom = clamp(dragStart.current.bottom + dy, MARGIN, window.innerHeight - BTN_SIZE - MARGIN)
       setPos({ right: newRight, bottom: newBottom })
     }
-    const onMouseUp = () => {
+    const onTouchMove = (e: TouchEvent) => {
+      if (!isDragging.current || !dragStart.current) return
+      const touch = e.touches[0]
+      const dx = dragStart.current.mouseX - touch.clientX
+      const dy = dragStart.current.mouseY - touch.clientY
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) hasMoved.current = true
+      const newRight = clamp(dragStart.current.right + dx, MARGIN, window.innerWidth - BTN_SIZE - MARGIN)
+      const newBottom = clamp(dragStart.current.bottom + dy, MARGIN, window.innerHeight - BTN_SIZE - MARGIN)
+      setPos({ right: newRight, bottom: newBottom })
+    }
+    const onEnd = () => {
       if (isDragging.current) {
         isDragging.current = false
         setPos((p) => {
@@ -74,10 +93,14 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
       }
     }
     window.addEventListener('mousemove', onMouseMove)
-    window.addEventListener('mouseup', onMouseUp)
+    window.addEventListener('mouseup', onEnd)
+    window.addEventListener('touchmove', onTouchMove, { passive: false })
+    window.addEventListener('touchend', onEnd)
     return () => {
       window.removeEventListener('mousemove', onMouseMove)
-      window.removeEventListener('mouseup', onMouseUp)
+      window.removeEventListener('mouseup', onEnd)
+      window.removeEventListener('touchmove', onTouchMove)
+      window.removeEventListener('touchend', onEnd)
     }
   }, [])
 
@@ -151,6 +174,7 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
       {/* Floating Button — draggable */}
       <button
         onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
         onClick={() => {
           if (hasMoved.current) return // suppress click after drag
           if (isOpen) handleClose(); else handleOpen()

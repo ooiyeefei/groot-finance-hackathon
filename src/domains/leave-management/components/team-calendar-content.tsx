@@ -175,24 +175,24 @@ export default function TeamCalendarContent({ businessId: propBusinessId }: Team
   return (
     <div className="space-y-6">
       {/* Calendar Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <CalendarDays className="w-6 h-6" />
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2">
+            <CalendarDays className="w-5 h-5 sm:w-6 sm:h-6" />
             Team Calendar
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-muted-foreground mt-1 text-sm">
             View team absences and public holidays
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2">
           <Button variant="outline" size="sm" onClick={goToToday}>
             Today
           </Button>
           <Button variant="outline" size="icon" onClick={() => navigateMonth('prev')}>
             <ChevronLeft className="w-4 h-4" />
           </Button>
-          <span className="text-lg font-medium text-foreground min-w-[180px] text-center">
+          <span className="text-sm sm:text-lg font-medium text-foreground min-w-[140px] sm:min-w-[180px] text-center">
             {MONTHS[currentMonth]} {currentYear}
           </span>
           <Button variant="outline" size="icon" onClick={() => navigateMonth('next')}>

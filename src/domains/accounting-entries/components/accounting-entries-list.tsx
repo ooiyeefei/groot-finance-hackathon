@@ -329,9 +329,9 @@ export default function AccountingEntriesList({
           </div>
 
           {/* Second Row: Date Range and Refresh */}
-          <div className="flex flex-col sm:flex-row gap-4 items-center">
+          <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
             {/* Date Range */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
               <Calendar className="w-4 h-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">Date Range:</span>
               <input
@@ -408,9 +408,9 @@ export default function AccountingEntriesList({
       )}
 
       {/* Results Summary and Pagination Controls */}
-      <div className="flex items-center justify-between text-sm text-record-supporting">
-        <div className="flex items-center gap-4">
-          <span>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm text-record-supporting">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+          <span className="text-xs sm:text-sm">
             {generateResultsSummary()}
           </span>
           <div className="flex items-center gap-2">
@@ -474,16 +474,16 @@ export default function AccountingEntriesList({
               key={transaction.id}
               className="bg-record-layer-1 border border-record-border hover:bg-record-hover hover:border-record-border-hover rounded-lg p-4 transition-all duration-200"
             >
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 {/* Left Side - Transaction Info */}
-                <div className="flex items-center gap-4">
-                  <div className="text-2xl">
+                <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
+                  <div className="text-2xl flex-shrink-0">
                     {getAccountingEntryTypeIcon(transaction.transaction_type)}
                   </div>
-                  
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <h3 className="font-medium text-record-title truncate">
+                      <h3 className="font-medium text-record-title truncate text-sm sm:text-base">
                         {transaction.description}
                       </h3>
                       <div className="badge-info-metadata inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors capitalize">
@@ -510,19 +510,19 @@ export default function AccountingEntriesList({
                       )}
                     </div>
                     
-                    <div className="flex items-center gap-4 text-sm text-record-supporting">
+                    <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm text-record-supporting flex-wrap">
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
                         {formatDate(transaction.transaction_date)}
                       </span>
-                      
+
                       {transaction.vendor_name && (
-                        <span className="flex items-center gap-1">
-                          <Building className="w-3 h-3" />
+                        <span className="flex items-center gap-1 truncate max-w-[120px] sm:max-w-none">
+                          <Building className="w-3 h-3 flex-shrink-0" />
                           {transaction.vendor_name}
                         </span>
                       )}
-                      
+
                       <span className="flex items-center gap-1">
                         <span className="text-record-supporting-light text-xs">
                           {formatCategoryName(transaction.category, transaction.transaction_type as TransactionType)}
@@ -533,9 +533,9 @@ export default function AccountingEntriesList({
                 </div>
 
                 {/* Right Side - Amount and Actions */}
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <div className="text-lg font-bold text-record-title">
+                <div className="flex items-center gap-3 sm:gap-4 ml-9 sm:ml-0">
+                  <div className="text-left sm:text-right">
+                    <div className="text-base sm:text-lg font-bold text-record-title">
                       {transaction.transaction_type === 'Expense' && '-'}
                       {formatCurrency(transaction.original_amount, transaction.original_currency as SupportedCurrency)}
                     </div>

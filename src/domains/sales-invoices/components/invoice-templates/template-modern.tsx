@@ -95,7 +95,7 @@ export function ModernInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplate
   return (
     <div
       id="invoice-template"
-      className="bg-card text-foreground w-full max-w-[800px] mx-auto p-10 border border-border rounded-lg shadow-sm"
+      className="bg-card text-foreground w-full max-w-[800px] mx-auto p-4 sm:p-10 border border-border rounded-lg shadow-sm overflow-x-auto"
     >
       {/* ── Header ── */}
       <header className="flex items-start justify-between gap-6 pb-8 border-b border-border" style={{ pageBreakInside: 'avoid' }}>
@@ -143,7 +143,7 @@ export function ModernInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplate
       </header>
 
       {/* ── Dates & Bill To ── */}
-      <section className="grid grid-cols-2 gap-8 py-8 border-b border-border">
+      <section className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8 py-6 sm:py-8 border-b border-border">
         {/* Bill To */}
         <div>
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
@@ -213,8 +213,8 @@ export function ModernInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplate
       </section>
 
       {/* ── Line Items Table ── */}
-      <section className="py-8">
-        <table className="w-full text-sm">
+      <section className="py-6 sm:py-8 overflow-x-auto">
+        <table className="w-full text-sm min-w-[600px]">
           <thead>
             <tr className="border-b-2 border-border">
               <th className="text-left py-3 pr-4 font-semibold text-muted-foreground uppercase tracking-wider text-xs">
