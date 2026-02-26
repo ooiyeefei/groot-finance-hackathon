@@ -1,21 +1,71 @@
 """
 QR Code Detection Step (019-lhdn-einv-flow-2)
 
-Detects QR codes in receipt images using OpenCV's built-in QR detector.
+Detects QR codes in receipt images using OpenCV's built-in QR detector
+with multiple image pre-processing passes for reliability on phone photos.
 Extracts URLs and filters out LHDN validation QR codes.
 Returns merchant buyer-info form URLs.
 """
 
 import re
-from typing import List
+from typing import List, Tuple
 import numpy as np
-from io import BytesIO
 
 # LHDN validation QR pattern — these are NOT merchant form URLs
 LHDN_QR_PATTERN = re.compile(r"myinvois\.hasil\.gov\.my", re.IGNORECASE)
 
 # Valid URL pattern
 URL_PATTERN = re.compile(r"^https?://", re.IGNORECASE)
+
+
+def _try_decode(detector, image, label: str, document_id: str) -> List[str]:
+    """Try to detect and decode QR codes from a single image variant."""
+    try:
+        retval, decoded_info, points, _ = detector.detectAndDecodeMulti(image)
+        if retval and decoded_info:
+            results = [d for d in decoded_info if d]
+            if results:
+                print(f"[{document_id}] QR Detection [{label}]: decoded {len(results)} codes")
+            return results
+    except Exception:
+        pass
+    return []
+
+
+def _prepare_variants(image) -> List[Tuple[str, any]]:
+    """Generate multiple pre-processed image variants for QR detection."""
+    import cv2
+
+    variants = []
+
+    # 1. Original color image
+    variants.append(("original", image))
+
+    # 2. Grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    variants.append(("grayscale", gray))
+
+    # 3. Grayscale + OTSU threshold (best for printed receipts)
+    _, otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    variants.append(("otsu", otsu))
+
+    # 4. Adaptive threshold (handles uneven lighting from photos)
+    adaptive = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 51, 10)
+    variants.append(("adaptive", adaptive))
+
+    # 5. Sharpened (helps with slightly blurry photos)
+    kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
+    sharpened = cv2.filter2D(gray, -1, kernel)
+    variants.append(("sharpened", sharpened))
+
+    # 6. Upscaled 2x (helps with small QR codes)
+    h, w = gray.shape[:2]
+    if max(h, w) < 2000:
+        upscaled = cv2.resize(gray, (w * 2, h * 2), interpolation=cv2.INTER_CUBIC)
+        _, upscaled_otsu = cv2.threshold(upscaled, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        variants.append(("upscaled_otsu", upscaled_otsu))
+
+    return variants
 
 
 def detect_qr_step(
@@ -26,19 +76,8 @@ def detect_qr_step(
     """
     Detect QR codes in a receipt image and extract URLs.
 
-    Uses OpenCV's built-in QRCodeDetector — no system library dependencies.
-
-    Args:
-        document_id: Document ID for logging
-        image_bytes: Raw image bytes
-        mime_type: Image MIME type
-
-    Returns:
-        Dict with:
-        - detected_qr_codes: List of all detected QR code data
-        - merchant_form_urls: List of non-LHDN URLs (merchant buyer-info forms)
-        - lhdn_validation_urls: List of LHDN validation QR URLs
-        - merchant_form_url: First non-LHDN URL (primary candidate) or None
+    Uses OpenCV QRCodeDetector with multiple pre-processing passes
+    for reliability on phone camera photos.
     """
     print(f"[{document_id}] QR Detection: Starting")
 
@@ -57,24 +96,27 @@ def detect_qr_step(
             print(f"[{document_id}] QR Detection: Failed to decode image")
             return _empty_result()
 
-        # Use OpenCV's QR code detector
+        h, w = image.shape[:2]
+        print(f"[{document_id}] QR Detection: Image size {w}x{h}")
+
         detector = cv2.QRCodeDetector()
-        retval, decoded_info, points, straight_qrcode = detector.detectAndDecodeMulti(image)
 
-        if retval and decoded_info:
-            non_empty = [d for d in decoded_info if d]
-            print(f"[{document_id}] QR Detection: Found {len(decoded_info)} codes ({len(non_empty)} decoded)")
+        # Try multiple image variants — stop at first successful decode
+        decoded_data: List[str] = []
+        variants = _prepare_variants(image)
 
-            for i, data in enumerate(decoded_info):
-                if not data:
-                    print(f"[{document_id}] QR Detection: Code #{i} detected but could not be decoded")
-                    continue
+        for label, variant in variants:
+            decoded_data = _try_decode(detector, variant, label, document_id)
+            if decoded_data:
+                break
 
-                print(f"[{document_id}] QR Detection: Code #{i} raw data: {data[:120]}")
-
+        if not decoded_data:
+            print(f"[{document_id}] QR Detection: Tried {len(variants)} variants, no QR decoded")
+        else:
+            for i, data in enumerate(decoded_data):
+                print(f"[{document_id}] QR Detection: Code #{i} raw data: {data[:150]}")
                 detected_qr_codes.append(data)
 
-                # Check if it's a URL
                 if URL_PATTERN.match(data):
                     if LHDN_QR_PATTERN.search(data):
                         lhdn_validation_urls.append(data)
@@ -84,13 +126,10 @@ def detect_qr_step(
                         print(f"[{document_id}] QR Detection: Merchant form URL: {data[:80]}...")
                 else:
                     print(f"[{document_id}] QR Detection: Non-URL QR data: {data[:50]}...")
-        else:
-            print(f"[{document_id}] QR Detection: No QR codes found")
 
     except ImportError:
         print(f"[{document_id}] QR Detection: opencv not available, skipping")
     except Exception as e:
-        # QR detection failure should not fail the entire pipeline
         print(f"[{document_id}] QR Detection: Error - {str(e)}")
 
     result = {
