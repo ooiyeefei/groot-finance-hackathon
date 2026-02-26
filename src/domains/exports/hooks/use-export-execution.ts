@@ -94,6 +94,8 @@ interface ExportTemplateConfig {
   detailFields?: FieldMapping[];
   defaultDateFormat?: string;
   defaultDecimalPlaces?: number;
+  sectionHeader?: string;
+  includeColumnHeaders?: boolean;
 }
 
 // ============================================

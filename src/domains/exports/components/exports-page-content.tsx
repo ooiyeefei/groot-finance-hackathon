@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
-import { FileSpreadsheet, FileText, Clock, History, Download, Plus, BarChart3, Copy, ExternalLink, Loader2, Users } from 'lucide-react';
+import { FileSpreadsheet, FileText, Clock, History, Download, Plus, BarChart3, Copy, ExternalLink, Loader2, Users, AlertCircle } from 'lucide-react';
 import { lazy, Suspense } from 'react';
 
 // Lazy load MonthlyReportGenerator for performance
@@ -27,6 +27,7 @@ import { ModuleSelector } from './module-selector';
 import { TemplateList } from './template-list';
 import { ExportFilters } from './export-filters';
 import { ExportPreview } from './export-preview';
+import { CodeMappingStep } from './code-mapping-step';
 import { TemplateBuilder } from './template-builder';
 import { DeleteTemplateDialog } from './delete-template-dialog';
 import { ScheduleList } from './schedule-list';
@@ -79,6 +80,7 @@ export default function ExportsPageContent() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | Id<'export_templates'> | undefined>();
   const [isPrebuilt, setIsPrebuilt] = useState(true);
   const [filters, setFilters] = useState<ExportFiltersType>({});
+  const [codeMappingComplete, setCodeMappingComplete] = useState(false);
 
   // Template builder state
   const [showTemplateBuilder, setShowTemplateBuilder] = useState(false);
@@ -154,7 +156,13 @@ export default function ExportsPageContent() {
   useEffect(() => {
     setSelectedTemplateId(undefined);
     setIsPrebuilt(true);
+    setCodeMappingComplete(false);
   }, [selectedModule]);
+
+  // Reset code mapping when template changes
+  useEffect(() => {
+    setCodeMappingComplete(false);
+  }, [selectedTemplateId]);
 
   // Handle template selection
   const handleTemplateSelect = useCallback(
@@ -266,6 +274,8 @@ export default function ExportsPageContent() {
           detailFields: template.detailFields,
           defaultDateFormat: template.defaultDateFormat,
           defaultDecimalPlaces: template.defaultDecimalPlaces,
+          sectionHeader: template.sectionHeader,
+          includeColumnHeaders: template.includeColumnHeaders,
         },
       });
 
@@ -526,13 +536,42 @@ export default function ExportsPageContent() {
               </Card>
             )}
 
-            {/* Step 3: Filters & Preview */}
-            {selectedModule && selectedTemplateId && template && (
+            {/* Step 3: Code Mapping (Master Accounting templates only) */}
+            {selectedModule && selectedTemplateId && template && template.requiresCodeMapping && !codeMappingComplete && businessId && (
               <Card className="bg-card border-border">
                 <CardHeader>
                   <div className="flex items-center gap-3">
                     <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
                       3
+                    </div>
+                    <div>
+                      <CardTitle className="text-foreground">Map Codes</CardTitle>
+                      <CardDescription className="text-muted-foreground">
+                        Map Groot Finance values to Master Accounting codes
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <CodeMappingStep
+                    businessId={businessId}
+                    module={selectedModule}
+                    codeMappingTypes={template.codeMappingTypes ?? []}
+                    onComplete={() => setCodeMappingComplete(true)}
+                    onSkip={() => setCodeMappingComplete(true)}
+                    disabled={isExecuting}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Step 3/4: Filters & Preview (shown after mapping step or when no mapping needed) */}
+            {selectedModule && selectedTemplateId && template && (!template.requiresCodeMapping || codeMappingComplete) && (
+              <Card className="bg-card border-border">
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
+                      {template.requiresCodeMapping ? 4 : 3}
                     </div>
                     <div>
                       <CardTitle className="text-foreground">Filter & Export</CardTitle>
@@ -549,6 +588,12 @@ export default function ExportsPageContent() {
                     onChange={setFilters}
                     disabled={isExecuting}
                   />
+                  {template.targetSystem === 'master-accounting' && (
+                    <div className="flex items-start gap-2 rounded-md bg-muted/50 border border-border p-3 text-sm text-muted-foreground">
+                      <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                      <span>Re-exporting the same records may create duplicates in Master Accounting. Ensure you haven&apos;t already imported these records.</span>
+                    </div>
+                  )}
                   <div className="border-t border-border pt-6">
                     <ExportPreview
                       records={previewRecords}

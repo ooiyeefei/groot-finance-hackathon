@@ -1473,6 +1473,30 @@ export default defineSchema({
     .index("by_expiresAt", ["expiresAt"]),
 
   // ============================================
+  // EXPORT CODE MAPPINGS (001-master-accounting-export)
+  // ============================================
+
+  export_code_mappings: defineTable({
+    businessId: v.id("businesses"),
+    targetSystem: v.string(),
+    mappingType: v.string(),
+    sourceValue: v.string(),
+    targetCode: v.string(),
+    isDefault: v.optional(v.boolean()),
+    createdBy: v.id("users"),
+    updatedBy: v.optional(v.id("users")),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_business_system", ["businessId", "targetSystem"])
+    .index("by_business_type", ["businessId", "targetSystem", "mappingType"])
+    .index("by_business_source", [
+      "businessId",
+      "targetSystem",
+      "mappingType",
+      "sourceValue",
+    ]),
+
+  // ============================================
   // SALES INVOICES DOMAIN (009-sales-invoice-generation)
   // ============================================
 

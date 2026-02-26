@@ -32,6 +32,7 @@ import type * as functions_einvoiceUsage from "../functions/einvoiceUsage.js";
 import type * as functions_emails from "../functions/emails.js";
 import type * as functions_expenseClaims from "../functions/expenseClaims.js";
 import type * as functions_expenseSubmissions from "../functions/expenseSubmissions.js";
+import type * as functions_exportCodeMappings from "../functions/exportCodeMappings.js";
 import type * as functions_exportHistory from "../functions/exportHistory.js";
 import type * as functions_exportJobs from "../functions/exportJobs.js";
 import type * as functions_exportSchedules from "../functions/exportSchedules.js";
@@ -106,6 +107,7 @@ declare const fullApi: ApiFromModules<{
   "functions/emails": typeof functions_emails;
   "functions/expenseClaims": typeof functions_expenseClaims;
   "functions/expenseSubmissions": typeof functions_expenseSubmissions;
+  "functions/exportCodeMappings": typeof functions_exportCodeMappings;
   "functions/exportHistory": typeof functions_exportHistory;
   "functions/exportJobs": typeof functions_exportJobs;
   "functions/exportSchedules": typeof functions_exportSchedules;

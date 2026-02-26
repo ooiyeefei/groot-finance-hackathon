@@ -119,6 +119,10 @@ export interface PrebuiltTemplate {
   detailFields?: FieldMapping[];
   defaultDateFormat?: string;
   defaultDecimalPlaces?: number;
+  sectionHeader?: string;
+  includeColumnHeaders?: boolean;
+  requiresCodeMapping?: boolean;
+  codeMappingTypes?: string[];
 }
 
 // ============================================

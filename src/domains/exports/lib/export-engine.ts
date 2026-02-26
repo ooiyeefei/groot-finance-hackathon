@@ -36,42 +36,48 @@ export function generateFlatExport(
   records: Record<string, unknown>[],
   fieldMappings: FieldMapping[],
   delimiter: string = ",",
-  options?: FormatOptions
+  options?: FormatOptions & { includeColumnHeaders?: boolean; sectionHeader?: string }
 ): string {
   const sortedMappings = [...fieldMappings].sort((a, b) => a.order - b.order);
+  const includeHeaders = options?.includeColumnHeaders !== false;
 
-  // Header row
-  const headers = sortedMappings.map((m) =>
-    escapeDelimitedValue(m.targetColumn, delimiter)
-  );
-  const headerRow = headers.join(delimiter);
+  const outputLines: string[] = [];
+
+  // Section header (e.g., "Chart of Account" for Master Accounting master data)
+  if (options?.sectionHeader) {
+    outputLines.push(options.sectionHeader);
+  }
+
+  // Column header row
+  if (includeHeaders) {
+    const headers = sortedMappings.map((m) =>
+      escapeDelimitedValue(m.targetColumn, delimiter)
+    );
+    outputLines.push(headers.join(delimiter));
+  }
 
   // Check if any mappings reference lineItem fields
   const hasLineItemFields = sortedMappings.some((m) =>
     m.sourceField.startsWith("lineItem.")
   );
 
-  const dataRows: string[] = [];
-
   for (const record of records) {
     if (hasLineItemFields && Array.isArray(record.journalLines)) {
-      // Expand: one row per journal line, header fields repeated
       for (const line of record.journalLines as Record<string, unknown>[]) {
         const mergedRecord = { ...record, lineItem: line };
-        dataRows.push(formatRow(mergedRecord, sortedMappings, delimiter, options));
+        outputLines.push(formatRow(mergedRecord, sortedMappings, delimiter, options));
       }
     } else if (hasLineItemFields && Array.isArray(record.lineItems)) {
-      // Expand: one row per line item
       for (const line of record.lineItems as Record<string, unknown>[]) {
         const mergedRecord = { ...record, lineItem: line };
-        dataRows.push(formatRow(mergedRecord, sortedMappings, delimiter, options));
+        outputLines.push(formatRow(mergedRecord, sortedMappings, delimiter, options));
       }
     } else {
-      dataRows.push(formatRow(record, sortedMappings, delimiter, options));
+      outputLines.push(formatRow(record, sortedMappings, delimiter, options));
     }
   }
 
-  return [headerRow, ...dataRows].join("\n");
+  return outputLines.join("\n");
 }
 
 // ============================================
@@ -87,12 +93,17 @@ export function generateHierarchicalExport(
   masterFields: FieldMapping[],
   detailFields: FieldMapping[],
   delimiter: string = ";",
-  options?: FormatOptions
+  options?: FormatOptions & { sectionHeader?: string }
 ): string {
   const sortedMaster = [...masterFields].sort((a, b) => a.order - b.order);
   const sortedDetail = [...detailFields].sort((a, b) => a.order - b.order);
 
   const rows: string[] = [];
+
+  // Section header (e.g., "Purchases Book-Bill" for Master Accounting)
+  if (options?.sectionHeader) {
+    rows.push(options.sectionHeader);
+  }
 
   for (const record of records) {
     // MASTER row
@@ -126,11 +137,16 @@ export function generateExport(
   template: PrebuiltTemplate,
   options?: FormatOptions
 ): string {
-  const mergedOptions: FormatOptions = {
+  const mergedOptions: FormatOptions & {
+    sectionHeader?: string;
+    includeColumnHeaders?: boolean;
+  } = {
     defaultDateFormat: template.defaultDateFormat || options?.defaultDateFormat,
     defaultDecimalPlaces:
       template.defaultDecimalPlaces ?? options?.defaultDecimalPlaces,
     defaultThousandSeparator: options?.defaultThousandSeparator,
+    sectionHeader: template.sectionHeader,
+    includeColumnHeaders: template.includeColumnHeaders,
   };
 
   if (

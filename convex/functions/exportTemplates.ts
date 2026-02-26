@@ -26,6 +26,9 @@ const PREBUILT_TEMPLATE_IDS: Record<string, string[]> = {
     "briohr-expense",
     "kakitangan-expense",
     "generic-expense",
+    "master-accounting-purchases-bill",
+    "master-accounting-cashbook-payment",
+    "master-accounting-creditor",
   ],
   leave: [
     "sql-payroll-leave",
@@ -37,12 +40,15 @@ const PREBUILT_TEMPLATE_IDS: Record<string, string[]> = {
     "sql-accounting-gl-je",
     "autocount-journal",
     "generic-accounting",
+    "master-accounting-journal",
   ],
   invoice: [
     "sql-accounting-ap-pi",
     "sql-accounting-ar-iv",
     "autocount-invoice",
     "generic-invoice",
+    "master-accounting-sales-invoice",
+    "master-accounting-debtor",
   ],
 };
 

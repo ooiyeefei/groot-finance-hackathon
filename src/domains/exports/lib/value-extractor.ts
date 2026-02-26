@@ -89,7 +89,14 @@ export function escapeDelimitedValue(
     return "";
   }
 
-  const str = String(value);
+  let str = String(value);
+
+  // For pipe-delimited formats (Master Accounting), replace pipe chars in data
+  // to prevent delimiter corruption. Pipe format doesn't support quoting.
+  if (delimiter === "|") {
+    str = str.replace(/\|/g, "-");
+    return str;
+  }
 
   const needsEscaping =
     str.includes(delimiter) ||
@@ -180,6 +187,35 @@ export function getFieldType(fieldId: string): "text" | "number" | "date" {
 // FIELD VALUE FORMATTING
 // ============================================
 
+// Master Accounting field length limits by column name pattern
+const MASTER_ACCOUNTING_MAX_LENGTHS: Record<string, number> = {
+  Code: 20,
+  Description: 200,
+  ReferenceNo: 50,
+  RegisterNo: 30,
+  Name: 200,
+  Remark: 200,
+  Address: 200,
+  Phone: 30,
+  Fax: 30,
+  Email: 200,
+  TIN: 30,
+};
+
+function truncateForMasterAccounting(
+  value: string,
+  targetColumn: string
+): string {
+  for (const [pattern, maxLen] of Object.entries(
+    MASTER_ACCOUNTING_MAX_LENGTHS
+  )) {
+    if (targetColumn.includes(pattern)) {
+      return value.length > maxLen ? value.slice(0, maxLen) : value;
+    }
+  }
+  return value;
+}
+
 export function formatFieldValue(
   value: unknown,
   mapping: FieldMapping,
@@ -192,22 +228,34 @@ export function formatFieldValue(
     return "";
   }
 
+  let result: string;
+
   switch (fieldType) {
     case "date":
-      return formatDate(
+      result = formatDate(
         value as string | number,
         mapping.dateFormat || defaultDateFormat || "YYYY-MM-DD"
       );
+      break;
 
     case "number":
-      return formatNumber(
+      result = formatNumber(
         value as number,
         mapping.decimalPlaces ?? defaultDecimalPlaces ?? 2,
         mapping.thousandSeparator || defaultThousandSeparator || "none"
       );
+      break;
 
     case "text":
     default:
-      return String(value);
+      result = String(value);
+      break;
   }
+
+  // Apply Master Accounting truncation for text fields
+  if (fieldType === "text") {
+    result = truncateForMasterAccounting(result, mapping.targetColumn);
+  }
+
+  return result;
 }

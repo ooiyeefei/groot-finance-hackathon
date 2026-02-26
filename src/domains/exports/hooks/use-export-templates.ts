@@ -107,6 +107,11 @@ export function useExportTemplate(
             fileExtension: prebuilt.fileExtension,
             defaultDateFormat: prebuilt.defaultDateFormat,
             defaultDecimalPlaces: prebuilt.defaultDecimalPlaces,
+            sectionHeader: prebuilt.sectionHeader,
+            includeColumnHeaders: prebuilt.includeColumnHeaders,
+            requiresCodeMapping: prebuilt.requiresCodeMapping,
+            codeMappingTypes: prebuilt.codeMappingTypes,
+            targetSystem: prebuilt.targetSystem,
             isPrebuilt: true,
           }
         : null,
