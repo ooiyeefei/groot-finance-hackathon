@@ -14,6 +14,8 @@ import {
   RefreshCw,
   Clock,
   Ban,
+  Eye,
+  FileText,
 } from 'lucide-react'
 import EinvoiceStatusBadge from './einvoice-status-badge'
 import EinvoiceMatchReview from './einvoice-match-review'
@@ -38,6 +40,7 @@ interface EinvoiceSectionProps {
   einvoiceRequestedAt?: number | null
   einvoiceReceivedAt?: number | null
   einvoiceAgentError?: string | null
+  einvoiceStoragePath?: string | null
   lhdnReceivedDocumentUuid?: string | null
   lhdnReceivedLongId?: string | null
   lhdnReceivedStatus?: string | null
@@ -61,6 +64,7 @@ export default function EinvoiceSection({
   einvoiceRequestedAt,
   einvoiceReceivedAt,
   einvoiceAgentError,
+  einvoiceStoragePath,
   lhdnReceivedDocumentUuid,
   lhdnReceivedLongId,
   lhdnReceivedStatus,
@@ -71,6 +75,7 @@ export default function EinvoiceSection({
 }: EinvoiceSectionProps) {
   const [requestLoading, setRequestLoading] = useState(false)
   const [uploadLoading, setUploadLoading] = useState(false)
+  const [pdfLoading, setPdfLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Don't show section if no e-invoice-related data at all
@@ -132,6 +137,31 @@ export default function EinvoiceSection({
       setUploadLoading(false)
       // Reset input
       e.target.value = ''
+    }
+  }
+
+  const handleViewEinvoicePdf = async () => {
+    if (!einvoiceStoragePath) return
+
+    setPdfLoading(true)
+    setError(null)
+
+    try {
+      const response = await fetch(
+        `/api/v1/expense-claims/${claimId}/image-url?storagePath=${encodeURIComponent(einvoiceStoragePath)}&useRawFile=true`
+      )
+      const result = await response.json()
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to load e-invoice PDF')
+      }
+
+      // Open PDF in new tab
+      window.open(result.data.imageUrl, '_blank', 'noopener,noreferrer')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load e-invoice PDF')
+    } finally {
+      setPdfLoading(false)
     }
   }
 
@@ -270,6 +300,37 @@ export default function EinvoiceSection({
             </div>
           )}
         </div>
+
+        {/* Attached E-Invoice Document */}
+        {einvoiceAttached && einvoiceStoragePath && (
+          <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-green-600 dark:text-green-400" />
+                <div>
+                  <p className="text-green-600 dark:text-green-400 text-sm font-medium">E-Invoice Attached</p>
+                  <p className="text-muted-foreground text-xs">
+                    {einvoiceStoragePath.split('/').pop()}
+                  </p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleViewEinvoicePdf}
+                disabled={pdfLoading}
+                className="border-green-500/30 text-green-600 dark:text-green-400 hover:bg-green-500/10"
+              >
+                {pdfLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                ) : (
+                  <Eye className="w-4 h-4 mr-1" />
+                )}
+                View PDF
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Match Review */}
         {pendingMatchCandidates && pendingMatchCandidates.length > 0 && (

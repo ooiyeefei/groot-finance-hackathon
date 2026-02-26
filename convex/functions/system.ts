@@ -1332,8 +1332,93 @@ export const getBusinessesForLhdnPolling = query({
   },
 });
 
+// ============================================
+// E-INVOICE EMAIL PROCESSING (019-lhdn-einv-flow-2)
+//
+// SES receives email → Lambda processes → calls these functions
+// ============================================
+
 /**
- * Helper: Parse email ref from einvoice+XXX@hellogroot.com address
+ * Public Query: Look up expense claim by email ref token.
+ * Called by einvoice-email-processor Lambda to get claim details for S3 path construction.
+ * Returns businessId, userId, storagePath needed to save files in the right S3 folder.
+ */
+export const getClaimByEmailRef = query({
+  args: { emailRef: v.string() },
+  handler: async (ctx, args) => {
+    const claims = await ctx.db
+      .query("expense_claims")
+      .withIndex("by_einvoiceEmailRef", (q) => q.eq("einvoiceEmailRef", args.emailRef))
+      .collect();
+
+    const claim = claims.find((c) => !c.deletedAt);
+    if (!claim) return null;
+
+    return {
+      claimId: claim._id as string,
+      businessId: claim.businessId as string,
+      userId: claim.userId as string,
+      // S3 storage path pattern: {bizId}/{userId}/{claimId}
+      storagePath: `${claim.businessId}/${claim.userId}/${claim._id}`,
+    };
+  },
+});
+
+/**
+ * Public Mutation: Update expense claim after e-invoice email is processed.
+ * Called by einvoice-email-processor Lambda after saving files to S3.
+ */
+export const processEinvoiceEmail = mutation({
+  args: {
+    claimId: v.string(),
+    emailRef: v.string(),
+    fromAddress: v.string(),
+    subject: v.optional(v.string()),
+    messageId: v.string(),
+    einvoiceStoragePath: v.union(v.string(), v.null()),
+    rawEmailStoragePath: v.string(),
+    hasAttachment: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const claim = await resolveById(ctx.db, "expense_claims", args.claimId);
+    if (!claim) {
+      console.log(`[E-Invoice Email] Claim not found: ${args.claimId}`);
+      return;
+    }
+
+    await ctx.db.patch(claim._id, {
+      einvoiceRequestStatus: "received" as const,
+      einvoiceSource: "merchant_issued" as const,
+      einvoiceAttached: args.hasAttachment,
+      einvoiceReceivedAt: Date.now(),
+      ...(args.einvoiceStoragePath && { einvoiceStoragePath: args.einvoiceStoragePath }),
+      einvoiceRawEmailPath: args.rawEmailStoragePath,
+      updatedAt: Date.now(),
+    });
+
+    // Send notification to the employee
+    try {
+      await ctx.scheduler.runAfter(0, internal.functions.notifications.create, {
+        recipientUserId: claim.userId,
+        businessId: claim.businessId,
+        type: "compliance" as const,
+        severity: "info" as const,
+        title: "E-Invoice Received",
+        body: `E-invoice received from ${args.fromAddress}${args.hasAttachment ? " (PDF attached)" : " (no attachment)"}`,
+        resourceType: "expense_claim" as const,
+        resourceId: claim._id as string,
+        sourceEvent: `einvoice_email_${claim._id}_${args.messageId}`,
+      });
+    } catch (e) {
+      console.log(`[E-Invoice Email] Notification failed (non-critical): ${e}`);
+    }
+
+    console.log(`[E-Invoice Email] Updated claim ${args.claimId}: status=received, hasAttachment=${args.hasAttachment}`);
+  },
+});
+
+/**
+ * Helper: Parse email ref from einvoice+XXX@einv.hellogroot.com address
  */
 function parseEmailRef(email: string): string | null {
   const match = email.match(/einvoice\+([^@]+)@/i);

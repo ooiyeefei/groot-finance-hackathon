@@ -120,6 +120,7 @@ interface ClaimDetails {
   einvoiceRequestedAt?: number | null
   einvoiceReceivedAt?: number | null
   einvoiceAgentError?: string | null
+  einvoiceStoragePath?: string | null
   lhdnReceivedDocumentUuid?: string | null
   lhdnReceivedLongId?: string | null
   lhdnReceivedStatus?: string | null
@@ -849,6 +850,7 @@ export default function UnifiedExpenseDetailsModal({
                         einvoiceRequestedAt={claimDetails.einvoiceRequestedAt}
                         einvoiceReceivedAt={claimDetails.einvoiceReceivedAt}
                         einvoiceAgentError={claimDetails.einvoiceAgentError}
+                        einvoiceStoragePath={claimDetails.einvoiceStoragePath}
                         lhdnReceivedDocumentUuid={claimDetails.lhdnReceivedDocumentUuid}
                         lhdnReceivedLongId={claimDetails.lhdnReceivedLongId}
                         lhdnReceivedStatus={claimDetails.lhdnReceivedStatus}

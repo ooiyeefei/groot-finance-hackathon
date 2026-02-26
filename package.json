@@ -140,6 +140,7 @@
     "@testing-library/jest-dom": "^6.9.0",
     "@testing-library/react": "^16.3.0",
     "@types/html2pdf.js": "^0.10.0",
+    "@types/mailparser": "^3.4.6",
     "@types/node": "^20",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",

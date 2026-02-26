@@ -499,7 +499,7 @@ def handler(event: dict, context: DurableContext):
                     "tin": request.business_details.tin,
                     "brn": request.business_details.brn,
                     "address": request.business_details.address,
-                    "email": f"einvoice+{email_ref}@hellogroot.com",
+                    "email": f"einvoice+{email_ref}@einv.hellogroot.com",
                     "phone": request.business_details.phone,
                 },
                 "extractedData": {

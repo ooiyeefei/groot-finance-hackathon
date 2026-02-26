@@ -6,6 +6,8 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
+import * as ses from 'aws-cdk-lib/aws-ses';
+import * as sesActions from 'aws-cdk-lib/aws-ses-actions';
 import { Construct } from 'constructs';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -268,6 +270,73 @@ export class DocumentProcessingStack extends cdk.Stack {
     lhdnPollSchedule.addTarget(new targets.LambdaFunction(lhdnPollFunction));
 
     // ========================================================================
+    // E-Invoice Email Processor Lambda (019-lhdn-einv-flow-2)
+    // Processes incoming merchant e-invoice emails received via SES.
+    // SES stores raw email in S3 → triggers this Lambda → parses MIME →
+    // extracts PDF attachment → saves to S3 under expense claim → updates Convex.
+    //
+    // Email format: einvoice+{ref}@einv.hellogroot.com
+    // MX record: einv.hellogroot.com → inbound-smtp.us-west-2.amazonaws.com
+    // ========================================================================
+    const emailProcessorLogGroup = new logs.LogGroup(this, 'EinvoiceEmailProcessorLogs', {
+      logGroupName: '/aws/lambda/finanseal-einvoice-email-processor',
+      retention: logs.RetentionDays.ONE_MONTH,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const emailProcessorFunction = new lambdaNode.NodejsFunction(this, 'EinvoiceEmailProcessor', {
+      entry: path.join(__dirname, '../../src/lambda/einvoice-email-processor/handler.ts'),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_20_X,
+      architecture: lambda.Architecture.ARM_64,
+      functionName: 'finanseal-einvoice-email-processor',
+      description: 'Process incoming merchant e-invoice emails from SES (019-lhdn-einv-flow-2)',
+      memorySize: 256,
+      timeout: cdk.Duration.seconds(30),
+      logGroup: emailProcessorLogGroup,
+      environment: {
+        NEXT_PUBLIC_CONVEX_URL: 'https://kindhearted-lynx-129.convex.cloud',
+        S3_BUCKET_NAME: 'finanseal-bucket',
+      },
+      bundling: {
+        externalModules: ['@aws-sdk/*'],
+        minify: true,
+        sourceMap: true,
+      },
+    });
+
+    // S3 read/write: read raw email from SES bucket, write processed files to main bucket
+    bucket.grantReadWrite(emailProcessorFunction);
+
+    // Also need read access to the SES email bucket (may be same bucket or different)
+    // SES stores raw emails in the same bucket under ses-emails/einvoice/ prefix
+
+    // ========================================================================
+    // SES Receiving: einv.hellogroot.com (019-lhdn-einv-flow-2)
+    //
+    // Prerequisites (manual DNS):
+    // - MX record: einv → inbound-smtp.us-west-2.amazonaws.com (priority 10)
+    //
+    // Cost: Free (first 1,000 emails/month), then $0.10 per 1,000
+    // ========================================================================
+    const receiptRuleSet = new ses.ReceiptRuleSet(this, 'EinvoiceReceiptRuleSet', {
+      receiptRuleSetName: 'finanseal-einvoice-receipt',
+    });
+
+    receiptRuleSet.addRule('EinvoiceReceiptRule', {
+      recipients: ['einv.hellogroot.com'],
+      actions: [
+        new sesActions.S3({
+          bucket,
+          objectKeyPrefix: 'ses-emails/einvoice/',
+        }),
+        new sesActions.Lambda({
+          function: emailProcessorFunction,
+        }),
+      ],
+    });
+
+    // ========================================================================
     // Outputs
     // ========================================================================
     new cdk.CfnOutput(this, 'FunctionArn', {
@@ -298,6 +367,12 @@ export class DocumentProcessingStack extends cdk.Stack {
       value: lhdnPollFunction.functionArn,
       description: 'LHDN polling Lambda ARN',
       exportName: `${id}-LhdnPollFunctionArn`,
+    });
+
+    new cdk.CfnOutput(this, 'EinvoiceEmailProcessorArn', {
+      value: emailProcessorFunction.functionArn,
+      description: 'E-Invoice email processor Lambda ARN',
+      exportName: `${id}-EinvoiceEmailProcessorArn`,
     });
   }
 }

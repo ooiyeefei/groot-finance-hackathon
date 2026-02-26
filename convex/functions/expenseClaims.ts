@@ -2508,6 +2508,8 @@ export const internalUpdateEinvoiceStatus = internalMutation({
     einvoiceEmailRef: v.optional(v.string()),
     einvoiceRequestedAt: v.optional(v.number()),
     einvoiceManualUploadPath: v.optional(v.string()),
+    einvoiceStoragePath: v.optional(v.string()),
+    einvoiceRawEmailPath: v.optional(v.string()),
     merchantFormUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -2533,6 +2535,8 @@ export const internalUpdateEinvoiceStatus = internalMutation({
     if (args.einvoiceEmailRef !== undefined) updateData.einvoiceEmailRef = args.einvoiceEmailRef;
     if (args.einvoiceRequestedAt !== undefined) updateData.einvoiceRequestedAt = args.einvoiceRequestedAt;
     if (args.einvoiceManualUploadPath !== undefined) updateData.einvoiceManualUploadPath = args.einvoiceManualUploadPath;
+    if (args.einvoiceStoragePath !== undefined) updateData.einvoiceStoragePath = args.einvoiceStoragePath;
+    if (args.einvoiceRawEmailPath !== undefined) updateData.einvoiceRawEmailPath = args.einvoiceRawEmailPath;
     if (args.merchantFormUrl !== undefined) updateData.merchantFormUrl = args.merchantFormUrl;
 
     await ctx.db.patch(claim._id, updateData);
@@ -2670,7 +2674,7 @@ export const requestEinvoice = mutation({
         tin: business.lhdnTin as string,
         brn: (business.businessRegistrationNumber || business.lhdnTin) as string,
         address: business.address as string,
-        email: `einvoice+${emailRef}@hellogroot.com`,
+        email: `einvoice+${emailRef}@einv.hellogroot.com`,
         phone: business.contactPhone,
       },
       receiptReferenceNumber: claim.referenceNumber,

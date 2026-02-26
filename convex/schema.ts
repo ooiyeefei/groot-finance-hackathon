@@ -513,6 +513,10 @@ export default defineSchema({
     // Manual Upload
     einvoiceManualUploadPath: v.optional(v.string()),  // Storage path for manually uploaded e-invoice
 
+    // E-Invoice from merchant email (SES → Lambda → S3)
+    einvoiceStoragePath: v.optional(v.string()),       // S3 path: {bizId}/{userId}/{claimId}/einvoice/{filename}
+    einvoiceRawEmailPath: v.optional(v.string()),      // S3 path: {bizId}/{userId}/{claimId}/einvoice/raw-email.eml
+
     // Timestamps & Error
     einvoiceRequestedAt: v.optional(v.number()),
     einvoiceReceivedAt: v.optional(v.number()),
