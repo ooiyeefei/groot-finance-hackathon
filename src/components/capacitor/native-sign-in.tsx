@@ -12,7 +12,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { useSignIn, useSignUp } from '@clerk/nextjs';
+import { useSignIn, useSignUp, useClerk } from '@clerk/nextjs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,6 +26,7 @@ interface NativeSignInProps {
 
 export function NativeSignIn({ locale, redirectUrl, signUpUrl }: NativeSignInProps) {
   const { signIn, setActive, isLoaded } = useSignIn();
+  const { signOut } = useClerk();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -37,6 +38,15 @@ export function NativeSignIn({ locale, redirectUrl, signUpUrl }: NativeSignInPro
     setLoading(true);
 
     try {
+      // Clear any stale session before attempting sign-in.
+      // In Capacitor WKWebView, signOut() from the previous page may not
+      // have fully cleared cookies by the time this page loaded.
+      try {
+        await signOut();
+      } catch {
+        // Ignore - may already be signed out
+      }
+
       const result = await signIn.create({
         identifier: email,
         password,
@@ -54,11 +64,19 @@ export function NativeSignIn({ locale, redirectUrl, signUpUrl }: NativeSignInPro
       const message = clerkError.errors?.[0]?.longMessage
         || clerkError.errors?.[0]?.message
         || 'Sign in failed. Please check your credentials.';
+
+      // If Clerk says "already signed in", the session is actually valid -
+      // redirect to the app instead of showing an error
+      if (message.toLowerCase().includes('already signed in')) {
+        window.location.href = redirectUrl || `/${locale}`;
+        return;
+      }
+
       setError(message);
     } finally {
       setLoading(false);
     }
-  }, [isLoaded, signIn, setActive, email, password]);
+  }, [isLoaded, signIn, setActive, signOut, email, password, redirectUrl, locale]);
 
   if (!isLoaded) {
     return (
