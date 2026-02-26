@@ -26,8 +26,12 @@ FROM public.ecr.aws/lambda/python:3.11
 USER root
 RUN yum install -y poppler-utils && yum clean all
 
-# Copy zbar shared library from builder stage
+# Copy zbar + all its shared library dependencies from Debian
 COPY --from=zbar-builder /usr/lib/x86_64-linux-gnu/libzbar.so.0.3.0 /usr/lib64/libzbar.so.0.3.0
+COPY --from=zbar-builder /lib/x86_64-linux-gnu/libv4l2.so.0 /usr/lib64/libv4l2.so.0
+COPY --from=zbar-builder /lib/x86_64-linux-gnu/libv4lconvert.so.0 /usr/lib64/libv4lconvert.so.0
+COPY --from=zbar-builder /lib/x86_64-linux-gnu/libjpeg.so.62 /usr/lib64/libjpeg.so.62
+COPY --from=zbar-builder /lib/x86_64-linux-gnu/libdbus-1.so.3 /usr/lib64/libdbus-1.so.3
 RUN ln -sf /usr/lib64/libzbar.so.0.3.0 /usr/lib64/libzbar.so.0 && \
     ln -sf /usr/lib64/libzbar.so.0.3.0 /usr/lib64/libzbar.so && \
     /sbin/ldconfig
