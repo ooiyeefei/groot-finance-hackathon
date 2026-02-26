@@ -311,8 +311,8 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
       )}
 
       {/* Header row - title + actions */}
-      <div className="flex items-start justify-between flex-wrap gap-4">
-        <div className="flex-1 min-w-0">
+      <div className="space-y-3">
+        <div className="min-w-0">
           {isEditingTitle ? (
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="sm" className="flex-shrink-0" onClick={() => router.push(backPath)}>
@@ -333,7 +333,7 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
               <Button variant="ghost" size="sm" className="flex-shrink-0" onClick={() => router.push(backPath)}>
                 <ArrowLeft className="h-4 w-4" />
               </Button>
-              <h1 className="text-[27px] font-semibold text-foreground truncate">{submission.title}</h1>
+              <h1 className="text-xl sm:text-[27px] font-semibold text-foreground truncate">{submission.title}</h1>
               {isDraft && (
                 <Button variant="ghost" size="sm" onClick={() => { setEditTitle(submission.title); setIsEditingTitle(true) }}>
                   <Pencil className="h-4 w-4" />
@@ -341,19 +341,19 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
               )}
             </div>
           )}
-          <div className="flex items-center gap-3 mt-1 ml-10">
+          <div className="flex items-center gap-3 mt-1 ml-10 flex-wrap">
             <Badge className={statusBadge.className}>{statusBadge.label}</Badge>
-            <span className="text-base text-muted-foreground">
+            <span className="text-sm sm:text-base text-muted-foreground">
               {claims.length} {claims.length === 1 ? 'claim' : 'claims'}
             </span>
             {data?.submitter && (
-              <span className="text-base text-muted-foreground">by {data.submitter.name}</span>
+              <span className="text-sm sm:text-base text-muted-foreground">by {data.submitter.name}</span>
             )}
           </div>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* Action buttons - stack on mobile, row on desktop */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 ml-10">
           {isDraft && (
             <>
               <Button
