@@ -18,7 +18,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { SignOutButton } from '@clerk/nextjs'
+import { useClerk } from '@clerk/nextjs'
 import {
   Building2,
   ArrowLeft,
@@ -92,6 +92,7 @@ export default function BusinessOnboardingModal({
   mode = 'modal',
 }: BusinessOnboardingModalProps) {
   const router = useRouter()
+  const { signOut } = useClerk()
   const { refreshMemberships, refreshContext } = useBusinessContext()
 
   // Wizard state
@@ -298,16 +299,18 @@ export default function BusinessOnboardingModal({
             </div>
             <div className="flex items-center gap-2">
               {mode === 'page' && (
-                <SignOutButton redirectUrl="/en/sign-in">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    <LogOut className="h-4 w-4 mr-1.5" />
-                    Sign out
-                  </Button>
-                </SignOutButton>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground hover:text-foreground"
+                  onClick={async () => {
+                    await signOut()
+                    window.location.href = '/en/sign-in'
+                  }}
+                >
+                  <LogOut className="h-4 w-4 mr-1.5" />
+                  Sign out
+                </Button>
               )}
               <Button
                 variant="ghost"

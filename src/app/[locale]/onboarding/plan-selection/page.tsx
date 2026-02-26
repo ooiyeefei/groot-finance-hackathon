@@ -24,23 +24,68 @@
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { SignOutButton } from '@clerk/nextjs'
+import { useClerk } from '@clerk/nextjs'
 import { PlanKey } from '@/lib/stripe/plans'
 import { PricingTable } from '@/domains/billing/components/pricing-table'
 import { TrialCTA } from '@/domains/onboarding/components/plan-selection/trial-cta'
 import { useToast } from '@/components/ui/toast'
-import { AlertTriangle, Loader2, LogOut } from 'lucide-react'
+import { useBusinessMemberships, useBusinessContext } from '@/contexts/business-context'
+import { AlertTriangle, Loader2, LogOut, ChevronRight } from 'lucide-react'
 
 // Inner component that uses useSearchParams (must be wrapped in Suspense)
 function PlanSelectionContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const locale = useLocale()
+  const { signOut } = useClerk()
   const { addToast } = useToast()
   const [isTrialLoading, setIsTrialLoading] = useState(false)
+  const [isSigningOut, setIsSigningOut] = useState(false)
+
+  // Business context for switching businesses
+  const { memberships } = useBusinessMemberships()
+  const { switchActiveBusiness, activeContext } = useBusinessContext()
+  const activeBusinessId = activeContext?.businessId || null
+  const [isSwitching, setIsSwitching] = useState(false)
 
   // Check if this is an expired trial redirect
   const isTrialExpired = searchParams.get('trial_expired') === 'true'
+
+  // Show business switcher only when trial expired and user has multiple businesses
+  const hasMultipleBusinesses = memberships.length > 1
+
+  // Handle sign out with explicit redirect (works reliably in Capacitor WKWebView)
+  const handleSignOut = async () => {
+    setIsSigningOut(true)
+    try {
+      await signOut()
+      window.location.href = `/${locale}/sign-in`
+    } catch (error) {
+      console.error('Error signing out:', error)
+      setIsSigningOut(false)
+    }
+  }
+
+  // Handle business switch
+  const handleSwitchBusiness = async (businessId: string) => {
+    setIsSwitching(true)
+    try {
+      const success = await switchActiveBusiness(businessId)
+      if (success) {
+        // After switching, reload to let middleware re-evaluate trial status
+        window.location.href = `/${locale}`
+      }
+    } catch (error) {
+      console.error('Error switching business:', error)
+      addToast({
+        type: 'error',
+        title: 'Error',
+        description: 'Failed to switch business. Please try again.',
+      })
+    } finally {
+      setIsSwitching(false)
+    }
+  }
 
   // Handle trial selection - continue to business setup
   const handleStartTrial = async () => {
@@ -88,7 +133,7 @@ function PlanSelectionContent() {
       <div className="max-w-5xl mx-auto space-y-8">
         {/* Trial Expired Banner */}
         {isTrialExpired && (
-          <div className="max-w-3xl mx-auto">
+          <div className="max-w-3xl mx-auto space-y-4">
             <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-6 flex items-start gap-4">
               <AlertTriangle className="w-6 h-6 text-destructive flex-shrink-0 mt-0.5" />
               <div className="space-y-2">
@@ -101,6 +146,38 @@ function PlanSelectionContent() {
                 </p>
               </div>
             </div>
+
+            {/* Business Switcher - shown when user has other businesses to switch to */}
+            {hasMultipleBusinesses && (
+              <div className="bg-card border border-border rounded-lg p-4">
+                <p className="text-sm font-medium text-foreground mb-3">
+                  Switch to another business
+                </p>
+                <div className="space-y-2">
+                  {memberships
+                    .filter((biz) => biz.id !== activeBusinessId)
+                    .map((biz) => (
+                      <button
+                        key={biz.id}
+                        onClick={() => handleSwitchBusiness(biz.id)}
+                        disabled={isSwitching}
+                        className="w-full flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted text-left transition-colors disabled:opacity-50"
+                      >
+                        <div
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                          style={{ backgroundColor: biz.logo_fallback_color || '#6366f1' }}
+                        >
+                          {biz.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{biz.name}</p>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -155,12 +232,18 @@ function PlanSelectionContent() {
           <p className="text-sm text-muted-foreground">
             All plans include full data access and email support
           </p>
-          <SignOutButton redirectUrl="/en/sign-in">
-            <button className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button
+            onClick={handleSignOut}
+            disabled={isSigningOut}
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+          >
+            {isSigningOut ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
               <LogOut className="w-3.5 h-3.5" />
-              Sign out
-            </button>
-          </SignOutButton>
+            )}
+            {isSigningOut ? 'Signing out...' : 'Sign out'}
+          </button>
         </div>
       </div>
     </div>
