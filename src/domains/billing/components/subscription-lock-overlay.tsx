@@ -3,14 +3,13 @@
 /**
  * SubscriptionLockOverlay
  *
- * Blur overlay over the main content area when subscription is paused
- * (trial expired without payment method). Prompts user to choose a plan.
+ * Blur overlay over the main content area when subscription access is revoked.
  *
  * The sidebar remains accessible (z-[45] > overlay z-40) so users can:
  * - Switch to another business that may still be active
  * - Navigate to pricing/billing pages
  *
- * Triggered by: subscription.status === 'paused'
+ * Triggered by: subscription.status in ['paused', 'canceled', 'unpaid']
  */
 
 import { useSubscription } from '../hooks/use-subscription'
@@ -32,6 +31,31 @@ const UNBLOCKED_PATHS = [
   '/onboarding',
 ]
 
+// Statuses that trigger the lock overlay
+const LOCKED_STATUSES = new Set(['paused', 'canceled', 'unpaid'])
+
+// Status-specific messaging
+function getLockContent(status: string) {
+  switch (status) {
+    case 'canceled':
+      return {
+        title: 'Subscription Ended',
+        message: 'Your subscription has been canceled. Choose a plan to restore access to Groot Finance. Your data is safe and waiting for you.',
+      }
+    case 'unpaid':
+      return {
+        title: 'Payment Required',
+        message: 'Your subscription payment is overdue. Please update your payment method or choose a plan to continue.',
+      }
+    case 'paused':
+    default:
+      return {
+        title: 'Free Trial Ended',
+        message: 'Your 14-day Pro trial has ended. Choose a plan to continue using Groot Finance. Your data is safe and waiting for you.',
+      }
+  }
+}
+
 export function SubscriptionLockOverlay() {
   const { data, isLoading } = useSubscription()
   const { signOut } = useClerk()
@@ -40,12 +64,14 @@ export function SubscriptionLockOverlay() {
   // Don't block while loading or if no data yet
   if (isLoading || !data) return null
 
-  // Only block when subscription is paused (trial expired without payment)
-  if (data.subscription.status !== 'paused') return null
+  // Block when subscription is in a locked state
+  if (!LOCKED_STATUSES.has(data.subscription.status)) return null
 
   // Don't block pricing/billing/settings pages — user needs those to upgrade
   const isUnblockedPath = UNBLOCKED_PATHS.some(path => pathname?.includes(path))
   if (isUnblockedPath) return null
+
+  const { title, message } = getLockContent(data.subscription.status)
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
@@ -68,12 +94,11 @@ export function SubscriptionLockOverlay() {
           </div>
 
           <h2 className="text-2xl font-bold text-foreground mb-2">
-            Free Trial Ended
+            {title}
           </h2>
 
           <p className="text-muted-foreground mb-6">
-            Your 14-day Pro trial has ended. Choose a plan to continue using Groot Finance.
-            Your data is safe and waiting for you.
+            {message}
           </p>
 
           {/* CTA buttons */}

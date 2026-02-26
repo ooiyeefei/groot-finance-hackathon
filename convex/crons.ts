@@ -200,6 +200,19 @@ crons.daily(
   internal.functions.timesheets.autoConfirmPastDeadline
 );
 
+/**
+ * Manual Subscription Expiry
+ *
+ * Runs daily at 0:30 AM UTC to pause manual subscriptions
+ * (bank transfer customers) whose subscriptionPeriodEnd has passed.
+ * This triggers the lock overlay so expired manual subs get locked.
+ */
+crons.daily(
+  "expire-manual-subscriptions",
+  { hourUTC: 0, minuteUTC: 30 },
+  internal.functions.businesses.expireManualSubscriptions
+);
+
 // E-Invoice LHDN Polling (019-lhdn-einv-flow-2):
 // Handled by AWS EventBridge → Lambda (every 5 min). No Convex cron needed.
 // Lambda queries Convex for businesses with pending requests, polls LHDN directly.

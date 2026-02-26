@@ -2456,6 +2456,57 @@ export const manuallyDeactivateSubscription = mutation({
 });
 
 // ============================================
+// SUBSCRIPTION EXPIRY CRON
+// ============================================
+
+/**
+ * Auto-expire manual subscriptions whose period has ended.
+ *
+ * Runs daily via cron. Finds businesses where:
+ * - stripeSubscriptionId starts with "manual_"
+ * - subscriptionStatus is "active"
+ * - subscriptionPeriodEnd < now
+ *
+ * Sets them to "paused" so the lock overlay triggers.
+ */
+export const expireManualSubscriptions = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+
+    // Find all businesses with manual subscriptions
+    const businesses = await ctx.db
+      .query("businesses")
+      .filter((q) => q.eq(q.field("subscriptionStatus"), "active"))
+      .collect();
+
+    let expired = 0;
+
+    for (const business of businesses) {
+      // Only process manual subscriptions with an expired period
+      const isManual = business.stripeSubscriptionId?.startsWith("manual_");
+      const isExpired = business.subscriptionPeriodEnd && business.subscriptionPeriodEnd < now;
+
+      if (isManual && isExpired) {
+        await ctx.db.patch(business._id, {
+          subscriptionStatus: "paused",
+          updatedAt: now,
+        });
+
+        console.log(
+          `[Subscription Expiry] ⏰ Expired manual subscription for ${business.name} (${business._id}), ` +
+          `periodEnd was ${new Date(business.subscriptionPeriodEnd!).toISOString()}`
+        );
+        expired++;
+      }
+    }
+
+    console.log(`[Subscription Expiry] Checked ${businesses.length} active businesses, expired ${expired}`);
+    return { checked: businesses.length, expired };
+  },
+});
+
+// ============================================
 // 019: COUNTRY-BASED PRICING LOCKDOWN
 // ============================================
 

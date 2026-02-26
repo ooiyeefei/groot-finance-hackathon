@@ -131,9 +131,18 @@ export async function GET(request: NextRequest) {
     // Build subscription details entirely from Convex (synced by webhooks)
     const periodEndTimestamp = business.subscriptionPeriodEnd ?? null
 
+    // Detect expired manual subscriptions: if period ended and status is still "active",
+    // the subscription has lapsed (no Stripe webhook to auto-update manual subs)
+    const isManualSub = business.stripeSubscriptionId?.startsWith('manual_')
+    const now = Date.now()
+    const isPeriodExpired = periodEndTimestamp && periodEndTimestamp < now
+    const effectiveStatus = (
+      business.subscriptionStatus === 'active' && isManualSub && isPeriodExpired
+    ) ? 'paused' : (business.subscriptionStatus || 'active')
+
     // Calculate trial info — trial is a STATUS, not a plan
-    const isTrialingStatus = business.subscriptionStatus === 'trialing'
-    const isPausedStatus = business.subscriptionStatus === 'paused'
+    const isTrialingStatus = effectiveStatus === 'trialing'
+    const isPausedStatus = effectiveStatus === 'paused'
     const isOnTrial = isTrialingStatus
 
     let trialInfo: {
@@ -239,7 +248,7 @@ export async function GET(request: NextRequest) {
           highlightFeatures: plan.highlightFeatures,
         },
         subscription: {
-          status: business.subscriptionStatus || 'active',
+          status: effectiveStatus,
           stripeCustomerId: business.stripeCustomerId ?? null,
           stripeSubscriptionId: business.stripeSubscriptionId ?? null,
           currentPeriodStart: null, // Not tracked in Convex (not needed by frontend)

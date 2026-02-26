@@ -147,8 +147,9 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
   }, [])
 
   // Don't render for unauthenticated users or when subscription is locked
+  const LOCKED_STATUSES = ['paused', 'canceled', 'unpaid']
   if (!isSignedIn) return null
-  if (subscriptionData?.subscription.status === 'paused') return null
+  if (subscriptionData && LOCKED_STATUSES.includes(subscriptionData.subscription.status)) return null
 
   const chatWindowBottom = pos.bottom + BTN_SIZE + MARGIN
   const chatWindowRight = pos.right
