@@ -7,17 +7,22 @@
  * Architecture:
  * - EventBridge triggers this Lambda every 5 minutes
  * - Lambda queries Convex for businesses with pending e-invoice requests
- * - Lambda reads per-business LHDN client secret from AWS SSM (IAM-native)
- * - Lambda authenticates with LHDN and fetches received documents
+ * - For each business, Lambda reads their LHDN client secret from AWS SSM
+ *   (credentials entered by user in business settings UI)
+ * - Lambda authenticates with LHDN using per-business credentials
+ * - Lambda fetches received documents with `onbehalfof` header
  * - Lambda parses raw UBL XML to extract buyer email
  * - Lambda calls Convex mutation with raw documents for matching
  * - Convex handles 4-tier matching, storage, and real-time UI updates
  *
+ * Credential flow:
+ * - User enters LHDN Client ID + Client Secret in business settings UI
+ * - Client ID stored in Convex (lhdnClientId field on business record)
+ * - Client Secret stored in SSM: /groot-finance/businesses/{businessId}/lhdn-client-secret
+ *
  * Trigger modes:
  * - EventBridge (scheduled): polls ALL businesses with pending requests
  * - Direct invocation (PollEvent): polls a SINGLE specified business
- *
- * SSM path: /groot-finance/businesses/{businessId}/lhdn-client-secret
  */
 
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";

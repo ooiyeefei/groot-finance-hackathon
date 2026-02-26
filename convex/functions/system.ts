@@ -1271,13 +1271,18 @@ export const reportEinvoiceFormFillResult = mutation({
 // LHDN POLLING (019-lhdn-einv-flow-2)
 //
 // EventBridge triggers Lambda every 5 min → Lambda queries getBusinessesForLhdnPolling
-// → Lambda reads SSM secrets → LHDN auth → fetch docs → calls processLhdnReceivedDocuments
-// → 4-tier matching → dedup → storage → notifications → real-time UI update
+// → Lambda reads per-business SSM secrets → LHDN auth → fetch docs
+// → calls processLhdnReceivedDocuments → 4-tier matching → dedup → storage
+// → notifications → real-time UI update
 // ============================================
 
 /**
  * Public Query: Returns businesses with pending e-invoice requests.
  * Called by LHDN Polling Lambda (via Convex HTTP API) to discover which businesses to poll.
+ *
+ * Per-business credentials: Each business enters their own LHDN Client ID
+ * and Client Secret via business settings UI. Client ID is stored here in
+ * Convex, Client Secret is in SSM (read by Lambda at runtime).
  *
  * Returns only businesses that have:
  * 1. LHDN TIN configured
@@ -1289,7 +1294,10 @@ export const getBusinessesForLhdnPolling = query({
   handler: async (ctx) => {
     const businesses = await ctx.db.query("businesses").collect();
     const lhdnBusinesses = businesses.filter(
-      (b) => b.lhdnTin && (b as Record<string, unknown>).lhdnClientId && !(b as Record<string, unknown>).deletedAt
+      (b) =>
+        b.lhdnTin &&
+        (b as Record<string, unknown>).lhdnClientId &&
+        !(b as Record<string, unknown>).deletedAt
     );
 
     const result: Array<{

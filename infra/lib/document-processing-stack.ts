@@ -201,9 +201,11 @@ export class DocumentProcessingStack extends cdk.Stack {
     // ========================================================================
     // LHDN Polling Lambda (019-lhdn-einv-flow-2)
     // Node.js Lambda that polls LHDN MyInvois API for received e-invoices.
-    // Reads per-business LHDN client secret from SSM (IAM-native, zero exported creds).
-    // Passes fetched documents to Convex mutation for matching + storage.
-    // Triggered by: Vercel API route (via Convex cron/scheduler)
+    // Each business has their own LHDN credentials (entered via business settings UI):
+    //   - Client ID: stored in Convex (lhdnClientId field)
+    //   - Client Secret: stored in SSM (/groot-finance/businesses/{id}/lhdn-client-secret)
+    // Lambda reads per-business credentials from SSM at runtime.
+    // Triggered by: EventBridge (every 5 min) or direct invocation
     // ========================================================================
     const lhdnPollLogGroup = new logs.LogGroup(this, 'LhdnPollLogs', {
       logGroupName: `/aws/lambda/finanseal-lhdn-polling`,
@@ -217,7 +219,7 @@ export class DocumentProcessingStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_20_X,
       architecture: lambda.Architecture.ARM_64, // Cost-optimized
       functionName: 'finanseal-lhdn-polling',
-      description: 'LHDN MyInvois polling — SSM creds, fetch received docs, Convex matching (019-lhdn-einv-flow-2)',
+      description: 'LHDN MyInvois polling — per-business SSM creds, fetch received docs, Convex matching (019-lhdn-einv-flow-2)',
       memorySize: 256,
       timeout: cdk.Duration.minutes(2), // Polling + enrichment typically <30s
       logGroup: lhdnPollLogGroup,
