@@ -2,6 +2,8 @@
 
 import * as React from 'react'
 import { useState, useEffect, useCallback } from 'react'
+import { usePathname } from 'next/navigation'
+import { useAuth } from '@clerk/nextjs'
 import { BottomNav, BottomNavSpacer, type BottomNavItem } from './bottom-nav'
 import { fetchUserRoleWithCache, clearUserRoleCache } from '@/lib/cache-utils'
 import { useActiveBusiness } from '@/contexts/business-context'
@@ -42,7 +44,17 @@ export function MobileAppShell({
   locale = 'en'
 }: MobileAppShellProps) {
   const t = useTranslations('navigation')
+  const pathname = usePathname()
+  const { isSignedIn } = useAuth()
   const { businessId } = useActiveBusiness()
+
+  // Hide bottom nav on standalone pages (auth, onboarding) and when signed out
+  const isStandalonePage = pathname?.includes('/sign-in')
+    || pathname?.includes('/sign-up')
+    || pathname?.includes('/onboarding/')
+    || pathname?.includes('/invitations/')
+    || pathname?.includes('/access-denied')
+  const showNav = isSignedIn && !isStandalonePage
 
   // Hydration-safe: always start with default role to match server render.
   // localStorage is read in useEffect after hydration to avoid mismatch.
@@ -98,10 +110,14 @@ export function MobileAppShell({
   return (
     <>
       {children}
-      {/* Spacer to prevent content from being hidden behind bottom nav and chat widget */}
-      <BottomNavSpacer />
-      {/* Bottom navigation - visible only on mobile */}
-      <BottomNav items={navItems} />
+      {showNav && (
+        <>
+          {/* Spacer to prevent content from being hidden behind bottom nav and chat widget */}
+          <BottomNavSpacer />
+          {/* Bottom navigation - visible only on mobile */}
+          <BottomNav items={navItems} />
+        </>
+      )}
     </>
   )
 }
