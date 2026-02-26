@@ -297,12 +297,12 @@ def handler(event: dict, context: DurableContext):
                 # Get image bytes for QR detection
                 if converted_images and len(converted_images) > 0:
                     # PDF was converted — use first page image
-                    image_data = s3.download_file(converted_images[0].s3_key)
+                    image_data = s3.read_document(converted_images[0].s3_key)
                 elif request.storage_path:
                     # Direct image upload — read from S3
                     # Build the full S3 key with domain prefix
                     s3_key = f"{request.domain}/{request.storage_path}"
-                    image_data = s3.download_file(s3_key)
+                    image_data = s3.read_document(s3_key)
                 else:
                     print(f"[{doc_id}] QR Detection: No image available")
                     return {"merchant_form_url": None, "detected_qr_codes": []}
