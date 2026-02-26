@@ -156,9 +156,12 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
         }),
       })
       const result = await response.json()
+      console.log('[Submission] Manual entry response:', result)
       if (result.success && result.data?.expense_claim_id) {
         await refetch()
         setSelectedClaimId(result.data.expense_claim_id)
+      } else {
+        console.error('[Submission] Manual entry failed:', result.error || result)
       }
     } catch (err) {
       console.error('[Submission] Manual entry creation failed:', err)

@@ -23,6 +23,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { formatBusinessDate } from '@/lib/utils'
 import type { DuplicateMatchPreview, DuplicateOverride, MatchTier } from '@/domains/expense-claims/types/duplicate-detection'
+import EinvoiceSection from './einvoice-section'
 
 interface EditExpenseModalNewProps {
   expenseClaimId: string
@@ -61,6 +62,9 @@ export default function EditExpenseModalNew({
   // State for success messaging
   const [showSuccess, setShowSuccess] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
+
+  // State for e-invoice data (fetched from claim API)
+  const [einvoiceData, setEinvoiceData] = useState<Record<string, any> | null>(null)
 
   // State for duplicate detection
   const [showDuplicateModal, setShowDuplicateModal] = useState(false)
@@ -230,6 +234,31 @@ export default function EditExpenseModalNew({
       setShowDeleteConfirm(false)
     }
   }, [isDeleting])
+
+  // Fetch e-invoice data for the EinvoiceSection
+  useEffect(() => {
+    if (!isOpen || !expenseClaimId) return
+    const fetchEinvoiceData = async () => {
+      try {
+        const res = await fetch(`/api/v1/expense-claims/${expenseClaimId}`)
+        const result = await res.json()
+        if (result.success && result.data) {
+          setEinvoiceData(result.data)
+        }
+      } catch {
+        // Non-fatal
+      }
+    }
+    fetchEinvoiceData()
+  }, [isOpen, expenseClaimId])
+
+  const refreshEinvoiceData = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/v1/expense-claims/${expenseClaimId}`)
+      const result = await res.json()
+      if (result.success && result.data) setEinvoiceData(result.data)
+    } catch { /* non-fatal */ }
+  }, [expenseClaimId])
 
   // Generate signed URL when receipt info is loaded
   useEffect(() => {
@@ -698,6 +727,26 @@ export default function EditExpenseModalNew({
                           />
                         </CardContent>
                       </Card>
+
+                      {/* E-Invoice Section */}
+                      <EinvoiceSection
+                        claimId={expenseClaimId}
+                        merchantFormUrl={einvoiceData?.merchantFormUrl}
+                        einvoiceRequestStatus={einvoiceData?.einvoiceRequestStatus}
+                        einvoiceSource={einvoiceData?.einvoiceSource}
+                        einvoiceAttached={einvoiceData?.einvoiceAttached}
+                        einvoiceEmailRef={einvoiceData?.einvoiceEmailRef}
+                        einvoiceRequestedAt={einvoiceData?.einvoiceRequestedAt}
+                        einvoiceReceivedAt={einvoiceData?.einvoiceReceivedAt}
+                        einvoiceAgentError={einvoiceData?.einvoiceAgentError}
+                        einvoiceStoragePath={einvoiceData?.einvoiceStoragePath}
+                        lhdnReceivedDocumentUuid={einvoiceData?.lhdnReceivedDocumentUuid}
+                        lhdnReceivedLongId={einvoiceData?.lhdnReceivedLongId}
+                        lhdnReceivedStatus={einvoiceData?.lhdnReceivedStatus}
+                        lhdnReceivedAt={einvoiceData?.lhdnReceivedAt}
+                        currency={formData.original_currency}
+                        onRefresh={refreshEinvoiceData}
+                      />
 
                       {/* Expense ID at bottom of content */}
                       <div className="flex justify-end mt-6 pt-4 border-t border-border">
