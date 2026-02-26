@@ -30,7 +30,7 @@ RUN yum install -y poppler-utils && yum clean all
 COPY --from=zbar-builder /usr/lib/x86_64-linux-gnu/libzbar.so.0.3.0 /usr/lib64/libzbar.so.0.3.0
 RUN ln -sf /usr/lib64/libzbar.so.0.3.0 /usr/lib64/libzbar.so.0 && \
     ln -sf /usr/lib64/libzbar.so.0.3.0 /usr/lib64/libzbar.so && \
-    ldconfig
+    /sbin/ldconfig
 
 # Copy requirements and install dependencies
 COPY requirements.txt ${LAMBDA_TASK_ROOT}/
