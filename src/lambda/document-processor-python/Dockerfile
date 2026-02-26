@@ -5,7 +5,7 @@
 # - AWS Durable Execution SDK for fault-tolerant workflows
 # - DSPy for structured LLM extraction with Gemini
 # - Poppler for PDF to image conversion
-# - zbar for QR code detection (copied from Debian)
+# - OpenCV for QR code detection (pre-built headless wheel)
 # - Sentry for error tracking
 #
 # Build:
@@ -15,26 +15,11 @@
 #   docker run -p 9000:8080 finanseal-document-processor
 #   curl -X POST "http://localhost:9000/2015-03-31/functions/function/invocations" -d '{"test": true}'
 
-# Stage 1: Get zbar shared library from Debian (not available in AL2 repos)
-FROM python:3.11-slim AS zbar-builder
-RUN apt-get update -qq && apt-get install -y -qq libzbar0 && rm -rf /var/lib/apt/lists/*
-
-# Stage 2: Lambda runtime
 FROM public.ecr.aws/lambda/python:3.11
 
 # Install Poppler for PDF conversion (as root)
 USER root
 RUN yum install -y poppler-utils && yum clean all
-
-# Copy zbar + all its shared library dependencies from Debian
-COPY --from=zbar-builder /usr/lib/x86_64-linux-gnu/libzbar.so.0.3.0 /usr/lib64/libzbar.so.0.3.0
-COPY --from=zbar-builder /lib/x86_64-linux-gnu/libv4l2.so.0 /usr/lib64/libv4l2.so.0
-COPY --from=zbar-builder /lib/x86_64-linux-gnu/libv4lconvert.so.0 /usr/lib64/libv4lconvert.so.0
-COPY --from=zbar-builder /lib/x86_64-linux-gnu/libjpeg.so.62 /usr/lib64/libjpeg.so.62
-COPY --from=zbar-builder /lib/x86_64-linux-gnu/libdbus-1.so.3 /usr/lib64/libdbus-1.so.3
-RUN ln -sf /usr/lib64/libzbar.so.0.3.0 /usr/lib64/libzbar.so.0 && \
-    ln -sf /usr/lib64/libzbar.so.0.3.0 /usr/lib64/libzbar.so && \
-    /sbin/ldconfig
 
 # Copy requirements and install dependencies
 COPY requirements.txt ${LAMBDA_TASK_ROOT}/
@@ -45,7 +30,7 @@ RUN pip install --upgrade pip
 # Install Python packages, using pre-built wheels for packages with native extensions
 # to avoid needing Rust compiler (tiktoken) or C compiler (numpy)
 RUN pip install --no-cache-dir \
-    --only-binary=numpy,tiktoken \
+    --only-binary=numpy,tiktoken,opencv-python-headless \
     -r requirements.txt
 
 # Copy function code

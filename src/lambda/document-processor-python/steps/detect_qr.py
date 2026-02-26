@@ -1,16 +1,15 @@
 """
 QR Code Detection Step (019-lhdn-einv-flow-2)
 
-Detects QR codes in receipt images using pyzbar.
+Detects QR codes in receipt images using OpenCV's built-in QR detector.
 Extracts URLs and filters out LHDN validation QR codes.
 Returns merchant buyer-info form URLs.
 """
 
 import re
-from typing import List, Optional
-from PIL import Image
+from typing import List
+import numpy as np
 from io import BytesIO
-
 
 # LHDN validation QR pattern — these are NOT merchant form URLs
 LHDN_QR_PATTERN = re.compile(r"myinvois\.hasil\.gov\.my", re.IGNORECASE)
@@ -26,6 +25,8 @@ def detect_qr_step(
 ) -> dict:
     """
     Detect QR codes in a receipt image and extract URLs.
+
+    Uses OpenCV's built-in QRCodeDetector — no system library dependencies.
 
     Args:
         document_id: Document ID for logging
@@ -46,23 +47,27 @@ def detect_qr_step(
     lhdn_validation_urls: List[str] = []
 
     try:
-        # Import pyzbar — may not be available in all environments
-        from pyzbar import pyzbar
+        import cv2
 
-        # Open image with Pillow
-        image = Image.open(BytesIO(image_bytes))
+        # Decode image bytes to OpenCV format
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-        # Convert to RGB if needed (pyzbar works best with RGB)
-        if image.mode != "RGB":
-            image = image.convert("RGB")
+        if image is None:
+            print(f"[{document_id}] QR Detection: Failed to decode image")
+            return _empty_result()
 
-        # Detect QR codes
-        decoded_objects = pyzbar.decode(image)
-        print(f"[{document_id}] QR Detection: Found {len(decoded_objects)} codes")
+        # Use OpenCV's QR code detector
+        detector = cv2.QRCodeDetector()
+        retval, decoded_info, points, straight_qrcode = detector.detectAndDecodeMulti(image)
 
-        for obj in decoded_objects:
-            if obj.type == "QRCODE":
-                data = obj.data.decode("utf-8", errors="replace")
+        if retval and decoded_info:
+            print(f"[{document_id}] QR Detection: Found {len(decoded_info)} codes")
+
+            for data in decoded_info:
+                if not data:
+                    continue
+
                 detected_qr_codes.append(data)
 
                 # Check if it's a URL
@@ -75,9 +80,11 @@ def detect_qr_step(
                         print(f"[{document_id}] QR Detection: Merchant form URL: {data[:80]}...")
                 else:
                     print(f"[{document_id}] QR Detection: Non-URL QR data: {data[:50]}...")
+        else:
+            print(f"[{document_id}] QR Detection: No QR codes found")
 
     except ImportError:
-        print(f"[{document_id}] QR Detection: pyzbar not available, skipping")
+        print(f"[{document_id}] QR Detection: opencv not available, skipping")
     except Exception as e:
         # QR detection failure should not fail the entire pipeline
         print(f"[{document_id}] QR Detection: Error - {str(e)}")
@@ -91,3 +98,12 @@ def detect_qr_step(
 
     print(f"[{document_id}] QR Detection: Complete - {len(merchant_form_urls)} merchant URLs, {len(lhdn_validation_urls)} LHDN URLs")
     return result
+
+
+def _empty_result() -> dict:
+    return {
+        "detected_qr_codes": [],
+        "merchant_form_urls": [],
+        "lhdn_validation_urls": [],
+        "merchant_form_url": None,
+    }
