@@ -62,11 +62,15 @@ def detect_qr_step(
         retval, decoded_info, points, straight_qrcode = detector.detectAndDecodeMulti(image)
 
         if retval and decoded_info:
-            print(f"[{document_id}] QR Detection: Found {len(decoded_info)} codes")
+            non_empty = [d for d in decoded_info if d]
+            print(f"[{document_id}] QR Detection: Found {len(decoded_info)} codes ({len(non_empty)} decoded)")
 
-            for data in decoded_info:
+            for i, data in enumerate(decoded_info):
                 if not data:
+                    print(f"[{document_id}] QR Detection: Code #{i} detected but could not be decoded")
                     continue
+
+                print(f"[{document_id}] QR Detection: Code #{i} raw data: {data[:120]}")
 
                 detected_qr_codes.append(data)
 
