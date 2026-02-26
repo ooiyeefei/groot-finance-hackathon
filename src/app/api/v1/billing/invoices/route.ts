@@ -84,10 +84,11 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '10'), 100)
     const startingAfter = searchParams.get('starting_after') || undefined
 
-    // Fetch invoices from Stripe
-    // Using type assertion for Stripe SDK v20+ compatibility
+    // Fetch invoices from Stripe, scoped to this business's subscription
+    // to avoid showing invoices from other Groot products sharing the same Stripe customer
     const invoicesResponse = await getStripe().invoices.list({
       customer: business.stripeCustomerId,
+      ...(business.stripeSubscriptionId ? { subscription: business.stripeSubscriptionId } : {}),
       limit,
       starting_after: startingAfter,
     })

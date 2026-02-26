@@ -204,18 +204,26 @@ export async function GET(request: NextRequest) {
       urgencyLevel: 'none',
     }
 
-    if (periodEndTimestamp && !isTrialingStatus) {
+    // Skip renewal info if period end is stale (same as trial end or in the past).
+    // When a real renewal happens, the webhook updates subscriptionPeriodEnd to a future date.
+    const isStaleTrialPeriod = periodEndTimestamp && business.trialEndDate &&
+      periodEndTimestamp === business.trialEndDate
+
+    if (periodEndTimestamp && !isTrialingStatus && !isStaleTrialPeriod) {
       const periodEnd = new Date(periodEndTimestamp)
       const now = new Date()
       const daysUntilRenewal = Math.ceil((periodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
 
-      renewalInfo = {
-        periodEnd: periodEnd.toISOString(),
-        daysUntilRenewal: Math.max(0, daysUntilRenewal),
-        needsAttention: daysUntilRenewal <= 30,
-        urgencyLevel: daysUntilRenewal <= 7 ? 'high' :
-                      daysUntilRenewal <= 14 ? 'medium' :
-                      daysUntilRenewal <= 30 ? 'low' : 'none',
+      // Only show renewal info if period end is in the future
+      if (daysUntilRenewal > 0) {
+        renewalInfo = {
+          periodEnd: periodEnd.toISOString(),
+          daysUntilRenewal,
+          needsAttention: daysUntilRenewal <= 30,
+          urgencyLevel: daysUntilRenewal <= 7 ? 'high' :
+                        daysUntilRenewal <= 14 ? 'medium' :
+                        daysUntilRenewal <= 30 ? 'low' : 'none',
+        }
       }
     }
 
