@@ -3,7 +3,6 @@
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { ArrowLeft, Loader2 } from 'lucide-react'
-import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import { useSalesInvoice } from '@/domains/sales-invoices/hooks/use-sales-invoices'
@@ -40,9 +39,7 @@ export default function RecordPaymentPage() {
         <main className="flex-1 overflow-auto p-card-padding pb-24 sm:pb-4">
           <div className="text-center py-24">
             <p className="text-muted-foreground">Invoice not found.</p>
-            <Link href={`/${locale}/invoices#sales-invoices`} className="mt-4 inline-block">
-              <Button variant="outline">Back to Invoices</Button>
-            </Link>
+            <Button variant="outline" className="mt-4" onClick={() => router.push(`/${locale}/invoices#sales-invoices`)}>Back to Invoices</Button>
           </div>
         </main>
       </>
@@ -56,12 +53,10 @@ export default function RecordPaymentPage() {
     <div className="max-w-2xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link href={`/${locale}/sales-invoices/${invoiceId}`}>
-          <Button variant="ghost" size="sm">
+        <Button variant="ghost" size="sm" onClick={() => router.push(`/${locale}/sales-invoices/${invoiceId}`)}>
             <ArrowLeft className="h-4 w-4 mr-1" />
             Back
           </Button>
-        </Link>
         <div>
           <h1 className="text-xl font-semibold text-foreground">
             Record Payment

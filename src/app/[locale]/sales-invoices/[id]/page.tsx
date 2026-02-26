@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { ArrowLeft, Pencil, Send, RotateCw, CreditCard, Ban, Download, Loader2, Trash2 } from 'lucide-react'
-import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -81,9 +80,7 @@ export default function SalesInvoiceDetailPage() {
         <main className="flex-1 overflow-auto p-card-padding pb-24 sm:pb-4">
           <div className="text-center py-24">
             <p className="text-muted-foreground">Invoice not found.</p>
-            <Link href={`/${locale}/invoices#sales-invoices`} className="mt-4 inline-block">
-              <Button variant="outline">Back to Invoices</Button>
-            </Link>
+            <Button variant="outline" className="mt-4" onClick={() => router.push(`/${locale}/invoices#sales-invoices`)}>Back to Invoices</Button>
           </div>
         </main>
       </>
@@ -268,12 +265,10 @@ export default function SalesInvoiceDetailPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
-          <Link href={`/${locale}/invoices#sales-invoices`}>
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              Back
-            </Button>
-          </Link>
+          <Button variant="ghost" size="sm" onClick={() => router.push(`/${locale}/invoices#sales-invoices`)}>
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Back
+          </Button>
           <div>
             <h1 className="text-xl font-semibold text-foreground">
               {invoice.invoiceNumber}
@@ -302,12 +297,10 @@ export default function SalesInvoiceDetailPage() {
 
           {isDraft && (
             <>
-              <Link href={`/${locale}/sales-invoices/${invoice._id}/edit`}>
-                <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
+              <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => router.push(`/${locale}/sales-invoices/${invoice._id}/edit`)}>
                   <Pencil className="h-4 w-4 mr-1" />
                   Edit
                 </Button>
-              </Link>
               <Button
                 size="sm"
                 onClick={handleSend}
@@ -341,12 +334,10 @@ export default function SalesInvoiceDetailPage() {
           )}
 
           {!isVoid && !isPaid && (
-            <Link href={`/${locale}/sales-invoices/${invoice._id}/payment`}>
-              <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
+            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => router.push(`/${locale}/sales-invoices/${invoice._id}/payment`)}>
                 <CreditCard className="h-4 w-4 mr-1" />
                 Record Payment
               </Button>
-            </Link>
           )}
 
           {!isVoid && !isPaid && (

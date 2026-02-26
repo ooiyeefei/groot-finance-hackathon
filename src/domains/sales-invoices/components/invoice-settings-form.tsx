@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { ArrowLeft, Settings, Save, Loader2, Eye, CreditCard, Mail, Upload, X, ChevronDown, ChevronRight, QrCode } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -95,6 +95,7 @@ function buildInitialPaymentMethods(
 // ---------------------------------------------------------------------------
 
 export default function InvoiceSettingsForm() {
+  const router = useRouter()
   const locale = useLocale()
   const { addToast } = useToast()
   const { businessId, business } = useActiveBusiness()
@@ -262,11 +263,9 @@ export default function InvoiceSettingsForm() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link href={`/${locale}/invoices#sales-invoices`}>
-            <Button variant="outline" size="icon" title="Back to Sales Invoices">
+          <Button variant="outline" size="icon" title="Back to Sales Invoices" onClick={() => router.push(`/${locale}/invoices#sales-invoices`)}>
               <ArrowLeft className="w-4 h-4" />
             </Button>
-          </Link>
           <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
             <Settings className="w-5 h-5 text-primary" />
           </div>

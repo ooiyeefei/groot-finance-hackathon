@@ -1,9 +1,8 @@
 'use client'
 
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { useLocale } from 'next-intl'
-import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { useSalesInvoice } from '@/domains/sales-invoices/hooks/use-sales-invoices'
 import { InvoiceEditorLayout } from '@/domains/sales-invoices/components/invoice-editor-layout'
@@ -12,6 +11,7 @@ import type { SalesInvoiceFormInput, PaymentTerms, TaxMode, LineItem } from '@/d
 
 export default function EditSalesInvoicePage() {
   const params = useParams()
+  const router = useRouter()
   const locale = useLocale()
   const invoiceId = params.id as string
 
@@ -29,9 +29,7 @@ export default function EditSalesInvoicePage() {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-background gap-4">
         <p className="text-muted-foreground">Invoice not found.</p>
-        <Link href={`/${locale}/invoices#sales-invoices`}>
-          <Button variant="outline">Back to Invoices</Button>
-        </Link>
+        <Button variant="outline" onClick={() => router.push(`/${locale}/invoices#sales-invoices`)}>Back to Invoices</Button>
       </div>
     )
   }
@@ -40,9 +38,7 @@ export default function EditSalesInvoicePage() {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-background gap-4">
         <p className="text-muted-foreground">Only draft invoices can be edited.</p>
-        <Link href={`/${locale}/sales-invoices/${invoiceId}`}>
-          <Button variant="outline">View Invoice</Button>
-        </Link>
+        <Button variant="outline" onClick={() => router.push(`/${locale}/sales-invoices/${invoiceId}`)}>View Invoice</Button>
       </div>
     )
   }

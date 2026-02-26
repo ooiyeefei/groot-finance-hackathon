@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useCallback, useMemo } from 'react'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import {
   Plus,
@@ -62,6 +62,7 @@ const FILTER_TABS: TabDefinition[] = [
 // ---------------------------------------------------------------------------
 
 export default function SalesInvoiceList() {
+  const router = useRouter()
   const locale = useLocale()
   const { business } = useActiveBusiness()
   const { profile: businessProfile } = useBusinessProfile()
@@ -299,17 +300,13 @@ export default function SalesInvoiceList() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Link href={`/${locale}/sales-invoices/settings`}>
-            <Button variant="outline" size="icon" title="Invoice Settings">
+          <Button variant="outline" size="icon" title="Invoice Settings" onClick={() => router.push(`/${locale}/sales-invoices/settings`)}>
               <Settings className="h-4 w-4" />
             </Button>
-          </Link>
-          <Link href={`/${locale}/sales-invoices/create`}>
-            <Button variant="primary" size="default">
+          <Button variant="primary" size="default" onClick={() => router.push(`/${locale}/sales-invoices/create`)}>
               <Plus className="h-4 w-4 mr-1.5" />
               New Invoice
             </Button>
-          </Link>
         </div>
       </div>
 
@@ -504,23 +501,15 @@ export default function SalesInvoiceList() {
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         {/* View */}
-                        <Link
-                          href={`/${locale}/sales-invoices/${invoice._id}`}
-                        >
-                          <Button variant="ghost" size="sm" title="View" className="text-green-600 hover:text-green-700 hover:bg-green-600/10">
+                        <Button variant="ghost" size="sm" title="View" className="text-green-600 hover:text-green-700 hover:bg-green-600/10" onClick={() => router.push(`/${locale}/sales-invoices/${invoice._id}`)}>
                             <Eye className="h-4 w-4" />
                           </Button>
-                        </Link>
 
                         {/* Edit (draft only) */}
                         {isDraft(invoice.status) && (
-                          <Link
-                            href={`/${locale}/sales-invoices/${invoice._id}/edit`}
-                          >
-                            <Button variant="ghost" size="sm" title="Edit">
+                            <Button variant="ghost" size="sm" title="Edit" onClick={() => router.push(`/${locale}/sales-invoices/${invoice._id}/edit`)}>
                               <Pencil className="h-4 w-4" />
                             </Button>
-                          </Link>
                         )}
 
                         {/* Send (draft only) */}
@@ -543,18 +532,15 @@ export default function SalesInvoiceList() {
                         {/* Record Payment */}
                         {invoice.status !== SALES_INVOICE_STATUSES.PAID &&
                           invoice.status !== SALES_INVOICE_STATUSES.VOID && (
-                            <Link
-                              href={`/${locale}/sales-invoices/${invoice._id}/payment`}
-                            >
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 title="Record Payment"
                                 className="text-blue-600 hover:text-blue-700 hover:bg-blue-600/10"
+                                onClick={() => router.push(`/${locale}/sales-invoices/${invoice._id}/payment`)}
                               >
                                 <CreditCard className="h-4 w-4" />
                               </Button>
-                            </Link>
                           )}
 
                         {/* Void */}
@@ -673,22 +659,16 @@ export default function SalesInvoiceList() {
                 </div>
 
                 <div className="flex items-center gap-1 pt-1">
-                  <Link href={`/${locale}/sales-invoices/${invoice._id}`}>
-                    <Button variant="ghost" size="sm" className="text-green-600 hover:text-green-700 hover:bg-green-600/10">
+                  <Button variant="ghost" size="sm" className="text-green-600 hover:text-green-700 hover:bg-green-600/10" onClick={() => router.push(`/${locale}/sales-invoices/${invoice._id}`)}>
                       <Eye className="h-4 w-4 mr-1" />
                       View
                     </Button>
-                  </Link>
 
                   {isDraft(invoice.status) && (
-                    <Link
-                      href={`/${locale}/sales-invoices/${invoice._id}/edit`}
-                    >
-                      <Button variant="ghost" size="sm">
+                      <Button variant="ghost" size="sm" onClick={() => router.push(`/${locale}/sales-invoices/${invoice._id}/edit`)}>
                         <Pencil className="h-4 w-4 mr-1" />
                         Edit
                       </Button>
-                    </Link>
                   )}
 
                   {isDraft(invoice.status) && (
@@ -709,14 +689,10 @@ export default function SalesInvoiceList() {
 
                   {invoice.status !== SALES_INVOICE_STATUSES.PAID &&
                     invoice.status !== SALES_INVOICE_STATUSES.VOID && (
-                      <Link
-                        href={`/${locale}/sales-invoices/${invoice._id}/payment`}
-                      >
-                        <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 hover:bg-blue-600/10">
+                        <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 hover:bg-blue-600/10" onClick={() => router.push(`/${locale}/sales-invoices/${invoice._id}/payment`)}>
                           <CreditCard className="h-4 w-4 mr-1" />
                           Pay
                         </Button>
-                      </Link>
                     )}
 
                   {invoice.status !== SALES_INVOICE_STATUSES.VOID &&
@@ -829,6 +805,7 @@ function EmptyState({
   activeTab: FilterTab
   locale: string
 }) {
+  const router = useRouter()
   return (
     <div className="text-center py-16">
       <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -838,12 +815,10 @@ function EmptyState({
           : `No ${activeTab} invoices found.`}
       </p>
       {activeTab === 'all' && (
-        <Link href={`/${locale}/sales-invoices/create`} className="mt-4 inline-block">
-          <Button variant="primary" size="default">
+        <Button variant="primary" size="default" className="mt-4" onClick={() => router.push(`/${locale}/sales-invoices/create`)}>
             <Plus className="h-4 w-4 mr-1.5" />
             Create Invoice
           </Button>
-        </Link>
       )}
     </div>
   )
