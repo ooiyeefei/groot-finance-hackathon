@@ -2486,6 +2486,327 @@ export const internalProcessVendorFromExtraction = internalMutation({
 });
 
 // ============================================
+// E-INVOICE RETRIEVAL (019-lhdn-einv-flow-2)
+// ============================================
+
+/**
+ * Internal: Update e-invoice fields on an expense claim
+ * Used by einvoiceJobs actions after matching or agent completion
+ */
+export const internalUpdateEinvoiceStatus = internalMutation({
+  args: {
+    claimId: v.id("expense_claims"),
+    einvoiceRequestStatus: v.string(),
+    einvoiceSource: v.optional(v.string()),
+    einvoiceAttached: v.optional(v.boolean()),
+    lhdnReceivedDocumentUuid: v.optional(v.string()),
+    lhdnReceivedLongId: v.optional(v.string()),
+    lhdnReceivedStatus: v.optional(v.string()),
+    lhdnReceivedAt: v.optional(v.number()),
+    einvoiceReceivedAt: v.optional(v.number()),
+    einvoiceAgentError: v.optional(v.string()),
+    einvoiceEmailRef: v.optional(v.string()),
+    einvoiceRequestedAt: v.optional(v.number()),
+    einvoiceManualUploadPath: v.optional(v.string()),
+    merchantFormUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const claim = await ctx.db.get(args.claimId);
+    if (!claim) {
+      throw new Error(`Expense claim not found: ${args.claimId}`);
+    }
+
+    const updateData: Record<string, unknown> = {
+      einvoiceRequestStatus: args.einvoiceRequestStatus,
+      updatedAt: Date.now(),
+    };
+
+    // Only set fields that are explicitly provided
+    if (args.einvoiceSource !== undefined) updateData.einvoiceSource = args.einvoiceSource;
+    if (args.einvoiceAttached !== undefined) updateData.einvoiceAttached = args.einvoiceAttached;
+    if (args.lhdnReceivedDocumentUuid !== undefined) updateData.lhdnReceivedDocumentUuid = args.lhdnReceivedDocumentUuid;
+    if (args.lhdnReceivedLongId !== undefined) updateData.lhdnReceivedLongId = args.lhdnReceivedLongId;
+    if (args.lhdnReceivedStatus !== undefined) updateData.lhdnReceivedStatus = args.lhdnReceivedStatus;
+    if (args.lhdnReceivedAt !== undefined) updateData.lhdnReceivedAt = args.lhdnReceivedAt;
+    if (args.einvoiceReceivedAt !== undefined) updateData.einvoiceReceivedAt = args.einvoiceReceivedAt;
+    if (args.einvoiceAgentError !== undefined) updateData.einvoiceAgentError = args.einvoiceAgentError;
+    if (args.einvoiceEmailRef !== undefined) updateData.einvoiceEmailRef = args.einvoiceEmailRef;
+    if (args.einvoiceRequestedAt !== undefined) updateData.einvoiceRequestedAt = args.einvoiceRequestedAt;
+    if (args.einvoiceManualUploadPath !== undefined) updateData.einvoiceManualUploadPath = args.einvoiceManualUploadPath;
+    if (args.merchantFormUrl !== undefined) updateData.merchantFormUrl = args.merchantFormUrl;
+
+    await ctx.db.patch(claim._id, updateData);
+    console.log(`[E-Invoice] Updated expense claim ${args.claimId} einvoiceRequestStatus to: ${args.einvoiceRequestStatus}`);
+    return claim._id;
+  },
+});
+
+/**
+ * Query: Get e-invoice status details for an expense claim
+ * Returns all e-invoice fields + pending match candidates
+ */
+export const getEinvoiceStatus = query({
+  args: {
+    claimId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    const claim = await resolveById(ctx.db, "expense_claims", args.claimId);
+    if (!claim || claim.deletedAt) return null;
+
+    // Get pending match candidates from einvoice_received_documents
+    const pendingMatchCandidates: Array<{
+      receivedDocId: string;
+      supplierName: string;
+      total: number;
+      dateTimeIssued: string;
+      matchTier: string;
+      matchConfidence: number;
+    }> = [];
+
+    // Find received documents where this claim is in matchCandidateClaimIds
+    const receivedDocs = await ctx.db
+      .query("einvoice_received_documents")
+      .withIndex("by_businessId_status", (q) =>
+        q.eq("businessId", claim.businessId).eq("status", "valid")
+      )
+      .collect();
+
+    for (const doc of receivedDocs) {
+      if (doc.matchCandidateClaimIds?.includes(claim._id)) {
+        pendingMatchCandidates.push({
+          receivedDocId: doc._id,
+          supplierName: doc.supplierName || "Unknown",
+          total: doc.total || 0,
+          dateTimeIssued: doc.dateTimeIssued || "",
+          matchTier: doc.matchTier || "tier3_fuzzy",
+          matchConfidence: doc.matchConfidence || 0,
+        });
+      }
+    }
+
+    return {
+      einvoiceRequestStatus: claim.einvoiceRequestStatus || null,
+      einvoiceSource: claim.einvoiceSource || null,
+      einvoiceAttached: claim.einvoiceAttached || false,
+      merchantFormUrl: claim.merchantFormUrl || null,
+      lhdnReceivedDocumentUuid: claim.lhdnReceivedDocumentUuid || null,
+      lhdnReceivedLongId: claim.lhdnReceivedLongId || null,
+      lhdnReceivedStatus: claim.lhdnReceivedStatus || null,
+      lhdnReceivedAt: claim.lhdnReceivedAt || null,
+      einvoiceRequestedAt: claim.einvoiceRequestedAt || null,
+      einvoiceReceivedAt: claim.einvoiceReceivedAt || null,
+      einvoiceAgentError: claim.einvoiceAgentError || null,
+      pendingMatchCandidates,
+    };
+  },
+});
+
+/**
+ * Public Mutation: Request e-invoice via AI agent (manual trigger / retry)
+ * Validates ownership, business settings, and returns data for the API route
+ * to invoke the form fill Lambda. The Lambda handles all state management
+ * (creates request log, sets emailRef, etc.) via reportEinvoiceFormFillResult.
+ */
+export const requestEinvoice = mutation({
+  args: {
+    claimId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) throw new Error("User not found");
+
+    const claim = await resolveById(ctx.db, "expense_claims", args.claimId);
+    if (!claim || claim.deletedAt) throw new Error("Expense claim not found");
+
+    // Verify user has access (own claim or manager/admin)
+    if (claim.userId !== user._id) {
+      const membership = await ctx.db
+        .query("business_memberships")
+        .withIndex("by_userId_businessId", (q) =>
+          q.eq("userId", user._id).eq("businessId", claim.businessId)
+        )
+        .first();
+      if (!membership || !["owner", "finance_admin", "manager"].includes(membership.role)) {
+        throw new Error("Not authorized to request e-invoice for this claim");
+      }
+    }
+
+    if (!claim.merchantFormUrl) {
+      throw new Error("No merchant form URL detected for this expense claim");
+    }
+
+    // Get business settings
+    const business = await ctx.db.get(claim.businessId);
+    if (!business) throw new Error("Business not found");
+    if (!business.lhdnTin) {
+      throw new Error("Business TIN not configured. Please update business settings.");
+    }
+    if (!business.address) {
+      throw new Error("Business address not configured. Please update business settings.");
+    }
+
+    // Clear previous error on retry
+    if (claim.einvoiceAgentError) {
+      await ctx.db.patch(claim._id, {
+        einvoiceAgentError: undefined,
+        updatedAt: Date.now(),
+      });
+    }
+
+    // Derive emailRef from claim ID (first 10 chars — deterministic)
+    const emailRef = (claim._id as string).substring(0, 10);
+
+    // Return data for the API route to invoke the form fill Lambda
+    return {
+      merchantFormUrl: claim.merchantFormUrl,
+      buyerDetails: {
+        name: business.name,
+        tin: business.lhdnTin as string,
+        brn: (business.businessRegistrationNumber || business.lhdnTin) as string,
+        address: business.address as string,
+        email: `einvoice+${emailRef}@hellogroot.com`,
+        phone: business.contactPhone,
+      },
+      receiptReferenceNumber: claim.referenceNumber,
+    };
+  },
+});
+
+/**
+ * Public Mutation: Resolve an ambiguous e-invoice match (accept/reject)
+ * Used by employee to confirm or reject Tier 3 fuzzy matches
+ */
+export const resolveEinvoiceMatch = mutation({
+  args: {
+    claimId: v.string(),
+    receivedDocId: v.string(),
+    action: v.union(v.literal("accept"), v.literal("reject")),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) throw new Error("User not found");
+
+    const claim = await resolveById(ctx.db, "expense_claims", args.claimId);
+    if (!claim || claim.deletedAt) throw new Error("Expense claim not found");
+
+    // Verify user has access
+    if (claim.userId !== user._id) {
+      const membership = await ctx.db
+        .query("business_memberships")
+        .withIndex("by_userId_businessId", (q) =>
+          q.eq("userId", user._id).eq("businessId", claim.businessId)
+        )
+        .first();
+      if (!membership || !["owner", "finance_admin", "manager"].includes(membership.role)) {
+        throw new Error("Not authorized to resolve match for this claim");
+      }
+    }
+
+    // Get received document (new table, always Convex IDs)
+    const receivedDocId = args.receivedDocId as Id<"einvoice_received_documents">;
+    const receivedDoc = await ctx.db.get(receivedDocId);
+    if (!receivedDoc) throw new Error("Received document not found");
+
+    if (args.action === "accept") {
+      // Link received document to claim
+      await ctx.db.patch(receivedDoc._id, {
+        matchedExpenseClaimId: claim._id as string,
+        matchTier: "manual",
+        matchConfidence: 1.0,
+        matchCandidateClaimIds: undefined, // Clear candidates
+      } as Record<string, unknown>);
+
+      // Update expense claim with LHDN references
+      await ctx.db.patch(claim._id, {
+        einvoiceRequestStatus: "received",
+        einvoiceAttached: true,
+        lhdnReceivedDocumentUuid: receivedDoc.lhdnDocumentUuid,
+        lhdnReceivedLongId: receivedDoc.lhdnLongId,
+        lhdnReceivedStatus: receivedDoc.status as "valid" | "cancelled",
+        lhdnReceivedAt: Date.now(),
+        einvoiceReceivedAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+
+      return { success: true, action: "accepted" };
+    } else {
+      // Reject: remove this claim from candidates
+      const candidateIds = (receivedDoc.matchCandidateClaimIds || []) as string[];
+      const updatedCandidates = candidateIds.filter((id) => id !== (claim._id as string));
+
+      await ctx.db.patch(receivedDoc._id, {
+        matchCandidateClaimIds: updatedCandidates.length > 0 ? updatedCandidates : undefined,
+      } as Record<string, unknown>);
+
+      return { success: true, action: "rejected" };
+    }
+  },
+});
+
+/**
+ * Public Mutation: Mark expense claim with manual e-invoice upload
+ * Called after file has been uploaded to Convex storage
+ */
+export const markEinvoiceManualUpload = mutation({
+  args: {
+    claimId: v.string(),
+    storagePath: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) throw new Error("User not found");
+
+    const claim = await resolveById(ctx.db, "expense_claims", args.claimId);
+    if (!claim || claim.deletedAt) throw new Error("Expense claim not found");
+
+    // Verify user has access (own claim)
+    if (claim.userId !== user._id) {
+      throw new Error("Not authorized to upload e-invoice for this claim");
+    }
+
+    // Check not already attached
+    if (claim.einvoiceAttached) {
+      throw new Error("E-invoice already attached to this claim");
+    }
+
+    await ctx.db.patch(claim._id, {
+      einvoiceSource: "manual_upload",
+      einvoiceManualUploadPath: args.storagePath,
+      einvoiceAttached: true,
+      einvoiceRequestStatus: "received",
+      einvoiceReceivedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    return { success: true };
+  },
+});
+
+/**
+ * Generate upload URL for e-invoice manual upload
+ */
+export const generateEinvoiceUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+// ============================================
 // STUCK RECORDS MONITORING (for finance_admin operations)
 // ============================================
 

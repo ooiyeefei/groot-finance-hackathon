@@ -463,6 +463,28 @@ export async function createExpenseClaim(
           const fileType = request.file.type === 'application/pdf' ? 'pdf' : 'image'
           console.log(`[Lambda Processing] Triggering document processor for expense claim: ${claimId} (${fileType})`)
 
+          // Fetch business details for e-invoice form fill (019-lhdn-einv-flow-2)
+          // Passed upfront so Lambda can trigger form fill without round-tripping to Convex
+          let businessDetails: { name: string; tin: string; brn: string; address: string; phone?: string; contactEmail?: string } | undefined
+          try {
+            const business = await convexClient.query(api.functions.businesses.getBusinessProfileByStringId, {
+              businessId: employeeProfile.business_id,
+            })
+            if (business?.lhdn_tin && business?.address) {
+              businessDetails = {
+                name: business.name,
+                tin: business.lhdn_tin,
+                brn: business.business_registration_number || business.lhdn_tin,
+                address: business.address,
+                phone: business.contact_phone || undefined,
+                contactEmail: business.contact_email || undefined,
+              }
+            }
+          } catch {
+            // Non-fatal: business details are optional (only needed for e-invoice)
+            console.log('[Lambda Processing] Could not fetch business details for e-invoice (non-fatal)')
+          }
+
           const lambdaResult = await invokeDocumentProcessor({
             documentId: claimId,
             domain: 'expense_claims',
@@ -472,6 +494,7 @@ export async function createExpenseClaim(
             businessId: employeeProfile.business_id,
             idempotencyKey: `expense-${claimId}-${Date.now()}`,
             expectedDocumentType: 'receipt',
+            businessDetails,
           })
 
           await convexClient.mutation(api.functions.expenseClaims.update, {
@@ -735,6 +758,21 @@ export async function getExpenseClaim(
           unit_price: item.unit_price,
           total_amount: item.line_total || item.total_amount || 0
         })) || []
+      }
+    }
+
+    // Fetch e-invoice status (includes pendingMatchCandidates)
+    if (claim.merchantFormUrl || claim.einvoiceRequestStatus || claim.einvoiceAttached) {
+      try {
+        const einvoiceStatus = await convexClient.query(api.functions.expenseClaims.getEinvoiceStatus, {
+          claimId,
+        });
+        if (einvoiceStatus) {
+          (transformedClaim as any).pendingMatchCandidates = einvoiceStatus.pendingMatchCandidates;
+        }
+      } catch (einvoiceError) {
+        // Non-fatal: don't fail the whole request if e-invoice status fails
+        console.error('[getExpenseClaim] Failed to fetch e-invoice status:', einvoiceError);
       }
     }
 

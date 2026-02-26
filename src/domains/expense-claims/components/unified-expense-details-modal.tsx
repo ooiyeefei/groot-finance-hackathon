@@ -37,6 +37,7 @@ import DuplicateBadge from './duplicate-badge'
 import DuplicateComparisonPanel from './duplicate-comparison-panel'
 import CorrectResubmitButton from './correct-resubmit-button'
 import RouteClaimButton from './route-claim-button'
+import EinvoiceSection from './einvoice-section'
 
 interface UnifiedExpenseDetailsModalProps {
   claimId: string
@@ -110,6 +111,27 @@ interface ClaimDetails {
   duplicateStatus?: 'none' | 'potential' | 'confirmed' | 'dismissed'
   duplicateGroupId?: string
   isSplitExpense?: boolean
+  // E-Invoice fields (019-lhdn-einv-flow-2)
+  merchantFormUrl?: string | null
+  einvoiceRequestStatus?: string | null
+  einvoiceSource?: string | null
+  einvoiceAttached?: boolean
+  einvoiceEmailRef?: string | null
+  einvoiceRequestedAt?: number | null
+  einvoiceReceivedAt?: number | null
+  einvoiceAgentError?: string | null
+  lhdnReceivedDocumentUuid?: string | null
+  lhdnReceivedLongId?: string | null
+  lhdnReceivedStatus?: string | null
+  lhdnReceivedAt?: number | null
+  pendingMatchCandidates?: Array<{
+    receivedDocId: string
+    supplierName: string
+    total: number
+    dateTimeIssued: string
+    matchTier: string
+    matchConfidence: number
+  }>
 }
 
 export default function UnifiedExpenseDetailsModal({
@@ -815,6 +837,26 @@ export default function UnifiedExpenseDetailsModal({
                         </CardContent>
                       </Card>
 
+
+                      {/* E-Invoice Section (019-lhdn-einv-flow-2) */}
+                      <EinvoiceSection
+                        claimId={claimDetails.id}
+                        merchantFormUrl={claimDetails.merchantFormUrl}
+                        einvoiceRequestStatus={claimDetails.einvoiceRequestStatus}
+                        einvoiceSource={claimDetails.einvoiceSource}
+                        einvoiceAttached={claimDetails.einvoiceAttached}
+                        einvoiceEmailRef={claimDetails.einvoiceEmailRef}
+                        einvoiceRequestedAt={claimDetails.einvoiceRequestedAt}
+                        einvoiceReceivedAt={claimDetails.einvoiceReceivedAt}
+                        einvoiceAgentError={claimDetails.einvoiceAgentError}
+                        lhdnReceivedDocumentUuid={claimDetails.lhdnReceivedDocumentUuid}
+                        lhdnReceivedLongId={claimDetails.lhdnReceivedLongId}
+                        lhdnReceivedStatus={claimDetails.lhdnReceivedStatus}
+                        lhdnReceivedAt={claimDetails.lhdnReceivedAt}
+                        pendingMatchCandidates={claimDetails.pendingMatchCandidates}
+                        currency={claimDetails.currency || claimDetails.transaction?.original_currency}
+                        onRefresh={fetchClaimDetails}
+                      />
 
                       {/* Document Processing Status */}
                       {claimDetails.document && (

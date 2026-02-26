@@ -58,14 +58,34 @@ Fix errors and repeat until successful.
   - Adding new Convex modules
 - **Common failure**: Forgetting to deploy to prod after Convex changes — causes "Could not find public function" errors in production
 
+### Security — Least Privilege (CRITICAL)
+
+**Applies to ALL layers**: application code, infrastructure, database, service-to-service auth.
+
+**Principle**: Every component gets the minimum permissions needed — nothing more. This applies to:
+- **IAM policies**: Scope actions to specific resource ARNs with conditions. Never use `*` resources or broad action wildcards.
+- **Convex mutations**: Use `internalMutation` for backend-only operations. Only expose `mutation`/`query` when the frontend needs access.
+- **API routes**: Authenticate every endpoint — Clerk auth for user-facing, internal service keys for backend-to-backend.
+- **Secrets management**: Never store secrets in Convex (plain-text DB) or environment variables when a secure alternative exists. Use AWS SSM Parameter Store SecureString (free, encrypted at rest with KMS).
+- **Service-to-service auth**: Prefer IAM-native access (Lambda → SSM, Lambda → S3) over exporting credentials. When crossing boundaries (Convex → AWS), use Vercel OIDC → IAM role assumption.
+- **Database**: Don't return sensitive fields in queries. Filter out internal fields before sending to frontend.
+
+**Anti-patterns to avoid**:
+- Storing API secrets in Convex `businesses` table (use SSM SecureString instead)
+- Convex actions reading AWS credentials from env vars (use Lambda with IAM role instead)
+- Public mutations for backend-only operations (use `internalMutation`)
+- Hardcoding secrets in code or CDK stacks (use SSM references or `.env.local`)
+
 ### AWS CDK & Infrastructure (CRITICAL)
 ```bash
 cd infra
 npx cdk deploy --profile groot-finanseal --region us-west-2
 ```
-**Never make ad-hoc CLI changes** — all infrastructure via CDK.
+**Never make ad-hoc CLI changes** — all infrastructure via CDK. CDK is the single source of truth for all AWS resources.
 
 **Add to existing stacks**: When adding/updating AWS resources, always add to an existing CDK stack in `infra/lib/`. Do not create new stacks unless the resource is logically independent and approved.
+
+**AWS-first for AWS operations**: When a feature needs AWS services (SSM, S3, SES, LHDN API), put the logic in Lambda — not in Convex actions. Lambda has IAM-native access to AWS services (zero exported credentials). Convex should handle scheduling + real-time data layer only.
 
 **Security — IAM authentication required on all resources**:
 - **All Lambda functions** must be secured with IAM-based invocation. No public Function URLs, no unauthenticated API Gateway endpoints.
@@ -78,6 +98,25 @@ npx cdk deploy --profile groot-finanseal --region us-west-2
 - Examples: SSM Parameter Store SecureString (free) over Secrets Manager ($0.40/secret/month), CloudWatch Logs with retention limits, ARM_64 Lambda architecture (cheaper than x86_64).
 - When multiple AWS services can solve a problem, choose the cheapest option that meets performance requirements and document the cost trade-off.
 - Mark `@aws-sdk/*` as `externalModules` in Lambda bundling — use the runtime-provided SDK to reduce bundle size and cold start time.
+
+### Current CDK Stacks & AWS Resources
+
+All AWS infrastructure is defined in `infra/lib/`. Any new AWS resource MUST be added to an existing stack here.
+
+| Stack | File | Resources |
+|-------|------|-----------|
+| **DocumentProcessing** | `document-processing-stack.ts` | `finanseal-document-processor` (Python Docker, 1024MB, x86_64), `finanseal-einvoice-form-fill` (Node.js 20, 512MB, ARM_64), `finanseal-lhdn-polling` (Node.js 20, 256MB, ARM_64) |
+| **CDN** | `cdn-stack.ts` | CloudFront distribution (OAC → `finanseal-bucket`), signed URL key pair, SSM params for key-pair-id/domain |
+| **SystemEmail** | `system-email-stack.ts` | `finanseal-welcome-workflow` (Node.js 22, Durable Function), SES domain identity (`notifications.hellogroot.com`), SES config set, SNS topics, CloudWatch alarms (bounce/complaint rates) |
+| **MCPServer** | `mcp-server-stack.ts` | `finanseal-mcp-server` (Node.js 20, 512MB, ARM_64), API Gateway REST `/mcp` endpoint |
+| **DigitalSignature** | `digital-signature-stack.ts` | `finanseal-digital-signature` (Node.js 20, 256MB, ARM_64), SSM params for cert/keys, cert expiry CloudWatch alarm + SNS |
+| **APNs** | `apns-stack.ts` | SSM parameters for APNs push notification keys (P8 format) |
+| **PublicAssets** | `public-assets-stack.ts` | `finanseal-public` S3 bucket (public read with referer check), Vercel OIDC upload permission |
+
+**Shared resources** (referenced but not created by CDK):
+- S3 bucket: `finanseal-bucket` (private documents — created outside CDK)
+- Vercel OIDC role: `arn:aws:iam::837224017779:role/FinanSEAL-Vercel-S3-Role`
+- Convex: `https://kindhearted-lynx-129.convex.cloud`
 
 ### No Screenshots or Binary Files in Git
 - **Never commit** `.png`, `.jpg`, `.gif`, or other screenshot/image files to the repo
@@ -133,6 +172,7 @@ formatBusinessDate('2025-10-31')  // "Oct 31, 2025" (no timezone shift)
 | UI Components | `src/components/ui/CLAUDE.md` |
 | API Reference | `src/app/api/v1/CLAUDE.md` |
 | Expense Claims | `src/domains/expense-claims/CLAUDE.md` |
+| LHDN E-Invoice | `src/domains/expense-claims/einvoice/CLAUDE.md` |
 | App Patterns | `src/app/CLAUDE.md` |
 
 ## Active Technologies
@@ -178,6 +218,8 @@ formatBusinessDate('2025-10-31')  // "Oct 31, 2025" (no timezone shift)
 - Convex (document database with real-time sync), Stripe (billing source of truth) (019-country-pricing-lock)
 - TypeScript 5.9.3 / Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, AWS SDK (Lambda invocation), Clerk 6.30.0, Zod 3.23.8, qrcode (npm) (001-lhdn-einvoice-submission)
 - Convex (document database), AWS SSM Parameter Store (credentials) (001-lhdn-einvoice-submission)
+- TypeScript 5.9.3 (Next.js + Convex), Python 3.11 (Lambda) + Next.js 15.5.7, Convex 1.31.3, @browserbasehq/stagehand, pyzbar (Python), AWS SES (019-lhdn-einv-flow-2)
+- Convex (document database), AWS S3 (file storage), SES S3 (email storage) (019-lhdn-einv-flow-2)
 
 ## Recent Changes
 - 001-category-3-mcp: Added MCP Server with API key management

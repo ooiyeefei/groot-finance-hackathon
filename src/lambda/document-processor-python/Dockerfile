@@ -16,10 +16,11 @@
 
 FROM public.ecr.aws/lambda/python:3.11
 
-# Install Poppler for PDF conversion (as root)
+# Install Poppler for PDF conversion and zbar for QR detection (as root)
 USER root
 RUN yum install -y \
     poppler-utils \
+    zbar \
     && yum clean all
 
 # Copy requirements and install dependencies

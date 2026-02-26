@@ -31,3 +31,6 @@ litellm>=1.40.0,<2.0.0
 
 # Sentry for error tracking
 sentry-sdk>=2.0.0
+
+# QR code detection from receipt images (019-lhdn-einv-flow-2)
+pyzbar==0.1.9

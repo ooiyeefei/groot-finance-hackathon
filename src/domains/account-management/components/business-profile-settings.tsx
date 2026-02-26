@@ -41,6 +41,7 @@ export default function BusinessProfileSettings() {
   const [msicDescription, setMsicDescription] = useState('')
   const [sstRegistrationNumber, setSstRegistrationNumber] = useState('')
   const [lhdnClientId, setLhdnClientId] = useState('')
+  const [lhdnClientSecret, setLhdnClientSecret] = useState('')
   const [peppolParticipantId, setPeppolParticipantId] = useState('')
 
   // MSIC combobox state
@@ -72,6 +73,7 @@ export default function BusinessProfileSettings() {
     msicDescription: '',
     sstRegistrationNumber: '',
     lhdnClientId: '',
+    lhdnClientSecret: '',
     peppolParticipantId: '',
     homeCurrency: 'SGD' as SupportedCurrency,
   })
@@ -95,6 +97,7 @@ export default function BusinessProfileSettings() {
         msicDescription: profile.msic_description || '',
         sstRegistrationNumber: profile.sst_registration_number || '',
         lhdnClientId: profile.lhdn_client_id || '',
+        lhdnClientSecret: '', // Secret stored in AWS SSM, not returned from Convex
         peppolParticipantId: profile.peppol_participant_id || '',
         homeCurrency: (profile.home_currency || 'SGD') as SupportedCurrency,
       }
@@ -115,6 +118,7 @@ export default function BusinessProfileSettings() {
       setMsicDescription(initial.msicDescription)
       setSstRegistrationNumber(initial.sstRegistrationNumber)
       setLhdnClientId(initial.lhdnClientId)
+      setLhdnClientSecret(initial.lhdnClientSecret)
       setPeppolParticipantId(initial.peppolParticipantId)
       setAutoSelfBillExemptVendors(profile.auto_self_bill_exempt_vendors === true)
 
@@ -144,10 +148,11 @@ export default function BusinessProfileSettings() {
       msicDescription !== initialValues.msicDescription ||
       sstRegistrationNumber !== initialValues.sstRegistrationNumber ||
       lhdnClientId !== initialValues.lhdnClientId ||
+      lhdnClientSecret !== initialValues.lhdnClientSecret ||
       peppolParticipantId !== initialValues.peppolParticipantId
   }, [businessName, businessEmail, businessPhone, addressLine1, addressLine2, addressLine3,
       city, stateCode, postalCode, countryCode, lhdnTin, businessRegistrationNumber,
-      msicCode, msicDescription, sstRegistrationNumber, lhdnClientId, peppolParticipantId,
+      msicCode, msicDescription, sstRegistrationNumber, lhdnClientId, lhdnClientSecret, peppolParticipantId,
       initialValues])
 
   // Register dirty state with unsaved changes provider
@@ -209,6 +214,7 @@ export default function BusinessProfileSettings() {
           msic_description: msicDescription.trim() || undefined,
           sst_registration_number: sstRegistrationNumber.trim() || undefined,
           lhdn_client_id: lhdnClientId.trim() || undefined,
+          // NOTE: lhdn_client_secret is NOT sent here — stored via separate SSM API call below
           peppol_participant_id: peppolParticipantId.trim() || undefined,
           auto_self_bill_exempt_vendors: autoSelfBillExemptVendors,
         })
@@ -217,6 +223,20 @@ export default function BusinessProfileSettings() {
       const result = await response.json()
 
       if (result.success) {
+        // Save LHDN client secret to AWS SSM Parameter Store (separate from Convex)
+        if (lhdnClientSecret.trim() && lhdnClientSecret !== initialValues.lhdnClientSecret) {
+          try {
+            await fetch('/api/v1/account-management/businesses/lhdn-secret', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ client_secret: lhdnClientSecret.trim() }),
+            })
+          } catch (ssmError) {
+            console.error('[Business Profile] Failed to save LHDN secret to SSM:', ssmError)
+            // Non-blocking — profile saved, secret save can be retried
+          }
+        }
+
         updateProfile(result.data)
         // Update initial values to match saved state, clearing dirty state
         setInitialValues({
@@ -236,6 +256,7 @@ export default function BusinessProfileSettings() {
           msicDescription: msicDescription.trim(),
           sstRegistrationNumber: sstRegistrationNumber.trim(),
           lhdnClientId: lhdnClientId.trim(),
+          lhdnClientSecret: lhdnClientSecret.trim(),
           peppolParticipantId: peppolParticipantId.trim(),
           homeCurrency: (result.data.home_currency || 'SGD') as SupportedCurrency
         })
@@ -777,7 +798,24 @@ export default function BusinessProfileSettings() {
                       className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
                     />
                     <p className="text-xs text-muted-foreground mt-1">
-                      Client secret must be configured externally via AWS Secrets Manager.
+                      From your MyInvois portal &gt; Manage Application.
+                    </p>
+                  </div>
+
+                  {/* LHDN Client Secret */}
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      LHDN Client Secret
+                    </label>
+                    <input
+                      type="password"
+                      value={lhdnClientSecret}
+                      onChange={(e) => setLhdnClientSecret(e.target.value)}
+                      placeholder="LHDN MyInvois Client Secret"
+                      className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Stored securely in AWS. Required for automatic e-invoice retrieval.
                     </p>
                   </div>
 

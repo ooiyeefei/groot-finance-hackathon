@@ -193,6 +193,8 @@ class ConvexClient:
         business_purpose: Optional[str] = None,
         description: Optional[str] = None,
         reference_number: Optional[str] = None,
+        # QR detection (019-lhdn-einv-flow-2)
+        merchant_form_url: Optional[str] = None,
     ) -> str:
         """
         Update expense claim with extraction results.
@@ -209,6 +211,7 @@ class ConvexClient:
             business_purpose: Generated business purpose
             description: Generated description
             reference_number: Extracted receipt/reference number
+            merchant_form_url: Merchant form URL from QR code
 
         Returns:
             Updated document ID
@@ -236,6 +239,8 @@ class ConvexClient:
             args["description"] = description
         if reference_number is not None:
             args["referenceNumber"] = reference_number
+        if merchant_form_url is not None:
+            args["merchantFormUrl"] = merchant_form_url
 
         return self._mutation(
             "functions/system:updateExpenseClaimExtraction",

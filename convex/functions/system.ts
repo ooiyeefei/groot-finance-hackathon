@@ -15,6 +15,7 @@ import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
 import { resolveById } from "../lib/resolvers";
 import { internal } from "../_generated/api";
+import { Id } from "../_generated/dataModel";
 
 // ============================================
 // INVOICE SYSTEM FUNCTIONS (for Trigger.dev)
@@ -297,6 +298,8 @@ export const updateExpenseClaimExtraction = mutation({
     homeCurrency: v.optional(v.string()),
     homeCurrencyAmount: v.optional(v.number()),
     exchangeRate: v.optional(v.number()),
+    // QR detection (019-lhdn-einv-flow-2)
+    merchantFormUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const claim = await resolveById(ctx.db, "expense_claims", args.id);
@@ -352,10 +355,16 @@ export const updateExpenseClaimExtraction = mutation({
     if (args.exchangeRate !== undefined) {
       updateData.exchangeRate = args.exchangeRate;
     }
+    // QR detection (019-lhdn-einv-flow-2) — just store the URL.
+    // Form fill is triggered directly by the Python Lambda (no Convex round-trip).
+    if (args.merchantFormUrl !== undefined) {
+      updateData.merchantFormUrl = args.merchantFormUrl;
+    }
 
     await ctx.db.patch(claim._id, updateData);
     console.log(`[System] Updated expense claim ${args.id} extraction results`);
-    return claim._id;
+
+    return claim._id as string;
   },
 });
 
@@ -1148,4 +1157,445 @@ export const processVendorFromExpenseClaimExtraction = mutation({
     return result;
   },
 });
+
+// ============================================
+// E-INVOICE FORM FILL RESULT (019-lhdn-einv-flow-2)
+// Called by the Node.js form fill Lambda after Stagehand completes
+// ============================================
+
+/**
+ * Report e-invoice form fill status.
+ * Called by the einvoice-form-fill Lambda at each phase:
+ *   - "in_progress": Sets emailRef on claim, creates request log, schedules burst polling
+ *   - "success": Updates claim + log, sends success notification
+ *   - "failed": Updates claim + log, sends failure notification
+ *
+ * Single Convex entry point for the entire form fill lifecycle.
+ */
+export const reportEinvoiceFormFillResult = mutation({
+  args: {
+    expenseClaimId: v.string(),
+    emailRef: v.string(),
+    status: v.union(v.literal("in_progress"), v.literal("success"), v.literal("failed")),
+    merchantFormUrl: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    browserbaseSessionId: v.optional(v.string()),
+    durationMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    console.log(`[System] E-invoice form fill: claim=${args.expenseClaimId} status=${args.status}`);
+
+    const claim = await resolveById(ctx.db, "expense_claims", args.expenseClaimId);
+    if (!claim) {
+      console.error(`[System] Expense claim not found: ${args.expenseClaimId}`);
+      return { success: false };
+    }
+
+    // ── in_progress: starting form fill ──
+    if (args.status === "in_progress") {
+      // Set emailRef and status on the claim
+      await ctx.db.patch(claim._id, {
+        einvoiceEmailRef: args.emailRef,
+        einvoiceRequestStatus: "requesting",
+        einvoiceRequestedAt: Date.now(),
+        einvoiceSource: "merchant_issued",
+        updatedAt: Date.now(),
+      });
+
+      // Create request log
+      await ctx.db.insert("einvoice_request_logs", {
+        businessId: claim.businessId,
+        expenseClaimId: claim._id,
+        userId: claim.userId,
+        merchantFormUrl: args.merchantFormUrl || "",
+        emailRefToken: args.emailRef,
+        status: "in_progress",
+        startedAt: Date.now(),
+      });
+
+      // EventBridge triggers LHDN polling Lambda every 5 min — no burst scheduling needed.
+      // Lambda will discover this business has pending requests and poll LHDN automatically.
+
+      return { success: true };
+    }
+
+    // ── success / failed: form fill completed ──
+    // Find the request log by expenseClaimId
+    const requestLog = await ctx.db
+      .query("einvoice_request_logs")
+      .withIndex("by_expenseClaimId", (q) => q.eq("expenseClaimId", claim._id))
+      .order("desc")
+      .first();
+
+    if (requestLog) {
+      const logUpdate: Record<string, unknown> = {
+        status: args.status,
+        completedAt: Date.now(),
+      };
+      if (args.errorMessage) logUpdate.errorMessage = args.errorMessage;
+      if (args.browserbaseSessionId) logUpdate.browserbaseSessionId = args.browserbaseSessionId;
+      if (args.durationMs) logUpdate.durationMs = args.durationMs;
+      await ctx.db.patch(requestLog._id, logUpdate);
+    }
+
+    // Update claim status
+    const claimUpdate: Record<string, unknown> = {
+      einvoiceRequestStatus: args.status === "success" ? "requested" : "failed",
+      updatedAt: Date.now(),
+    };
+    if (args.status === "failed" && args.errorMessage) {
+      claimUpdate.einvoiceAgentError = args.errorMessage;
+    }
+    await ctx.db.patch(claim._id, claimUpdate);
+
+    // Send notification (only on completion, not in_progress)
+    await ctx.scheduler.runAfter(0, internal.functions.notifications.create, {
+      recipientUserId: claim.userId,
+      businessId: claim.businessId,
+      type: "compliance" as const,
+      severity: (args.status === "success" ? "info" : "warning") as "info" | "warning",
+      title: args.status === "success" ? "E-Invoice Requested" : "E-Invoice Request Failed",
+      body: args.status === "success"
+        ? `Your e-invoice request for ${claim.vendorName || "merchant"} has been submitted. You'll be notified when the e-invoice is received.`
+        : `Could not complete the e-invoice request for ${claim.vendorName || "merchant"}. You can try again or fill the form manually.`,
+      resourceType: "expense_claim" as const,
+      resourceId: args.expenseClaimId,
+      sourceEvent: `einvoice_${args.status}_${args.expenseClaimId}`,
+    });
+
+    return { success: true };
+  },
+});
+
+// ============================================
+// LHDN POLLING (019-lhdn-einv-flow-2)
+//
+// EventBridge triggers Lambda every 5 min → Lambda queries getBusinessesForLhdnPolling
+// → Lambda reads SSM secrets → LHDN auth → fetch docs → calls processLhdnReceivedDocuments
+// → 4-tier matching → dedup → storage → notifications → real-time UI update
+// ============================================
+
+/**
+ * Public Query: Returns businesses with pending e-invoice requests.
+ * Called by LHDN Polling Lambda (via Convex HTTP API) to discover which businesses to poll.
+ *
+ * Returns only businesses that have:
+ * 1. LHDN TIN configured
+ * 2. LHDN Client ID configured
+ * 3. At least one expense claim with einvoiceRequestStatus = "requesting" or "requested"
+ */
+export const getBusinessesForLhdnPolling = query({
+  args: {},
+  handler: async (ctx) => {
+    const businesses = await ctx.db.query("businesses").collect();
+    const lhdnBusinesses = businesses.filter(
+      (b) => b.lhdnTin && (b as Record<string, unknown>).lhdnClientId && !(b as Record<string, unknown>).deletedAt
+    );
+
+    const result: Array<{
+      businessId: string;
+      businessTin: string;
+      lhdnClientId: string;
+    }> = [];
+
+    for (const biz of lhdnBusinesses) {
+      const pendingClaims = await ctx.db
+        .query("expense_claims")
+        .withIndex("by_businessId", (q) => q.eq("businessId", biz._id))
+        .collect();
+
+      const hasPending = pendingClaims.some(
+        (claim) =>
+          !claim.deletedAt &&
+          (claim.einvoiceRequestStatus === "requesting" ||
+            claim.einvoiceRequestStatus === "requested")
+      );
+
+      if (hasPending) {
+        result.push({
+          businessId: biz._id as string,
+          businessTin: biz.lhdnTin as string,
+          lhdnClientId: (biz as Record<string, unknown>).lhdnClientId as string,
+        });
+      }
+    }
+
+    return result;
+  },
+});
+
+/**
+ * Helper: Parse email ref from einvoice+XXX@hellogroot.com address
+ */
+function parseEmailRef(email: string): string | null {
+  const match = email.match(/einvoice\+([^@]+)@/i);
+  return match ? match[1] : null;
+}
+
+export const processLhdnReceivedDocuments = mutation({
+  args: {
+    businessId: v.string(),
+    documents: v.array(v.object({
+      uuid: v.string(),
+      submissionUID: v.optional(v.string()),
+      longId: v.optional(v.string()),
+      internalId: v.optional(v.string()),
+      supplierTin: v.optional(v.string()),
+      supplierName: v.optional(v.string()),
+      buyerTin: v.optional(v.string()),
+      buyerEmail: v.optional(v.string()),
+      total: v.optional(v.number()),
+      dateTimeIssued: v.optional(v.string()),
+      status: v.optional(v.string()),
+    })),
+  },
+  handler: async (ctx, args) => {
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) {
+      console.error(`[LHDN Process] Business not found: ${args.businessId}`);
+      return { success: false, processed: 0 };
+    }
+
+    let processed = 0;
+
+    for (const doc of args.documents) {
+      try {
+        // Dedup: check if document already exists
+        const existing = await ctx.db
+          .query("einvoice_received_documents")
+          .withIndex("by_lhdnDocumentUuid", (q: any) => q.eq("lhdnDocumentUuid", doc.uuid))
+          .first();
+
+        if (existing) {
+          // Check for status changes (e.g., cancellation)
+          const newStatus = doc.status?.toLowerCase() === "cancelled" ? "cancelled" : "valid";
+          if (existing.status !== newStatus) {
+            await ctx.db.patch(existing._id, {
+              status: newStatus as "valid" | "cancelled",
+              processedAt: Date.now(),
+            });
+
+            if (newStatus === "cancelled" && existing.matchedExpenseClaimId) {
+              const claim = await resolveById(ctx.db, "expense_claims", existing.matchedExpenseClaimId as string);
+              if (claim) {
+                await ctx.db.patch(claim._id, {
+                  lhdnReceivedStatus: "cancelled",
+                  updatedAt: Date.now(),
+                });
+              }
+            }
+          }
+          continue;
+        }
+
+        // 4-tier matching
+        const matchResult = await runDocumentMatching(ctx.db, business._id, doc);
+
+        // Store received document
+        await ctx.db.insert("einvoice_received_documents", {
+          businessId: business._id,
+          lhdnDocumentUuid: doc.uuid,
+          lhdnSubmissionUid: doc.submissionUID,
+          lhdnLongId: doc.longId,
+          lhdnInternalId: doc.internalId,
+          supplierTin: doc.supplierTin,
+          supplierName: doc.supplierName,
+          buyerTin: doc.buyerTin || (business.lhdnTin as string),
+          buyerEmail: doc.buyerEmail,
+          total: doc.total,
+          dateTimeIssued: doc.dateTimeIssued,
+          status: (doc.status?.toLowerCase() === "cancelled" ? "cancelled" : "valid") as "valid" | "cancelled",
+          matchedExpenseClaimId: matchResult.matchedClaimId,
+          matchTier: matchResult.tier as "tier1_email" | "tier1_5_reference" | "tier2_tin_amount" | "tier3_fuzzy" | "manual" | undefined,
+          matchConfidence: matchResult.confidence,
+          matchCandidateClaimIds: matchResult.candidateClaimIds,
+          processedAt: Date.now(),
+          rawDocumentSnapshot: {
+            uuid: doc.uuid,
+            submissionUID: doc.submissionUID,
+            longId: doc.longId,
+            buyerEmail: doc.buyerEmail,
+          },
+        });
+
+        // If matched, update expense claim + notify
+        if (matchResult.matchedClaimId) {
+          const claimId = matchResult.matchedClaimId as Id<"expense_claims">;
+          const claim = await ctx.db.get(claimId);
+          if (claim && claim.lhdnReceivedDocumentUuid !== doc.uuid) {
+            await ctx.db.patch(claim._id, {
+              einvoiceRequestStatus: "received",
+              einvoiceAttached: true,
+              lhdnReceivedDocumentUuid: doc.uuid,
+              lhdnReceivedLongId: doc.longId,
+              lhdnReceivedStatus: "valid",
+              lhdnReceivedAt: Date.now(),
+              einvoiceReceivedAt: Date.now(),
+              updatedAt: Date.now(),
+            });
+
+            await ctx.db.insert("notifications", {
+              recipientUserId: claim.userId,
+              businessId: business._id,
+              type: "compliance",
+              severity: "info",
+              title: "E-Invoice Received",
+              body: `An e-invoice from ${doc.supplierName || "merchant"} has been matched to your expense claim.`,
+              resourceType: "expense_claim",
+              resourceId: claimId as string,
+              sourceEvent: `einvoice_attached_${claimId}`,
+              status: "unread",
+              createdAt: Date.now(),
+            });
+          }
+        }
+
+        // If ambiguous (Tier 3), notify candidates for review
+        if (matchResult.candidateClaimIds && matchResult.candidateClaimIds.length > 0) {
+          for (const candidateId of matchResult.candidateClaimIds) {
+            const candId = candidateId as Id<"expense_claims">;
+            const candidateClaim = await ctx.db.get(candId);
+            if (candidateClaim) {
+              await ctx.db.insert("notifications", {
+                recipientUserId: candidateClaim.userId,
+                businessId: business._id,
+                type: "compliance",
+                severity: "info",
+                title: "E-Invoice Match Needs Review",
+                body: `A received e-invoice from ${doc.supplierName || "merchant"} may match your expense claim. Please review and confirm.`,
+                resourceType: "expense_claim",
+                resourceId: candId as string,
+                sourceEvent: `einvoice_review_${candId}_${doc.uuid}`,
+                status: "unread",
+                createdAt: Date.now(),
+              });
+            }
+          }
+        }
+
+        processed++;
+      } catch (docError) {
+        console.error(`[LHDN Process] Error processing document ${doc.uuid}:`, docError);
+      }
+    }
+
+    console.log(`[LHDN Process] Processed ${processed}/${args.documents.length} documents for ${business.name}`);
+    return { success: true, processed };
+  },
+});
+
+/**
+ * 4-tier matching algorithm (runs inside mutation for direct DB access)
+ */
+async function runDocumentMatching(
+  db: any,
+  businessId: any,
+  doc: {
+    buyerEmail?: string;
+    internalId?: string;
+    supplierTin?: string;
+    supplierName?: string;
+    total?: number;
+    dateTimeIssued?: string;
+  }
+): Promise<{
+  matchedClaimId?: any;
+  tier?: string;
+  confidence?: number;
+  candidateClaimIds?: any[];
+}> {
+  // Tier 1: Deterministic match via buyer email + suffix
+  if (doc.buyerEmail) {
+    const emailRef = parseEmailRef(doc.buyerEmail);
+    if (emailRef) {
+      const claim = await db
+        .query("expense_claims")
+        .withIndex("by_einvoiceEmailRef", (q: any) => q.eq("einvoiceEmailRef", emailRef))
+        .first();
+      if (claim) {
+        console.log(`[LHDN Match] Tier 1: emailRef=${emailRef} -> claim ${claim._id}`);
+        return { matchedClaimId: claim._id, tier: "tier1_email", confidence: 1.0 };
+      }
+    }
+  }
+
+  // Tier 1.5: Match by merchant's reference number
+  if (doc.internalId) {
+    const claims = await db
+      .query("expense_claims")
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
+      .collect();
+
+    const refMatch = claims.find(
+      (c: any) =>
+        c.referenceNumber === doc.internalId &&
+        !c.deletedAt &&
+        (c.einvoiceRequestStatus === "requesting" || c.einvoiceRequestStatus === "requested")
+    );
+    if (refMatch) {
+      console.log(`[LHDN Match] Tier 1.5: ref=${doc.internalId} -> claim ${refMatch._id}`);
+      return { matchedClaimId: refMatch._id, tier: "tier1_5_reference", confidence: 0.95 };
+    }
+  }
+
+  // Tier 2: High confidence via supplierTin + total + date (±1 day)
+  if (doc.supplierTin && doc.total && doc.dateTimeIssued) {
+    const docDate = new Date(doc.dateTimeIssued);
+    const dayBefore = new Date(docDate.getTime() - 86400000);
+    const dayAfter = new Date(docDate.getTime() + 86400000);
+
+    const claims = await db
+      .query("expense_claims")
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
+      .collect();
+
+    const tier2 = claims.filter((c: any) => {
+      if (c.deletedAt || c.einvoiceAttached) return false;
+      if (c.totalAmount !== doc.total) return false;
+      if (c.transactionDate) {
+        const claimDate = new Date(c.transactionDate);
+        if (claimDate < dayBefore || claimDate > dayAfter) return false;
+      }
+      return true;
+    });
+
+    if (tier2.length === 1) {
+      console.log(`[LHDN Match] Tier 2: TIN+amount+date -> claim ${tier2[0]._id}`);
+      return { matchedClaimId: tier2[0]._id, tier: "tier2_tin_amount", confidence: 0.85 };
+    }
+  }
+
+  // Tier 3: Fuzzy via amount + date → flag for review
+  if (doc.total && doc.dateTimeIssued) {
+    const docDate = new Date(doc.dateTimeIssued);
+    const dayBefore = new Date(docDate.getTime() - 86400000);
+    const dayAfter = new Date(docDate.getTime() + 86400000);
+
+    const claims = await db
+      .query("expense_claims")
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
+      .collect();
+
+    const tier3 = claims.filter((c: any) => {
+      if (c.deletedAt || c.einvoiceAttached) return false;
+      if (c.totalAmount !== doc.total) return false;
+      if (c.transactionDate) {
+        const claimDate = new Date(c.transactionDate);
+        if (claimDate < dayBefore || claimDate > dayAfter) return false;
+      }
+      return true;
+    });
+
+    if (tier3.length > 0) {
+      console.log(`[LHDN Match] Tier 3: ${tier3.length} candidates for review`);
+      return {
+        tier: "tier3_fuzzy",
+        confidence: 0.5,
+        candidateClaimIds: tier3.map((c: any) => c._id),
+      };
+    }
+  }
+
+  return {};
+}
 

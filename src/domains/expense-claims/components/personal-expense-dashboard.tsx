@@ -14,6 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import ExpenseStatusBadge from './expense-status-badge'
 import DuplicateBadge from './duplicate-badge'
+import EinvoiceStatusBadge from './einvoice-status-badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatBusinessDate } from '@/lib/utils'
 
@@ -579,6 +580,14 @@ function ExpenseClaimCard({ claim, index, context, categories, setEditingClaimId
               errorMessage={claim.error_message}
               processingStage={claim.status_display?.isProcessing ? claim.status as any : undefined}
               animated={true}
+            />
+            {/* E-Invoice Badge */}
+            <EinvoiceStatusBadge
+              einvoiceRequestStatus={claim.einvoiceRequestStatus}
+              einvoiceAttached={claim.einvoiceAttached}
+              einvoiceSource={claim.einvoiceSource}
+              merchantFormUrl={claim.merchantFormUrl}
+              lhdnReceivedStatus={claim.lhdnReceivedStatus}
             />
             {/* Duplicate Badge - shows when claim has potential duplicates */}
             {claim.duplicateStatus && claim.duplicateStatus !== 'none' && (

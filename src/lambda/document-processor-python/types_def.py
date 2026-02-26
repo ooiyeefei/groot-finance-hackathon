@@ -178,6 +178,28 @@ class BusinessCategory:
 # =============================================================================
 
 @dataclass
+class BusinessDetails:
+    """Buyer business details for e-invoice form fill (019-lhdn-einv-flow-2)."""
+    name: str
+    tin: str          # LHDN TIN
+    brn: str          # Business Registration Number
+    address: str
+    phone: Optional[str] = None
+    contact_email: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "BusinessDetails":
+        return cls(
+            name=data["name"],
+            tin=data["tin"],
+            brn=data["brn"],
+            address=data["address"],
+            phone=data.get("phone"),
+            contact_email=data.get("contactEmail"),
+        )
+
+
+@dataclass
 class DocumentProcessingRequest:
     """Request payload from Vercel API to Lambda."""
     document_id: str
@@ -192,12 +214,18 @@ class DocumentProcessingRequest:
     fast_mode: bool = False  # DEPRECATED: Two-phase extraction now handles speed (kept for backward compatibility)
     test_mode: bool = False  # If true, don't update Convex (for testing)
     skip_validation: bool = False  # Explicit validation skip (for testing)
+    # Business details for e-invoice form fill (019-lhdn-einv-flow-2)
+    business_details: Optional[BusinessDetails] = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "DocumentProcessingRequest":
         categories = None
         if data.get("businessCategories"):
             categories = [BusinessCategory.from_dict(c) for c in data["businessCategories"]]
+
+        business_details = None
+        if data.get("businessDetails"):
+            business_details = BusinessDetails.from_dict(data["businessDetails"])
 
         return cls(
             document_id=data["documentId"],
@@ -212,6 +240,7 @@ class DocumentProcessingRequest:
             fast_mode=data.get("fastMode", False),
             test_mode=data.get("testMode", False),
             skip_validation=data.get("skipValidation", False),
+            business_details=business_details,
         )
 
 

@@ -82,6 +82,8 @@ export interface BusinessProfile {
   msic_description?: string | null
   sst_registration_number?: string | null
   lhdn_client_id?: string | null
+  // NOTE: lhdn_client_secret is NOT stored in Convex — goes to AWS SSM Parameter Store
+  // via /api/v1/account-management/businesses/lhdn-secret endpoint
   peppol_participant_id?: string | null
   // e-inv-ui-forms: Structured address
   address_line1?: string | null
@@ -514,6 +516,7 @@ export async function updateBusinessProfile(
     msic_description,
     sst_registration_number,
     lhdn_client_id,
+    // NOTE: lhdn_client_secret NOT sent to Convex — stored in AWS SSM Parameter Store
     // e-inv-ui-forms: Peppol
     peppol_participant_id,
     // e-inv-ui-forms: Structured address

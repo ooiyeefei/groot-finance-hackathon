@@ -46,6 +46,7 @@ from steps.extract_receipt import (
     extract_receipt_phase1_step,
     extract_receipt_phase2_step,
 )
+from steps.detect_qr import detect_qr_step
 from utils.convex_client import ConvexClient
 from utils.s3_client import S3Client
 from types_def import (
@@ -283,6 +284,43 @@ def handler(event: dict, context: DurableContext):
         context.step(lambda ctx: update_converted_image(), name="update_converted_image")
 
         # =================================================================
+        # Step 3c: QR Code Detection (019-lhdn-einv-flow-2)
+        # Runs for expense_claims only — detects merchant form URLs from receipt QR codes
+        # Parallel to extraction — does not add latency
+        # =================================================================
+        def detect_qr_codes():
+            if request.domain != "expense_claims":
+                return {"merchant_form_url": None, "detected_qr_codes": []}
+
+            print(f"[{doc_id}] Step: QR Code Detection")
+            try:
+                # Get image bytes for QR detection
+                if converted_images and len(converted_images) > 0:
+                    # PDF was converted — use first page image
+                    image_data = s3.download_file(converted_images[0].s3_key)
+                elif request.storage_path:
+                    # Direct image upload — read from S3
+                    # Build the full S3 key with domain prefix
+                    s3_key = f"{request.domain}/{request.storage_path}"
+                    image_data = s3.download_file(s3_key)
+                else:
+                    print(f"[{doc_id}] QR Detection: No image available")
+                    return {"merchant_form_url": None, "detected_qr_codes": []}
+
+                result = detect_qr_step(
+                    document_id=doc_id,
+                    image_bytes=image_data,
+                    mime_type=request.file_type or "image/png",
+                )
+                return result
+            except Exception as qr_error:
+                # QR detection failure is non-fatal
+                print(f"[{doc_id}] QR Detection failed (non-fatal): {str(qr_error)}")
+                return {"merchant_form_url": None, "detected_qr_codes": []}
+
+        qr_result = context.step(lambda ctx: detect_qr_codes(), name="detect_qr_codes")
+
+        # =================================================================
         # Step 4: Validate document - ALWAYS SKIP (domain-based routing)
         # =================================================================
         # Skip validation for ALL domains - the upload context (which page user is on)
@@ -375,7 +413,7 @@ def handler(event: dict, context: DurableContext):
         def update_convex_results():
             if request.test_mode:
                 print(f"[{doc_id}] SKIPPING Convex update (test_mode=True)")
-                return True
+                return {"claimId": doc_id, "emailRef": None, "requestLogId": None}
 
             print(f"[{doc_id}] Step: Updating Convex with results")
 
@@ -391,8 +429,16 @@ def handler(event: dict, context: DurableContext):
                     confidence_score=extraction_result.get("confidence", 0.0),
                     extraction_method="dspy_gemini",
                 )
+                return {"claimId": doc_id, "emailRef": None, "requestLogId": None}
             else:
-                convex.update_expense_claim_extraction(
+                # Include QR detection results in processing metadata
+                merchant_form_url = qr_result.get("merchant_form_url") if qr_result else None
+                if merchant_form_url:
+                    extraction_result["merchant_form_url"] = merchant_form_url
+                    extraction_result["detected_qr_codes"] = qr_result.get("detected_qr_codes", [])
+                    print(f"[{doc_id}] Including merchant_form_url in extraction: {merchant_form_url[:80]}...")
+
+                result = convex.update_expense_claim_extraction(
                     document_id=doc_id,
                     extracted_data=extraction_result,
                     confidence_score=extraction_result.get("confidence", 0.0),
@@ -405,10 +451,76 @@ def handler(event: dict, context: DurableContext):
                     business_purpose=extraction_result.get("business_purpose"),
                     description=extraction_result.get("description"),
                     reference_number=extraction_result.get("receipt_number"),
+                    # QR detection (019-lhdn-einv-flow-2)
+                    merchant_form_url=merchant_form_url,
                 )
-            return True
+                return result
 
         context.step(lambda ctx: update_convex_results(), name="update_convex_results")
+
+        # =================================================================
+        # Step 7d: Trigger e-invoice form fill Lambda (019-lhdn-einv-flow-2)
+        # If QR code detected + business has TIN → invoke Node.js Lambda
+        # emailRef derived from claim ID (first 10 chars) — deterministic, no Convex round-trip
+        # Runs async (fire-and-forget) — user already sees extracted data
+        # =================================================================
+        def trigger_einvoice_form_fill():
+            if request.test_mode:
+                print(f"[{doc_id}] SKIPPING e-invoice form fill trigger (test_mode=True)")
+                return {"triggered": False, "reason": "test_mode"}
+
+            if request.domain != "expense_claims":
+                return {"triggered": False, "reason": "not_expense_claims"}
+
+            merchant_form_url = qr_result.get("merchant_form_url") if qr_result else None
+            if not merchant_form_url:
+                return {"triggered": False, "reason": "no_merchant_form_url"}
+
+            if not request.business_details:
+                print(f"[{doc_id}] E-invoice: merchantFormUrl found but no business details in payload")
+                return {"triggered": False, "reason": "no_business_details"}
+
+            form_fill_arn = os.environ.get("EINVOICE_FORM_FILL_LAMBDA_ARN")
+            if not form_fill_arn:
+                print(f"[{doc_id}] E-invoice: EINVOICE_FORM_FILL_LAMBDA_ARN not configured")
+                return {"triggered": False, "reason": "no_lambda_arn"}
+
+            # Derive emailRef from claim ID (first 10 chars — unique, deterministic)
+            email_ref = doc_id[:10]
+
+            print(f"[{doc_id}] Triggering e-invoice form fill Lambda: {merchant_form_url[:80]}...")
+
+            import boto3
+            lambda_client = boto3.client("lambda")
+            payload = {
+                "merchantFormUrl": merchant_form_url,
+                "buyerDetails": {
+                    "name": request.business_details.name,
+                    "tin": request.business_details.tin,
+                    "brn": request.business_details.brn,
+                    "address": request.business_details.address,
+                    "email": f"einvoice+{email_ref}@hellogroot.com",
+                    "phone": request.business_details.phone,
+                },
+                "extractedData": {
+                    "referenceNumber": extraction_result.get("receipt_number"),
+                    "vendorName": extraction_result.get("vendor_name"),
+                    "amount": extraction_result.get("total_amount"),
+                    "date": extraction_result.get("transaction_date"),
+                },
+                "emailRef": email_ref,
+                "expenseClaimId": doc_id,
+            }
+
+            lambda_client.invoke(
+                FunctionName=form_fill_arn,
+                InvocationType="Event",  # Async — fire and forget
+                Payload=json.dumps(payload),
+            )
+            print(f"[{doc_id}] E-invoice form fill Lambda invoked successfully")
+            return {"triggered": True, "emailRef": email_ref}
+
+        context.step(lambda ctx: trigger_einvoice_form_fill(), name="trigger_einvoice_form_fill")
 
         # =================================================================
         # Step 7a: Phase 2 Line Items Extraction (expense_claims)

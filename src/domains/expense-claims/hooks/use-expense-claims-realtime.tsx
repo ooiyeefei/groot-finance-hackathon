@@ -132,6 +132,12 @@ export function useExpenseClaimsRealtime(
       duplicateStatus: claim.duplicateStatus,
       duplicateGroupId: claim.duplicateGroupId,
       isSplitExpense: claim.isSplitExpense,
+      // E-Invoice fields (019-lhdn-einv-flow-2)
+      merchantFormUrl: claim.merchantFormUrl,
+      einvoiceRequestStatus: claim.einvoiceRequestStatus,
+      einvoiceSource: claim.einvoiceSource,
+      einvoiceAttached: claim.einvoiceAttached,
+      lhdnReceivedStatus: claim.lhdnReceivedStatus,
     }));
 
     return {

@@ -1,8 +1,11 @@
 import * as cdk from 'aws-cdk-lib';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as lambdaNode from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as targets from 'aws-cdk-lib/aws-events-targets';
 import { Construct } from 'constructs';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -138,6 +141,131 @@ export class DocumentProcessingStack extends cdk.Stack {
     });
 
     // ========================================================================
+    // E-Invoice Form Fill Lambda (019-lhdn-einv-flow-2)
+    // Node.js Lambda that uses Stagehand + Browserbase to fill merchant forms
+    // Triggered by: Python document-processor (boto3) or Vercel API (OIDC)
+    // ========================================================================
+    const formFillLogGroup = new logs.LogGroup(this, 'FormFillLogs', {
+      logGroupName: `/aws/lambda/finanseal-einvoice-form-fill`,
+      retention: logs.RetentionDays.ONE_MONTH,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const formFillFunction = new lambdaNode.NodejsFunction(this, 'EinvoiceFormFill', {
+      entry: path.join(__dirname, '../../src/lambda/einvoice-form-fill/handler.ts'),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_20_X,
+      architecture: lambda.Architecture.ARM_64, // Cost-optimized
+      functionName: 'finanseal-einvoice-form-fill',
+      description: 'E-Invoice form fill via Stagehand + Browserbase (019-lhdn-einv-flow-2)',
+      memorySize: 512,
+      timeout: cdk.Duration.minutes(5), // Form fill typically takes 30-60s
+      logGroup: formFillLogGroup,
+      environment: {
+        BROWSERBASE_API_KEY: process.env.BROWSERBASE_API_KEY || '',
+        BROWSERBASE_PROJECT_ID: process.env.BROWSERBASE_PROJECT_ID || '',
+        GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+        NEXT_PUBLIC_CONVEX_URL: 'https://kindhearted-lynx-129.convex.cloud',
+      },
+      bundling: {
+        externalModules: ['@aws-sdk/*', '@browserbasehq/stagehand'],
+        minify: true,
+        sourceMap: true,
+        // Stagehand is marked external for esbuild, then installed via afterBundling.
+        // This avoids CDK's npm ci lock file sync issues with Stagehand's many transitive deps.
+        commandHooks: {
+          beforeBundling: () => [],
+          beforeInstall: () => [],
+          afterBundling: (_inputDir: string, outputDir: string) => [
+            `cd ${outputDir} && npm init -y --quiet && npm install @browserbasehq/stagehand --no-optional --production --quiet`,
+          ],
+        },
+      },
+    });
+
+    // Grant Python Lambda permission to invoke the form fill Lambda
+    formFillFunction.grantInvoke(this.documentProcessorFunction);
+
+    // Pass form fill Lambda ARN to Python Lambda as env var
+    this.documentProcessorFunction.addEnvironment(
+      'EINVOICE_FORM_FILL_LAMBDA_ARN',
+      formFillFunction.functionArn
+    );
+
+    // Allow Vercel OIDC role to invoke form fill Lambda (for manual requests)
+    formFillFunction.addPermission('VercelOidcInvoke', {
+      principal: new iam.ArnPrincipal(vercelOidcRoleArn),
+      action: 'lambda:InvokeFunction',
+    });
+
+    // ========================================================================
+    // LHDN Polling Lambda (019-lhdn-einv-flow-2)
+    // Node.js Lambda that polls LHDN MyInvois API for received e-invoices.
+    // Reads per-business LHDN client secret from SSM (IAM-native, zero exported creds).
+    // Passes fetched documents to Convex mutation for matching + storage.
+    // Triggered by: Vercel API route (via Convex cron/scheduler)
+    // ========================================================================
+    const lhdnPollLogGroup = new logs.LogGroup(this, 'LhdnPollLogs', {
+      logGroupName: `/aws/lambda/finanseal-lhdn-polling`,
+      retention: logs.RetentionDays.ONE_MONTH,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const lhdnPollFunction = new lambdaNode.NodejsFunction(this, 'LhdnPolling', {
+      entry: path.join(__dirname, '../../src/lambda/lhdn-polling/handler.ts'),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_20_X,
+      architecture: lambda.Architecture.ARM_64, // Cost-optimized
+      functionName: 'finanseal-lhdn-polling',
+      description: 'LHDN MyInvois polling — SSM creds, fetch received docs, Convex matching (019-lhdn-einv-flow-2)',
+      memorySize: 256,
+      timeout: cdk.Duration.minutes(2), // Polling + enrichment typically <30s
+      logGroup: lhdnPollLogGroup,
+      environment: {
+        NEXT_PUBLIC_CONVEX_URL: 'https://kindhearted-lynx-129.convex.cloud',
+        LHDN_API_BASE_URL: process.env.LHDN_API_BASE_URL || 'https://preprod-api.myinvois.hasil.gov.my',
+      },
+      bundling: {
+        externalModules: ['@aws-sdk/*'], // Use runtime-provided SDK
+        minify: true,
+        sourceMap: true,
+      },
+    });
+
+    // IAM: Read per-business LHDN client secret from SSM Parameter Store
+    lhdnPollFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ['ssm:GetParameter'],
+      resources: [
+        `arn:aws:ssm:${this.region}:${this.account}:parameter/groot-finance/businesses/*/lhdn-client-secret`,
+      ],
+    }));
+
+    // Allow Vercel OIDC role to invoke LHDN polling Lambda (for on-demand polling)
+    lhdnPollFunction.addPermission('VercelOidcInvoke', {
+      principal: new iam.ArnPrincipal(vercelOidcRoleArn),
+      action: 'lambda:InvokeFunction',
+    });
+
+    // ========================================================================
+    // EventBridge: Schedule LHDN polling every 5 minutes (019-lhdn-einv-flow-2)
+    //
+    // Lambda self-discovers businesses with pending e-invoice requests by
+    // querying Convex, then polls LHDN for each. No Convex cron or Vercel
+    // middleware needed — purely AWS-native scheduling.
+    //
+    // Cost: EventBridge rules are free tier (up to 14M invocations/month).
+    // Lambda cost: ~$0 when no businesses have pending requests (< 1s runtime).
+    // ========================================================================
+    const lhdnPollSchedule = new events.Rule(this, 'LhdnPollSchedule', {
+      ruleName: 'finanseal-lhdn-poll-schedule',
+      description: 'Trigger LHDN polling Lambda every 5 minutes (019-lhdn-einv-flow-2)',
+      schedule: events.Schedule.rate(cdk.Duration.minutes(5)),
+    });
+
+    lhdnPollSchedule.addTarget(new targets.LambdaFunction(lhdnPollFunction));
+
+    // ========================================================================
     // Outputs
     // ========================================================================
     new cdk.CfnOutput(this, 'FunctionArn', {
@@ -156,6 +284,18 @@ export class DocumentProcessingStack extends cdk.Stack {
       value: logGroup.logGroupName,
       description: 'CloudWatch Log Group name',
       exportName: `${id}-LogGroupName`,
+    });
+
+    new cdk.CfnOutput(this, 'FormFillFunctionArn', {
+      value: formFillFunction.functionArn,
+      description: 'E-Invoice form fill Lambda ARN',
+      exportName: `${id}-FormFillFunctionArn`,
+    });
+
+    new cdk.CfnOutput(this, 'LhdnPollFunctionArn', {
+      value: lhdnPollFunction.functionArn,
+      description: 'LHDN polling Lambda ARN',
+      exportName: `${id}-LhdnPollFunctionArn`,
     });
   }
 }

@@ -200,4 +200,8 @@ crons.daily(
   internal.functions.timesheets.autoConfirmPastDeadline
 );
 
+// E-Invoice LHDN Polling (019-lhdn-einv-flow-2):
+// Handled by AWS EventBridge → Lambda (every 5 min). No Convex cron needed.
+// Lambda queries Convex for businesses with pending requests, polls LHDN directly.
+
 export default crons;

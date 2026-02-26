@@ -479,6 +479,45 @@ export default defineSchema({
     selfBillRequired: v.optional(v.boolean()),
     receiptQrCodeDetected: v.optional(v.boolean()),
 
+    // ============================================
+    // E-INVOICE RETRIEVAL FIELDS (019-lhdn-einv-flow-2)
+    // ============================================
+
+    // QR Detection
+    merchantFormUrl: v.optional(v.string()),  // URL from receipt QR code — merchant buyer-info form
+
+    // E-Invoice Request Lifecycle
+    einvoiceRequestStatus: v.optional(v.union(
+      v.literal("none"),
+      v.literal("requesting"),
+      v.literal("requested"),
+      v.literal("received"),
+      v.literal("failed"),
+    )),
+    einvoiceSource: v.optional(v.union(
+      v.literal("merchant_issued"),
+      v.literal("manual_upload"),
+      v.literal("not_applicable"),
+    )),
+    einvoiceAttached: v.optional(v.boolean()),  // Quick filter flag
+
+    // LHDN Received Document Reference
+    lhdnReceivedDocumentUuid: v.optional(v.string()),  // LHDN document UUID
+    lhdnReceivedLongId: v.optional(v.string()),        // For verification QR code
+    lhdnReceivedStatus: v.optional(v.union(v.literal("valid"), v.literal("cancelled"))),
+    lhdnReceivedAt: v.optional(v.number()),            // LHDN validation timestamp
+
+    // Email Matching
+    einvoiceEmailRef: v.optional(v.string()),          // Unique 6-char token for + addressing
+
+    // Manual Upload
+    einvoiceManualUploadPath: v.optional(v.string()),  // Storage path for manually uploaded e-invoice
+
+    // Timestamps & Error
+    einvoiceRequestedAt: v.optional(v.number()),
+    einvoiceReceivedAt: v.optional(v.number()),
+    einvoiceAgentError: v.optional(v.string()),        // Error from AI agent failure
+
     // Timestamps
     updatedAt: v.optional(v.number()),
   })
@@ -496,7 +535,10 @@ export default defineSchema({
     // Batch submission index
     .index("by_submissionId", ["submissionId"])
     // LHDN self-bill index
-    .index("by_businessId_lhdnStatus", ["businessId", "lhdnStatus"]),
+    .index("by_businessId_lhdnStatus", ["businessId", "lhdnStatus"])
+    // E-Invoice indexes (019-lhdn-einv-flow-2)
+    .index("by_businessId_einvoiceRequestStatus", ["businessId", "einvoiceRequestStatus"])
+    .index("by_einvoiceEmailRef", ["einvoiceEmailRef"]),
 
   // ============================================
   // EXPENSE SUBMISSIONS DOMAIN (009-batch-receipt-submission)
@@ -539,6 +581,66 @@ export default defineSchema({
     .index("by_designatedApproverId", ["designatedApproverId"])
     .index("by_businessId_status", ["businessId", "status"])
     .index("by_businessId_userId", ["businessId", "userId"]),
+
+  // ============================================
+  // E-INVOICE RECEIVED DOCUMENTS (019-lhdn-einv-flow-2)
+  // ============================================
+
+  einvoice_received_documents: defineTable({
+    businessId: v.id("businesses"),
+    lhdnDocumentUuid: v.string(),                      // LHDN document UUID (26-char)
+    lhdnSubmissionUid: v.optional(v.string()),
+    lhdnLongId: v.optional(v.string()),                // For verification QR code
+    lhdnInternalId: v.optional(v.string()),            // Merchant's own invoice reference
+    supplierTin: v.optional(v.string()),
+    supplierName: v.optional(v.string()),
+    buyerTin: v.optional(v.string()),
+    buyerEmail: v.optional(v.string()),                // From UBL — may contain + suffix
+    total: v.optional(v.number()),
+    dateTimeIssued: v.optional(v.string()),            // ISO date-time
+    status: v.union(v.literal("valid"), v.literal("cancelled")),
+    matchedExpenseClaimId: v.optional(v.id("expense_claims")),
+    matchTier: v.optional(v.union(
+      v.literal("tier1_email"),
+      v.literal("tier1_5_reference"),
+      v.literal("tier2_tin_amount"),
+      v.literal("tier3_fuzzy"),
+      v.literal("manual"),
+    )),
+    matchConfidence: v.optional(v.number()),           // 0-1 confidence score
+    matchCandidateClaimIds: v.optional(v.array(v.id("expense_claims"))),
+    processedAt: v.number(),
+    rawDocumentSnapshot: v.optional(v.any()),          // Key UBL fields for audit
+  })
+    .index("by_businessId_status", ["businessId", "status"])
+    .index("by_lhdnDocumentUuid", ["lhdnDocumentUuid"])
+    .index("by_matchedExpenseClaimId", ["matchedExpenseClaimId"])
+    .index("by_businessId_processedAt", ["businessId", "processedAt"]),
+
+  // ============================================
+  // E-INVOICE REQUEST LOGS (019-lhdn-einv-flow-2)
+  // ============================================
+
+  einvoice_request_logs: defineTable({
+    businessId: v.id("businesses"),
+    expenseClaimId: v.id("expense_claims"),
+    userId: v.id("users"),
+    merchantFormUrl: v.string(),
+    emailRefToken: v.string(),                         // The + suffix token
+    status: v.union(
+      v.literal("pending"),
+      v.literal("in_progress"),
+      v.literal("success"),
+      v.literal("failed"),
+    ),
+    errorMessage: v.optional(v.string()),
+    browserbaseSessionId: v.optional(v.string()),
+    durationMs: v.optional(v.number()),
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_expenseClaimId", ["expenseClaimId"])
+    .index("by_businessId_status", ["businessId", "status"]),
 
   // ============================================
   // DUPLICATE MATCHES TABLE (007-duplicate-expense-detection)

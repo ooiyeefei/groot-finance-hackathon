@@ -37,6 +37,17 @@ export interface DocumentProcessingRequest {
 
   // Optional hints (optimize when caller has context)
   expectedDocumentType?: 'invoice' | 'receipt';  // Skip classification if known
+
+  // Business details for e-invoice form fill (019-lhdn-einv-flow-2)
+  // Passed upfront so Lambda can trigger form fill without querying Convex
+  businessDetails?: {
+    name: string;
+    tin: string;                         // LHDN TIN
+    brn: string;                         // Business Registration Number
+    address: string;
+    phone?: string;
+    contactEmail?: string;
+  };
 }
 
 /**
