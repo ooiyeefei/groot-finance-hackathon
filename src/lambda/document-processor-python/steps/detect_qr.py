@@ -53,7 +53,7 @@ def detect_qr_step(
             print(f"[{document_id}] QR Detection: Found {len(qr_results)} QR codes")
 
             for i, qr in enumerate(qr_results):
-                data = qr.text
+                data = qr.text.strip()
                 print(f"[{document_id}] QR Detection: Code #{i} data: {data[:150]}")
                 detected_qr_codes.append(data)
 
