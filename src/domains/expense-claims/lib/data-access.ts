@@ -470,12 +470,13 @@ export async function createExpenseClaim(
             const business = await convexClient.query(api.functions.businesses.getBusinessProfileByStringId, {
               businessId: employeeProfile.business_id,
             })
-            if (business?.lhdn_tin && business?.address) {
+            const fullAddress = [business?.address_line1, business?.address_line2, business?.city, business?.state_code, business?.postal_code, business?.country_code].filter(Boolean).join(', ')
+            if (business?.lhdn_tin && fullAddress) {
               businessDetails = {
                 name: business.name,
                 tin: business.lhdn_tin,
                 brn: business.business_registration_number || business.lhdn_tin,
-                address: business.address,
+                address: fullAddress,
                 phone: business.contact_phone || undefined,
                 contactEmail: business.contact_email || undefined,
               }
