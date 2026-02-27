@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, forwardRef, useImperativeHandle, lazy, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { FileText, Image, File, Play, RotateCcw, Eye, Trash2, Plus, Loader2 } from 'lucide-react'
+import { FileText, Image, File, Play, RotateCcw, Eye, FileSearch, Trash2, Plus, Loader2 } from 'lucide-react'
 import SkeletonLoader from '@/components/ui/skeleton-loader'
 import { useDocuments } from '@/domains/invoices/hooks/use-documents'
 import DocumentStatusBadge from './document-status-badge'
@@ -471,7 +471,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                       title="Analyze"
                       className="doc-action-btn"
                     >
-                      <Eye className="w-4 h-4 sm:mr-1.5" />
+                      <FileSearch className="w-4 h-4 sm:mr-1.5" />
                       <span className="hidden sm:inline">Analyze</span>
                     </Button>
                   )}
