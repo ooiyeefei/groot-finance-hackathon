@@ -992,3 +992,48 @@ main .p-6 {
 .pt-safe-area-inset-top {
   padding-top: env(safe-area-inset-top, 0px);
 }
+
+/* ========================================================
+   MOBILE OVERFLOW PREVENTION
+   Prevents horizontal overflow on mobile Capacitor shell.
+   The main content area must not exceed viewport width.
+   ======================================================== */
+@media (max-width: 640px) {
+  body {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
+  /* All authenticated page main content areas */
+  main {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  /* Force all flex-1 content wrappers to stay within bounds */
+  .flex-1 {
+    max-width: 100vw;
+    min-width: 0;
+  }
+
+  /* Document card action buttons: icon-only on mobile */
+  .doc-action-btn span {
+    display: none !important;
+  }
+  .doc-action-btn svg {
+    margin-right: 0 !important;
+  }
+
+  /* Force badge rows to wrap */
+  .doc-badges {
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  /* Force button rows to wrap in a grid */
+  .doc-actions {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(36px, auto));
+    gap: 0.375rem;
+  }
+}

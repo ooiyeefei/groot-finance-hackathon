@@ -124,7 +124,7 @@ export default function HeaderWithUser({ title, subtitle, actions }: HeaderWithU
   }, [])
 
   return (
-    <header className="bg-card border-b border-border px-4 sm:px-6 py-3 sm:py-4">
+    <header className="bg-card border-b border-border px-4 sm:px-6 py-3 sm:py-4" style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 0.75rem)' }}>
       <div className="flex items-center justify-between gap-2 sm:gap-4">
         {/* Left: Business switcher (mobile) + Title */}
         <div className="flex-1 min-w-0">

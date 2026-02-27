@@ -410,16 +410,16 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
         {documents.map((document) => (
           <div
             key={document.id}
-            className="bg-muted/50 rounded-lg border border-border p-card-padding hover:bg-muted/70 transition-colors"
+            className="bg-muted/50 rounded-lg border border-border p-card-padding hover:bg-muted/70 transition-colors overflow-hidden"
           >
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="flex items-center space-x-3 flex-1 min-w-0">
                 {getFileIcon(document.file_type)}
                 <div className="flex-1 min-w-0">
                   <h4 className="text-foreground font-medium truncate">{document.file_name}</h4>
-                  <div className="flex items-center space-x-4 text-sm text-muted-foreground mt-1">
+                  <div className="flex items-center flex-wrap gap-x-4 gap-y-0 text-sm text-muted-foreground mt-1">
                     <span>{formatFileSize(document.file_size)}</span>
-                    <span>•</span>
+                    <span className="hidden sm:inline">•</span>
                     <span>Uploaded {formatDate(document.created_at)}</span>
                     {document.processed_at && (
                       <>
@@ -431,8 +431,8 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                 </div>
               </div>
 
-              <div className="flex flex-col items-end space-y-2">
-                <div className="flex items-center space-x-3">
+              <div className="flex flex-col items-start sm:items-end space-y-2 min-w-0 max-w-full">
+                <div className="doc-badges flex items-center flex-wrap gap-2">
                   <DocumentStatusBadge
                     status={document.status}
                     errorMessage={document.error_message}
@@ -462,7 +462,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                   )}
                 </div>
                 
-                <div className="flex items-center space-x-2">
+                <div className="doc-actions flex items-center flex-wrap gap-2">
 
                   {/* Analyze Document button for completed documents */}
                   {isCompletedDocument(document.status) && document.extracted_data && (
@@ -471,10 +471,11 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                       onMouseEnter={preloadDocumentAnalysisModal}
                       variant="view"
                       size="sm"
-                      title="Analyze document and view extracted data"
+                      title="Analyze"
+                      className="doc-action-btn"
                     >
-                      <Eye className="w-4 h-4 mr-1.5" />
-                      Analyze
+                      <Eye className="w-4 h-4 sm:mr-1.5" />
+                      <span className="hidden sm:inline">Analyze</span>
                     </Button>
                   )}
 
@@ -488,10 +489,11 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                           onMouseEnter={preloadAccountingEntryFormModal}
                           variant="primary"
                           size="sm"
-                          title={`Update transaction with reprocessed data: ${document.linked_transaction.description}`}
+                          title="Update Record"
+                          className="doc-action-btn"
                         >
-                          <Plus className="w-4 h-4 mr-1.5" />
-                          Update Record
+                          <Plus className="w-4 h-4 sm:mr-1.5" />
+                          <span className="hidden sm:inline">Update Record</span>
                         </Button>
                       ) : (
                         // Show View Transaction for normal processed documents
@@ -500,10 +502,11 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                           onMouseEnter={preloadAccountingEntryFormModal}
                           variant="view"
                           size="sm"
-                          title={`View transaction: ${document.linked_transaction.description}`}
+                          title="View Record"
+                          className="doc-action-btn"
                         >
-                          <Eye className="w-4 h-4 mr-1.5" />
-                          View Record
+                          <Eye className="w-4 h-4 sm:mr-1.5" />
+                          <span className="hidden sm:inline">View Record</span>
                         </Button>
                       )
                     ) : (
@@ -512,10 +515,11 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                         onMouseEnter={preloadAccountingEntryFormModal}
                         variant="primary"
                         size="sm"
-                        title="Create transaction from extracted document data"
+                        title="Create Record"
+                        className="doc-action-btn"
                       >
-                        <Plus className="w-4 h-4 mr-1.5" />
-                        Create Record
+                        <Plus className="w-4 h-4 sm:mr-1.5" />
+                        <span className="hidden sm:inline">Create Record</span>
                       </Button>
                     )
                   )}
@@ -527,17 +531,18 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                       disabled={processingDocuments.has(document.id)}
                       variant="primary"
                       size="sm"
-                      title="Reprocess this document"
+                      title="Reprocess"
+                      className="doc-action-btn"
                     >
                       {processingDocuments.has(document.id) ? (
-                        <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                        <Loader2 className="w-4 h-4 sm:mr-1.5 animate-spin" />
                       ) : (
-                        <RotateCcw className="w-4 h-4 mr-1.5" />
+                        <RotateCcw className="w-4 h-4 sm:mr-1.5" />
                       )}
-                      {processingDocuments.has(document.id) ? 'Processing...' : 'Reprocess'}
+                      <span className="hidden sm:inline">{processingDocuments.has(document.id) ? 'Processing...' : 'Reprocess'}</span>
                     </Button>
                   )}
-                  
+
                   {/* Retry button for failed documents */}
                   {document.status === 'failed' && (
                     <Button
@@ -545,10 +550,11 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                       disabled={processingDocuments.has(document.id)}
                       variant="primary"
                       size="sm"
-                      title="Retry processing (works for both general failures and classification failures)"
+                      title="Retry"
+                      className="doc-action-btn"
                     >
-                      <RotateCcw className="w-4 h-4 mr-1.5" />
-                      Retry
+                      <RotateCcw className="w-4 h-4 sm:mr-1.5" />
+                      <span className="hidden sm:inline">Retry</span>
                     </Button>
                   )}
 
@@ -559,10 +565,11 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                     disabled={deletingDocuments.has(document.id)}
                     variant="destructive"
                     size="sm"
-                    title="Delete this document"
+                    title="Delete"
+                    className="doc-action-btn"
                   >
-                    <Trash2 className="w-4 h-4 mr-1.5" />
-                    Delete
+                    <Trash2 className="w-4 h-4 sm:mr-1.5" />
+                    <span className="hidden sm:inline">Delete</span>
                   </Button>
                 </div>
               </div>
