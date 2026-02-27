@@ -427,6 +427,13 @@ If you see validation errors, fix them and resubmit. Do NOT change the phone fie
       const functionResponseParts: any[] = [];
       for (const fc of functionCalls) {
         const action: GeminiAction = { name: fc.name, args: fc.args || {} };
+
+        // Check for safety_decision — must acknowledge in function response
+        const safetyDecision = fc.args?.safety_decision;
+        if (safetyDecision) {
+          console.log(`[Form Fill]   Safety decision: ${safetyDecision.decision} — ${safetyDecision.explanation?.substring(0, 100)}`);
+        }
+
         console.log(`[Form Fill]   Action: ${action.name}${action.args.text ? ` "${action.args.text.substring(0, 50)}"` : ""}${action.args.x !== undefined ? ` (${action.args.x},${action.args.y})` : ""}`);
 
         try {
@@ -441,11 +448,17 @@ If you see validation errors, fix them and resubmit. Do NOT change the phone fie
         const newB64 = newScreenshot.toString("base64");
         const currentUrl = page.url();
 
+        // Build response — include safety_acknowledgement if safety_decision was present
+        const responseData: Record<string, any> = { url: currentUrl };
+        if (safetyDecision) {
+          responseData.safety_acknowledgement = "true";
+        }
+
         // Google CUA spec: screenshot goes inside function_response.parts
         functionResponseParts.push({
           functionResponse: {
             name: action.name,
-            response: { url: currentUrl },
+            response: responseData,
             parts: [{
               inlineData: { mimeType: "image/png", data: newB64 },
             }],
