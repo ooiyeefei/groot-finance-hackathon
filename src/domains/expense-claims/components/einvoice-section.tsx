@@ -197,15 +197,66 @@ export default function EinvoiceSection({
 
         {/* Agent Error */}
         {einvoiceAgentError && einvoiceRequestStatus === 'failed' && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-red-600 dark:text-red-400 text-sm font-medium">Request Failed</p>
-                <p className="text-muted-foreground text-xs mt-1">{einvoiceAgentError}</p>
+          einvoiceAgentError.startsWith('BOT_BLOCKED') && merchantFormUrl ? (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 space-y-2.5">
+              <div className="flex items-start gap-2">
+                <Ban className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-amber-700 dark:text-amber-300 text-sm font-medium">
+                    This merchant doesn&apos;t support automated requests
+                  </p>
+                  <p className="text-muted-foreground text-xs mt-1">
+                    Please fill the form manually using your company details. Once you receive the e-invoice, upload it here.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2 pl-6">
+                <Button
+                  size="sm"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                  asChild
+                >
+                  <a href={merchantFormUrl} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                    Open Form
+                  </a>
+                </Button>
+                <label>
+                  <Button size="sm" variant="outline" disabled={uploadLoading} asChild>
+                    <span>
+                      {uploadLoading ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                      ) : (
+                        <Upload className="w-3.5 h-3.5 mr-1.5" />
+                      )}
+                      Upload E-Invoice
+                    </span>
+                  </Button>
+                  <input
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg"
+                    onChange={handleUploadEinvoice}
+                    className="hidden"
+                    disabled={uploadLoading}
+                  />
+                </label>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-red-600 dark:text-red-400 text-sm font-medium">
+                    E-invoice request failed
+                  </p>
+                  <p className="text-muted-foreground text-xs mt-1">
+                    We couldn&apos;t submit the form automatically. You can retry or fill the form manually.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )
         )}
 
         {/* Status Details */}
@@ -283,19 +334,16 @@ export default function EinvoiceSection({
             </div>
           )}
 
-          {/* Merchant Form URL */}
-          {merchantFormUrl && !einvoiceAttached && (
+          {/* Merchant Form URL — hide when bot-blocked banner already shows the button */}
+          {merchantFormUrl && !einvoiceAttached && !(einvoiceAgentError?.startsWith('BOT_BLOCKED') && einvoiceRequestStatus === 'failed') && (
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">Merchant Form</span>
-              <a
-                href={merchantFormUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:text-primary/80 text-xs flex items-center gap-1"
-              >
-                <ExternalLink className="w-3 h-3" />
-                Open form manually
-              </a>
+              <Button size="sm" variant="ghost" className="h-auto py-1 px-2 text-xs text-primary hover:text-primary/80" asChild>
+                <a href={merchantFormUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="w-3 h-3 mr-1" />
+                  Open form manually
+                </a>
+              </Button>
             </div>
           )}
         </div>

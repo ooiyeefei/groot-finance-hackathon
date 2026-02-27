@@ -68,10 +68,6 @@ const STATE_CODE_MAP: Record<string, string> = {
   'TRG': 'Terengganu', 'KUL': 'Kuala Lumpur', 'LBN': 'Labuan', 'PJY': 'Putrajaya',
 };
 
-// State names in dropdown order (for ArrowDown navigation)
-const STATE_ORDER = ['Johor', 'Kedah', 'Kelantan', 'Melaka', 'Negeri Sembilan', 'Pahang',
-  'Perak', 'Perlis', 'Pulau Pinang', 'Sabah', 'Sarawak', 'Selangor', 'Terengganu',
-  'Wilayah Persekutuan Kuala Lumpur', 'Wilayah Persekutuan Labuan', 'Wilayah Persekutuan Putrajaya'];
 
 // ============================================================
 // Convex HTTP Client
@@ -191,41 +187,69 @@ async function executeAction(page: Page, action: GeminiAction): Promise<void> {
 // Playwright Pre-fill Helpers (deterministic, no CUA needed)
 // ============================================================
 
-async function prefillDropdown(page: Page, dropdownText: string, targetValue: string, optionsList: string[]): Promise<boolean> {
+async function prefillDropdown(page: Page, triggerText: string, targetValue: string): Promise<boolean> {
   try {
-    const btn = page.getByRole('combobox').filter({ hasText: dropdownText }).first();
-    if (await btn.count() === 0) return false;
-
-    const idx = optionsList.findIndex(s => s.toLowerCase().includes(targetValue.toLowerCase()));
-    if (idx < 0) {
-      console.log(`[Form Fill] "${targetValue}" not found in dropdown options`);
-      return false;
+    // Strategy 1: Click trigger to open dropdown, then click the option directly
+    // Find the combobox trigger — try text match, then fall back to all comboboxes
+    let trigger = page.getByRole('combobox').filter({ hasText: triggerText }).first();
+    if (await trigger.count() === 0) {
+      // Fallback: find any combobox (state is typically visible at bottom of form)
+      const allCombos = page.getByRole('combobox');
+      const count = await allCombos.count();
+      console.log(`[Form Fill] No combobox with "${triggerText}", found ${count} total`);
+      if (count === 0) return false;
+      trigger = allCombos.first();
     }
 
-    // Try up to 2 attempts (ArrowDown count can be off-by-one depending on initial focus)
+    // Scroll trigger into view
+    await trigger.scrollIntoViewIfNeeded().catch(() => {});
+    await new Promise(r => setTimeout(r, 300));
+
     for (let attempt = 0; attempt < 2; attempt++) {
-      await btn.focus();
-      await page.keyboard.press('Space');
-      await new Promise(r => setTimeout(r, 500));
+      // Click to open the dropdown
+      await trigger.click();
+      await new Promise(r => setTimeout(r, 800));
 
-      // Navigate: first attempt uses idx presses, retry uses idx+1
-      const presses = idx + attempt;
-      for (let i = 0; i < presses; i++) {
-        await page.keyboard.press('ArrowDown');
-        await new Promise(r => setTimeout(r, 80));
-      }
-      await page.keyboard.press('Space');
-      await new Promise(r => setTimeout(r, 1500));
+      // Look for the option in the opened dropdown (Radix renders options as role="option")
+      const option = page.getByRole('option').filter({ hasText: targetValue }).first();
+      const optionCount = await option.count();
 
-      // Verify selection
-      const selected = await btn.textContent().catch(() => '');
-      if (selected?.toLowerCase().includes(targetValue.toLowerCase())) {
-        console.log(`[Form Fill] Dropdown "${dropdownText}" → "${selected?.trim()}" (attempt ${attempt + 1})`);
-        return true;
+      if (optionCount > 0) {
+        // Found it! Click the option directly
+        await option.scrollIntoViewIfNeeded().catch(() => {});
+        await option.click();
+        await new Promise(r => setTimeout(r, 1000));
+
+        // Verify
+        const selected = await trigger.textContent().catch(() => '');
+        if (selected?.toLowerCase().includes(targetValue.toLowerCase())) {
+          console.log(`[Form Fill] Dropdown "${triggerText}" → "${selected?.trim()}" (click method)`);
+          return true;
+        }
+        console.log(`[Form Fill] Click method: selected but got "${selected?.trim()}", wanted "${targetValue}"`);
+      } else {
+        console.log(`[Form Fill] No option found for "${targetValue}" (attempt ${attempt + 1}), trying keyboard`);
+
+        // Strategy 2: Keyboard fallback (dropdown might already be open from click)
+        // Type first letter to jump, then ArrowDown to find
+        const firstLetter = targetValue.charAt(0).toLowerCase();
+        await page.keyboard.press(firstLetter.toUpperCase());
+        await new Promise(r => setTimeout(r, 300));
+
+        // Press Enter to select highlighted option
+        await page.keyboard.press('Enter');
+        await new Promise(r => setTimeout(r, 1000));
       }
-      console.log(`[Form Fill] Dropdown attempt ${attempt + 1}: got "${selected?.trim()}", wanted "${targetValue}"`);
+
+      // Close dropdown if still open
+      await page.keyboard.press('Escape');
+      await new Promise(r => setTimeout(r, 300));
     }
-    return true; // Accept whatever was selected
+
+    // Check final state
+    const finalText = await trigger.textContent().catch(() => '');
+    console.log(`[Form Fill] Dropdown "${triggerText}" final: "${finalText?.trim()}"`);
+    return finalText?.toLowerCase().includes(targetValue.toLowerCase()) || false;
   } catch (e) {
     console.log(`[Form Fill] Dropdown prefill failed: ${e}`);
     return false;
@@ -275,8 +299,19 @@ export async function handler(event: FormFillEvent): Promise<{
     console.log(`[Form Fill] Navigated to: ${page.url()}, status: ${navStatus}`);
 
     // Check for bot protection / access denied
-    if (navStatus === 403 || navStatus === 401 || navStatus === 503) {
-      throw new Error(`Merchant site returned ${navStatus} — likely bot protection. URL: ${event.merchantFormUrl.substring(0, 80)}`);
+    if (navStatus === 403 || navStatus === 401) {
+      throw new Error(`BOT_BLOCKED: Merchant site returned ${navStatus} (Cloudflare/WAF protection). This merchant requires manual form submission.`);
+    }
+    if (navStatus === 503) {
+      // 503 could be bot protection OR temporary outage — check for Cloudflare headers
+      const isCloudflareChallenege = await page.evaluate(() =>
+        document.querySelector('meta[name="captcha-bypass"]') !== null ||
+        document.title.toLowerCase().includes('just a moment') ||
+        document.title.toLowerCase().includes('attention required')
+      ).catch(() => false);
+      if (isCloudflareChallenege) {
+        throw new Error(`BOT_BLOCKED: Merchant site has Cloudflare protection. This merchant requires manual form submission.`);
+      }
     }
 
     // Wait for page to stabilize
@@ -339,11 +374,11 @@ STEP 4 - COMPANY DETAILS:
 - "Tax Identification Number (TIN)": ${bd.tin}
 - "Company Address": ${streetAddress}
 
-STEP 5 - SKIP State and City dropdowns (they will be filled automatically)
+STEP 5 - STOP HERE. You are DONE after filling the text fields above.
+Do NOT interact with State/City dropdowns, the terms checkbox, or the Submit button.
+These will be handled automatically after you finish.
 
-STEP 6 - Check the terms checkbox, then click Submit.
-
-If validation errors appear, fix empty text fields and resubmit. Do NOT touch phone, state, or city.${formFieldsSummary}`;
+When all text fields are filled, stop producing actions.${formFieldsSummary}`;
 
     // 8. CUA agent loop for text fields
     console.log(`[Form Fill] Starting CUA loop (max ${MAX_TURNS} turns)`);
@@ -410,42 +445,29 @@ If validation errors appear, fix empty text fields and resubmit. Do NOT touch ph
     // 9. Pre-fill state/city dropdowns with Playwright (deterministic, after CUA fills text)
     console.log(`[Form Fill] Pre-filling state: ${state}`);
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 1000));
 
-    const stateOk = await prefillDropdown(page, 'Select state', state, STATE_ORDER);
+    const stateOk = await prefillDropdown(page, 'Select state', state);
     console.log(`[Form Fill] State: ${stateOk ? state : 'FAILED'}`);
 
     if (stateOk) {
-      await new Promise(r => setTimeout(r, 1500)); // Wait for city options to load
+      await new Promise(r => setTimeout(r, 2000)); // Wait for city options to load after state change
+      const cityOk = await prefillDropdown(page, 'Select city', city);
+      console.log(`[Form Fill] City: ${cityOk ? city : 'FAILED'}`);
+    }
 
-      // Get available cities
-      const cityOptions = await page.evaluate(() => {
-        const sel = document.querySelector('select[name="companyCityName"]') as HTMLSelectElement;
-        if (!sel) return [];
-        return Array.from(sel.options).map(o => o.textContent?.trim() || '').filter(Boolean);
-      });
-      console.log(`[Form Fill] Available cities: ${cityOptions.slice(0, 5).join(', ')}...`);
+    // 10. Check terms and submit with Playwright (always attempt, even if dropdown partially failed)
+    await new Promise(r => setTimeout(r, 500));
+    const checkbox = page.locator('button[role="checkbox"]');
+    if (await checkbox.count() > 0) {
+      const isChecked = await checkbox.getAttribute('data-state');
+      if (isChecked !== 'checked') await checkbox.click();
+      console.log(`[Form Fill] Terms checked`);
+    }
 
-      if (cityOptions.length > 1) {
-        // Find best match for city
-        const cityMatch = cityOptions.find(c => c.toLowerCase().includes(city.toLowerCase()))
-          || cityOptions.find(c => c.toLowerCase().includes('petaling'))
-          || cityOptions[0];
-        if (cityMatch) {
-          const cityOk = await prefillDropdown(page, 'Select city', cityMatch, cityOptions);
-          console.log(`[Form Fill] City: ${cityOk ? cityMatch : 'FAILED'}`);
-        }
-      }
-
-      // 10. Check terms and submit with Playwright (no CUA needed)
-      const checkbox = page.locator('button[role="checkbox"]');
-      if (await checkbox.count() > 0) {
-        const isChecked = await checkbox.getAttribute('data-state');
-        if (isChecked !== 'checked') await checkbox.click();
-        console.log(`[Form Fill] Terms checked`);
-      }
-
-      await page.locator('button:has-text("Submit")').click();
+    const submitBtn = page.locator('button:has-text("Submit")');
+    if (await submitBtn.count() > 0) {
+      await submitBtn.click();
       console.log(`[Form Fill] Submitted`);
       await new Promise(r => setTimeout(r, 5000));
     }

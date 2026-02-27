@@ -611,7 +611,7 @@ export const getBusinessProfileByStringId = query({
       custom_cogs_categories: (business.customCogsCategories as Array<unknown>) || null,
       // e-inv-ui-forms: LHDN compliance fields
       lhdn_tin: business.lhdnTin || null,
-      business_registration_number: business.businessRegistrationNumber || null,
+      business_registration_number: business.businessRegistrationNumber || business.businessRegNumber || null,
       msic_code: business.msicCode || null,
       msic_description: business.msicDescription || null,
       sst_registration_number: business.sstRegistrationNumber || null,
