@@ -1,21 +1,17 @@
 """
 QR Code Detection Step (019-lhdn-einv-flow-2)
 
-Detects QR codes in receipt images using:
-1. Gemini Vision (primary) — reads QR code URLs from photos reliably
-2. OpenCV QR detector (fallback) — works on clean/straight images
-
+Detects QR codes in receipt images using pyzbar with OpenCV pre-processing.
+Multiple image variants tried for reliability on camera photos.
 Extracts URLs and filters out LHDN validation QR codes.
 Returns merchant buyer-info form URLs.
 """
 
 import re
-import os
-import json
-import base64
-from typing import List
+from typing import List, Tuple
 import numpy as np
-import httpx
+from PIL import Image
+from io import BytesIO
 
 # LHDN validation QR pattern — these are NOT merchant form URLs
 LHDN_QR_PATTERN = re.compile(r"myinvois\.hasil\.gov\.my", re.IGNORECASE)
@@ -23,105 +19,67 @@ LHDN_QR_PATTERN = re.compile(r"myinvois\.hasil\.gov\.my", re.IGNORECASE)
 # Valid URL pattern
 URL_PATTERN = re.compile(r"^https?://", re.IGNORECASE)
 
-# Extract URLs from Gemini response text
-URL_EXTRACT_PATTERN = re.compile(r"https?://[^\s\"'<>\]\)]+")
+
+def _try_pyzbar(image: Image.Image, label: str, document_id: str) -> List[str]:
+    """Try to decode QR codes from a PIL Image using pyzbar."""
+    from pyzbar import pyzbar as pyzbar_decode
+
+    decoded = pyzbar_decode.decode(image)
+    results = []
+    for obj in decoded:
+        if obj.type == "QRCODE":
+            data = obj.data.decode("utf-8", errors="replace")
+            if data:
+                results.append(data)
+
+    if results:
+        print(f"[{document_id}] QR Detection [pyzbar/{label}]: decoded {len(results)} QR codes")
+    return results
 
 
-def _detect_with_gemini(image_bytes: bytes, mime_type: str, document_id: str) -> List[str]:
-    """Use Gemini Vision to read QR code URLs from receipt image."""
-    api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        print(f"[{document_id}] QR Detection [gemini]: No API key available")
-        return []
+def _prepare_variants(image_bytes: bytes) -> List[Tuple[str, Image.Image]]:
+    """Generate multiple pre-processed image variants for QR detection."""
+    import cv2
 
-    b64_image = base64.b64encode(image_bytes).decode("utf-8")
+    # Original PIL image
+    pil_image = Image.open(BytesIO(image_bytes))
+    if pil_image.mode != "RGB":
+        pil_image = pil_image.convert("RGB")
 
-    # Use Gemini Flash for speed — this is a simple visual task
-    model = "gemini-2.0-flash"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    variants: List[Tuple[str, Image.Image]] = [("original", pil_image)]
 
-    payload = {
-        "contents": [{
-            "parts": [
-                {
-                    "inlineData": {
-                        "mimeType": mime_type if mime_type.startswith("image/") else "image/jpeg",
-                        "data": b64_image,
-                    }
-                },
-                {
-                    "text": (
-                        "This is a receipt image. Look for any QR codes in the image. "
-                        "If you find a QR code, tell me the exact URL it encodes. "
-                        "Return ONLY the URL(s), one per line. If no QR code or no URL found, return 'NONE'. "
-                        "Do not explain, just return the URL(s) or NONE."
-                    )
-                }
-            ]
-        }],
-        "generationConfig": {
-            "temperature": 0.0,
-            "maxOutputTokens": 256,
-        }
-    }
-
-    try:
-        response = httpx.post(url, json=payload, timeout=15.0)
-        response.raise_for_status()
-        result = response.json()
-
-        text = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-        print(f"[{document_id}] QR Detection [gemini]: response: {text[:200]}")
-
-        if "NONE" in text.upper() and len(text.strip()) < 10:
-            return []
-
-        # Extract URLs from the response
-        urls = URL_EXTRACT_PATTERN.findall(text)
-        # Clean trailing punctuation
-        urls = [u.rstrip(".,;:)") for u in urls]
-        print(f"[{document_id}] QR Detection [gemini]: extracted {len(urls)} URLs")
-        return urls
-
-    except Exception as e:
-        print(f"[{document_id}] QR Detection [gemini]: error - {str(e)}")
-        return []
-
-
-def _detect_with_opencv(image_bytes: bytes, document_id: str) -> List[str]:
-    """Fallback: OpenCV QR detector with image pre-processing."""
-    try:
-        import cv2
-    except ImportError:
-        return []
-
+    # OpenCV variants
     nparr = np.frombuffer(image_bytes, np.uint8)
-    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    if image is None:
-        return []
+    cv_image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if cv_image is None:
+        return variants
 
-    detector = cv2.QRCodeDetector()
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
 
-    variants = [
-        ("original", image),
-        ("grayscale", gray),
-    ]
+    # Grayscale
+    variants.append(("grayscale", Image.fromarray(gray)))
+
+    # OTSU threshold
     _, otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    variants.append(("otsu", otsu))
+    variants.append(("otsu", Image.fromarray(otsu)))
 
-    for label, variant in variants:
-        try:
-            retval, decoded_info, _, _ = detector.detectAndDecodeMulti(variant)
-            if retval and decoded_info:
-                results = [d for d in decoded_info if d]
-                if results:
-                    print(f"[{document_id}] QR Detection [opencv/{label}]: decoded {len(results)} codes")
-                    return results
-        except Exception:
-            pass
+    # Adaptive threshold
+    adaptive = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 51, 10)
+    variants.append(("adaptive", Image.fromarray(adaptive)))
 
-    return []
+    # Sharpened
+    kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
+    sharpened = cv2.filter2D(gray, -1, kernel)
+    variants.append(("sharpened", Image.fromarray(sharpened)))
+
+    # Upscaled 2x (helps with small QR codes)
+    h, w = gray.shape[:2]
+    if max(h, w) < 2000:
+        upscaled = cv2.resize(gray, (w * 2, h * 2), interpolation=cv2.INTER_CUBIC)
+        _, up_otsu = cv2.threshold(upscaled, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        variants.append(("upscaled_otsu", Image.fromarray(up_otsu)))
+
+    return variants
 
 
 def detect_qr_step(
@@ -131,7 +89,7 @@ def detect_qr_step(
 ) -> dict:
     """
     Detect QR codes in a receipt image and extract URLs.
-    Primary: Gemini Vision. Fallback: OpenCV.
+    Uses pyzbar with multiple OpenCV pre-processing passes.
     """
     print(f"[{document_id}] QR Detection: Starting")
 
@@ -140,15 +98,17 @@ def detect_qr_step(
     lhdn_validation_urls: List[str] = []
 
     try:
-        # Try Gemini Vision first (best for camera photos)
-        decoded_data = _detect_with_gemini(image_bytes, mime_type, document_id)
+        variants = _prepare_variants(image_bytes)
+        print(f"[{document_id}] QR Detection: Trying {len(variants)} image variants")
 
-        # Fallback to OpenCV if Gemini returned nothing
-        if not decoded_data:
-            decoded_data = _detect_with_opencv(image_bytes, document_id)
+        decoded_data: List[str] = []
+        for label, pil_img in variants:
+            decoded_data = _try_pyzbar(pil_img, label, document_id)
+            if decoded_data:
+                break
 
         if not decoded_data:
-            print(f"[{document_id}] QR Detection: No QR codes decoded")
+            print(f"[{document_id}] QR Detection: No QR codes decoded after {len(variants)} variants")
         else:
             for i, data in enumerate(decoded_data):
                 print(f"[{document_id}] QR Detection: Code #{i} raw data: {data[:150]}")
@@ -164,6 +124,8 @@ def detect_qr_step(
                 else:
                     print(f"[{document_id}] QR Detection: Non-URL QR data: {data[:50]}...")
 
+    except ImportError as e:
+        print(f"[{document_id}] QR Detection: Import error - {str(e)}")
     except Exception as e:
         print(f"[{document_id}] QR Detection: Error - {str(e)}")
 

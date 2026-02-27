@@ -33,5 +33,7 @@ litellm>=1.40.0,<2.0.0
 sentry-sdk>=2.0.0
 
 # QR code detection from receipt images (019-lhdn-einv-flow-2)
-# OpenCV for image pre-processing + QR fallback detection
+# pyzbar: fast QR/barcode decoder (requires libzbar.so — copied from AL2 EPEL in Dockerfile)
+pyzbar==0.1.9
+# OpenCV for image pre-processing to improve QR decode reliability
 opencv-python-headless==4.10.0.84
