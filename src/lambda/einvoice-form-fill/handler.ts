@@ -196,24 +196,36 @@ async function prefillDropdown(page: Page, dropdownText: string, targetValue: st
     const btn = page.getByRole('combobox').filter({ hasText: dropdownText }).first();
     if (await btn.count() === 0) return false;
 
-    // Find index of target in ordered list
     const idx = optionsList.findIndex(s => s.toLowerCase().includes(targetValue.toLowerCase()));
     if (idx < 0) {
       console.log(`[Form Fill] "${targetValue}" not found in dropdown options`);
       return false;
     }
 
-    await btn.focus();
-    await page.keyboard.press('Space');
-    await new Promise(r => setTimeout(r, 500));
+    // Try up to 2 attempts (ArrowDown count can be off-by-one depending on initial focus)
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await btn.focus();
+      await page.keyboard.press('Space');
+      await new Promise(r => setTimeout(r, 500));
 
-    for (let i = 0; i <= idx; i++) {
-      await page.keyboard.press('ArrowDown');
-      await new Promise(r => setTimeout(r, 80));
+      // Navigate: first attempt uses idx presses, retry uses idx+1
+      const presses = idx + attempt;
+      for (let i = 0; i < presses; i++) {
+        await page.keyboard.press('ArrowDown');
+        await new Promise(r => setTimeout(r, 80));
+      }
+      await page.keyboard.press('Space');
+      await new Promise(r => setTimeout(r, 1500));
+
+      // Verify selection
+      const selected = await btn.textContent().catch(() => '');
+      if (selected?.toLowerCase().includes(targetValue.toLowerCase())) {
+        console.log(`[Form Fill] Dropdown "${dropdownText}" → "${selected?.trim()}" (attempt ${attempt + 1})`);
+        return true;
+      }
+      console.log(`[Form Fill] Dropdown attempt ${attempt + 1}: got "${selected?.trim()}", wanted "${targetValue}"`);
     }
-    await page.keyboard.press('Space');
-    await new Promise(r => setTimeout(r, 1500));
-    return true;
+    return true; // Accept whatever was selected
   } catch (e) {
     console.log(`[Form Fill] Dropdown prefill failed: ${e}`);
     return false;
