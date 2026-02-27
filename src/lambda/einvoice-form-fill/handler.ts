@@ -142,12 +142,33 @@ export async function handler(event: FormFillEvent): Promise<{
     console.log(`[E-Invoice Form Fill] Session: ${browserbaseSessionId}`);
     console.log(`[E-Invoice Form Fill] Debug URL: ${stagehand.browserbaseDebugURL || "N/A"}`);
 
-    // 3. Navigate to merchant form
+    // 3. Set up network + console logging
     const page = stagehand.context.pages()[0];
+    const networkLogs: Array<{ method: string; url: string; status?: number }> = [];
+    const consoleLogs: string[] = [];
+
+    page.on("response", (resp) => {
+      const url = resp.url();
+      const status = resp.status();
+      // Log form submission responses (POST/PUT, non-static)
+      if (!url.includes(".js") && !url.includes(".css") && !url.includes(".png") && !url.includes(".ico")) {
+        networkLogs.push({ method: resp.request().method(), url: url.substring(0, 150), status });
+        if (resp.request().method() !== "GET") {
+          console.log(`[E-Invoice Form Fill] Network: ${resp.request().method()} ${url.substring(0, 100)} → ${status}`);
+        }
+      }
+    });
+
+    page.on("console", (msg) => {
+      const text = msg.text();
+      consoleLogs.push(`[${msg.type()}] ${text.substring(0, 200)}`);
+    });
+
+    // 4. Navigate to merchant form
     const response = await page.goto(event.merchantFormUrl, { waitUntil: "networkidle", timeout: 30000 });
     console.log(`[E-Invoice Form Fill] Navigated to: ${page.url()}, status: ${response?.status()}`);
 
-    // 4. Wait for page to fully load, then observe form structure
+    // 5. Wait for page to fully load, then observe form structure
     await page.waitForTimeout(2000);
     const formFields = await stagehand.observe({
       instruction: "Find all form fields, input boxes, dropdowns, and submit buttons on this page",
@@ -199,7 +220,17 @@ Fill all matching fields. If a field doesn't exist, skip it.`
     });
     console.log(`[E-Invoice Form Fill] Verification: ${JSON.stringify(verification)}`);
 
-    // 9. Close session
+    // 9. Log network + console summary
+    const postRequests = networkLogs.filter((l) => l.method !== "GET");
+    console.log(`[E-Invoice Form Fill] Network summary: ${networkLogs.length} total, ${postRequests.length} POST/PUT`);
+    for (const req of postRequests) {
+      console.log(`[E-Invoice Form Fill]   ${req.method} ${req.url} → ${req.status}`);
+    }
+    if (consoleLogs.length > 0) {
+      console.log(`[E-Invoice Form Fill] Console logs (${consoleLogs.length}): ${consoleLogs.slice(-5).join(" | ")}`);
+    }
+
+    // 10. Close session
     await stagehand.close();
 
     const durationMs = Date.now() - startTime;
