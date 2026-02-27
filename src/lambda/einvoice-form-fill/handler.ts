@@ -291,47 +291,18 @@ export async function handler(event: FormFillEvent): Promise<{
     const city = bd.city || "Puchong";
     const state = bd.stateCode || "Selangor";
 
+    // 5b. Pre-fill phone with Playwright — simple approach: find input, select all, type full number
     try {
-      // Find phone input — look for tel input or input near "Mobile Number" / "Phone" labels
       const phoneInput = await page.$('input[type="tel"]')
         || await page.$('input[placeholder*="702"]')
         || await page.$('input[placeholder*="phone" i]')
         || await page.$('input[name*="phone" i]');
 
       if (phoneInput) {
-        // Check current country code shown on page
-        const countryBtn = await page.$('button:has(img[alt*="flag" i]), button:has(img[src*="flag"]), [class*="country"] button, [class*="phone"] button');
-        const countryText = countryBtn ? await countryBtn.textContent() : "";
-        console.log(`[Form Fill] Phone field found. Country code showing: "${countryText?.trim()}"`);
-
-        // If not showing +60 Malaysia, try to change it
-        if (countryText && !countryText.includes("+60") && !countryText.includes("Malaysia")) {
-          console.log(`[Form Fill] Country code is not Malaysia, attempting to change...`);
-          if (countryBtn) {
-            await countryBtn.click();
-            await new Promise((r) => setTimeout(r, 500));
-            // Type "malaysia" to search in the dropdown
-            await page.keyboard.type("malaysia", { delay: 50 });
-            await new Promise((r) => setTimeout(r, 500));
-            // Click the Malaysia option
-            const malaysiaOption = await page.$('text=Malaysia') || await page.$('text=+60');
-            if (malaysiaOption) {
-              await malaysiaOption.click();
-              console.log(`[Form Fill] Selected Malaysia (+60)`);
-            } else {
-              // Press Escape to close dropdown
-              await page.keyboard.press("Escape");
-              console.log(`[Form Fill] Could not find Malaysia option, continuing`);
-            }
-            await new Promise((r) => setTimeout(r, 500));
-          }
-        }
-
-        // Fill the phone number
-        await phoneInput.click();
-        await page.keyboard.press("Control+A");
-        await page.keyboard.press("Backspace");
-        await phoneInput.type(phoneLocal, { delay: 30 });
+        // Triple-click to select all text in the phone input, then type over it
+        await phoneInput.click({ clickCount: 3 });
+        await new Promise((r) => setTimeout(r, 200));
+        await page.keyboard.type(phoneLocal, { delay: 30 });
         console.log(`[Form Fill] Phone pre-filled: ${phoneLocal}`);
       } else {
         console.log(`[Form Fill] Phone input not found, CUA will handle it`);

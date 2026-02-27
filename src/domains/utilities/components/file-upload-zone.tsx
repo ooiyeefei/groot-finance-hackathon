@@ -93,9 +93,28 @@ export default function FileUploadZone({
 
     try {
       // Convert HEIC/HEIF to JPEG before processing (iPhone photos)
+      // iOS often reports HEIC as image/png with .png extension — detect by magic bytes
       let fileToUpload = file
-      const isHeic = file.type === 'image/heic' || file.type === 'image/heif' ||
+      let isHeic = file.type === 'image/heic' || file.type === 'image/heif' ||
         file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')
+
+      // Check file magic bytes for HEIC: "ftyp" at offset 4 + heic/heix/mif1 brand
+      if (!isHeic && file.size > 12) {
+        try {
+          const header = await file.slice(0, 12).arrayBuffer()
+          const view = new DataView(header)
+          // HEIC/HEIF files have "ftyp" at bytes 4-7
+          const ftyp = String.fromCharCode(view.getUint8(4), view.getUint8(5), view.getUint8(6), view.getUint8(7))
+          if (ftyp === 'ftyp') {
+            const brand = String.fromCharCode(view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11))
+            if (['heic', 'heix', 'mif1', 'msf1', 'heis', 'hele', 'hevx', 'hevc'].includes(brand)) {
+              isHeic = true
+              console.log(`[Upload] Detected HEIC by magic bytes (brand: ${brand}) despite MIME: ${file.type}`)
+            }
+          }
+        } catch { /* ignore header read errors */ }
+      }
+
       if (isHeic) {
         try {
           const heic2any = (await import('heic2any')).default
