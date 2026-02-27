@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Languages, Eye, FileText, DollarSign, List, Copy, Loader2 } from 'lucide-react'
+import { X, Languages, Eye, FileText, DollarSign, List, Copy, Loader2, ImageIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import DocumentPreviewWithAnnotations from './document-preview-with-annotations'
 import { formatNumber } from '@/lib/utils/format-number'
@@ -231,6 +231,7 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
   } | null>(null)
   const [hoveredEntity, setHoveredEntity] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
+  const [showMobilePreview, setShowMobilePreview] = useState(false)
 
   // Refs for scroll-based page tracking
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -859,11 +860,27 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
           </button>
         </div>
         
-        {/* Modal Content - Two Pane Layout (stacks vertically on mobile) */}
-        <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-y-auto md:overflow-hidden">
-          {/* Left Pane - Visual (Scrollable) - Full width on mobile, half on desktop */}
-          <div className="w-full md:w-1/2 md:border-r border-border flex flex-col md:shrink-0 md:min-h-0">
-            <div className="md:overflow-y-auto md:flex-1 p-6">
+        {/* Modal Content - Two Pane Layout */}
+        {/* Desktop: side-by-side | Mobile: summary first, preview behind toggle */}
+        <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
+
+          {/* Mobile-only: "View Document" toggle button */}
+          <div className="md:hidden flex-shrink-0 px-4 pt-3 pb-1">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="w-full"
+              onClick={() => setShowMobilePreview(!showMobilePreview)}
+            >
+              <ImageIcon className="w-4 h-4 mr-2" />
+              {showMobilePreview ? 'Hide Document Preview' : 'View Document Preview'}
+            </Button>
+          </div>
+
+          {/* Left Pane - Document Preview */}
+          {/* Desktop: always visible | Mobile: toggled via button */}
+          <div className={`w-full md:w-1/2 md:border-r border-border flex flex-col md:shrink-0 md:min-h-0 ${showMobilePreview ? '' : 'hidden md:flex'}`}>
+            <div className="overflow-y-auto flex-1 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h4 className="text-sm font-medium text-foreground flex items-center">
                   <FileText className="w-4 h-4 mr-2" />
@@ -894,8 +911,8 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
                 <div
                   ref={scrollContainerRef}
                   onScroll={handleScroll}
-                  className="overflow-y-auto bg-muted/30 rounded-lg doc-preview-scroll"
-                  style={{ maxHeight: '75vh' }}
+                  className="overflow-y-auto bg-muted/30 rounded-lg"
+                  style={{ maxHeight: '65vh' }}
                 >
                   {pageImageUrls.length > 0 ? (
                     <div className="space-y-1">
@@ -1057,9 +1074,9 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
             </div>
           </div>
 
-          {/* Right Pane - Data & Translation - Full width on mobile, half on desktop */}
-          <div className="w-full md:w-1/2 flex flex-col min-h-0">
-            <div className="p-6 flex-1 overflow-y-auto">
+          {/* Right Pane - Document Summary & Data - Full width on mobile, half on desktop */}
+          <div className="w-full md:w-1/2 flex flex-col min-h-0 overflow-y-auto">
+            <div className="p-6 flex-1">
               <div className="space-y-6">
                 {/* Processing Status & Errors */}
                 {document.extracted_data?.text && (document.extracted_data.text.includes('error') || document.extracted_data.text.includes('failed')) && (
