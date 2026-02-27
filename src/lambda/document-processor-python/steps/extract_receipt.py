@@ -960,6 +960,9 @@ def extract_receipt_phase1_step(
             "extracted_at": datetime.utcnow().isoformat(),
             "tokens_used": token_data,
 
+            # E-Invoice URL from receipt text (019-lhdn-einv-flow-2)
+            "merchant_einvoice_url": getattr(extracted, 'merchant_einvoice_url', None),
+
             # Phase 1 does NOT include line_items - they come in Phase 2
             "line_items": [],  # Empty - Phase 2 will populate
         }
