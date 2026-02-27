@@ -29,12 +29,15 @@ USER root
 RUN yum install -y poppler-utils && yum clean all
 
 # Copy zbar + dependencies from AL2 builder (same glibc — no compatibility issues)
-COPY --from=zbar-builder /usr/lib64/libzbar.so.0 /usr/lib64/libzbar.so.0
-COPY --from=zbar-builder /usr/lib64/libzbar.so.0.3.0 /usr/lib64/libzbar.so.0.3.0
-COPY --from=zbar-builder /usr/lib64/libv4l2.so.0 /usr/lib64/libv4l2.so.0
-COPY --from=zbar-builder /usr/lib64/libv4lconvert.so.0 /usr/lib64/libv4lconvert.so.0
-COPY --from=zbar-builder /usr/lib64/libjpeg.so.62 /usr/lib64/libjpeg.so.62
-RUN /sbin/ldconfig
+COPY --from=zbar-builder /usr/lib64/libzbar.so.0.2.0 /usr/lib64/libzbar.so.0.2.0
+COPY --from=zbar-builder /usr/lib64/libv4l2.so.0.0.0 /usr/lib64/libv4l2.so.0.0.0
+COPY --from=zbar-builder /usr/lib64/libv4lconvert.so.0.0.0 /usr/lib64/libv4lconvert.so.0.0.0
+COPY --from=zbar-builder /usr/lib64/libjpeg.so.62.3.0 /usr/lib64/libjpeg.so.62.3.0
+RUN ln -sf libzbar.so.0.2.0 /usr/lib64/libzbar.so.0 && \
+    ln -sf libv4l2.so.0.0.0 /usr/lib64/libv4l2.so.0 && \
+    ln -sf libv4lconvert.so.0.0.0 /usr/lib64/libv4lconvert.so.0 && \
+    ln -sf libjpeg.so.62.3.0 /usr/lib64/libjpeg.so.62 && \
+    /sbin/ldconfig
 
 # Copy requirements and install dependencies
 COPY requirements.txt ${LAMBDA_TASK_ROOT}/
