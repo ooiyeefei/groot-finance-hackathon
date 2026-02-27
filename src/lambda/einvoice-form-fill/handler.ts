@@ -279,7 +279,7 @@ export async function handler(event: FormFillEvent): Promise<{
     console.log(`[Form Fill] Navigated to: ${page.url()}`);
     await new Promise((r) => setTimeout(r, 2000));
 
-    // 5. Build the instruction for Gemini CUA
+    // 5. Pre-fill phone field with Playwright (deterministic — CUA struggles with country code selectors)
     const bd = event.buyerDetails;
     const userName = bd.userName || bd.name;
     const phoneRaw = bd.phone || "+60132201176";
@@ -288,19 +288,64 @@ export async function handler(event: FormFillEvent): Promise<{
     const city = bd.city || "Puchong";
     const state = bd.stateCode || "Selangor";
 
+    try {
+      // Find phone input — look for tel input or input near "Mobile Number" / "Phone" labels
+      const phoneInput = await page.$('input[type="tel"]')
+        || await page.$('input[placeholder*="702"]')
+        || await page.$('input[placeholder*="phone" i]')
+        || await page.$('input[name*="phone" i]');
+
+      if (phoneInput) {
+        // Check current country code shown on page
+        const countryBtn = await page.$('button:has(img[alt*="flag" i]), button:has(img[src*="flag"]), [class*="country"] button, [class*="phone"] button');
+        const countryText = countryBtn ? await countryBtn.textContent() : "";
+        console.log(`[Form Fill] Phone field found. Country code showing: "${countryText?.trim()}"`);
+
+        // If not showing +60 Malaysia, try to change it
+        if (countryText && !countryText.includes("+60") && !countryText.includes("Malaysia")) {
+          console.log(`[Form Fill] Country code is not Malaysia, attempting to change...`);
+          if (countryBtn) {
+            await countryBtn.click();
+            await new Promise((r) => setTimeout(r, 500));
+            // Type "malaysia" to search in the dropdown
+            await page.keyboard.type("malaysia", { delay: 50 });
+            await new Promise((r) => setTimeout(r, 500));
+            // Click the Malaysia option
+            const malaysiaOption = await page.$('text=Malaysia') || await page.$('text=+60');
+            if (malaysiaOption) {
+              await malaysiaOption.click();
+              console.log(`[Form Fill] Selected Malaysia (+60)`);
+            } else {
+              // Press Escape to close dropdown
+              await page.keyboard.press("Escape");
+              console.log(`[Form Fill] Could not find Malaysia option, continuing`);
+            }
+            await new Promise((r) => setTimeout(r, 500));
+          }
+        }
+
+        // Fill the phone number
+        await phoneInput.click();
+        await page.keyboard.press("Control+A");
+        await page.keyboard.press("Backspace");
+        await phoneInput.type(phoneLocal, { delay: 30 });
+        console.log(`[Form Fill] Phone pre-filled: ${phoneLocal}`);
+      } else {
+        console.log(`[Form Fill] Phone input not found, CUA will handle it`);
+      }
+    } catch (e) {
+      console.log(`[Form Fill] Phone pre-fill failed (non-fatal): ${e}`);
+    }
+
+    // 6. Build the instruction for Gemini CUA (phone already filled)
     const instruction = `You are on a merchant e-invoice submission form. You must fill ALL fields and submit.
 
-IMPORTANT RULES:
-- Do NOT click the country flag/code selector for the phone field. Only click the TEXT INPUT area to the RIGHT of the flag.
-- After filling personal details, scroll down to see and fill the rest of the form.
-- You MUST select "Company" not "Individual" in the Claim As section.
-- You MUST fill ALL required fields marked with * before submitting.
-- Keep going until you click Submit and see a confirmation message.
+IMPORTANT: The Mobile Number field is ALREADY FILLED. Do NOT touch the phone field or country code selector.
 
 STEP 1 - PERSONAL DETAILS (top of form):
 - "Full Name (as per ID)": ${userName}
 - "Email Address": ${bd.email}
-- "Mobile Number": Click the text input field (NOT the flag), then type: ${phoneLocal}
+- Mobile Number: ALREADY FILLED - skip this field
 
 STEP 2 - Scroll down to see the DETAILS section
 
@@ -321,7 +366,7 @@ STEP 6 - SUBMIT:
 - Check the terms checkbox
 - Click the Submit button
 
-If you see validation errors, fix them and resubmit.`;
+If you see validation errors, fix them and resubmit. Do NOT change the phone field.`;
 
     console.log(`[Form Fill] Starting Gemini CUA agent loop (max ${MAX_TURNS} turns)`);
 
