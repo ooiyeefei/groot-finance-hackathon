@@ -114,63 +114,80 @@ export async function handler(event: FormFillEvent): Promise<{
       status: "in_progress",
     });
 
-    // 2. Create Browserbase session
-    const sessionResponse = await fetch("https://api.browserbase.com/v1/sessions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-bb-api-key": apiKey,
-      },
-      body: JSON.stringify({ projectId }),
-    });
-
-    if (!sessionResponse.ok) {
-      throw new Error(`Failed to create Browserbase session: ${sessionResponse.status}`);
-    }
-
-    const session = await sessionResponse.json();
-    browserbaseSessionId = session.id;
-    console.log(`[E-Invoice Form Fill] Browserbase session: ${browserbaseSessionId}`);
-
-    // 3. Initialize Stagehand
+    // 2. Initialize Stagehand with Browserbase (let Stagehand manage session)
     const stagehand = new Stagehand({
       env: "BROWSERBASE",
       apiKey,
       projectId,
-      browserbaseSessionID: browserbaseSessionId,
       model: {
-        modelName: "gemini-2.0-flash",
+        modelName: "google/gemini-2.0-flash",
         apiKey: geminiKey,
+      },
+      browserbaseSessionCreateParams: {
+        projectId: projectId!,
+        browserSettings: {
+          solveCaptchas: true,
+          recordSession: true,
+          viewport: { width: 1280, height: 900 },
+        },
+        userMetadata: {
+          claimId: event.expenseClaimId,
+          merchantUrl: event.merchantFormUrl.substring(0, 80),
+        },
       },
     });
 
     await stagehand.init();
+    browserbaseSessionId = stagehand.browserbaseSessionID;
+    console.log(`[E-Invoice Form Fill] Session: ${browserbaseSessionId}`);
+    console.log(`[E-Invoice Form Fill] Debug URL: ${stagehand.browserbaseDebugURL || "N/A"}`);
 
-    // 4. Navigate to merchant form
-    await stagehand.page.goto(event.merchantFormUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
-    console.log(`[E-Invoice Form Fill] Navigated to: ${event.merchantFormUrl.substring(0, 80)}`);
+    // 3. Navigate to merchant form
+    const page = stagehand.context.pages()[0];
+    const response = await page.goto(event.merchantFormUrl, { waitUntil: "networkidle", timeout: 30000 });
+    console.log(`[E-Invoice Form Fill] Navigated to: ${page.url()}, status: ${response?.status()}`);
 
-    // 5. Fill form with buyer details + receipt reference
+    // 4. Wait for page to fully load, then observe form structure
+    await page.waitForTimeout(2000);
+    const formFields = await stagehand.observe({
+      instruction: "Find all form fields, input boxes, dropdowns, and submit buttons on this page",
+    });
+    console.log(`[E-Invoice Form Fill] Found ${formFields.length} form elements`);
+
+    // 5. Fill form with buyer details
     const refNumber = event.extractedData?.referenceNumber;
     await stagehand.act(
       `Fill in the buyer information form with these details:
-- Company Name: ${event.buyerDetails.name}
+- Company Name / Buyer Name: ${event.buyerDetails.name}
 - TIN (Tax Identification Number): ${event.buyerDetails.tin}
 - BRN (Business Registration Number): ${event.buyerDetails.brn}
 - Address: ${event.buyerDetails.address}
 - Email: ${event.buyerDetails.email}
 ${event.buyerDetails.phone ? `- Phone: ${event.buyerDetails.phone}` : ""}
 ${refNumber ? `- Invoice/Receipt Reference Number: ${refNumber}` : ""}
-Then submit the form by clicking the submit button.`
-    );
 
-    // 6. Verify submission — wait for page response and extract result
-    await new Promise((r) => setTimeout(r, 3000)); // Wait for page to update after submit
-    const pageUrl = stagehand.page.url();
-    console.log(`[E-Invoice Form Fill] Page URL after submit: ${pageUrl}`);
+Fill all matching fields. If a field doesn't exist, skip it.`
+    );
+    console.log(`[E-Invoice Form Fill] Form fields filled`);
+
+    // 6. Take screenshot before submit
+    const preSubmitScreenshot = await page.screenshot({ type: "jpeg", quality: 60 });
+    console.log(`[E-Invoice Form Fill] Pre-submit screenshot: ${preSubmitScreenshot.length} bytes`);
+
+    // 7. Submit the form
+    await stagehand.act("Click the submit button to submit the form");
+    console.log(`[E-Invoice Form Fill] Form submitted, waiting for response...`);
+
+    // 8. Wait for page response and verify
+    await page.waitForTimeout(3000);
+    const postSubmitUrl = page.url();
+    console.log(`[E-Invoice Form Fill] Post-submit URL: ${postSubmitUrl}`);
+
+    const postSubmitScreenshot = await page.screenshot({ type: "jpeg", quality: 60 });
+    console.log(`[E-Invoice Form Fill] Post-submit screenshot: ${postSubmitScreenshot.length} bytes`);
 
     const verification = await stagehand.extract({
-      instruction: "Look at the current page. Is there a success message, confirmation, error message, or form still showing? Return the main visible text/message on the page.",
+      instruction: "Look at the current page. Is there a success/confirmation message, an error message, or is the form still showing? Describe what you see.",
       schema: {
         type: "object" as const,
         properties: {
@@ -182,14 +199,14 @@ Then submit the form by clicking the submit button.`
     });
     console.log(`[E-Invoice Form Fill] Verification: ${JSON.stringify(verification)}`);
 
-    // 7. Close session
+    // 9. Close session
     await stagehand.close();
 
     const durationMs = Date.now() - startTime;
     const verificationStatus = (verification as any)?.pageStatus || "unknown";
     console.log(`[E-Invoice Form Fill] Completed in ${durationMs}ms, verification: ${verificationStatus}`);
 
-    // 8. Report result to Convex (include verification)
+    // 10. Report result to Convex
     await convexMutation("functions/system:reportEinvoiceFormFillResult", {
       expenseClaimId: event.expenseClaimId,
       emailRef: event.emailRef,
