@@ -22,7 +22,7 @@ RUN pip install --upgrade pip
 
 # Install Python packages — pre-built wheels for native extensions
 RUN pip install --no-cache-dir \
-    --only-binary=numpy,tiktoken,zxing-cpp \
+    --only-binary=numpy,tiktoken,zxing-cpp,pillow-heif \
     -r requirements.txt
 
 # Copy function code
