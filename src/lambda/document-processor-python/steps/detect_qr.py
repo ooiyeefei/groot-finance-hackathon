@@ -64,16 +64,27 @@ def _prepare_variants(image_bytes: bytes) -> List[Tuple[str, Image.Image]]:
     high_contrast = enhancer.enhance(2.0)
     variants.append(("high_contrast", high_contrast))
 
-    # 6. Upscaled 2x (helps with small QR codes in large images)
+    # 6. Upscaled 2x
     w, h = gray.size
-    if max(w, h) < 2000:
-        upscaled = gray.resize((w * 2, h * 2), Image.LANCZOS)
-        up_threshold = upscaled.point(lambda p: 255 if p > 128 else 0)
-        variants.append(("upscaled_threshold", up_threshold))
+    upscaled_2x = gray.resize((w * 2, h * 2), Image.LANCZOS)
+    variants.append(("upscaled_2x", upscaled_2x))
 
-    # 7. Lower threshold (catches darker QR codes)
+    # 7. Upscaled 2x + threshold
+    up_threshold = upscaled_2x.point(lambda p: 255 if p > 128 else 0)
+    variants.append(("upscaled_threshold", up_threshold))
+
+    # 8. Upscaled 3x + sharpen (aggressive — for small/angled QR codes)
+    upscaled_3x = gray.resize((w * 3, h * 3), Image.LANCZOS)
+    up3_sharp = upscaled_3x.filter(ImageFilter.SHARPEN)
+    variants.append(("upscaled_3x_sharp", up3_sharp))
+
+    # 9. Lower threshold (catches darker QR codes)
     threshold_low = gray.point(lambda p: 255 if p > 96 else 0)
     variants.append(("threshold_96", threshold_low))
+
+    # 10. High threshold (catches lighter QR codes)
+    threshold_high = gray.point(lambda p: 255 if p > 160 else 0)
+    variants.append(("threshold_160", threshold_high))
 
     return variants
 
