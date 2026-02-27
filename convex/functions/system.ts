@@ -1692,3 +1692,93 @@ async function runDocumentMatching(
   return {};
 }
 
+// ============================================
+// MERCHANT E-INVOICE URL LOOKUP (system-wide)
+// ============================================
+
+/**
+ * Look up a merchant's e-invoice URL by vendor name.
+ * Called by document processor Lambda when QR and OCR detection both fail.
+ * System-wide table — not per-tenant, scoped by country.
+ */
+export const lookupMerchantEinvoiceUrl = query({
+  args: {
+    vendorName: v.string(),
+    country: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const country = args.country || "MY";
+    const vendorLower = args.vendorName.toLowerCase().trim();
+
+    // Get all active merchants for this country
+    const merchants = await ctx.db
+      .query("merchant_einvoice_urls")
+      .withIndex("by_country", (q) => q.eq("country", country).eq("isActive", true))
+      .collect();
+
+    // Fuzzy match: check if any matchPattern is a substring of vendorName or vice versa
+    for (const m of merchants) {
+      for (const pattern of m.matchPatterns) {
+        if (vendorLower.includes(pattern) || pattern.includes(vendorLower)) {
+          return {
+            merchantName: m.merchantName,
+            einvoiceUrl: m.einvoiceUrl,
+            urlType: m.urlType,
+            notes: m.notes,
+          };
+        }
+      }
+    }
+    return null;
+  },
+});
+
+/**
+ * Upsert a merchant e-invoice URL entry.
+ * Used by: admin UI, browser agent (after Google search discovery), seed script.
+ */
+export const upsertMerchantEinvoiceUrl = mutation({
+  args: {
+    merchantName: v.string(),
+    matchPatterns: v.array(v.string()),
+    einvoiceUrl: v.string(),
+    country: v.optional(v.string()),
+    urlType: v.optional(v.union(v.literal("static"), v.literal("dynamic"))),
+    source: v.optional(v.union(v.literal("manual"), v.literal("agent_discovered"))),
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const country = args.country || "MY";
+
+    // Check if merchant already exists by name
+    const existing = await ctx.db
+      .query("merchant_einvoice_urls")
+      .withIndex("by_merchantName", (q) => q.eq("merchantName", args.merchantName))
+      .first();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        matchPatterns: args.matchPatterns,
+        einvoiceUrl: args.einvoiceUrl,
+        urlType: args.urlType || existing.urlType,
+        source: args.source || existing.source,
+        notes: args.notes ?? existing.notes,
+        lastVerifiedAt: Date.now(),
+      });
+      return { id: existing._id, action: "updated" };
+    }
+
+    const id = await ctx.db.insert("merchant_einvoice_urls", {
+      merchantName: args.merchantName,
+      matchPatterns: args.matchPatterns,
+      einvoiceUrl: args.einvoiceUrl,
+      country,
+      urlType: args.urlType || "static",
+      isActive: true,
+      source: args.source || "manual",
+      lastVerifiedAt: Date.now(),
+    });
+    return { id, action: "created" };
+  },
+});
+

@@ -621,6 +621,32 @@ export default defineSchema({
     .index("by_businessId_processedAt", ["businessId", "processedAt"]),
 
   // ============================================
+  // MERCHANT E-INVOICE URLS (system-wide, not per-tenant)
+  // Known merchant e-invoice form URLs for automated submission.
+  // Detection chain: QR scan → OCR URL → this table → Google search agent
+  // ============================================
+
+  merchant_einvoice_urls: defineTable({
+    merchantName: v.string(),                          // Display name: "FamilyMart"
+    matchPatterns: v.array(v.string()),                // Lowercase substrings to match vendor_name: ["familymart", "family mart"]
+    einvoiceUrl: v.string(),                           // E-invoice form URL
+    country: v.string(),                               // ISO country code: "MY"
+    urlType: v.union(
+      v.literal("static"),                             // Fixed URL (e.g., MR. D.I.Y. company page)
+      v.literal("dynamic"),                            // URL needs receipt params from QR (e.g., FamilyMart)
+    ),
+    isActive: v.boolean(),                             // Can be disabled without deleting
+    source: v.optional(v.union(
+      v.literal("manual"),                             // Manually added
+      v.literal("agent_discovered"),                   // Found by browser agent Google search
+    )),
+    lastVerifiedAt: v.optional(v.number()),            // Last time URL was confirmed working
+    notes: v.optional(v.string()),                     // E.g., "Bot blocked — manual only"
+  })
+    .index("by_country", ["country", "isActive"])
+    .index("by_merchantName", ["merchantName"]),
+
+  // ============================================
   // E-INVOICE REQUEST LOGS (019-lhdn-einv-flow-2)
   // ============================================
 

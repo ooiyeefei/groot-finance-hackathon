@@ -129,11 +129,36 @@ _KNOWN_MERCHANT_URLS: dict[str, str] = {
 
 
 def _lookup_merchant_einvoice_url(vendor_name: str) -> Optional[str]:
-    """Match vendor name against known merchant e-invoice URLs (fuzzy substring match)."""
+    """Match vendor name against known merchant e-invoice URLs.
+    Checks Convex system-wide table first, falls back to hardcoded list."""
     if not vendor_name:
         return None
     vn = vendor_name.lower().strip()
-    # Direct key match
+
+    # Try Convex lookup (system-wide merchant_einvoice_urls table)
+    try:
+        convex_url = os.environ.get("NEXT_PUBLIC_CONVEX_URL", "")
+        if convex_url:
+            import urllib.request
+            req = urllib.request.Request(
+                f"{convex_url}/api/query",
+                data=json.dumps({
+                    "path": "functions/system:lookupMerchantEinvoiceUrl",
+                    "args": {"vendorName": vendor_name, "country": "MY"},
+                    "format": "json",
+                }).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                result = json.loads(resp.read())
+                if result.get("status") == "success" and result.get("value"):
+                    url = result["value"]["einvoiceUrl"]
+                    print(f"[Merchant Lookup] Convex match: {vendor_name} → {url[:80]}")
+                    return url
+    except Exception as e:
+        print(f"[Merchant Lookup] Convex query failed: {e}")
+
+    # Fallback: hardcoded table (fast, no network)
     for key, url in _KNOWN_MERCHANT_URLS.items():
         if key in vn or vn in key:
             return url
