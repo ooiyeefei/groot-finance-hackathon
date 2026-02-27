@@ -1,18 +1,17 @@
 /**
  * E-Invoice Form Fill Lambda (019-lhdn-einv-flow-2)
  *
- * Node.js Lambda that uses Stagehand agent() + Browserbase to fill
- * merchant buyer-info forms with company details.
+ * Uses Gemini CUA (Computer Use Agent) + Browserbase for autonomous
+ * form filling. No Stagehand dependency — direct Gemini API + Playwright.
  *
- * Uses agent() (CUA mode) for autonomous multi-step form filling
- * instead of act() which is designed for single atomic actions.
- *
- * Triggered by:
- * - Python document-processor Lambda (auto, after QR detection)
- * - Vercel API route (manual, user clicks "Request E-Invoice")
+ * Architecture:
+ * - Browserbase: cloud browser (session recording, CDP connection)
+ * - Gemini 3 Flash: CUA model (sees screenshots, outputs UI actions)
+ * - Playwright: executes actions in the browser via CDP
+ * - This Lambda: orchestrates the agent loop
  */
 
-import { Stagehand } from "@browserbasehq/stagehand";
+import { chromium, type Browser, type Page } from "playwright-core";
 
 // ============================================================
 // Types
@@ -42,17 +41,23 @@ interface FormFillEvent {
   expenseClaimId: string;
 }
 
-interface ConvexMutationResponse {
-  status: string;
-  value?: unknown;
-  errorMessage?: string;
+interface GeminiAction {
+  name: string;
+  args: Record<string, any>;
 }
 
 // ============================================================
-// Convex HTTP Client (minimal)
+// Constants
 // ============================================================
 
+const SCREEN_WIDTH = 1280;
+const SCREEN_HEIGHT = 900;
+const MAX_TURNS = 20;
 const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL || "";
+
+// ============================================================
+// Convex HTTP Client
+// ============================================================
 
 async function convexMutation(
   functionPath: string,
@@ -63,17 +68,136 @@ async function convexMutation(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ path: functionPath, args, format: "json" }),
   });
+  if (!response.ok) throw new Error(`Convex HTTP error: ${response.status}`);
+  const result = await response.json();
+  if (result.status === "error") throw new Error(`Convex: ${result.errorMessage}`);
+  return result.value;
+}
+
+// ============================================================
+// Gemini CUA API
+// ============================================================
+
+async function callGeminiCUA(
+  geminiKey: string,
+  contents: any[],
+): Promise<any> {
+  // Use gemini-2.0-flash-001 which supports computer use tool
+  const model = "gemini-2.0-flash-001";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
+
+  const payload = {
+    contents,
+    tools: [{
+      computerUse: {
+        environment: "ENVIRONMENT_BROWSER",
+      },
+    }],
+    generationConfig: {
+      temperature: 0.0,
+      maxOutputTokens: 8192,
+    },
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 
   if (!response.ok) {
-    throw new Error(`Convex HTTP error: ${response.status}`);
+    const errorBody = await response.text();
+    throw new Error(`Gemini API error ${response.status}: ${errorBody.substring(0, 300)}`);
   }
 
-  const result: ConvexMutationResponse = await response.json();
-  if (result.status === "error") {
-    throw new Error(`Convex mutation error: ${result.errorMessage}`);
+  return response.json();
+}
+
+// ============================================================
+// Action Executor (Playwright)
+// ============================================================
+
+function denormalize(val: number, dimension: number): number {
+  return Math.round((val / 1000) * dimension);
+}
+
+async function executeAction(page: Page, action: GeminiAction): Promise<void> {
+  const { name, args } = action;
+
+  switch (name) {
+    case "click_at": {
+      const x = denormalize(args.x, SCREEN_WIDTH);
+      const y = denormalize(args.y, SCREEN_HEIGHT);
+      await page.mouse.click(x, y);
+      break;
+    }
+    case "type_text_at": {
+      const x = denormalize(args.x, SCREEN_WIDTH);
+      const y = denormalize(args.y, SCREEN_HEIGHT);
+      await page.mouse.click(x, y);
+      if (args.clear_before_typing !== false) {
+        await page.keyboard.press("Control+A");
+        await page.keyboard.press("Backspace");
+      }
+      await page.keyboard.type(args.text || "", { delay: 30 });
+      if (args.press_enter === true) {
+        await page.keyboard.press("Enter");
+      }
+      break;
+    }
+    case "scroll_document": {
+      const dir = args.direction || "down";
+      const delta = dir === "down" ? 300 : dir === "up" ? -300 : 0;
+      await page.mouse.wheel(0, delta);
+      break;
+    }
+    case "scroll_at": {
+      const sx = denormalize(args.x, SCREEN_WIDTH);
+      const sy = denormalize(args.y, SCREEN_HEIGHT);
+      await page.mouse.move(sx, sy);
+      const magnitude = args.magnitude || 800;
+      const scrollDelta = denormalize(magnitude, SCREEN_HEIGHT);
+      const dir = args.direction || "down";
+      await page.mouse.wheel(0, dir === "down" ? scrollDelta : -scrollDelta);
+      break;
+    }
+    case "hover_at": {
+      const hx = denormalize(args.x, SCREEN_WIDTH);
+      const hy = denormalize(args.y, SCREEN_HEIGHT);
+      await page.mouse.move(hx, hy);
+      break;
+    }
+    case "key_combination": {
+      await page.keyboard.press(args.keys || "");
+      break;
+    }
+    case "navigate": {
+      await page.goto(args.url, { waitUntil: "networkidle", timeout: 15000 });
+      break;
+    }
+    case "go_back": {
+      await page.goBack({ timeout: 10000 });
+      break;
+    }
+    case "wait_5_seconds": {
+      await new Promise((r) => setTimeout(r, 5000));
+      break;
+    }
+    case "open_web_browser": {
+      // Already open
+      break;
+    }
+    default:
+      console.log(`[Form Fill] Unknown action: ${name}, skipping`);
   }
 
-  return result.value;
+  // Wait for page to settle after action
+  try {
+    await page.waitForLoadState("networkidle", { timeout: 3000 });
+  } catch {
+    // Timeout is fine — page may already be idle
+  }
+  await new Promise((r) => setTimeout(r, 500));
 }
 
 // ============================================================
@@ -87,24 +211,22 @@ export async function handler(event: FormFillEvent): Promise<{
 }> {
   const startTime = Date.now();
   let browserbaseSessionId: string | undefined;
+  let browser: Browser | undefined;
 
   console.log(
-    `[E-Invoice Form Fill] Starting for claim ${event.expenseClaimId}, URL: ${event.merchantFormUrl.substring(0, 80)}...`
+    `[Form Fill] Starting for claim ${event.expenseClaimId}, URL: ${event.merchantFormUrl.substring(0, 80)}...`
   );
 
   try {
-    const apiKey = process.env.BROWSERBASE_API_KEY;
-    const projectId = process.env.BROWSERBASE_PROJECT_ID;
-    const geminiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.BROWSERBASE_API_KEY!;
+    const projectId = process.env.BROWSERBASE_PROJECT_ID!;
+    const geminiKey = process.env.GEMINI_API_KEY!;
 
-    if (!apiKey || !projectId) {
-      throw new Error("BROWSERBASE_API_KEY or BROWSERBASE_PROJECT_ID not configured");
-    }
-    if (!geminiKey) {
-      throw new Error("GEMINI_API_KEY not configured");
+    if (!apiKey || !projectId || !geminiKey) {
+      throw new Error("Missing required env vars: BROWSERBASE_API_KEY, BROWSERBASE_PROJECT_ID, GEMINI_API_KEY");
     }
 
-    // 1. Tell Convex we're starting
+    // 1. Report to Convex: starting
     await convexMutation("functions/system:reportEinvoiceFormFillResult", {
       expenseClaimId: event.expenseClaimId,
       emailRef: event.emailRef,
@@ -113,52 +235,51 @@ export async function handler(event: FormFillEvent): Promise<{
     });
 
     // 2. Create Browserbase session
-    const sessionResponse = await fetch("https://api.browserbase.com/v1/sessions", {
+    const sessionResp = await fetch("https://api.browserbase.com/v1/sessions", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-bb-api-key": apiKey,
-      },
+      headers: { "Content-Type": "application/json", "x-bb-api-key": apiKey },
       body: JSON.stringify({
         projectId,
-        browserSettings: {
-          recordSession: true,
-          viewport: { width: 1280, height: 900 },
-        },
+        browserSettings: { recordSession: true, viewport: { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } },
       }),
     });
+    if (!sessionResp.ok) {
+      throw new Error(`Browserbase session failed: ${sessionResp.status} ${(await sessionResp.text()).substring(0, 200)}`);
+    }
+    const session = await sessionResp.json();
+    browserbaseSessionId = session.id;
+    console.log(`[Form Fill] Browserbase session: ${browserbaseSessionId}`);
+    console.log(`[Form Fill] Recording: https://www.browserbase.com/sessions/${browserbaseSessionId}`);
 
-    if (!sessionResponse.ok) {
-      const body = await sessionResponse.text();
-      throw new Error(`Browserbase session creation failed: ${sessionResponse.status} ${body.substring(0, 200)}`);
+    // 3. Get CDP URL and connect Playwright
+    const debugResp = await fetch(`https://api.browserbase.com/v1/sessions/${browserbaseSessionId}/debug`, {
+      headers: { "x-bb-api-key": apiKey },
+    });
+    if (!debugResp.ok) {
+      throw new Error(`Browserbase debug URL failed: ${debugResp.status}`);
+    }
+    const debugInfo = await debugResp.json();
+    const cdpUrl = debugInfo.debuggerFullscreenUrl || debugInfo.wsUrl || debugInfo.debuggerWsUrl;
+
+    if (!cdpUrl) {
+      // Fallback: connect via Browserbase connect URL
+      const connectUrl = `wss://connect.browserbase.com?apiKey=${apiKey}&sessionId=${browserbaseSessionId}`;
+      browser = await chromium.connectOverCDP(connectUrl);
+    } else {
+      browser = await chromium.connectOverCDP(cdpUrl);
     }
 
-    const session = await sessionResponse.json();
-    browserbaseSessionId = session.id;
-    console.log(`[E-Invoice Form Fill] Session: ${browserbaseSessionId}`);
-
-    // 3. Initialize Stagehand
-    const stagehand = new Stagehand({
-      env: "BROWSERBASE",
-      apiKey,
-      projectId,
-      browserbaseSessionID: browserbaseSessionId,
-      model: {
-        modelName: "google/gemini-2.0-flash",
-        apiKey: geminiKey,
-      },
-    });
-
-    await stagehand.init();
-    console.log(`[E-Invoice Form Fill] Stagehand initialized`);
+    const contexts = browser.contexts();
+    const context = contexts[0] || await browser.newContext();
+    const pages = context.pages();
+    const page = pages[0] || await context.newPage();
 
     // 4. Navigate to merchant form
-    const page = stagehand.context.pages()[0];
-    const response = await page.goto(event.merchantFormUrl, { waitUntil: "networkidle", timeout: 30000 });
-    console.log(`[E-Invoice Form Fill] Navigated to: ${page.url()}, status: ${response?.status()}`);
-    await page.waitForTimeout(2000);
+    await page.goto(event.merchantFormUrl, { waitUntil: "networkidle", timeout: 30000 });
+    console.log(`[Form Fill] Navigated to: ${page.url()}`);
+    await new Promise((r) => setTimeout(r, 2000));
 
-    // 5. Build buyer details for the agent instruction
+    // 5. Build the instruction for Gemini CUA
     const bd = event.buyerDetails;
     const userName = bd.userName || bd.name;
     const phoneRaw = bd.phone || "+60132201176";
@@ -167,82 +288,144 @@ export async function handler(event: FormFillEvent): Promise<{
     const city = bd.city || "Puchong";
     const state = bd.stateCode || "Selangor";
 
-    console.log(`[E-Invoice Form Fill] Buyer: ${userName}, ${bd.email}, ${bd.tin}, BRN: ${bd.brn}`);
+    const instruction = `You are on a merchant e-invoice submission form. Fill out this form completely and submit it.
 
-    // 6. Use agent() for autonomous multi-step form filling
-    // agent() handles the entire workflow: identify fields, fill them, handle dropdowns,
-    // check terms, submit, and verify — much more reliable than multiple act() calls
-    const agent = stagehand.agent({
-      model: {
-        modelName: "google/gemini-2.0-flash",
-        apiKey: geminiKey,
-      },
-      systemPrompt: `You are an expert at filling web forms accurately. You must fill EVERY required field before submitting.
-When you encounter a phone number field with a country code selector already showing "+60" or "Malaysia", only type the local digits without the country code.
-When you encounter dropdown/select fields, click them first to open the options list, then click the matching option.
-Always check the terms/conditions checkbox before submitting.
-After clicking Submit, wait and verify if the form was accepted or if there are validation errors. If there are errors, fix them and resubmit.`,
-    });
+PERSONAL DETAILS:
+- Full Name: ${userName}
+- Email Address: ${bd.email}
+- Mobile Number: ${phoneLocal} (country code +60 Malaysia is already selected, just type the local digits)
 
-    const agentResult = await agent.execute({
-      instruction: `You are on a merchant e-invoice form. Fill out this form completely and submit it.
+CLAIM TYPE:
+- Select "Company" (not Individual)
 
-STEP 1 - PERSONAL DETAILS:
-- "Full Name (as per ID)" or similar name field: ${userName}
-- "Email Address" or email field: ${bd.email}
-- "Mobile Number" or phone field: ${phoneLocal} (the country code +60 is already selected)
+COMPANY DETAILS:
+- Company Name: ${bd.name}
+- Business Registration Number (BRN): ${bd.brn}
+- Tax Identification Number (TIN): ${bd.tin}
+- Company Address: ${streetAddress}
+- Company State: select "${state}" from dropdown
+- Company City: select "${city}" from dropdown
 
-STEP 2 - CLAIM TYPE:
-- Select "Company" (not "Individual") in the "Claim as" section
-
-STEP 3 - COMPANY DETAILS (these fields appear after selecting Company):
-- "Company Name": ${bd.name}
-- "Company ID - Business Registration Number (BRN)": ${bd.brn}
-- "Company Tax Identification Number (TIN)": ${bd.tin}
-- "Company Address": ${streetAddress}
-- "SST Registration Number": leave empty if not required
-
-STEP 4 - LOCATION DROPDOWNS:
-- "Company State" dropdown: select "${state}"
-- "Company City" dropdown: select "${city}"
-
-STEP 5 - SUBMIT:
+FINAL STEPS:
 - Check the terms and conditions checkbox
-- Click the Submit button
+- Click Submit
 
-STEP 6 - VERIFY:
-- After submitting, check if there are any validation error messages
-- If there are errors, fix them and submit again
-- Report whether the form was submitted successfully`,
-      maxSteps: 25,
-    });
+If you see validation errors after submitting, fix the empty fields and submit again.
+When you see a success/confirmation message, the task is complete.`;
 
-    console.log(`[E-Invoice Form Fill] Agent result: success=${agentResult.success}, actions=${agentResult.actions?.length || 0}`);
-    console.log(`[E-Invoice Form Fill] Agent message: ${(agentResult as any).message?.substring(0, 300) || "N/A"}`);
+    console.log(`[Form Fill] Starting Gemini CUA agent loop (max ${MAX_TURNS} turns)`);
 
-    // 7. Close session
-    await stagehand.close();
+    // 6. Agent loop: screenshot → Gemini → execute → repeat
+    const screenshotBytes = await page.screenshot({ type: "png" });
+    const screenshotB64 = screenshotBytes.toString("base64");
+
+    // Initialize conversation with user instruction + initial screenshot
+    const contents: any[] = [
+      {
+        role: "user",
+        parts: [
+          { text: instruction },
+          { inlineData: { mimeType: "image/png", data: screenshotB64 } },
+        ],
+      },
+    ];
+
+    let taskComplete = false;
+    let totalActions = 0;
+
+    for (let turn = 0; turn < MAX_TURNS; turn++) {
+      console.log(`[Form Fill] Turn ${turn + 1}/${MAX_TURNS}`);
+
+      // Call Gemini CUA
+      const geminiResponse = await callGeminiCUA(geminiKey, contents);
+      const candidate = geminiResponse.candidates?.[0];
+      if (!candidate?.content?.parts) {
+        console.log(`[Form Fill] No response from Gemini, ending`);
+        break;
+      }
+
+      // Append model response to conversation
+      contents.push(candidate.content);
+
+      // Extract text reasoning and function calls
+      const parts = candidate.content.parts || [];
+      const textParts = parts.filter((p: any) => p.text).map((p: any) => p.text);
+      const functionCalls = parts.filter((p: any) => p.functionCall).map((p: any) => p.functionCall);
+
+      if (textParts.length > 0) {
+        console.log(`[Form Fill] Gemini reasoning: ${textParts.join(" ").substring(0, 200)}`);
+      }
+
+      // If no function calls, task is complete (model is done)
+      if (functionCalls.length === 0) {
+        console.log(`[Form Fill] No more actions — task complete`);
+        taskComplete = true;
+        break;
+      }
+
+      // Execute each action
+      const functionResponses: any[] = [];
+      for (const fc of functionCalls) {
+        const action: GeminiAction = { name: fc.name, args: fc.args || {} };
+        console.log(`[Form Fill]   Action: ${action.name}${action.args.text ? ` "${action.args.text.substring(0, 50)}"` : ""}${action.args.x !== undefined ? ` (${action.args.x},${action.args.y})` : ""}`);
+
+        try {
+          await executeAction(page, action);
+          totalActions++;
+        } catch (e) {
+          console.error(`[Form Fill]   Error executing ${action.name}: ${e}`);
+        }
+
+        // Capture screenshot after action
+        const newScreenshot = await page.screenshot({ type: "png" });
+        const newB64 = newScreenshot.toString("base64");
+        const currentUrl = page.url();
+
+        functionResponses.push({
+          functionResponse: {
+            name: action.name,
+            response: { url: currentUrl },
+          },
+        });
+        // Attach screenshot as inline data in the function response
+        functionResponses.push({
+          inlineData: { mimeType: "image/png", data: newB64 },
+        });
+      }
+
+      // Send function responses back to Gemini
+      contents.push({
+        role: "user",
+        parts: functionResponses,
+      });
+    }
+
+    // 7. Cleanup
+    await browser.close();
 
     const durationMs = Date.now() - startTime;
-    const isSuccess = agentResult.success === true;
-    console.log(`[E-Invoice Form Fill] Completed in ${durationMs}ms, success: ${isSuccess}`);
+    console.log(`[Form Fill] Completed in ${durationMs}ms, ${totalActions} actions, success: ${taskComplete}`);
 
-    // 8. Report result to Convex
+    // 8. Report to Convex
     await convexMutation("functions/system:reportEinvoiceFormFillResult", {
       expenseClaimId: event.expenseClaimId,
       emailRef: event.emailRef,
-      status: isSuccess ? "success" : "failed",
+      status: taskComplete ? "success" : "failed",
       browserbaseSessionId,
       durationMs,
     });
 
-    return { success: isSuccess, durationMs };
+    return { success: taskComplete, durationMs };
   } catch (error) {
     const durationMs = Date.now() - startTime;
-    const errorMessage = error instanceof Error ? error.message : `Unknown error: ${JSON.stringify(error)}`;
-    console.error(`[E-Invoice Form Fill] Failed in ${durationMs}ms: ${errorMessage}`);
+    const errorMessage = error instanceof Error ? error.message : `Unknown: ${JSON.stringify(error)}`;
+    console.error(`[Form Fill] Failed in ${durationMs}ms: ${errorMessage}`);
     if (error instanceof Error && error.stack) {
-      console.error(`[E-Invoice Form Fill] Stack: ${error.stack.substring(0, 500)}`);
+      console.error(`[Form Fill] Stack: ${error.stack.substring(0, 500)}`);
+    }
+
+    if (browser) {
+      try { await browser.close(); } catch { /* ignore */ }
     }
 
     try {
@@ -254,8 +437,8 @@ STEP 6 - VERIFY:
         browserbaseSessionId,
         durationMs,
       });
-    } catch (convexError) {
-      console.error(`[E-Invoice Form Fill] Failed to report to Convex: ${convexError}`);
+    } catch (e) {
+      console.error(`[Form Fill] Failed to report to Convex: ${e}`);
     }
 
     return { success: false, error: errorMessage, durationMs };

@@ -159,7 +159,7 @@ export class DocumentProcessingStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_20_X,
       architecture: lambda.Architecture.ARM_64, // Cost-optimized
       functionName: 'finanseal-einvoice-form-fill',
-      description: 'E-Invoice form fill via Stagehand + Browserbase (019-lhdn-einv-flow-2)',
+      description: 'E-Invoice form fill via Gemini CUA + Browserbase (019-lhdn-einv-flow-2)',
       memorySize: 512,
       timeout: cdk.Duration.minutes(5), // Form fill typically takes 30-60s
       logGroup: formFillLogGroup,
@@ -170,20 +170,11 @@ export class DocumentProcessingStack extends cdk.Stack {
         NEXT_PUBLIC_CONVEX_URL: 'https://kindhearted-lynx-129.convex.cloud',
       },
       bundling: {
-        externalModules: ['@aws-sdk/*', '@browserbasehq/stagehand'],
+        externalModules: ['@aws-sdk/*'],
         minify: true,
         sourceMap: true,
-        format: lambdaNode.OutputFormat.ESM,
-        banner: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);',
-        // Stagehand is marked external for esbuild, then installed via afterBundling.
-        // ESM format needed because chrome-launcher is ESM-only.
-        commandHooks: {
-          beforeBundling: () => [],
-          beforeInstall: () => [],
-          afterBundling: (_inputDir: string, outputDir: string) => [
-            `cd ${outputDir} && npm init -y --quiet && npm install @browserbasehq/stagehand chrome-launcher --production --quiet`,
-          ],
-        },
+        // No ESM hacks needed — playwright-core is CJS compatible
+        // No afterBundling npm install — playwright-core bundles cleanly with esbuild
       },
     });
 
