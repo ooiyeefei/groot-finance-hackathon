@@ -171,8 +171,6 @@ export async function handler(event: FormFillEvent): Promise<{
 
     const bd = event.buyerDetails;
     const userName = bd.userName || bd.name;
-    const phone = bd.phone || "+60132201176";
-    const phoneDigits = phone.replace(/[^0-9]/g, "").replace(/^60/, ""); // Strip +60 prefix
     const streetAddress = bd.addressLine1 || bd.address.split(",")[0] || bd.address;
     const city = bd.city || "";
     const stateCode = bd.stateCode || "";
@@ -180,14 +178,18 @@ export async function handler(event: FormFillEvent): Promise<{
     // 6. Fill form step by step (multiple act() calls for reliability)
 
     // Step A: Personal details section
+    // Phone: provide multiple formats — let agent pick what fits the field
+    const phoneRaw = bd.phone || "+60132201176";
+    const phoneLocal = phoneRaw.replace(/[^0-9]/g, "").replace(/^60/, ""); // e.g. "132201176"
+    const phoneFull = phoneRaw.replace(/[^0-9+]/g, ""); // e.g. "+60132201176"
     await stagehand.act(
       `Fill in the PERSONAL DETAILS section of this form:
-- In the "Full Name (as per ID)" field, type: ${userName}
-- In the "Email Address" field, type: ${bd.email}
-- In the "Mobile Number" field, type: ${phoneDigits}
+- In the "Full Name" or "Full Name (as per ID)" field, type: ${userName}
+- In the "Email Address" or "Email" field, type: ${bd.email}
+- For the "Mobile Number" or "Phone" field: If there's a country code selector already showing "+60" or "Malaysia", just type the local number: ${phoneLocal}. If the field expects a full number with country code, type: ${phoneFull}. If the field has a separate country code dropdown, select Malaysia (+60) first then type: ${phoneLocal}
 Do NOT click Submit yet. Do NOT change any other fields.`
     );
-    console.log(`[E-Invoice Form Fill] Step A: Personal details filled (${userName}, ${bd.email})`);
+    console.log(`[E-Invoice Form Fill] Step A: Personal details filled (${userName}, ${bd.email}, phone: ${phoneLocal})`);
 
     // Step B: Select "Company" claim type
     await stagehand.act(
@@ -249,18 +251,18 @@ Do NOT click Submit yet.`
       await stagehand.act(
         `The form has validation errors: ${errorMsg.substring(0, 300)}
 
-Please fix these errors by filling in any empty required fields with these details:
+Please fix these errors by filling in any empty required fields:
 - Full Name: ${userName}
 - Email: ${bd.email}
-- Phone: ${phoneDigits}
+- Phone: try ${phoneLocal} first. If validation says not enough characters, try ${phoneFull} or 0${phoneLocal}
 - Company Name: ${bd.name}
 - BRN: ${bd.brn}
 - TIN: ${bd.tin}
 - Address: ${streetAddress}
-- State: ${stateCode || "Selangor"}
-- City: ${city || "Petaling Jaya"}
+- State dropdown: select "${stateCode || "Selangor"}"
+- City dropdown: select "${city || "Petaling Jaya"}"
 
-After fixing all errors, check the terms checkbox and click Submit again.`
+After fixing all errors, make sure the terms checkbox is checked and click Submit.`
       );
       console.log(`[E-Invoice Form Fill] Retry: fixed and resubmitted`);
       await page.waitForTimeout(5000);

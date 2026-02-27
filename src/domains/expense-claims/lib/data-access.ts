@@ -465,7 +465,7 @@ export async function createExpenseClaim(
 
           // Fetch business + user details for e-invoice form fill (019-lhdn-einv-flow-2)
           // Passed upfront so Lambda can trigger form fill without round-tripping to Convex
-          let businessDetails: Record<string, any> | undefined
+          let businessDetails: { name: string; tin: string; brn: string; address: string; phone?: string; contactEmail?: string; [key: string]: any } | undefined
           try {
             const business = await convexClient.query(api.functions.businesses.getBusinessProfileByStringId, {
               businessId: employeeProfile.business_id,
