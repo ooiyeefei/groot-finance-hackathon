@@ -189,67 +189,87 @@ async function executeAction(page: Page, action: GeminiAction): Promise<void> {
 
 async function prefillDropdown(page: Page, triggerText: string, targetValue: string): Promise<boolean> {
   try {
-    // Strategy 1: Click trigger to open dropdown, then click the option directly
-    // Find the combobox trigger — try text match, then fall back to all comboboxes
+    // Debug: log all comboboxes on page
+    const allCombos = page.getByRole('combobox');
+    const comboCount = await allCombos.count();
+    const comboTexts: string[] = [];
+    for (let i = 0; i < comboCount; i++) {
+      const t = await allCombos.nth(i).textContent().catch(() => '?');
+      comboTexts.push(t?.trim() || '(empty)');
+    }
+    console.log(`[Form Fill] Found ${comboCount} comboboxes: [${comboTexts.join(', ')}]`);
+
+    // Find the trigger — text match first, then index fallback
     let trigger = page.getByRole('combobox').filter({ hasText: triggerText }).first();
     if (await trigger.count() === 0) {
-      // Fallback: find any combobox (state is typically visible at bottom of form)
-      const allCombos = page.getByRole('combobox');
-      const count = await allCombos.count();
-      console.log(`[Form Fill] No combobox with "${triggerText}", found ${count} total`);
-      if (count === 0) return false;
-      trigger = allCombos.first();
+      console.log(`[Form Fill] No combobox with "${triggerText}", using first unselected`);
+      // Find first combobox that still shows placeholder text
+      for (let i = 0; i < comboCount; i++) {
+        const text = comboTexts[i];
+        if (text.toLowerCase().includes('select') || text === '(empty)') {
+          trigger = allCombos.nth(i);
+          break;
+        }
+      }
+      if (await trigger.count() === 0) return false;
     }
 
-    // Scroll trigger into view
-    await trigger.scrollIntoViewIfNeeded().catch(() => {});
-    await new Promise(r => setTimeout(r, 300));
+    // Scroll the entire page to bottom, then scroll trigger into view
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await new Promise(r => setTimeout(r, 500));
+    await trigger.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
+    await new Promise(r => setTimeout(r, 500));
 
     for (let attempt = 0; attempt < 2; attempt++) {
-      // Click to open the dropdown
-      await trigger.click();
-      await new Promise(r => setTimeout(r, 800));
+      console.log(`[Form Fill] Dropdown "${triggerText}" attempt ${attempt + 1}: focus+Space`);
 
-      // Look for the option in the opened dropdown (Radix renders options as role="option")
-      const option = page.getByRole('option').filter({ hasText: targetValue }).first();
-      const optionCount = await option.count();
+      // Open with focus+Space (proven approach — click causes off-by-one)
+      await trigger.focus({ timeout: 5000 });
+      await page.keyboard.press('Space');
+      await new Promise(r => setTimeout(r, 1000));
+
+      // Check if dropdown opened
+      const optionCount = await page.getByRole('option').count();
+      console.log(`[Form Fill] Options visible: ${optionCount}`);
 
       if (optionCount > 0) {
-        // Found it! Click the option directly
-        await option.scrollIntoViewIfNeeded().catch(() => {});
-        await option.click();
-        await new Promise(r => setTimeout(r, 1000));
+        // Find target index in the option list
+        const allOptionTexts = await page.evaluate(() =>
+          Array.from(document.querySelectorAll('[role="option"]')).map(el => el.textContent?.trim() || '')
+        );
+        const targetIdx = allOptionTexts.findIndex(t => t.toLowerCase().includes(targetValue.toLowerCase()));
+        console.log(`[Form Fill] Target "${targetValue}" at index ${targetIdx} of ${allOptionTexts.length}`);
 
-        // Verify
-        const selected = await trigger.textContent().catch(() => '');
-        if (selected?.toLowerCase().includes(targetValue.toLowerCase())) {
-          console.log(`[Form Fill] Dropdown "${triggerText}" → "${selected?.trim()}" (click method)`);
+        if (targetIdx >= 0) {
+          // ArrowDown × targetIdx, then Space to select
+          const presses = targetIdx + attempt; // +attempt for off-by-one retry
+          for (let i = 0; i < presses; i++) {
+            await page.keyboard.press('ArrowDown');
+            await new Promise(r => setTimeout(r, 80));
+          }
+          await page.keyboard.press('Space');
+          await new Promise(r => setTimeout(r, 1500));
+        }
+
+        // Verify with page.evaluate (locator becomes stale after text change)
+        const comboTexts = await page.evaluate(() =>
+          Array.from(document.querySelectorAll('[role="combobox"]')).map(el => el.textContent?.trim() || '')
+        );
+        const found = comboTexts.some(t => t.toLowerCase().includes(targetValue.toLowerCase()));
+        if (found) {
+          console.log(`[Form Fill] Dropdown "${triggerText}" → "${targetValue}" ✓`);
           return true;
         }
-        console.log(`[Form Fill] Click method: selected but got "${selected?.trim()}", wanted "${targetValue}"`);
+        console.log(`[Form Fill] Combobox texts after: [${comboTexts.join(', ')}]`);
       } else {
-        console.log(`[Form Fill] No option found for "${targetValue}" (attempt ${attempt + 1}), trying keyboard`);
-
-        // Strategy 2: Keyboard fallback (dropdown might already be open from click)
-        // Type first letter to jump, then ArrowDown to find
-        const firstLetter = targetValue.charAt(0).toLowerCase();
-        await page.keyboard.press(firstLetter.toUpperCase());
-        await new Promise(r => setTimeout(r, 300));
-
-        // Press Enter to select highlighted option
-        await page.keyboard.press('Enter');
-        await new Promise(r => setTimeout(r, 1000));
+        console.log(`[Form Fill] Dropdown didn't open`);
       }
 
-      // Close dropdown if still open
       await page.keyboard.press('Escape');
       await new Promise(r => setTimeout(r, 300));
     }
 
-    // Check final state
-    const finalText = await trigger.textContent().catch(() => '');
-    console.log(`[Form Fill] Dropdown "${triggerText}" final: "${finalText?.trim()}"`);
-    return finalText?.toLowerCase().includes(targetValue.toLowerCase()) || false;
+    return false;
   } catch (e) {
     console.log(`[Form Fill] Dropdown prefill failed: ${e}`);
     return false;

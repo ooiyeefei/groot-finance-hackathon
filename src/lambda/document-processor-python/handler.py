@@ -88,6 +88,59 @@ class WorkflowContext:
 
 
 # =============================================================================
+# Known Malaysian Merchant E-Invoice URLs
+# Fallback when QR code is damaged/unreadable and OCR doesn't find a URL.
+# Keys are lowercase substrings matched against extracted vendor_name.
+# =============================================================================
+
+_KNOWN_MERCHANT_URLS: dict[str, str] = {
+    # Convenience stores
+    "familymart":       "https://fmeinvoice.ql.com.my/",
+    "family mart":      "https://fmeinvoice.ql.com.my/",
+    "99 speedmart":     "https://einvois.99speedmart.com.my/",
+    "99speedmart":      "https://einvois.99speedmart.com.my/",
+    # Retail
+    "mr. d.i.y":        "https://mrdiy.com.my/pages/einvoice-company",
+    "mr d.i.y":         "https://mrdiy.com.my/pages/einvoice-company",
+    "mr diy":           "https://mrdiy.com.my/pages/einvoice-company",
+    "mrdiy":            "https://mrdiy.com.my/pages/einvoice-company",
+    # Fast food
+    "mcdonald":         "https://www.mcdonalds.com.my/contact/invoice",
+    "kfc":              "https://kfc.com.my/e-invoice",
+    "pizza hut":        "https://www.pizzahut.com.my/e-invoicing",
+    "subway":           "https://subwaymalaysia.com/einvoice",
+    # Petrol stations
+    "petronas":         "https://setel.com/e-invoicing",
+    "shell":            "https://einvoice.shell.com.my/",
+    # Pharmacies
+    "watsons":          "https://einvoice.watsons.com.my/",
+    "watson":           "https://einvoice.watsons.com.my/",
+    "guardian":         "https://einvoice.guardian.com.my/",
+    # Supermarkets
+    "aeon":             "https://einvoice.aeongroupmalaysia.com/",
+    "jaya grocer":      "https://einvoice.jayagrocer.com/",
+    "village grocer":   "https://einvoice.villagegrocer.com.my/",
+    "tesco":            "https://einvoice.lotuss.com.my/",
+    "lotus":            "https://einvoice.lotuss.com.my/",
+    # Home improvement
+    "ikea":             "https://einvoice.ikea.com.my/",
+    "mr.diy":           "https://mrdiy.com.my/pages/einvoice-company",
+}
+
+
+def _lookup_merchant_einvoice_url(vendor_name: str) -> Optional[str]:
+    """Match vendor name against known merchant e-invoice URLs (fuzzy substring match)."""
+    if not vendor_name:
+        return None
+    vn = vendor_name.lower().strip()
+    # Direct key match
+    for key, url in _KNOWN_MERCHANT_URLS.items():
+        if key in vn or vn in key:
+            return url
+    return None
+
+
+# =============================================================================
 # Initialize Clients (outside handler for reuse)
 # =============================================================================
 
@@ -466,14 +519,19 @@ def handler(event: dict, context: DurableContext):
                 # Priority: QR code URL > OCR text URL (from extraction)
                 merchant_form_url = qr_result.get("merchant_form_url") if qr_result else None
                 if not merchant_form_url:
-                    # Fallback: check if Gemini extracted a merchant e-invoice URL from receipt text
+                    # Fallback 1: OCR-extracted URL from Gemini
                     ocr_url = extraction_result.get("merchant_einvoice_url")
                     if ocr_url:
-                        # Ensure it has a protocol
                         if not ocr_url.startswith("http"):
                             ocr_url = "https://" + ocr_url
                         merchant_form_url = ocr_url
                         print(f"[{doc_id}] Using OCR-extracted e-invoice URL: {ocr_url[:80]}")
+                if not merchant_form_url:
+                    # Fallback 2: known merchant lookup by vendor name
+                    vendor = (extraction_result.get("vendor_name") or "").lower().strip()
+                    merchant_form_url = _lookup_merchant_einvoice_url(vendor)
+                    if merchant_form_url:
+                        print(f"[{doc_id}] Matched vendor \"{vendor}\" → {merchant_form_url[:80]}")
                 if merchant_form_url:
                     extraction_result["merchant_form_url"] = merchant_form_url
                     extraction_result["detected_qr_codes"] = qr_result.get("detected_qr_codes", [])
@@ -513,16 +571,22 @@ def handler(event: dict, context: DurableContext):
             if request.domain != "expense_claims":
                 return {"triggered": False, "reason": "not_expense_claims"}
 
-            # Check both QR result and OCR-extracted URL from extraction
+            # Detection chain: QR → OCR URL → known merchant lookup
             merchant_form_url = qr_result.get("merchant_form_url") if qr_result else None
             if not merchant_form_url:
-                # Fallback: check OCR-extracted URL from Gemini extraction
+                # Fallback 1: check OCR-extracted URL from Gemini extraction
                 ocr_url = extraction_result.get("merchant_einvoice_url")
                 if ocr_url:
                     if not ocr_url.startswith("http"):
                         ocr_url = "https://" + ocr_url
                     merchant_form_url = ocr_url
-                    print(f"[{doc_id}] E-invoice: using OCR-extracted URL for form fill: {ocr_url[:80]}")
+                    print(f"[{doc_id}] E-invoice: using OCR-extracted URL: {ocr_url[:80]}")
+            if not merchant_form_url:
+                # Fallback 2: known merchant e-invoice URL lookup by vendor name
+                vendor_name = (extraction_result.get("vendor_name") or "").lower().strip()
+                merchant_form_url = _lookup_merchant_einvoice_url(vendor_name)
+                if merchant_form_url:
+                    print(f"[{doc_id}] E-invoice: matched vendor \"{vendor_name}\" → {merchant_form_url[:80]}")
             if not merchant_form_url:
                 return {"triggered": False, "reason": "no_merchant_form_url"}
 
