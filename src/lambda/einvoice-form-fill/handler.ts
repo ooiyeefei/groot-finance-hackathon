@@ -244,14 +244,16 @@ Fill all matching fields. If a field doesn't exist, skip it.`
       status: verificationStatus === "error" ? "failed" : "success",
       browserbaseSessionId,
       durationMs,
-      verificationMessage: (verification as any)?.message || undefined,
     });
 
     return { success: true, durationMs };
   } catch (error) {
     const durationMs = Date.now() - startTime;
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorMessage = error instanceof Error ? error.message : `Unknown error: ${JSON.stringify(error)}`;
     console.error(`[E-Invoice Form Fill] Failed in ${durationMs}ms: ${errorMessage}`);
+    if (error instanceof Error && error.stack) {
+      console.error(`[E-Invoice Form Fill] Stack: ${error.stack.substring(0, 500)}`);
+    }
 
     // Report failure to Convex
     try {

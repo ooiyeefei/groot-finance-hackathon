@@ -568,16 +568,21 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
                           {processingStatuses.includes(claim.status) ? (
                             <DocumentStatusBadge status={claim.status as any} />
                           ) : (
-                            <Badge
-                              className={claimBadge.className}
-                              title={claim.status === 'classification_failed'
-                                ? ((claim as any).errorMessage || 'This document does not appear to be a receipt or invoice. Please delete and upload a valid receipt.')
-                                : claim.status === 'failed'
-                                ? ((claim as any).errorMessage || 'Processing failed. Please try re-uploading.')
-                                : undefined}
-                            >
-                              {claimBadge.label}
-                            </Badge>
+                            <div className="flex items-center gap-1.5">
+                              <Badge className={claimBadge.className}>
+                                {claimBadge.label}
+                              </Badge>
+                              {(claim.status === 'classification_failed' || claim.status === 'failed') && (
+                                <span
+                                  title={claim.status === 'classification_failed'
+                                    ? ((claim as any).errorMessage || 'This document does not appear to be a receipt or invoice. Please delete and upload a valid receipt.')
+                                    : ((claim as any).errorMessage || 'Processing failed. Please try re-uploading.')}
+                                  className="cursor-help"
+                                >
+                                  <AlertCircle className="w-4 h-4 text-red-500" />
+                                </span>
+                              )}
+                            </div>
                           )}
                         </td>
                         {isDraft && (

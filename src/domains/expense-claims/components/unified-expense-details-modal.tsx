@@ -563,6 +563,21 @@ export default function UnifiedExpenseDetailsModal({
                   )}
                 </div>
 
+                {/* Classification Failed Alert */}
+                {claimDetails.status === 'classification_failed' && (
+                  <div className="mx-3 mb-2 bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-red-600 dark:text-red-400 font-medium text-sm">Invalid Document Detected</p>
+                        <p className="text-muted-foreground text-sm mt-1">
+                          This document does not appear to be a receipt or invoice. Please delete this entry and upload a valid receipt (photo of a purchase receipt, restaurant bill, or tax invoice).
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Bottom Section - Stacked on mobile, 40/60 Split on desktop */}
                 <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
                   {/* Left Panel - Receipt Preview (full width mobile, 40% desktop) */}
