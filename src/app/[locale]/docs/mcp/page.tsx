@@ -16,12 +16,12 @@ export default function MCPDocsPage() {
       <header className="bg-surface border-b border-border sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/en/business-settings?tab=api-keys">
-              <Button variant="ghost" size="sm">
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/en/business-settings?tab=api-keys">
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Back to API Keys
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </div>
           <div className="flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-primary" />
@@ -65,12 +65,12 @@ export default function MCPDocsPage() {
                   <p className="text-muted-foreground text-sm mb-3">
                     Go to Settings → API Keys in your Groot Finance dashboard, create a new key, and select the tools you want to enable.
                   </p>
-                  <Link href="/en/business-settings?tab=api-keys">
-                    <Button variant="outline" size="sm">
+                  <Button asChild variant="outline" size="sm">
+                    <Link href="/en/business-settings?tab=api-keys">
                       <Key className="w-4 h-4 mr-2" />
                       Manage API Keys
-                    </Button>
-                  </Link>
+                    </Link>
+                  </Button>
                 </div>
               </div>
             </div>

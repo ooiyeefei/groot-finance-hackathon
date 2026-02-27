@@ -19,6 +19,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@clerk/nextjs';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
+import { App } from '@capacitor/app';
 import { isNativePlatform, getPlatform } from '@/lib/capacitor/platform';
 import { initAuthBridge } from '@/lib/capacitor/auth-bridge';
 import { initDeepLinks } from '@/lib/capacitor/deep-links';
@@ -70,6 +71,15 @@ export function CapacitorProvider({ children }: CapacitorProviderProps) {
 
     // 5. Sentry native crash reporting (stub)
     initNativeSentry();
+
+    // 6. App state change — refresh session when returning from background
+    App.addListener('appStateChange', ({ isActive }) => {
+      if (isActive) {
+        // App returned to foreground — trigger Clerk session refresh
+        // by dispatching a visibilitychange event that Clerk listens to
+        document.dispatchEvent(new Event('visibilitychange'));
+      }
+    });
   }, [router]);
 
   // --- Push Notification Registration (after auth) ---

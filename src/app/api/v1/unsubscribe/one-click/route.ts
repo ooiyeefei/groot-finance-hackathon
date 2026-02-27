@@ -8,7 +8,7 @@
  * when users click "Unsubscribe" in the email header.
  *
  * Required email headers for this to work:
- * - List-Unsubscribe: <https://app.finanseal.com/api/v1/unsubscribe?token=xxx>
+ * - List-Unsubscribe: <https://finance.hellogroot.com/api/v1/unsubscribe?token=xxx>
  * - List-Unsubscribe-Post: List-Unsubscribe=One-Click
  *
  * The POST body will contain: List-Unsubscribe=One-Click

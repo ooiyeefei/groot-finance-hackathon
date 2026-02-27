@@ -48,12 +48,12 @@ export default async function PricingPage() {
             <div className="max-w-5xl mx-auto">
               {/* Back Button */}
               <div className="mb-6">
-                <Link href="/en/settings/billing">
-                  <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                <Button asChild variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                  <Link href="/en/settings/billing">
                     <ArrowLeft className="w-4 h-4 mr-2" />
                     Back to Billing
-                  </Button>
-                </Link>
+                  </Link>
+                </Button>
               </div>
 
               {/* Header Section */}

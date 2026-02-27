@@ -117,7 +117,7 @@ if [ ! -f "$ENTITLEMENTS" ]; then
 <dict>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
-		<string>applinks:app.finanseal.com</string>
+		<string>applinks:finance.hellogroot.com</string>
 	</array>
 	<key>aps-environment</key>
 	<string>development</string>
@@ -127,11 +127,11 @@ ENTITLEMENTS_EOF
   echo "  Created App.entitlements with Associated Domains and Push Notifications."
 else
   # Check if associated domains already configured
-  if grep -q "applinks:app.finanseal.com" "$ENTITLEMENTS"; then
+  if grep -q "applinks:finance.hellogroot.com" "$ENTITLEMENTS"; then
     echo "  Associated Domains already configured."
   else
     /usr/libexec/PlistBuddy -c "Add :com.apple.developer.associated-domains array" "$ENTITLEMENTS" 2>/dev/null || true
-    /usr/libexec/PlistBuddy -c "Add :com.apple.developer.associated-domains:0 string applinks:app.finanseal.com" "$ENTITLEMENTS" 2>/dev/null || true
+    /usr/libexec/PlistBuddy -c "Add :com.apple.developer.associated-domains:0 string applinks:finance.hellogroot.com" "$ENTITLEMENTS" 2>/dev/null || true
     echo "  Added Associated Domains entitlement."
   fi
 
@@ -168,7 +168,7 @@ echo "     - Set Deployment Target to: iOS 16.0"
 echo ""
 echo "  3. Add capabilities in Xcode (if not auto-detected from entitlements):"
 echo "     - Push Notifications"
-echo "     - Associated Domains (applinks:app.finanseal.com)"
+echo "     - Associated Domains (applinks:finance.hellogroot.com)"
 echo ""
 echo "  4. App Icons & Splash Screen:"
 echo "     - Add 1024x1024 app icon to ios/App/App/Assets.xcassets/AppIcon.appiconset/"

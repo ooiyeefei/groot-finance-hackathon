@@ -579,13 +579,13 @@ const ApiKeysManagementClient = memo(() => {
               Use this endpoint with your API key to connect Claude Desktop, Cursor, or other MCP clients.
             </p>
           </div>
-          <Link href="/en/docs/mcp" target="_blank">
-            <Button variant="outline" size="sm" className="shrink-0 w-full sm:w-auto">
+          <Button asChild variant="outline" size="sm" className="shrink-0 w-full sm:w-auto">
+            <Link href="/en/docs/mcp" target="_blank">
               <BookOpen className="w-4 h-4 mr-2" />
               View Documentation
               <ExternalLink className="w-3 h-3 ml-1.5" />
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </div>
       </div>
 
