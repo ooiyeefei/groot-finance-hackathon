@@ -1,7 +1,7 @@
 """
 QR Code Detection Step (019-lhdn-einv-flow-2)
 
-Detects QR codes in receipt images using pyzbar with OpenCV pre-processing.
+Detects QR codes in receipt images using pyzbar with Pillow pre-processing.
 Multiple image variants tried for reliability on camera photos.
 Extracts URLs and filters out LHDN validation QR codes.
 Returns merchant buyer-info form URLs.
@@ -9,8 +9,7 @@ Returns merchant buyer-info form URLs.
 
 import re
 from typing import List, Tuple
-import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter, ImageEnhance
 from io import BytesIO
 
 # LHDN validation QR pattern — these are NOT merchant form URLs
@@ -38,46 +37,43 @@ def _try_pyzbar(image: Image.Image, label: str, document_id: str) -> List[str]:
 
 
 def _prepare_variants(image_bytes: bytes) -> List[Tuple[str, Image.Image]]:
-    """Generate multiple pre-processed image variants for QR detection."""
-    import cv2
-
-    # Original PIL image
+    """Generate multiple pre-processed image variants using Pillow only (no OpenCV)."""
     pil_image = Image.open(BytesIO(image_bytes))
     if pil_image.mode != "RGB":
         pil_image = pil_image.convert("RGB")
 
-    variants: List[Tuple[str, Image.Image]] = [("original", pil_image)]
+    variants: List[Tuple[str, Image.Image]] = []
 
-    # OpenCV variants
-    nparr = np.frombuffer(image_bytes, np.uint8)
-    cv_image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    if cv_image is None:
-        return variants
+    # 1. Original
+    variants.append(("original", pil_image))
 
-    gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+    # 2. Grayscale
+    gray = pil_image.convert("L")
+    variants.append(("grayscale", gray))
 
-    # Grayscale
-    variants.append(("grayscale", Image.fromarray(gray)))
+    # 3. High contrast grayscale (threshold at midpoint)
+    threshold = gray.point(lambda p: 255 if p > 128 else 0)
+    variants.append(("threshold_128", threshold))
 
-    # OTSU threshold
-    _, otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    variants.append(("otsu", Image.fromarray(otsu)))
+    # 4. Sharpened
+    sharpened = gray.filter(ImageFilter.SHARPEN)
+    variants.append(("sharpened", sharpened))
 
-    # Adaptive threshold
-    adaptive = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 51, 10)
-    variants.append(("adaptive", Image.fromarray(adaptive)))
+    # 5. Enhanced contrast
+    enhancer = ImageEnhance.Contrast(gray)
+    high_contrast = enhancer.enhance(2.0)
+    variants.append(("high_contrast", high_contrast))
 
-    # Sharpened
-    kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
-    sharpened = cv2.filter2D(gray, -1, kernel)
-    variants.append(("sharpened", Image.fromarray(sharpened)))
+    # 6. Upscaled 2x (helps with small QR codes in large images)
+    w, h = gray.size
+    if max(w, h) < 2000:
+        upscaled = gray.resize((w * 2, h * 2), Image.LANCZOS)
+        up_threshold = upscaled.point(lambda p: 255 if p > 128 else 0)
+        variants.append(("upscaled_threshold", up_threshold))
 
-    # Upscaled 2x (helps with small QR codes)
-    h, w = gray.shape[:2]
-    if max(h, w) < 2000:
-        upscaled = cv2.resize(gray, (w * 2, h * 2), interpolation=cv2.INTER_CUBIC)
-        _, up_otsu = cv2.threshold(upscaled, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        variants.append(("upscaled_otsu", Image.fromarray(up_otsu)))
+    # 7. Lower threshold (catches darker QR codes)
+    threshold_low = gray.point(lambda p: 255 if p > 96 else 0)
+    variants.append(("threshold_96", threshold_low))
 
     return variants
 
@@ -89,7 +85,7 @@ def detect_qr_step(
 ) -> dict:
     """
     Detect QR codes in a receipt image and extract URLs.
-    Uses pyzbar with multiple OpenCV pre-processing passes.
+    Uses pyzbar with multiple Pillow pre-processing passes.
     """
     print(f"[{document_id}] QR Detection: Starting")
 

@@ -48,7 +48,7 @@ RUN pip install --upgrade pip
 # Install Python packages, using pre-built wheels for packages with native extensions
 # to avoid needing Rust compiler (tiktoken) or C compiler (numpy)
 RUN pip install --no-cache-dir \
-    --only-binary=numpy,tiktoken,opencv-python-headless \
+    --only-binary=numpy,tiktoken \
     -r requirements.txt
 
 # Copy function code
