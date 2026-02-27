@@ -16,6 +16,7 @@ pydantic>=2.0.0,<3.0.0
 
 # Image processing
 Pillow>=10.0.0,<12.0.0
+pillow-heif>=0.16.0  # HEIC/HEIF support (iPhone photos)
 
 # PDF to image conversion (requires Poppler in Lambda Layer)
 pdf2image>=1.16.0

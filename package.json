@@ -95,6 +95,7 @@
     "date-holidays": "^3.26.8",
     "dotenv": "^17.2.1",
     "google-spreadsheet": "^5.0.2",
+    "heic2any": "^0.0.4",
     "html2pdf.js": "^0.12.1",
     "i18n-iso-countries": "^7.14.0",
     "idb": "^8.0.3",

@@ -7,9 +7,9 @@ import { compressReceiptImage } from '@/lib/pwa/image-compression'
 import { useToast } from '@/components/ui/toast'
 
 // File validation constants
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'application/pdf']
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'application/pdf', 'image/heic', 'image/heif']
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB in bytes
-const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.pdf']
+const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.pdf', '.heic', '.heif']
 
 interface UploadState {
   uploading: boolean
@@ -67,7 +67,7 @@ export default function FileUploadZone({
   const validateFile = (file: File): string | null => {
     // Check file type
     if (!ALLOWED_TYPES.includes(file.type)) {
-      return 'Invalid file type. Only JPG, PNG, and PDF files are allowed.'
+      return 'Invalid file type. Only JPG, PNG, HEIC, and PDF files are allowed.'
     }
 
     // Check file size
@@ -92,10 +92,24 @@ export default function FileUploadZone({
     }
 
     try {
-      // Compress images before upload (skip PDFs)
+      // Convert HEIC/HEIF to JPEG before processing (iPhone photos)
       let fileToUpload = file
-      if (file.type.startsWith('image/')) {
-        fileToUpload = await compressReceiptImage(file)
+      const isHeic = file.type === 'image/heic' || file.type === 'image/heif' ||
+        file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')
+      if (isHeic) {
+        try {
+          const heic2any = (await import('heic2any')).default
+          const blob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.85 }) as Blob
+          fileToUpload = new File([blob], file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg'), { type: 'image/jpeg' })
+          console.log(`[Upload] Converted HEIC to JPEG: ${file.name} (${(file.size/1024).toFixed(0)}KB → ${(blob.size/1024).toFixed(0)}KB)`)
+        } catch (heicError) {
+          console.error('[Upload] HEIC conversion failed, uploading as-is:', heicError)
+        }
+      }
+
+      // Compress images before upload (skip PDFs)
+      if (fileToUpload.type.startsWith('image/')) {
+        fileToUpload = await compressReceiptImage(fileToUpload)
       }
 
       const formData = new FormData()
@@ -397,7 +411,7 @@ export default function FileUploadZone({
         <input
           ref={fileInputRef}
           type="file"
-          accept=".jpg,.jpeg,.png,.pdf"
+          accept=".jpg,.jpeg,.png,.pdf,.heic,.heif"
           onChange={handleFileInputChange}
           className="hidden"
           disabled={uploadState.uploading}
@@ -431,7 +445,7 @@ export default function FileUploadZone({
                   {dragActive ? 'Drop files here' : 'Upload receipts'}
                 </p>
                 <span className="text-muted-foreground text-xs">
-                  JPG, PNG, PDF up to 10MB
+                  JPG, PNG, HEIC, or PDF up to 10MB
                 </span>
               </>
             )}
@@ -473,7 +487,7 @@ export default function FileUploadZone({
                     }
                   </p>
                   <p className="text-muted-foreground text-sm mt-1">
-                    JPG, PNG, or PDF files up to 10MB
+                    JPG, PNG, HEIC, or PDF files up to 10MB
                     {allowMultiple && ' (multiple files supported)'}
                   </p>
                 </div>

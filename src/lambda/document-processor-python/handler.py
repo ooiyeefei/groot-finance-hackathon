@@ -22,6 +22,13 @@ import traceback
 from typing import Any, Optional
 from dataclasses import dataclass
 
+# Register HEIC/HEIF support with Pillow (iPhone photos)
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+except ImportError:
+    pass  # pillow-heif not available — HEIC files won't be processable
+
 # AWS Durable Execution SDK - correct import for aws-durable-execution-sdk-python
 from aws_durable_execution_sdk_python import durable_execution, DurableContext
 
