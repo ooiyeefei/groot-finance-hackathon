@@ -210,7 +210,7 @@ export default function EinvoiceSection({
                   </p>
                 </div>
               </div>
-              <div className="flex gap-2 pl-6">
+              <div className="pl-6">
                 <Button
                   size="sm"
                   className="bg-primary hover:bg-primary/90 text-primary-foreground"
@@ -221,25 +221,6 @@ export default function EinvoiceSection({
                     Open Form
                   </a>
                 </Button>
-                <label>
-                  <Button size="sm" variant="outline" disabled={uploadLoading} asChild>
-                    <span>
-                      {uploadLoading ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
-                      ) : (
-                        <Upload className="w-3.5 h-3.5 mr-1.5" />
-                      )}
-                      Upload E-Invoice
-                    </span>
-                  </Button>
-                  <input
-                    type="file"
-                    accept=".pdf,.png,.jpg,.jpeg"
-                    onChange={handleUploadEinvoice}
-                    className="hidden"
-                    disabled={uploadLoading}
-                  />
-                </label>
               </div>
             </div>
           ) : (
