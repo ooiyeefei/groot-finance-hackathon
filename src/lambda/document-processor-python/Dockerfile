@@ -28,15 +28,31 @@ FROM public.ecr.aws/lambda/python:3.11
 USER root
 RUN yum install -y poppler-utils && yum clean all
 
-# Copy zbar + dependencies from AL2 builder (same glibc — no compatibility issues)
+# Copy zbar + ALL dependencies from AL2 builder (same glibc — no compatibility issues)
+# zbar core + video/jpeg deps
 COPY --from=zbar-builder /usr/lib64/libzbar.so.0.2.0 /usr/lib64/libzbar.so.0.2.0
 COPY --from=zbar-builder /usr/lib64/libv4l2.so.0.0.0 /usr/lib64/libv4l2.so.0.0.0
 COPY --from=zbar-builder /usr/lib64/libv4lconvert.so.0.0.0 /usr/lib64/libv4lconvert.so.0.0.0
 COPY --from=zbar-builder /usr/lib64/libjpeg.so.62.3.0 /usr/lib64/libjpeg.so.62.3.0
+# X11 deps (AL2 EPEL zbar is compiled with X11 support)
+COPY --from=zbar-builder /lib64/libSM.so.6.0.1 /usr/lib64/libSM.so.6.0.1
+COPY --from=zbar-builder /lib64/libICE.so.6.3.0 /usr/lib64/libICE.so.6.3.0
+COPY --from=zbar-builder /lib64/libX11.so.6.3.0 /usr/lib64/libX11.so.6.3.0
+COPY --from=zbar-builder /lib64/libXau.so.6.0.0 /usr/lib64/libXau.so.6.0.0
+COPY --from=zbar-builder /lib64/libXext.so.6.4.0 /usr/lib64/libXext.so.6.4.0
+COPY --from=zbar-builder /lib64/libXv.so.1.0.0 /usr/lib64/libXv.so.1.0.0
+COPY --from=zbar-builder /lib64/libxcb.so.1.1.0 /usr/lib64/libxcb.so.1.1.0
 RUN ln -sf libzbar.so.0.2.0 /usr/lib64/libzbar.so.0 && \
     ln -sf libv4l2.so.0.0.0 /usr/lib64/libv4l2.so.0 && \
     ln -sf libv4lconvert.so.0.0.0 /usr/lib64/libv4lconvert.so.0 && \
     ln -sf libjpeg.so.62.3.0 /usr/lib64/libjpeg.so.62 && \
+    ln -sf libSM.so.6.0.1 /usr/lib64/libSM.so.6 && \
+    ln -sf libICE.so.6.3.0 /usr/lib64/libICE.so.6 && \
+    ln -sf libX11.so.6.3.0 /usr/lib64/libX11.so.6 && \
+    ln -sf libXau.so.6.0.0 /usr/lib64/libXau.so.6 && \
+    ln -sf libXext.so.6.4.0 /usr/lib64/libXext.so.6 && \
+    ln -sf libXv.so.1.0.0 /usr/lib64/libXv.so.1 && \
+    ln -sf libxcb.so.1.1.0 /usr/lib64/libxcb.so.1 && \
     /sbin/ldconfig
 
 # Copy requirements and install dependencies
