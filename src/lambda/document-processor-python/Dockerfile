@@ -45,11 +45,12 @@ COPY requirements.txt ${LAMBDA_TASK_ROOT}/
 # Upgrade pip to ensure it can find pre-built wheels
 RUN pip install --upgrade pip
 
-# Install Python packages, using pre-built wheels for packages with native extensions
-# to avoid needing Rust compiler (tiktoken) or C compiler (numpy)
+# Install Python packages — force fresh install (no Docker layer cache for deps)
+# Pre-built wheels for native extensions to avoid needing compilers
 RUN pip install --no-cache-dir \
     --only-binary=numpy,tiktoken \
-    -r requirements.txt
+    -r requirements.txt && \
+    pip uninstall -y opencv-python-headless 2>/dev/null; true
 
 # Copy function code
 COPY handler.py ${LAMBDA_TASK_ROOT}/
