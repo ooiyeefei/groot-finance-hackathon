@@ -654,16 +654,17 @@ export default function UnifiedExpenseDetailsModal({
                               />
                             </div>
 
-                            {/* Approval Actions */}
-                            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-4 border-t border-record-border">
+                            {/* Approval Actions — always horizontal row */}
+                            <div className="flex flex-row gap-2 pt-4 border-t border-record-border">
                               <Button
                                 onClick={() => handleApproval('reject')}
                                 disabled={processing}
                                 variant="destructive"
+                                size="sm"
                                 className="flex-1"
                               >
-                                <XCircle className="w-4 h-4 mr-2" />
-                                Reject
+                                <XCircle className="w-4 h-4 sm:mr-2" />
+                                <span className="hidden sm:inline">Reject</span>
                               </Button>
 
                               <RouteClaimButton
@@ -682,14 +683,15 @@ export default function UnifiedExpenseDetailsModal({
                                 onClick={() => handleApproval('approve')}
                                 disabled={processing}
                                 variant="success"
+                                size="sm"
                                 className="flex-1"
                               >
                                 {processing ? (
-                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  <Loader2 className="w-4 h-4 sm:mr-2 animate-spin" />
                                 ) : (
-                                  <CheckCircle className="w-4 h-4 mr-2" />
+                                  <CheckCircle className="w-4 h-4 sm:mr-2" />
                                 )}
-                                Approve
+                                <span className="hidden sm:inline">Approve</span>
                               </Button>
                             </div>
                           </CardContent>

@@ -88,25 +88,27 @@ export default function RouteClaimButton({
         size="sm"
         disabled={disabled}
         onClick={() => setOpen(true)}
-        className="gap-2"
+        className="flex-1 gap-1 sm:gap-2"
       >
         <ArrowRightLeft className="w-4 h-4" />
-        Route to...
+        <span className="hidden sm:inline">Route to...</span>
+        <span className="sm:hidden">Route</span>
       </Button>
     )
   }
 
   return (
     <>
-      {/* Trigger button (hidden when dialog is open) */}
+      {/* Trigger button (disabled when dialog is open) */}
       <Button
         variant="outline"
         size="sm"
         disabled={true}
-        className="gap-2"
+        className="flex-1 gap-1 sm:gap-2"
       >
         <ArrowRightLeft className="w-4 h-4" />
-        Route to...
+        <span className="hidden sm:inline">Route to...</span>
+        <span className="sm:hidden">Route</span>
       </Button>
 
       {/* Modal Overlay */}
