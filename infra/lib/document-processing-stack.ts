@@ -179,7 +179,7 @@ export class DocumentProcessingStack extends cdk.Stack {
           beforeBundling: () => [],
           beforeInstall: () => [],
           afterBundling: (_inputDir: string, outputDir: string) => [
-            `cd ${outputDir} && npm init -y --quiet && npm install @browserbasehq/stagehand --no-optional --production --quiet`,
+            `cd ${outputDir} && npm init -y --quiet && npm install @browserbasehq/stagehand chrome-launcher --production --quiet`,
           ],
         },
       },
