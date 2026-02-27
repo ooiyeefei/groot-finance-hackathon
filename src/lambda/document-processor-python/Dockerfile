@@ -5,7 +5,7 @@
 # - AWS Durable Execution SDK for fault-tolerant workflows
 # - DSPy for structured LLM extraction with Gemini
 # - Poppler for PDF to image conversion
-# - OpenCV for QR code detection (pre-built headless wheel)
+# - qreader + OpenCV for QR code detection (deep learning based)
 # - Sentry for error tracking
 #
 # Build:
@@ -30,7 +30,7 @@ RUN pip install --upgrade pip
 # Install Python packages, using pre-built wheels for packages with native extensions
 # to avoid needing Rust compiler (tiktoken) or C compiler (numpy)
 RUN pip install --no-cache-dir \
-    --only-binary=numpy,tiktoken,opencv-python-headless \
+    --only-binary=numpy,tiktoken,opencv-python-headless,scipy \
     -r requirements.txt
 
 # Copy function code
