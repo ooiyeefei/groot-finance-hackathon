@@ -52,7 +52,7 @@ interface GeminiAction {
 
 const SCREEN_WIDTH = 1280;
 const SCREEN_HEIGHT = 900;
-const MAX_TURNS = 20;
+const MAX_TURNS = 30;
 const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL || "";
 
 // ============================================================
@@ -289,7 +289,14 @@ export async function handler(event: FormFillEvent): Promise<{
     const phoneLocal = phoneRaw.replace(/[^0-9]/g, "").replace(/^60/, "");
     const streetAddress = bd.addressLine1 || bd.address.split(",")[0] || bd.address;
     const city = bd.city || "Puchong";
-    const state = bd.stateCode || "Selangor";
+    // Map MY state codes to full names (merchant forms show full names, not codes)
+    const stateCodeMap: Record<string, string> = {
+      'JHR': 'Johor', 'KDH': 'Kedah', 'KTN': 'Kelantan', 'MLK': 'Melaka',
+      'NSN': 'Negeri Sembilan', 'PHG': 'Pahang', 'PRK': 'Perak', 'PLS': 'Perlis',
+      'PNG': 'Pulau Pinang', 'SBH': 'Sabah', 'SWK': 'Sarawak', 'SGR': 'Selangor',
+      'TRG': 'Terengganu', 'KUL': 'Kuala Lumpur', 'LBN': 'Labuan', 'PJY': 'Putrajaya',
+    };
+    const state = stateCodeMap[bd.stateCode || ''] || bd.stateCode || "Selangor";
 
     // 5b. Pre-fill phone with Playwright — simple approach: find input, select all, type full number
     try {
