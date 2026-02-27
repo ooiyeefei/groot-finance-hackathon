@@ -463,21 +463,38 @@ export async function createExpenseClaim(
           const fileType = request.file.type === 'application/pdf' ? 'pdf' : 'image'
           console.log(`[Lambda Processing] Triggering document processor for expense claim: ${claimId} (${fileType})`)
 
-          // Fetch business details for e-invoice form fill (019-lhdn-einv-flow-2)
+          // Fetch business + user details for e-invoice form fill (019-lhdn-einv-flow-2)
           // Passed upfront so Lambda can trigger form fill without round-tripping to Convex
-          let businessDetails: { name: string; tin: string; brn: string; address: string; phone?: string; contactEmail?: string } | undefined
+          let businessDetails: Record<string, any> | undefined
           try {
             const business = await convexClient.query(api.functions.businesses.getBusinessProfileByStringId, {
               businessId: employeeProfile.business_id,
             })
-            const fullAddress = [business?.address_line1, business?.address_line2, business?.city, business?.state_code, business?.postal_code, business?.country_code].filter(Boolean).join(', ')
-            if (business?.lhdn_tin && fullAddress) {
+            // Get user's full name from Clerk
+            const clerk = (await import('@clerk/nextjs/server')).default || await import('@clerk/nextjs/server')
+            const clerkClient = (clerk as any).clerkClient || clerk
+            const clerkInstance = typeof clerkClient === 'function' ? await clerkClient() : clerkClient
+            let userName = business?.name || 'User'
+            try {
+              const clerkUser = await clerkInstance.users.getUser(userId)
+              userName = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ') || userName
+            } catch { /* fallback to business name */ }
+
+            if (business?.lhdn_tin && business?.address_line1) {
               businessDetails = {
                 name: business.name,
+                userName, // User's personal name for "Full Name" field
                 tin: business.lhdn_tin,
                 brn: business.business_registration_number || business.lhdn_tin,
-                address: fullAddress,
-                phone: business.contact_phone || undefined,
+                // Structured address for state/city dropdowns
+                addressLine1: business.address_line1,
+                addressLine2: business.address_line2 || '',
+                city: business.city || '',
+                stateCode: business.state_code || '',
+                postalCode: business.postal_code || '',
+                countryCode: business.country_code || 'MY',
+                address: [business.address_line1, business.address_line2, business.city, business.state_code].filter(Boolean).join(', '),
+                phone: business.contact_phone || '+60132201176', // Default phone
                 contactEmail: business.contact_email || undefined,
               }
             }

@@ -516,15 +516,22 @@ def handler(event: dict, context: DurableContext):
 
             import boto3
             lambda_client = boto3.client("lambda")
+            # Get extra fields from business_details (passed from Vercel)
+            bd = request.business_details
+            raw = request.raw_business_details or {}
             payload = {
                 "merchantFormUrl": merchant_form_url,
                 "buyerDetails": {
-                    "name": request.business_details.name,
-                    "tin": request.business_details.tin,
-                    "brn": request.business_details.brn,
-                    "address": request.business_details.address,
+                    "name": raw.get("name", bd.name),
+                    "userName": raw.get("userName", bd.name),  # User's personal name
+                    "tin": bd.tin,
+                    "brn": bd.brn,
+                    "address": raw.get("address", bd.address),
+                    "addressLine1": raw.get("addressLine1", bd.address),
+                    "city": raw.get("city", ""),
+                    "stateCode": raw.get("stateCode", ""),
                     "email": f"einvoice+{email_ref}@einv.hellogroot.com",
-                    "phone": request.business_details.phone,
+                    "phone": raw.get("phone", bd.phone) or "+60132201176",
                 },
                 "extractedData": {
                     "referenceNumber": extraction_result.get("receipt_number"),

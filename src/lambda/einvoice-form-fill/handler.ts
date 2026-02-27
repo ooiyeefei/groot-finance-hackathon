@@ -24,9 +24,13 @@ interface FormFillEvent {
   /** Buyer company details */
   buyerDetails: {
     name: string;
+    userName?: string; // User's personal name (for "Full Name" field)
     tin: string;
     brn: string;
     address: string;
+    addressLine1?: string;
+    city?: string;
+    stateCode?: string;
     email: string;
     phone?: string;
   };
@@ -165,66 +169,66 @@ export async function handler(event: FormFillEvent): Promise<{
     await page.waitForTimeout(3000);
     console.log(`[E-Invoice Form Fill] Page loaded, starting form fill`);
 
-    // Parse address into parts for structured forms
-    const addressParts = event.buyerDetails.address.split(",").map((s) => s.trim());
-    const streetAddress = addressParts[0] || event.buyerDetails.address;
-    const city = addressParts[1] || "";
-    const state = addressParts[2] || "";
+    const bd = event.buyerDetails;
+    const userName = bd.userName || bd.name;
+    const phone = bd.phone || "+60132201176";
+    const phoneDigits = phone.replace(/[^0-9]/g, "").replace(/^60/, ""); // Strip +60 prefix
+    const streetAddress = bd.addressLine1 || bd.address.split(",")[0] || bd.address;
+    const city = bd.city || "";
+    const stateCode = bd.stateCode || "";
 
     // 6. Fill form step by step (multiple act() calls for reliability)
 
     // Step A: Personal details section
     await stagehand.act(
-      `Fill in the PERSONAL DETAILS section of the form:
-- "Full Name" field: type "${event.buyerDetails.name}"
-- "Email Address" field: type "${event.buyerDetails.email}"
-- "Mobile Number" field: type "${event.buyerDetails.phone || "0123456789"}"
-Do NOT click Submit yet.`
+      `Fill in the PERSONAL DETAILS section of this form:
+- In the "Full Name (as per ID)" field, type: ${userName}
+- In the "Email Address" field, type: ${bd.email}
+- In the "Mobile Number" field, type: ${phoneDigits}
+Do NOT click Submit yet. Do NOT change any other fields.`
     );
-    console.log(`[E-Invoice Form Fill] Step A: Personal details filled`);
+    console.log(`[E-Invoice Form Fill] Step A: Personal details filled (${userName}, ${bd.email})`);
 
     // Step B: Select "Company" claim type
     await stagehand.act(
-      `In the "Claim as" section, click the "Company" radio button or label to select Company type. Do NOT click Submit.`
+      `In the "Claim as" section, click on "Company" to select it as the claim type. Do NOT click Submit.`
     );
     console.log(`[E-Invoice Form Fill] Step B: Company selected`);
 
     // Step C: Fill company details
     await stagehand.act(
-      `Fill in the company details:
-- "Company Name" field: type "${event.buyerDetails.name}"
-- "Company ID - Business Registration Number (BRN)" field: type "${event.buyerDetails.brn}"
-- "Company Tax Identification Number (TIN)" field: type "${event.buyerDetails.tin}"
-- "Company Address" field: type "${streetAddress}"
+      `Fill in the company fields that appeared after selecting Company:
+- "Company Name" field: type ${bd.name}
+- "Company ID - Business Registration Number (BRN)" field: type ${bd.brn}
+- "Company Tax Identification Number (TIN)" field: type ${bd.tin}
+- "Company Address" field: type ${streetAddress}
 Do NOT click Submit yet.`
     );
-    console.log(`[E-Invoice Form Fill] Step C: Company details filled`);
+    console.log(`[E-Invoice Form Fill] Step C: Company details (BRN: ${bd.brn}, TIN: ${bd.tin})`);
 
     // Step D: Select state and city dropdowns
-    if (state || city) {
-      await stagehand.act(
-        `Select the company location:
-${state ? `- Click "Company State" dropdown and select the option closest to "${state}" or "Selangor" if not found` : ""}
-${city ? `- Click "Company City" dropdown and select the option closest to "${city}" or "Petaling Jaya" if not found` : ""}
+    await stagehand.act(
+      `Select the company location from dropdowns:
+- Click the "Company State" dropdown and select "${stateCode || "Selangor"}" from the list
+- After state is selected, click the "Company City" dropdown and select "${city || "Petaling Jaya"}" from the list
 Do NOT click Submit yet.`
-      );
-      console.log(`[E-Invoice Form Fill] Step D: State/city selected`);
-    }
+    );
+    console.log(`[E-Invoice Form Fill] Step D: State/city (${stateCode}, ${city})`);
 
     // Step E: Accept terms and submit
     await stagehand.act(
-      `Check the terms and conditions checkbox if it's not already checked, then click the "Submit" button.`
+      `Check the terms and conditions checkbox if not already checked, then click the "Submit" button to submit the form.`
     );
-    console.log(`[E-Invoice Form Fill] Step E: Terms accepted and form submitted`);
+    console.log(`[E-Invoice Form Fill] Step E: Submitted`);
 
-    // 7. Wait for page response and verify
+    // 7. Wait for page response
     await page.waitForTimeout(5000);
     const postSubmitUrl = page.url();
     console.log(`[E-Invoice Form Fill] Post-submit URL: ${postSubmitUrl}`);
 
-    // Check if form submission succeeded by looking for validation errors or success message
+    // 8. Check for validation errors — if found, try to fix and resubmit once
     const verification = await stagehand.extract({
-      instruction: "Check the current page. Are there any red validation error messages visible (like 'is required' or 'doesn't have enough characters')? Or is there a success/thank you message? Return the status and list any error messages you see.",
+      instruction: "Check the current page. Are there any red validation error messages visible (like 'is required' or 'doesn't have enough characters')? Or is there a success/thank you/confirmation message? Return the status and list any error messages.",
       schema: {
         type: "object" as const,
         properties: {
@@ -235,6 +239,32 @@ Do NOT click Submit yet.`
       },
     });
     console.log(`[E-Invoice Form Fill] Verification: ${JSON.stringify(verification)}`);
+
+    // Retry: if validation errors, ask agent to fix them and resubmit
+    const verStatus = (verification as any)?.pageStatus;
+    if (verStatus === "validation_errors" || verStatus === "form_still_visible") {
+      const errorMsg = (verification as any)?.message || "";
+      console.log(`[E-Invoice Form Fill] Validation errors detected, attempting fix: ${errorMsg.substring(0, 200)}`);
+
+      await stagehand.act(
+        `The form has validation errors: ${errorMsg.substring(0, 300)}
+
+Please fix these errors by filling in any empty required fields with these details:
+- Full Name: ${userName}
+- Email: ${bd.email}
+- Phone: ${phoneDigits}
+- Company Name: ${bd.name}
+- BRN: ${bd.brn}
+- TIN: ${bd.tin}
+- Address: ${streetAddress}
+- State: ${stateCode || "Selangor"}
+- City: ${city || "Petaling Jaya"}
+
+After fixing all errors, check the terms checkbox and click Submit again.`
+      );
+      console.log(`[E-Invoice Form Fill] Retry: fixed and resubmitted`);
+      await page.waitForTimeout(5000);
+    }
 
     // 9. Close session
     await stagehand.close();

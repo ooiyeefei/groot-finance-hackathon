@@ -216,6 +216,7 @@ class DocumentProcessingRequest:
     skip_validation: bool = False  # Explicit validation skip (for testing)
     # Business details for e-invoice form fill (019-lhdn-einv-flow-2)
     business_details: Optional[BusinessDetails] = None
+    raw_business_details: Optional[dict] = None  # Full dict with structured address fields
 
     @classmethod
     def from_dict(cls, data: dict) -> "DocumentProcessingRequest":
@@ -241,6 +242,7 @@ class DocumentProcessingRequest:
             test_mode=data.get("testMode", False),
             skip_validation=data.get("skipValidation", False),
             business_details=business_details,
+            raw_business_details=data.get("businessDetails"),
         )
 
 
