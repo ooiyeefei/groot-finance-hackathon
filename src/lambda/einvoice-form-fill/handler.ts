@@ -83,7 +83,7 @@ async function callGeminiCUA(
   contents: any[],
 ): Promise<any> {
   // Use gemini-2.0-flash-001 which supports computer use tool
-  const model = "gemini-2.0-flash-001";
+  const model = "gemini-3-flash-preview";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
 
   const payload = {
@@ -288,30 +288,40 @@ export async function handler(event: FormFillEvent): Promise<{
     const city = bd.city || "Puchong";
     const state = bd.stateCode || "Selangor";
 
-    const instruction = `You are on a merchant e-invoice submission form. Fill out this form completely and submit it.
+    const instruction = `You are on a merchant e-invoice submission form. You must fill ALL fields and submit.
 
-PERSONAL DETAILS:
-- Full Name: ${userName}
-- Email Address: ${bd.email}
-- Mobile Number: ${phoneLocal} (country code +60 Malaysia is already selected, just type the local digits)
+IMPORTANT RULES:
+- Do NOT click the country flag/code selector for the phone field. Only click the TEXT INPUT area to the RIGHT of the flag.
+- After filling personal details, scroll down to see and fill the rest of the form.
+- You MUST select "Company" not "Individual" in the Claim As section.
+- You MUST fill ALL required fields marked with * before submitting.
+- Keep going until you click Submit and see a confirmation message.
 
-CLAIM TYPE:
-- Select "Company" (not Individual)
+STEP 1 - PERSONAL DETAILS (top of form):
+- "Full Name (as per ID)": ${userName}
+- "Email Address": ${bd.email}
+- "Mobile Number": Click the text input field (NOT the flag), then type: ${phoneLocal}
 
-COMPANY DETAILS:
-- Company Name: ${bd.name}
-- Business Registration Number (BRN): ${bd.brn}
-- Tax Identification Number (TIN): ${bd.tin}
-- Company Address: ${streetAddress}
-- Company State: select "${state}" from dropdown
-- Company City: select "${city}" from dropdown
+STEP 2 - Scroll down to see the DETAILS section
 
-FINAL STEPS:
-- Check the terms and conditions checkbox
-- Click Submit
+STEP 3 - CLAIM TYPE:
+- Click "Company" radio button (NOT Individual)
 
-If you see validation errors after submitting, fix the empty fields and submit again.
-When you see a success/confirmation message, the task is complete.`;
+STEP 4 - COMPANY DETAILS (appear after selecting Company):
+- "Company Name": ${bd.name}
+- "Business Registration Number (BRN)": ${bd.brn}
+- "Tax Identification Number (TIN)": ${bd.tin}
+- "Company Address": ${streetAddress}
+
+STEP 5 - LOCATION:
+- "Company State" dropdown: click to open, select "${state}"
+- "Company City" dropdown: click to open, select "${city}"
+
+STEP 6 - SUBMIT:
+- Check the terms checkbox
+- Click the Submit button
+
+If you see validation errors, fix them and resubmit.`;
 
     console.log(`[Form Fill] Starting Gemini CUA agent loop (max ${MAX_TURNS} turns)`);
 
@@ -340,8 +350,17 @@ When you see a success/confirmation message, the task is complete.`;
       const geminiResponse = await callGeminiCUA(geminiKey, contents);
       const candidate = geminiResponse.candidates?.[0];
       if (!candidate?.content?.parts) {
-        console.log(`[Form Fill] No response from Gemini, ending`);
-        break;
+        console.log(`[Form Fill] No response from Gemini, retrying with fresh screenshot...`);
+        const retryScreenshot = await page.screenshot({ type: "png" });
+        const retryB64 = retryScreenshot.toString("base64");
+        contents.push({
+          role: "user",
+          parts: [
+            { text: "The form is not complete yet. Please continue filling in the remaining empty fields and submit the form." },
+            { inlineData: { mimeType: "image/png", data: retryB64 } },
+          ],
+        });
+        continue;
       }
 
       // Append model response to conversation
