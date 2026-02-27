@@ -251,23 +251,9 @@ export async function handler(event: FormFillEvent): Promise<{
     console.log(`[Form Fill] Browserbase session: ${browserbaseSessionId}`);
     console.log(`[Form Fill] Recording: https://www.browserbase.com/sessions/${browserbaseSessionId}`);
 
-    // 3. Get CDP URL and connect Playwright
-    const debugResp = await fetch(`https://api.browserbase.com/v1/sessions/${browserbaseSessionId}/debug`, {
-      headers: { "x-bb-api-key": apiKey },
-    });
-    if (!debugResp.ok) {
-      throw new Error(`Browserbase debug URL failed: ${debugResp.status}`);
-    }
-    const debugInfo = await debugResp.json();
-    const cdpUrl = debugInfo.debuggerFullscreenUrl || debugInfo.wsUrl || debugInfo.debuggerWsUrl;
-
-    if (!cdpUrl) {
-      // Fallback: connect via Browserbase connect URL
-      const connectUrl = `wss://connect.browserbase.com?apiKey=${apiKey}&sessionId=${browserbaseSessionId}`;
-      browser = await chromium.connectOverCDP(connectUrl);
-    } else {
-      browser = await chromium.connectOverCDP(cdpUrl);
-    }
+    // 3. Connect Playwright via Browserbase WebSocket CDP
+    const connectUrl = `wss://connect.browserbase.com?apiKey=${apiKey}&sessionId=${browserbaseSessionId}`;
+    browser = await chromium.connectOverCDP(connectUrl);
 
     const contexts = browser.contexts();
     const context = contexts[0] || await browser.newContext();
