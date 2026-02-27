@@ -114,33 +114,45 @@ export async function handler(event: FormFillEvent): Promise<{
       status: "in_progress",
     });
 
-    // 2. Initialize Stagehand with Browserbase (let Stagehand manage session)
+    // 2. Create Browserbase session manually (more reliable than browserbaseSessionCreateParams)
+    const sessionResponse = await fetch("https://api.browserbase.com/v1/sessions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-bb-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        projectId,
+        browserSettings: {
+          recordSession: true,
+          viewport: { width: 1280, height: 900 },
+        },
+      }),
+    });
+
+    if (!sessionResponse.ok) {
+      const body = await sessionResponse.text();
+      throw new Error(`Browserbase session creation failed: ${sessionResponse.status} ${body.substring(0, 200)}`);
+    }
+
+    const session = await sessionResponse.json();
+    browserbaseSessionId = session.id;
+    console.log(`[E-Invoice Form Fill] Session: ${browserbaseSessionId}`);
+
+    // 3. Initialize Stagehand with existing session
     const stagehand = new Stagehand({
       env: "BROWSERBASE",
       apiKey,
       projectId,
+      browserbaseSessionID: browserbaseSessionId,
       model: {
         modelName: "google/gemini-2.0-flash",
         apiKey: geminiKey,
       },
-      browserbaseSessionCreateParams: {
-        projectId: projectId!,
-        browserSettings: {
-          solveCaptchas: true,
-          recordSession: true,
-          viewport: { width: 1280, height: 900 },
-        },
-        userMetadata: {
-          claimId: event.expenseClaimId,
-          merchantUrl: event.merchantFormUrl.substring(0, 80),
-        },
-      },
     });
 
     await stagehand.init();
-    browserbaseSessionId = stagehand.browserbaseSessionID;
-    console.log(`[E-Invoice Form Fill] Session: ${browserbaseSessionId}`);
-    console.log(`[E-Invoice Form Fill] Debug URL: ${stagehand.browserbaseDebugURL || "N/A"}`);
+    console.log(`[E-Invoice Form Fill] Stagehand initialized, debug: ${stagehand.browserbaseDebugURL || "N/A"}`);
 
     // 3. Set up network + console logging
     const page = stagehand.context.pages()[0];
