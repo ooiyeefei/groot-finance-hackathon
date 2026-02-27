@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from 'react'
 import { Upload, AlertCircle, CheckCircle } from 'lucide-react'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { compressReceiptImage } from '@/lib/pwa/image-compression'
+import { useToast } from '@/components/ui/toast'
 
 // File validation constants
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'application/pdf']
@@ -50,6 +51,7 @@ export default function FileUploadZone({
   compact = false,
 }: FileUploadZoneProps) {
   const { businessId } = useActiveBusiness()
+  const { addToast } = useToast()
   const [dragActive, setDragActive] = useState(false)
   const [uploadState, setUploadState] = useState<UploadState>({
     uploading: false,
@@ -245,30 +247,34 @@ export default function FileUploadZone({
 
     // Finalize upload state
     if (errors.length === 0) {
+      const successMsg = uploadedDocuments.length === 1
+        ? `Successfully uploaded "${uploadedDocuments[0].fileName}"`
+        : `Successfully uploaded ${uploadedDocuments.length} files`
       setUploadState({
         uploading: false,
         progress: 100,
         error: null,
-        success: uploadedDocuments.length === 1
-          ? `Successfully uploaded "${uploadedDocuments[0].fileName}"`
-          : `Successfully uploaded ${uploadedDocuments.length} files`,
+        success: null,
         uploadedFiles: uploadedDocuments.length,
         totalFiles: files.length
       })
+      addToast({ type: 'success', title: successMsg })
 
       // Notify parent of batch success
       if (allowMultiple && uploadedDocuments.length > 1) {
         onBatchUploadSuccess?.(uploadedDocuments)
       }
     } else if (uploadedDocuments.length > 0) {
+      const successMsg = `Successfully uploaded ${uploadedDocuments.length} of ${files.length} files`
       setUploadState({
         uploading: false,
         progress: 100,
         error: `Some uploads failed: ${errors.join(', ')}`,
-        success: `Successfully uploaded ${uploadedDocuments.length} of ${files.length} files`,
+        success: null,
         uploadedFiles: uploadedDocuments.length,
         totalFiles: files.length
       })
+      addToast({ type: 'warning', title: successMsg, description: `Some uploads failed: ${errors.join(', ')}` })
 
       // Notify parent of partial success
       if (allowMultiple && uploadedDocuments.length > 0) {
@@ -485,12 +491,7 @@ export default function FileUploadZone({
         </div>
       )}
 
-      {uploadState.success && (
-        <div className={`flex items-center space-x-2 ${compact ? 'p-2 text-sm' : 'p-4'} bg-success border border-success rounded-lg`}>
-          <CheckCircle className={compact ? 'w-4 h-4 text-success-foreground flex-shrink-0' : 'w-5 h-5 text-success-foreground'} />
-          <p className="text-success-foreground">{uploadState.success}</p>
-        </div>
-      )}
+      {/* Success messages now use toast notifications */}
 
     </div>
   )
