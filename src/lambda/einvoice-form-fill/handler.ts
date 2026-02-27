@@ -1,15 +1,15 @@
 /**
  * E-Invoice Form Fill Lambda (019-lhdn-einv-flow-2)
  *
- * Node.js Lambda that uses Stagehand + Browserbase to fill
+ * Node.js Lambda that uses Stagehand agent() + Browserbase to fill
  * merchant buyer-info forms with company details.
+ *
+ * Uses agent() (CUA mode) for autonomous multi-step form filling
+ * instead of act() which is designed for single atomic actions.
  *
  * Triggered by:
  * - Python document-processor Lambda (auto, after QR detection)
  * - Vercel API route (manual, user clicks "Request E-Invoice")
- *
- * Self-contained: creates request log, sets emailRef on claim,
- * fills form, reports result — all via Convex HTTP API.
  */
 
 import { Stagehand } from "@browserbasehq/stagehand";
@@ -19,12 +19,10 @@ import { Stagehand } from "@browserbasehq/stagehand";
 // ============================================================
 
 interface FormFillEvent {
-  /** Merchant form URL from QR code */
   merchantFormUrl: string;
-  /** Buyer company details */
   buyerDetails: {
     name: string;
-    userName?: string; // User's personal name (for "Full Name" field)
+    userName?: string;
     tin: string;
     brn: string;
     address: string;
@@ -34,16 +32,13 @@ interface FormFillEvent {
     email: string;
     phone?: string;
   };
-  /** Extracted receipt data (for reference number) */
   extractedData?: {
     referenceNumber?: string;
     vendorName?: string;
     amount?: number;
     date?: string;
   };
-  /** Email ref token (derived from claim ID first 10 chars) */
   emailRef: string;
-  /** Convex expense claim ID */
   expenseClaimId: string;
 }
 
@@ -98,7 +93,6 @@ export async function handler(event: FormFillEvent): Promise<{
   );
 
   try {
-    // Validate required env vars
     const apiKey = process.env.BROWSERBASE_API_KEY;
     const projectId = process.env.BROWSERBASE_PROJECT_ID;
     const geminiKey = process.env.GEMINI_API_KEY;
@@ -110,7 +104,7 @@ export async function handler(event: FormFillEvent): Promise<{
       throw new Error("GEMINI_API_KEY not configured");
     }
 
-    // 1. Tell Convex we're starting (set emailRef + status on claim)
+    // 1. Tell Convex we're starting
     await convexMutation("functions/system:reportEinvoiceFormFillResult", {
       expenseClaimId: event.expenseClaimId,
       emailRef: event.emailRef,
@@ -118,7 +112,7 @@ export async function handler(event: FormFillEvent): Promise<{
       status: "in_progress",
     });
 
-    // 2. Create Browserbase session manually (more reliable than browserbaseSessionCreateParams)
+    // 2. Create Browserbase session
     const sessionResponse = await fetch("https://api.browserbase.com/v1/sessions", {
       method: "POST",
       headers: {
@@ -143,7 +137,7 @@ export async function handler(event: FormFillEvent): Promise<{
     browserbaseSessionId = session.id;
     console.log(`[E-Invoice Form Fill] Session: ${browserbaseSessionId}`);
 
-    // 3. Initialize Stagehand with existing session
+    // 3. Initialize Stagehand
     const stagehand = new Stagehand({
       env: "BROWSERBASE",
       apiKey,
@@ -156,135 +150,93 @@ export async function handler(event: FormFillEvent): Promise<{
     });
 
     await stagehand.init();
-    console.log(`[E-Invoice Form Fill] Stagehand initialized, debug: ${stagehand.browserbaseDebugURL || "N/A"}`);
-
-    // 3. Get page reference (Stagehand wraps Playwright — page.on events not supported)
-    const page = stagehand.context.pages()[0];
+    console.log(`[E-Invoice Form Fill] Stagehand initialized`);
 
     // 4. Navigate to merchant form
+    const page = stagehand.context.pages()[0];
     const response = await page.goto(event.merchantFormUrl, { waitUntil: "networkidle", timeout: 30000 });
     console.log(`[E-Invoice Form Fill] Navigated to: ${page.url()}, status: ${response?.status()}`);
+    await page.waitForTimeout(2000);
 
-    // 5. Wait for page to fully load
-    await page.waitForTimeout(3000);
-    console.log(`[E-Invoice Form Fill] Page loaded, starting form fill`);
-
+    // 5. Build buyer details for the agent instruction
     const bd = event.buyerDetails;
     const userName = bd.userName || bd.name;
-    const streetAddress = bd.addressLine1 || bd.address.split(",")[0] || bd.address;
-    const city = bd.city || "";
-    const stateCode = bd.stateCode || "";
-
-    // 6. Fill form step by step (multiple act() calls for reliability)
-
-    // Step A: Personal details section
-    // Phone: provide multiple formats — let agent pick what fits the field
     const phoneRaw = bd.phone || "+60132201176";
-    const phoneLocal = phoneRaw.replace(/[^0-9]/g, "").replace(/^60/, ""); // e.g. "132201176"
-    const phoneFull = phoneRaw.replace(/[^0-9+]/g, ""); // e.g. "+60132201176"
-    await stagehand.act(
-      `Fill in the PERSONAL DETAILS section of this form:
-- In the "Full Name" or "Full Name (as per ID)" field, type: ${userName}
-- In the "Email Address" or "Email" field, type: ${bd.email}
-- For the "Mobile Number" or "Phone" field: If there's a country code selector already showing "+60" or "Malaysia", just type the local number: ${phoneLocal}. If the field expects a full number with country code, type: ${phoneFull}. If the field has a separate country code dropdown, select Malaysia (+60) first then type: ${phoneLocal}
-Do NOT click Submit yet. Do NOT change any other fields.`
-    );
-    console.log(`[E-Invoice Form Fill] Step A: Personal details filled (${userName}, ${bd.email}, phone: ${phoneLocal})`);
+    const phoneLocal = phoneRaw.replace(/[^0-9]/g, "").replace(/^60/, "");
+    const streetAddress = bd.addressLine1 || bd.address.split(",")[0] || bd.address;
+    const city = bd.city || "Puchong";
+    const state = bd.stateCode || "Selangor";
 
-    // Step B: Select "Company" claim type
-    await stagehand.act(
-      `In the "Claim as" section, click on "Company" to select it as the claim type. Do NOT click Submit.`
-    );
-    console.log(`[E-Invoice Form Fill] Step B: Company selected`);
+    console.log(`[E-Invoice Form Fill] Buyer: ${userName}, ${bd.email}, ${bd.tin}, BRN: ${bd.brn}`);
 
-    // Step C: Fill company details
-    await stagehand.act(
-      `Fill in the company fields that appeared after selecting Company:
-- "Company Name" field: type ${bd.name}
-- "Company ID - Business Registration Number (BRN)" field: type ${bd.brn}
-- "Company Tax Identification Number (TIN)" field: type ${bd.tin}
-- "Company Address" field: type ${streetAddress}
-Do NOT click Submit yet.`
-    );
-    console.log(`[E-Invoice Form Fill] Step C: Company details (BRN: ${bd.brn}, TIN: ${bd.tin})`);
-
-    // Step D: Select state and city dropdowns
-    await stagehand.act(
-      `Select the company location from dropdowns:
-- Click the "Company State" dropdown and select "${stateCode || "Selangor"}" from the list
-- After state is selected, click the "Company City" dropdown and select "${city || "Petaling Jaya"}" from the list
-Do NOT click Submit yet.`
-    );
-    console.log(`[E-Invoice Form Fill] Step D: State/city (${stateCode}, ${city})`);
-
-    // Step E: Accept terms and submit
-    await stagehand.act(
-      `Check the terms and conditions checkbox if not already checked, then click the "Submit" button to submit the form.`
-    );
-    console.log(`[E-Invoice Form Fill] Step E: Submitted`);
-
-    // 7. Wait for page response
-    await page.waitForTimeout(5000);
-    const postSubmitUrl = page.url();
-    console.log(`[E-Invoice Form Fill] Post-submit URL: ${postSubmitUrl}`);
-
-    // 8. Check for validation errors — if found, try to fix and resubmit once
-    const verification = await stagehand.extract({
-      instruction: "Check the current page. Are there any red validation error messages visible (like 'is required' or 'doesn't have enough characters')? Or is there a success/thank you/confirmation message? Return the status and list any error messages.",
-      schema: {
-        type: "object" as const,
-        properties: {
-          pageStatus: { type: "string", description: "One of: success, validation_errors, error, form_still_visible, unknown" },
-          message: { type: "string", description: "The success message or list of validation errors visible" },
-        },
-        required: ["pageStatus", "message"],
+    // 6. Use agent() for autonomous multi-step form filling
+    // agent() handles the entire workflow: identify fields, fill them, handle dropdowns,
+    // check terms, submit, and verify — much more reliable than multiple act() calls
+    const agent = stagehand.agent({
+      model: {
+        modelName: "google/gemini-2.0-flash",
+        apiKey: geminiKey,
       },
+      systemPrompt: `You are an expert at filling web forms accurately. You must fill EVERY required field before submitting.
+When you encounter a phone number field with a country code selector already showing "+60" or "Malaysia", only type the local digits without the country code.
+When you encounter dropdown/select fields, click them first to open the options list, then click the matching option.
+Always check the terms/conditions checkbox before submitting.
+After clicking Submit, wait and verify if the form was accepted or if there are validation errors. If there are errors, fix them and resubmit.`,
     });
-    console.log(`[E-Invoice Form Fill] Verification: ${JSON.stringify(verification)}`);
 
-    // Retry: if validation errors, ask agent to fix them and resubmit
-    const verStatus = (verification as any)?.pageStatus;
-    if (verStatus === "validation_errors" || verStatus === "form_still_visible") {
-      const errorMsg = (verification as any)?.message || "";
-      console.log(`[E-Invoice Form Fill] Validation errors detected, attempting fix: ${errorMsg.substring(0, 200)}`);
+    const agentResult = await agent.execute({
+      instruction: `You are on a merchant e-invoice form. Fill out this form completely and submit it.
 
-      await stagehand.act(
-        `The form has validation errors: ${errorMsg.substring(0, 300)}
+STEP 1 - PERSONAL DETAILS:
+- "Full Name (as per ID)" or similar name field: ${userName}
+- "Email Address" or email field: ${bd.email}
+- "Mobile Number" or phone field: ${phoneLocal} (the country code +60 is already selected)
 
-Please fix these errors by filling in any empty required fields:
-- Full Name: ${userName}
-- Email: ${bd.email}
-- Phone: try ${phoneLocal} first. If validation says not enough characters, try ${phoneFull} or 0${phoneLocal}
-- Company Name: ${bd.name}
-- BRN: ${bd.brn}
-- TIN: ${bd.tin}
-- Address: ${streetAddress}
-- State dropdown: select "${stateCode || "Selangor"}"
-- City dropdown: select "${city || "Petaling Jaya"}"
+STEP 2 - CLAIM TYPE:
+- Select "Company" (not "Individual") in the "Claim as" section
 
-After fixing all errors, make sure the terms checkbox is checked and click Submit.`
-      );
-      console.log(`[E-Invoice Form Fill] Retry: fixed and resubmitted`);
-      await page.waitForTimeout(5000);
-    }
+STEP 3 - COMPANY DETAILS (these fields appear after selecting Company):
+- "Company Name": ${bd.name}
+- "Company ID - Business Registration Number (BRN)": ${bd.brn}
+- "Company Tax Identification Number (TIN)": ${bd.tin}
+- "Company Address": ${streetAddress}
+- "SST Registration Number": leave empty if not required
 
-    // 9. Close session
+STEP 4 - LOCATION DROPDOWNS:
+- "Company State" dropdown: select "${state}"
+- "Company City" dropdown: select "${city}"
+
+STEP 5 - SUBMIT:
+- Check the terms and conditions checkbox
+- Click the Submit button
+
+STEP 6 - VERIFY:
+- After submitting, check if there are any validation error messages
+- If there are errors, fix them and submit again
+- Report whether the form was submitted successfully`,
+      maxSteps: 25,
+    });
+
+    console.log(`[E-Invoice Form Fill] Agent result: success=${agentResult.success}, actions=${agentResult.actions?.length || 0}`);
+    console.log(`[E-Invoice Form Fill] Agent message: ${(agentResult as any).message?.substring(0, 300) || "N/A"}`);
+
+    // 7. Close session
     await stagehand.close();
 
     const durationMs = Date.now() - startTime;
-    const verificationStatus = (verification as any)?.pageStatus || "unknown";
-    console.log(`[E-Invoice Form Fill] Completed in ${durationMs}ms, verification: ${verificationStatus}`);
+    const isSuccess = agentResult.success === true;
+    console.log(`[E-Invoice Form Fill] Completed in ${durationMs}ms, success: ${isSuccess}`);
 
-    // 10. Report result to Convex
+    // 8. Report result to Convex
     await convexMutation("functions/system:reportEinvoiceFormFillResult", {
       expenseClaimId: event.expenseClaimId,
       emailRef: event.emailRef,
-      status: (verificationStatus === "error" || verificationStatus === "validation_errors") ? "failed" : "success",
+      status: isSuccess ? "success" : "failed",
       browserbaseSessionId,
       durationMs,
     });
 
-    return { success: true, durationMs };
+    return { success: isSuccess, durationMs };
   } catch (error) {
     const durationMs = Date.now() - startTime;
     const errorMessage = error instanceof Error ? error.message : `Unknown error: ${JSON.stringify(error)}`;
@@ -293,7 +245,6 @@ After fixing all errors, make sure the terms checkbox is checked and click Submi
       console.error(`[E-Invoice Form Fill] Stack: ${error.stack.substring(0, 500)}`);
     }
 
-    // Report failure to Convex
     try {
       await convexMutation("functions/system:reportEinvoiceFormFillResult", {
         expenseClaimId: event.expenseClaimId,
