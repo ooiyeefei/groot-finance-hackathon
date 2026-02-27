@@ -862,8 +862,8 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
         {/* Modal Content - Two Pane Layout (stacks vertically on mobile) */}
         <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-y-auto md:overflow-hidden">
           {/* Left Pane - Visual (Scrollable) - Full width on mobile, half on desktop */}
-          <div className="w-full md:w-1/2 md:border-r border-border flex flex-col shrink-0 md:min-h-0">
-            <div className="overflow-y-auto flex-1 p-6">
+          <div className="w-full md:w-1/2 md:border-r border-border flex flex-col md:shrink-0 md:min-h-0">
+            <div className="md:overflow-y-auto md:flex-1 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h4 className="text-sm font-medium text-foreground flex items-center">
                   <FileText className="w-4 h-4 mr-2" />
@@ -894,7 +894,7 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
                 <div
                   ref={scrollContainerRef}
                   onScroll={handleScroll}
-                  className="overflow-y-auto bg-muted/30 rounded-lg"
+                  className="overflow-y-auto bg-muted/30 rounded-lg doc-preview-scroll"
                   style={{ maxHeight: '75vh' }}
                 >
                   {pageImageUrls.length > 0 ? (

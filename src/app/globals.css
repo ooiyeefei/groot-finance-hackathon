@@ -1043,4 +1043,11 @@ main .p-6 {
     flex-wrap: wrap !important;
     gap: 0.375rem !important;
   }
+
+  /* ---- Document Analysis Modal mobile layout ---- */
+
+  /* Limit document preview height so summary is visible below */
+  .doc-preview-scroll {
+    max-height: 40vh !important;
+  }
 }
