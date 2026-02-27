@@ -269,9 +269,18 @@ export async function handler(event: FormFillEvent): Promise<{
 
     const page = await browser.newPage({ viewport: { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } });
 
-    // 3. Navigate to merchant form
-    await page.goto(event.merchantFormUrl, { waitUntil: "networkidle", timeout: 30000 });
-    console.log(`[Form Fill] Navigated to: ${page.url()}`);
+    // 3. Navigate to merchant form (use domcontentloaded — networkidle times out on heavy sites)
+    const navResponse = await page.goto(event.merchantFormUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
+    const navStatus = navResponse?.status() || 0;
+    console.log(`[Form Fill] Navigated to: ${page.url()}, status: ${navStatus}`);
+
+    // Check for bot protection / access denied
+    if (navStatus === 403 || navStatus === 401 || navStatus === 503) {
+      throw new Error(`Merchant site returned ${navStatus} — likely bot protection. URL: ${event.merchantFormUrl.substring(0, 80)}`);
+    }
+
+    // Wait for page to stabilize
+    try { await page.waitForLoadState("networkidle", { timeout: 10000 }); } catch { /* heavy pages may never reach networkidle */ }
     await new Promise((r) => setTimeout(r, 2000));
 
     // 4. Build buyer details
