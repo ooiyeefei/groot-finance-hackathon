@@ -161,52 +161,75 @@ export async function handler(event: FormFillEvent): Promise<{
     const response = await page.goto(event.merchantFormUrl, { waitUntil: "networkidle", timeout: 30000 });
     console.log(`[E-Invoice Form Fill] Navigated to: ${page.url()}, status: ${response?.status()}`);
 
-    // 5. Wait for page to fully load, then observe form structure
-    await page.waitForTimeout(2000);
-    const formFields = await stagehand.observe({
-      instruction: "Find all form fields, input boxes, dropdowns, and submit buttons on this page",
-    });
-    console.log(`[E-Invoice Form Fill] Found ${formFields.length} form elements`);
-
-    // 5. Fill form with buyer details
-    const refNumber = event.extractedData?.referenceNumber;
-    await stagehand.act(
-      `Fill in the buyer information form with these details:
-- Company Name / Buyer Name: ${event.buyerDetails.name}
-- TIN (Tax Identification Number): ${event.buyerDetails.tin}
-- BRN (Business Registration Number): ${event.buyerDetails.brn}
-- Address: ${event.buyerDetails.address}
-- Email: ${event.buyerDetails.email}
-${event.buyerDetails.phone ? `- Phone: ${event.buyerDetails.phone}` : ""}
-${refNumber ? `- Invoice/Receipt Reference Number: ${refNumber}` : ""}
-
-Fill all matching fields. If a field doesn't exist, skip it.`
-    );
-    console.log(`[E-Invoice Form Fill] Form fields filled`);
-
-    // 6. Take screenshot before submit
-    const preSubmitScreenshot = await page.screenshot({ type: "jpeg", quality: 60 });
-    console.log(`[E-Invoice Form Fill] Pre-submit screenshot: ${preSubmitScreenshot.length} bytes`);
-
-    // 7. Submit the form
-    await stagehand.act("Click the submit button to submit the form");
-    console.log(`[E-Invoice Form Fill] Form submitted, waiting for response...`);
-
-    // 8. Wait for page response and verify
+    // 5. Wait for page to fully load
     await page.waitForTimeout(3000);
+    console.log(`[E-Invoice Form Fill] Page loaded, starting form fill`);
+
+    // Parse address into parts for structured forms
+    const addressParts = event.buyerDetails.address.split(",").map((s) => s.trim());
+    const streetAddress = addressParts[0] || event.buyerDetails.address;
+    const city = addressParts[1] || "";
+    const state = addressParts[2] || "";
+
+    // 6. Fill form step by step (multiple act() calls for reliability)
+
+    // Step A: Personal details section
+    await stagehand.act(
+      `Fill in the PERSONAL DETAILS section of the form:
+- "Full Name" field: type "${event.buyerDetails.name}"
+- "Email Address" field: type "${event.buyerDetails.email}"
+- "Mobile Number" field: type "${event.buyerDetails.phone || "0123456789"}"
+Do NOT click Submit yet.`
+    );
+    console.log(`[E-Invoice Form Fill] Step A: Personal details filled`);
+
+    // Step B: Select "Company" claim type
+    await stagehand.act(
+      `In the "Claim as" section, click the "Company" radio button or label to select Company type. Do NOT click Submit.`
+    );
+    console.log(`[E-Invoice Form Fill] Step B: Company selected`);
+
+    // Step C: Fill company details
+    await stagehand.act(
+      `Fill in the company details:
+- "Company Name" field: type "${event.buyerDetails.name}"
+- "Company ID - Business Registration Number (BRN)" field: type "${event.buyerDetails.brn}"
+- "Company Tax Identification Number (TIN)" field: type "${event.buyerDetails.tin}"
+- "Company Address" field: type "${streetAddress}"
+Do NOT click Submit yet.`
+    );
+    console.log(`[E-Invoice Form Fill] Step C: Company details filled`);
+
+    // Step D: Select state and city dropdowns
+    if (state || city) {
+      await stagehand.act(
+        `Select the company location:
+${state ? `- Click "Company State" dropdown and select the option closest to "${state}" or "Selangor" if not found` : ""}
+${city ? `- Click "Company City" dropdown and select the option closest to "${city}" or "Petaling Jaya" if not found` : ""}
+Do NOT click Submit yet.`
+      );
+      console.log(`[E-Invoice Form Fill] Step D: State/city selected`);
+    }
+
+    // Step E: Accept terms and submit
+    await stagehand.act(
+      `Check the terms and conditions checkbox if it's not already checked, then click the "Submit" button.`
+    );
+    console.log(`[E-Invoice Form Fill] Step E: Terms accepted and form submitted`);
+
+    // 7. Wait for page response and verify
+    await page.waitForTimeout(5000);
     const postSubmitUrl = page.url();
     console.log(`[E-Invoice Form Fill] Post-submit URL: ${postSubmitUrl}`);
 
-    const postSubmitScreenshot = await page.screenshot({ type: "jpeg", quality: 60 });
-    console.log(`[E-Invoice Form Fill] Post-submit screenshot: ${postSubmitScreenshot.length} bytes`);
-
+    // Check if form submission succeeded by looking for validation errors or success message
     const verification = await stagehand.extract({
-      instruction: "Look at the current page. Is there a success/confirmation message, an error message, or is the form still showing? Describe what you see.",
+      instruction: "Check the current page. Are there any red validation error messages visible (like 'is required' or 'doesn't have enough characters')? Or is there a success/thank you message? Return the status and list any error messages you see.",
       schema: {
         type: "object" as const,
         properties: {
-          pageStatus: { type: "string", description: "One of: success, error, form_still_visible, unknown" },
-          message: { type: "string", description: "The main message or text visible on the page" },
+          pageStatus: { type: "string", description: "One of: success, validation_errors, error, form_still_visible, unknown" },
+          message: { type: "string", description: "The success message or list of validation errors visible" },
         },
         required: ["pageStatus", "message"],
       },
@@ -224,7 +247,7 @@ Fill all matching fields. If a field doesn't exist, skip it.`
     await convexMutation("functions/system:reportEinvoiceFormFillResult", {
       expenseClaimId: event.expenseClaimId,
       emailRef: event.emailRef,
-      status: verificationStatus === "error" ? "failed" : "success",
+      status: (verificationStatus === "error" || verificationStatus === "validation_errors") ? "failed" : "success",
       browserbaseSessionId,
       durationMs,
     });
