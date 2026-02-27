@@ -42,7 +42,7 @@ const BUYER = {
 // ── Gemini CUA API ──────────────────────────────────────────
 
 async function callGeminiCUA(contents: any[]): Promise<any> {
-  const model = "gemini-3-flash-preview";
+  const model = "gemini-2.5-computer-use-preview-10-2025";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
 
   const payload = {
@@ -336,14 +336,15 @@ If you see validation errors, fix them and resubmit.`;
       const newB64 = newScreenshot.toString("base64");
       const currentUrl = page.url();
 
+      // Google CUA spec: screenshot goes INSIDE function_response.parts
       functionResponses.push({
         functionResponse: {
           name: fc.name,
           response: { url: currentUrl },
+          parts: [{
+            inlineData: { mimeType: "image/png", data: newB64 },
+          }],
         },
-      });
-      functionResponses.push({
-        inlineData: { mimeType: "image/png", data: newB64 },
       });
     }
 

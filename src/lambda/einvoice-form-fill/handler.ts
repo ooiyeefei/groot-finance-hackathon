@@ -82,8 +82,8 @@ async function callGeminiCUA(
   geminiKey: string,
   contents: any[],
 ): Promise<any> {
-  // Use gemini-2.0-flash-001 which supports computer use tool
-  const model = "gemini-3-flash-preview";
+  // Dedicated CUA model — purpose-built for computer use tasks
+  const model = "gemini-2.5-computer-use-preview-10-2025";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
 
   const payload = {
@@ -265,6 +265,23 @@ export async function handler(event: FormFillEvent): Promise<{
     console.log(`[Form Fill] Navigated to: ${page.url()}`);
     await new Promise((r) => setTimeout(r, 2000));
 
+    // 4b. Pre-analyze form fields so we can tell the model what to expect
+    let formFieldsSummary = "";
+    try {
+      const formInfo = await page.evaluate(() => {
+        const labels = Array.from(document.querySelectorAll('label, [class*="label"]'))
+          .map(el => el.textContent?.trim())
+          .filter(Boolean)
+          .slice(0, 30);
+        const inputCount = document.querySelectorAll('input:not([type="hidden"]), select, textarea').length;
+        return { labels, inputCount };
+      });
+      formFieldsSummary = `\n\nFORM ANALYSIS: This form has ${formInfo.inputCount} input fields. Field labels found: ${formInfo.labels.join(', ')}. You MUST fill ALL of these fields before submitting.`;
+      console.log(`[Form Fill] Form analysis: ${formInfo.inputCount} inputs, labels: ${formInfo.labels.slice(0, 10).join(', ')}...`);
+    } catch (e) {
+      console.log(`[Form Fill] Form analysis failed (non-fatal): ${e}`);
+    }
+
     // 5. Pre-fill phone field with Playwright (deterministic — CUA struggles with country code selectors)
     const bd = event.buyerDetails;
     const userName = bd.userName || bd.name;
@@ -352,7 +369,7 @@ STEP 6 - SUBMIT:
 - Check the terms checkbox
 - Click the Submit button
 
-If you see validation errors, fix them and resubmit. Do NOT change the phone field.`;
+If you see validation errors, fix them and resubmit. Do NOT change the phone field.${formFieldsSummary}`;
 
     console.log(`[Form Fill] Starting Gemini CUA agent loop (max ${MAX_TURNS} turns)`);
 
@@ -413,8 +430,9 @@ If you see validation errors, fix them and resubmit. Do NOT change the phone fie
         break;
       }
 
-      // Execute each action
-      const functionResponses: any[] = [];
+      // Execute each action and build function responses
+      // IMPORTANT: screenshot must be INSIDE function_response.parts per Google CUA spec
+      const functionResponseParts: any[] = [];
       for (const fc of functionCalls) {
         const action: GeminiAction = { name: fc.name, args: fc.args || {} };
         console.log(`[Form Fill]   Action: ${action.name}${action.args.text ? ` "${action.args.text.substring(0, 50)}"` : ""}${action.args.x !== undefined ? ` (${action.args.x},${action.args.y})` : ""}`);
@@ -431,22 +449,22 @@ If you see validation errors, fix them and resubmit. Do NOT change the phone fie
         const newB64 = newScreenshot.toString("base64");
         const currentUrl = page.url();
 
-        functionResponses.push({
+        // Google CUA spec: screenshot goes inside function_response.parts
+        functionResponseParts.push({
           functionResponse: {
             name: action.name,
             response: { url: currentUrl },
+            parts: [{
+              inlineData: { mimeType: "image/png", data: newB64 },
+            }],
           },
-        });
-        // Attach screenshot as inline data in the function response
-        functionResponses.push({
-          inlineData: { mimeType: "image/png", data: newB64 },
         });
       }
 
       // Send function responses back to Gemini
       contents.push({
         role: "user",
-        parts: functionResponses,
+        parts: functionResponseParts,
       });
     }
 
