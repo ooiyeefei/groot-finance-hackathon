@@ -463,7 +463,17 @@ def handler(event: dict, context: DurableContext):
                 return {"claimId": doc_id, "emailRef": None, "requestLogId": None}
             else:
                 # Include QR detection results in processing metadata
+                # Priority: QR code URL > OCR text URL (from extraction)
                 merchant_form_url = qr_result.get("merchant_form_url") if qr_result else None
+                if not merchant_form_url:
+                    # Fallback: check if Gemini extracted a merchant e-invoice URL from receipt text
+                    ocr_url = extraction_result.get("merchant_einvoice_url")
+                    if ocr_url:
+                        # Ensure it has a protocol
+                        if not ocr_url.startswith("http"):
+                            ocr_url = "https://" + ocr_url
+                        merchant_form_url = ocr_url
+                        print(f"[{doc_id}] Using OCR-extracted e-invoice URL: {ocr_url[:80]}")
                 if merchant_form_url:
                     extraction_result["merchant_form_url"] = merchant_form_url
                     extraction_result["detected_qr_codes"] = qr_result.get("detected_qr_codes", [])

@@ -91,6 +91,12 @@ class CoreReceiptData(BaseModel):
         description="Business justification, e.g., 'Client meeting lunch'"
     )
 
+    # E-Invoice URL (019-lhdn-einv-flow-2)
+    merchant_einvoice_url: Optional[str] = Field(
+        None,
+        description="URL for e-invoice request if printed on receipt (e.g. 'www.mcdonalds.com.my/contact/invoice'). Look for text like 'e-Invoice', 'e-invois', 'LHDN' near a URL. Include full URL with domain. Return null if not found."
+    )
+
     # Quality
     confidence_score: float = Field(..., ge=0.0, le=1.0, description="Overall confidence")
     extraction_quality: Literal['high', 'medium', 'low'] = Field(..., description="Quality assessment")
