@@ -513,7 +513,16 @@ def handler(event: dict, context: DurableContext):
             if request.domain != "expense_claims":
                 return {"triggered": False, "reason": "not_expense_claims"}
 
+            # Check both QR result and OCR-extracted URL from extraction
             merchant_form_url = qr_result.get("merchant_form_url") if qr_result else None
+            if not merchant_form_url:
+                # Fallback: check OCR-extracted URL from Gemini extraction
+                ocr_url = extraction_result.get("merchant_einvoice_url")
+                if ocr_url:
+                    if not ocr_url.startswith("http"):
+                        ocr_url = "https://" + ocr_url
+                    merchant_form_url = ocr_url
+                    print(f"[{doc_id}] E-invoice: using OCR-extracted URL for form fill: {ocr_url[:80]}")
             if not merchant_form_url:
                 return {"triggered": False, "reason": "no_merchant_form_url"}
 
