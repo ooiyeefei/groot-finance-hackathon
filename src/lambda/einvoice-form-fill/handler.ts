@@ -147,7 +147,8 @@ export async function handler(event: FormFillEvent): Promise<{
     await stagehand.init();
 
     // 4. Navigate to merchant form
-    await stagehand.act(`Navigate to ${event.merchantFormUrl}`);
+    await stagehand.page.goto(event.merchantFormUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+    console.log(`[E-Invoice Form Fill] Navigated to: ${event.merchantFormUrl.substring(0, 80)}`);
 
     // 5. Fill form with buyer details + receipt reference
     const refNumber = event.extractedData?.referenceNumber;
@@ -163,19 +164,39 @@ ${refNumber ? `- Invoice/Receipt Reference Number: ${refNumber}` : ""}
 Then submit the form by clicking the submit button.`
     );
 
-    // 6. Close session
+    // 6. Verify submission — wait for page response and extract result
+    await new Promise((r) => setTimeout(r, 3000)); // Wait for page to update after submit
+    const pageUrl = stagehand.page.url();
+    console.log(`[E-Invoice Form Fill] Page URL after submit: ${pageUrl}`);
+
+    const verification = await stagehand.extract({
+      instruction: "Look at the current page. Is there a success message, confirmation, error message, or form still showing? Return the main visible text/message on the page.",
+      schema: {
+        type: "object" as const,
+        properties: {
+          pageStatus: { type: "string", description: "One of: success, error, form_still_visible, unknown" },
+          message: { type: "string", description: "The main message or text visible on the page" },
+        },
+        required: ["pageStatus", "message"],
+      },
+    });
+    console.log(`[E-Invoice Form Fill] Verification: ${JSON.stringify(verification)}`);
+
+    // 7. Close session
     await stagehand.close();
 
     const durationMs = Date.now() - startTime;
-    console.log(`[E-Invoice Form Fill] Success in ${durationMs}ms`);
+    const verificationStatus = (verification as any)?.pageStatus || "unknown";
+    console.log(`[E-Invoice Form Fill] Completed in ${durationMs}ms, verification: ${verificationStatus}`);
 
-    // 7. Report success to Convex
+    // 8. Report result to Convex (include verification)
     await convexMutation("functions/system:reportEinvoiceFormFillResult", {
       expenseClaimId: event.expenseClaimId,
       emailRef: event.emailRef,
-      status: "success",
+      status: verificationStatus === "error" ? "failed" : "success",
       browserbaseSessionId,
       durationMs,
+      verificationMessage: (verification as any)?.message || undefined,
     });
 
     return { success: true, durationMs };
