@@ -157,28 +157,25 @@ export class DocumentProcessingStack extends cdk.Stack {
       entry: path.join(__dirname, '../../src/lambda/einvoice-form-fill/handler.ts'),
       handler: 'handler',
       runtime: lambda.Runtime.NODEJS_20_X,
-      architecture: lambda.Architecture.ARM_64, // Cost-optimized
+      architecture: lambda.Architecture.X86_64, // Required for @sparticuz/chromium binary
       functionName: 'finanseal-einvoice-form-fill',
-      description: 'E-Invoice form fill via Gemini CUA + Browserbase (019-lhdn-einv-flow-2)',
-      memorySize: 512,
-      timeout: cdk.Duration.minutes(5), // Form fill typically takes 30-60s
+      description: 'E-Invoice form fill via Gemini CUA + @sparticuz/chromium (019-lhdn-einv-flow-2)',
+      memorySize: 1024, // Chromium needs ~512MB, plus Lambda overhead
+      timeout: cdk.Duration.minutes(5),
       logGroup: formFillLogGroup,
       environment: {
-        BROWSERBASE_API_KEY: process.env.BROWSERBASE_API_KEY || '',
-        BROWSERBASE_PROJECT_ID: process.env.BROWSERBASE_PROJECT_ID || '',
         GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
         NEXT_PUBLIC_CONVEX_URL: 'https://kindhearted-lynx-129.convex.cloud',
       },
       bundling: {
-        externalModules: ['@aws-sdk/*', 'playwright-core'],
+        externalModules: ['@aws-sdk/*', 'playwright-core', '@sparticuz/chromium'],
         minify: true,
         sourceMap: true,
-        // playwright-core needs package.json at runtime — mark external and install via afterBundling
         commandHooks: {
           beforeBundling: () => [],
           beforeInstall: () => [],
           afterBundling: (_inputDir: string, outputDir: string) => [
-            `cd ${outputDir} && npm init -y --quiet && npm install playwright-core --production --quiet`,
+            `cd ${outputDir} && npm init -y --quiet && npm install playwright-core @sparticuz/chromium --production --quiet`,
           ],
         },
       },
