@@ -1,14 +1,14 @@
 'use client'
 
 import { createPortal } from 'react-dom'
-import { X, Edit, Trash2, Calendar, Building, FileText, DollarSign, Hash, Eye, Copy, EyeOff } from 'lucide-react'
+import { X, Edit, Trash2, Calendar, Building, FileText, DollarSign, Hash, Eye, Copy, EyeOff, ImageIcon } from 'lucide-react'
 import type { AccountingEntry } from '@/domains/accounting-entries/lib/data-access'
 import type { SupportedCurrency } from '@/domains/accounting-entries/types'
 import { formatCurrency, getAccountingEntryTypeColor, getAccountingEntryTypeIcon } from '@/domains/accounting-entries/hooks/use-accounting-entries'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import MultiPageDocumentPreview from './multi-page-document-preview'
 import { Button } from '@/components/ui/button'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { formatBusinessDate } from '@/lib/utils'
 
 interface AccountingEntryDetailModalProps {
@@ -33,7 +33,14 @@ export default function AccountingEntryDetailModal({
     isOpen: false,
     isLoading: false
   })
-  const [isPreviewVisible, setIsPreviewVisible] = useState(true) // Auto-show if document exists
+  // Start with preview hidden — auto-show only on desktop (lg+)
+  const [isPreviewVisible, setIsPreviewVisible] = useState(false)
+
+  useEffect(() => {
+    if (transaction.source_record_id && window.innerWidth >= 1024) {
+      setIsPreviewVisible(true)
+    }
+  }, [])
 
   const handleDeleteClick = () => {
     setDeleteConfirmation({
@@ -152,12 +159,29 @@ export default function AccountingEntryDetailModal({
         </div>
 
         {/* Modal Content - Dynamic Layout Based on Preview Visibility */}
-        <div className="flex-1 flex flex-col lg:flex-row min-h-0">
-          {/* Document Preview Pane - Left Side (like invoice analysis modal) */}
-          {isPreviewVisible && transaction.source_record_id && (
+        <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden">
+
+          {/* Mobile-only: "View Document" toggle button */}
+          {transaction.source_record_id && (
+            <div className="lg:hidden flex-shrink-0 px-4 pt-3 pb-1">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full"
+                onClick={() => setIsPreviewVisible(!isPreviewVisible)}
+              >
+                <ImageIcon className="w-4 h-4 mr-2" />
+                {isPreviewVisible ? 'Hide Document Preview' : 'View Document Preview'}
+              </Button>
+            </div>
+          )}
+
+          {/* Document Preview Pane - Left Side */}
+          {/* Desktop (lg+): always controlled by header toggle | Mobile: toggled via button above */}
+          {transaction.source_record_id && (
             <div
               id="document-preview-pane"
-              className="w-full lg:w-1/2 lg:border-r lg:border-border flex flex-col min-h-0 mt-4 lg:mt-0"
+              className={`w-full lg:w-1/2 lg:border-r lg:border-border flex flex-col min-h-0 ${isPreviewVisible ? '' : 'hidden lg:hidden'}`}
               aria-label="Document preview"
             >
               <MultiPageDocumentPreview
@@ -169,7 +193,7 @@ export default function AccountingEntryDetailModal({
           )}
 
           {/* Information and Line Items Pane - Right Side or Full Width */}
-          <div className={`${isPreviewVisible && transaction.source_record_id ? 'w-full lg:w-1/2' : 'w-full'} flex flex-col min-h-0 transition-all duration-300`}>
+          <div className={`${isPreviewVisible && transaction.source_record_id ? 'w-full lg:w-1/2' : 'w-full'} flex flex-col min-h-0 overflow-y-auto transition-all duration-300`}>
             <div className={`flex ${isPreviewVisible && transaction.source_record_id ? 'flex-col' : 'flex-col xl:flex-row'} min-h-0 h-full`}>
 
               {/* Information Section */}

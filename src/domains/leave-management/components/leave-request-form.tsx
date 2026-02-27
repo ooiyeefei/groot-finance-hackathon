@@ -297,14 +297,15 @@ export default function LeaveRequestForm({ businessId, onSuccess, onCancel }: Le
             </Alert>
           )}
 
-          {/* Actions */}
-          <div className="flex flex-col sm:flex-row gap-3 pt-4">
+          {/* Actions — always horizontal row, compact on mobile */}
+          <div className="flex flex-row gap-2 sm:gap-3 pt-4">
             <Button
               type="button"
               variant="secondary"
               onClick={onCancel}
               disabled={isLoading}
               className="flex-1"
+              size="sm"
             >
               Cancel
             </Button>
@@ -313,16 +314,18 @@ export default function LeaveRequestForm({ businessId, onSuccess, onCancel }: Le
               variant="secondary"
               disabled={!isValid || isLoading}
               className="flex-1"
+              size="sm"
             >
               {isCreating ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Saving...
+                  <Loader2 className="w-4 h-4 sm:mr-2 animate-spin" />
+                  <span className="hidden sm:inline">Saving...</span>
                 </>
               ) : (
                 <>
-                  <FileText className="w-4 h-4 mr-2" />
-                  Save as Draft
+                  <FileText className="w-4 h-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Save as Draft</span>
+                  <span className="sm:hidden">Draft</span>
                 </>
               )}
             </Button>
@@ -331,16 +334,18 @@ export default function LeaveRequestForm({ businessId, onSuccess, onCancel }: Le
               onClick={(e) => handleSubmit(e, true)}
               disabled={!isValid || isLoading}
               className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
+              size="sm"
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Submitting...
+                  <Loader2 className="w-4 h-4 sm:mr-2 animate-spin" />
+                  <span className="hidden sm:inline">Submitting...</span>
                 </>
               ) : (
                 <>
-                  <Send className="w-4 h-4 mr-2" />
-                  Submit for Approval
+                  <Send className="w-4 h-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Submit for Approval</span>
+                  <span className="sm:hidden">Submit</span>
                 </>
               )}
             </Button>
