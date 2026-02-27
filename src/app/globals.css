@@ -994,31 +994,119 @@ main .p-6 {
 }
 
 /* ========================================================
-   MOBILE OVERFLOW PREVENTION
-   Prevents horizontal overflow on mobile Capacitor shell.
-   The main content area must not exceed viewport width.
+   CAPACITOR MOBILE SHELL — GLOBAL RESPONSIVE OVERRIDES
+   ========================================================
+   These rules ensure ALL pages and components work on mobile
+   (iPhone ~390-430px) without needing per-component fixes.
+
+   Unlike Flutter, web apps need explicit responsive CSS.
+   These blanket rules handle the most common overflow and
+   layout issues that occur when a desktop-first web app
+   is displayed in a Capacitor WKWebView.
    ======================================================== */
 @media (max-width: 640px) {
+
+  /* ---- 1. VIEWPORT CONTAINMENT ---- */
   body {
     overflow-x: hidden;
     max-width: 100vw;
   }
-
-  /* All authenticated page main content areas */
   main {
     max-width: 100vw;
     overflow-x: hidden;
   }
-
-  /* Force all flex-1 content wrappers to stay within bounds */
   .flex-1 {
     max-width: 100vw;
     min-width: 0;
   }
 
-  /* ---- Document card mobile layout ---- */
+  /* ---- 2. FORCE MULTI-COLUMN GRIDS TO SINGLE COLUMN ---- */
+  /* Any grid with 2+ cols that isn't explicitly mobile-safe */
+  .grid-cols-2:not(.mobile-grid-keep),
+  .grid-cols-3:not(.mobile-grid-keep),
+  .grid-cols-4:not(.mobile-grid-keep),
+  .grid-cols-5:not(.mobile-grid-keep),
+  .grid-cols-6:not(.mobile-grid-keep) {
+    grid-template-columns: 1fr !important;
+  }
 
-  /* Icon-only buttons: hide text labels */
+  /* ---- 3. FORCE SIDE-BY-SIDE FLEX TO STACK ---- */
+  /* Two-pane layouts that use md: breakpoints should stack on mobile */
+  .md\:flex-row {
+    flex-direction: column !important;
+  }
+  .md\:w-1\/2 {
+    width: 100% !important;
+  }
+  .md\:w-1\/3 {
+    width: 100% !important;
+  }
+  .md\:w-2\/3 {
+    width: 100% !important;
+  }
+
+  /* ---- 4. TABLES: HORIZONTAL SCROLL ---- */
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  thead, tbody, tr {
+    display: table;
+    width: 100%;
+    table-layout: auto;
+  }
+
+  /* ---- 5. MODALS: FULL-SCREEN ON MOBILE ---- */
+  /* Full-screen modals (fixed inset-0) already work */
+  /* Dialog/sheet modals: ensure they don't overflow */
+  [role="dialog"] {
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    margin: 0 !important;
+  }
+  [role="dialog"] > div {
+    max-width: 100vw !important;
+  }
+
+  /* ---- 6. SCROLLABLE CONTAINERS: CAP HEIGHT ---- */
+  /* Prevent any single scrollable area from hogging the viewport */
+  .doc-preview-scroll {
+    max-height: 40vh !important;
+  }
+
+  /* ---- 7. BUTTON ROWS: ALWAYS WRAP ---- */
+  /* Any flex row of buttons should wrap rather than overflow */
+  .flex > button + button,
+  .flex > .btn + .btn,
+  .flex > [class*="Button"] + [class*="Button"] {
+    flex-shrink: 0;
+  }
+  /* Ensure flex containers with multiple buttons can wrap */
+  .gap-2:has(> button:nth-child(3)),
+  .gap-3:has(> button:nth-child(3)),
+  .space-x-2:has(> button:nth-child(3)),
+  .space-x-3:has(> button:nth-child(3)) {
+    flex-wrap: wrap !important;
+  }
+
+  /* ---- 8. TEXT OVERFLOW PREVENTION ---- */
+  h1, h2, h3, h4 {
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+  pre, code {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+
+  /* ---- 9. FORM LAYOUTS: STACK FIELDS ---- */
+  /* Side-by-side form fields should stack */
+  .sm\:grid-cols-2 {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- 10. INVOICE DOCUMENT CARD SPECIFICS ---- */
   .doc-action-btn span {
     display: none !important;
   }
@@ -1029,25 +1117,14 @@ main .p-6 {
     padding-left: 0.5rem !important;
     padding-right: 0.5rem !important;
   }
-
-  /* Badges: wrap into rows */
   .doc-badges {
     flex-wrap: wrap;
     gap: 0.375rem;
   }
-
-  /* Action buttons: compact horizontal row */
   .doc-actions {
     display: flex !important;
     flex-direction: row !important;
     flex-wrap: wrap !important;
     gap: 0.375rem !important;
-  }
-
-  /* ---- Document Analysis Modal mobile layout ---- */
-
-  /* Limit document preview height so summary is visible below */
-  .doc-preview-scroll {
-    max-height: 40vh !important;
   }
 }
