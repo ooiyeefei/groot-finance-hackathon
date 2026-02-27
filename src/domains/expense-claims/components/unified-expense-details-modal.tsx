@@ -282,6 +282,7 @@ export default function UnifiedExpenseDetailsModal({
       'rejected': { label: 'Rejected', color: 'red', description: 'Claim was rejected' },
       'reimbursed': { label: 'Reimbursed', color: 'purple', description: 'Payment processed' },
       'failed': { label: 'Failed', color: 'red', description: 'Processing failed - please try manual entry' },
+      'classification_failed': { label: 'Invalid Document', color: 'red', description: 'This document does not appear to be a receipt or invoice. Please delete and upload a valid receipt.' },
     }
     return statusMap[status] || { label: status.replace('_', ' ').toUpperCase(), color: 'gray', description: 'Unknown status' }
   }

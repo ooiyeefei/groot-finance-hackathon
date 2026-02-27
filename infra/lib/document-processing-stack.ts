@@ -173,8 +173,10 @@ export class DocumentProcessingStack extends cdk.Stack {
         externalModules: ['@aws-sdk/*', '@browserbasehq/stagehand'],
         minify: true,
         sourceMap: true,
+        format: lambdaNode.OutputFormat.ESM,
+        banner: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);',
         // Stagehand is marked external for esbuild, then installed via afterBundling.
-        // This avoids CDK's npm ci lock file sync issues with Stagehand's many transitive deps.
+        // ESM format needed because chrome-launcher is ESM-only.
         commandHooks: {
           beforeBundling: () => [],
           beforeInstall: () => [],

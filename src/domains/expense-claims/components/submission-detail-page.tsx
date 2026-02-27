@@ -59,7 +59,7 @@ const CLAIM_STATUS_BADGES: Record<string, { className: string; label: string }> 
   rejected: { className: 'bg-red-500/10 text-red-600 dark:text-red-400', label: 'Rejected' },
   reimbursed: { className: 'bg-purple-500/10 text-purple-600 dark:text-purple-400', label: 'Reimbursed' },
   failed: { className: 'bg-red-500/10 text-red-600 dark:text-red-400', label: 'Failed' },
-  classification_failed: { className: 'bg-red-500/10 text-red-600 dark:text-red-400', label: 'Failed' },
+  classification_failed: { className: 'bg-red-500/10 text-red-600 dark:text-red-400', label: 'Invalid Document' },
 }
 
 export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employee' }: SubmissionDetailPageProps) {
@@ -193,10 +193,13 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
     setShowDeleteConfirm(true)
   }, [])
 
+  const [isDeleted, setIsDeleted] = useState(false)
+
   const handleDeleteConfirmed = useCallback(async () => {
     try {
       setIsConfirmLoading(true)
       await deleteSubmission.mutateAsync(submissionId)
+      setIsDeleted(true)
       setShowDeleteConfirm(false)
       router.push(`/${locale}/expense-claims`)
     } catch (e: any) {
@@ -290,6 +293,13 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
   }
 
   if (error || !submission) {
+    if (isDeleted) {
+      return (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      )
+    }
     return (
       <div className="text-center py-20">
         <p className="text-muted-foreground">{error || 'Submission not found'}</p>
@@ -558,7 +568,16 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
                           {processingStatuses.includes(claim.status) ? (
                             <DocumentStatusBadge status={claim.status as any} />
                           ) : (
-                            <Badge className={claimBadge.className}>{claimBadge.label}</Badge>
+                            <Badge
+                              className={claimBadge.className}
+                              title={claim.status === 'classification_failed'
+                                ? ((claim as any).errorMessage || 'This document does not appear to be a receipt or invoice. Please delete and upload a valid receipt.')
+                                : claim.status === 'failed'
+                                ? ((claim as any).errorMessage || 'Processing failed. Please try re-uploading.')
+                                : undefined}
+                            >
+                              {claimBadge.label}
+                            </Badge>
                           )}
                         </td>
                         {isDraft && (
