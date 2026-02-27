@@ -170,11 +170,17 @@ export class DocumentProcessingStack extends cdk.Stack {
         NEXT_PUBLIC_CONVEX_URL: 'https://kindhearted-lynx-129.convex.cloud',
       },
       bundling: {
-        externalModules: ['@aws-sdk/*'],
+        externalModules: ['@aws-sdk/*', 'playwright-core'],
         minify: true,
         sourceMap: true,
-        // No ESM hacks needed — playwright-core is CJS compatible
-        // No afterBundling npm install — playwright-core bundles cleanly with esbuild
+        // playwright-core needs package.json at runtime — mark external and install via afterBundling
+        commandHooks: {
+          beforeBundling: () => [],
+          beforeInstall: () => [],
+          afterBundling: (_inputDir: string, outputDir: string) => [
+            `cd ${outputDir} && npm init -y --quiet && npm install playwright-core --production --quiet`,
+          ],
+        },
       },
     });
 
