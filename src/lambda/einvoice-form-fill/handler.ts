@@ -99,18 +99,32 @@ async function callGeminiCUA(
     },
   };
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  // Retry on transient errors (503, 429, network issues)
+  const maxRetries = 3;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
 
-  if (!response.ok) {
+    if (response.ok) {
+      return response.json();
+    }
+
     const errorBody = await response.text();
+    const isRetryable = response.status === 503 || response.status === 429 || response.status >= 500;
+
+    if (isRetryable && attempt < maxRetries) {
+      const delay = attempt * 3000; // 3s, 6s backoff
+      console.log(`[Form Fill] Gemini ${response.status}, retrying in ${delay}ms (attempt ${attempt}/${maxRetries})`);
+      await new Promise((r) => setTimeout(r, delay));
+      continue;
+    }
+
     throw new Error(`Gemini API error ${response.status}: ${errorBody.substring(0, 300)}`);
   }
-
-  return response.json();
+  throw new Error("Gemini API: all retries exhausted");
 }
 
 // ============================================================
