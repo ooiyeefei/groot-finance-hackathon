@@ -1016,24 +1016,31 @@ main .p-6 {
     min-width: 0;
   }
 
-  /* Document card action buttons: icon-only on mobile */
+  /* ---- Document card mobile layout ---- */
+
+  /* Icon-only buttons: hide text labels */
   .doc-action-btn span {
     display: none !important;
   }
   .doc-action-btn svg {
     margin-right: 0 !important;
   }
+  .doc-action-btn {
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
 
-  /* Force badge rows to wrap */
+  /* Badges: wrap into rows */
   .doc-badges {
     flex-wrap: wrap;
     gap: 0.375rem;
   }
 
-  /* Force button rows to wrap in a grid */
+  /* Action buttons: compact horizontal row */
   .doc-actions {
-    display: grid !important;
-    grid-template-columns: repeat(auto-fill, minmax(36px, auto));
-    gap: 0.375rem;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    gap: 0.375rem !important;
   }
 }

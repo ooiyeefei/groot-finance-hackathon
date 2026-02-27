@@ -412,26 +412,23 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
             key={document.id}
             className="bg-muted/50 rounded-lg border border-border p-card-padding hover:bg-muted/70 transition-colors overflow-hidden"
           >
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            {/* Desktop: single row | Mobile: stacked sections */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
+              {/* File info */}
               <div className="flex items-center space-x-3 flex-1 min-w-0">
                 {getFileIcon(document.file_type)}
                 <div className="flex-1 min-w-0">
-                  <h4 className="text-foreground font-medium truncate">{document.file_name}</h4>
-                  <div className="flex items-center flex-wrap gap-x-4 gap-y-0 text-sm text-muted-foreground mt-1">
+                  <h4 className="text-foreground font-medium truncate text-sm sm:text-base">{document.file_name}</h4>
+                  <div className="flex items-center flex-wrap gap-x-3 gap-y-0 text-xs sm:text-sm text-muted-foreground mt-0.5">
                     <span>{formatFileSize(document.file_size)}</span>
-                    <span className="hidden sm:inline">•</span>
-                    <span>Uploaded {formatDate(document.created_at)}</span>
-                    {document.processed_at && (
-                      <>
-                        <span>•</span>
-                        <span>Processed {formatDate(document.processed_at)}</span>
-                      </>
-                    )}
+                    <span>•</span>
+                    <span>{formatDate(document.created_at)}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="flex flex-col items-start sm:items-end space-y-2 min-w-0 max-w-full">
+              {/* Badges + Actions */}
+              <div className="flex flex-row items-center gap-2 sm:flex-col sm:items-end sm:space-y-2 min-w-0 max-w-full flex-wrap">
                 <div className="doc-badges flex items-center flex-wrap gap-2">
                   <DocumentStatusBadge
                     status={document.status}
