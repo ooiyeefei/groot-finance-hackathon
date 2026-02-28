@@ -446,6 +446,92 @@ TASK:
     return actions
 
 
+# ── Tier 2B: Gemini Flash fallback (when CUA rate-limited) ──
+
+def run_tier2_flash(page: Page, buyer: dict, receipt: dict) -> int:
+    """Fallback: use Gemini Flash to generate fill actions when CUA model is rate-limited."""
+    print("[Tier 2B] Flash fallback — CUA rate-limited")
+
+    # Take full-page screenshot for Flash
+    full_b64 = base64.b64encode(page.screenshot(type="png", full_page=True)).decode()
+
+    # Ask Flash to identify empty fields and map buyer details to them
+    prompt = f"""You are filling a merchant e-invoice form. Analyze this form screenshot.
+
+BUYER DETAILS:
+- Full Name: {buyer["userName"]}
+- Email: {buyer["email"]}
+- Phone: {buyer["phone"]}
+- Company: {buyer["name"]}
+- BRN: {buyer["brn"]}  |  TIN: {buyer["tin"]}
+- Address: {buyer["address"]}, {buyer["city"]}, 47100, {buyer["state"]}, Malaysia
+
+TASK: Return a JSON array of actions to fill ONLY the empty fields.
+Each action: {{"selector": "CSS selector", "value": "text to type", "action": "fill"|"select"|"check"|"click"}}
+
+Rules:
+- SKIP pre-filled fields (they already have values)
+- For dropdowns, use action "select" with the option text as value
+- Include a consent/checkbox check if visible (action "check")
+- Include submit button click as last action (action "click", selector for Submit button)
+- Use precise CSS selectors (input[name=...], select[name=...], #id, etc.)
+
+Return ONLY valid JSON array, no markdown fences."""
+
+    try:
+        response = gemini_flash(prompt, full_b64)
+        # Parse JSON from response
+        json_match = re.search(r'\[[\s\S]*\]', response)
+        if not json_match:
+            print(f"[Tier 2B] No JSON in response: {response[:200]}")
+            return 0
+
+        actions_list = json.loads(json_match.group())
+        print(f"[Tier 2B] Flash generated {len(actions_list)} actions")
+
+        filled = 0
+        for act in actions_list:
+            selector = act.get("selector", "")
+            value = act.get("value", "")
+            action = act.get("action", "fill")
+
+            if not selector:
+                continue
+
+            try:
+                el = page.locator(selector).first
+                if not el.is_visible(timeout=2000):
+                    print(f"[Tier 2B]   Skip (not visible): {selector}")
+                    continue
+
+                if action == "fill":
+                    el.click(click_count=3, timeout=2000)
+                    page.keyboard.type(value, delay=30)
+                    print(f"[Tier 2B]   Fill: {selector} = {value[:30]}")
+                    filled += 1
+                elif action == "select":
+                    el.select_option(label=value, timeout=3000)
+                    print(f"[Tier 2B]   Select: {selector} = {value}")
+                    filled += 1
+                elif action == "check":
+                    if not el.is_checked():
+                        el.click(timeout=2000)
+                    print(f"[Tier 2B]   Check: {selector}")
+                    filled += 1
+                elif action == "click":
+                    el.click(timeout=5000)
+                    print(f"[Tier 2B]   Click: {selector}")
+                    filled += 1
+            except Exception as e:
+                print(f"[Tier 2B]   Error on {selector}: {e}")
+
+        return filled
+
+    except Exception as e:
+        print(f"[Tier 2B] Flash fallback failed: {e}")
+        return 0
+
+
 # ── Tier 3: Troubleshooter ──────────────────────────────────
 
 # ── DSPy Signatures for structured troubleshooting ──────────
@@ -668,8 +754,15 @@ def handler(event: dict, context=None) -> dict:
         # ── Pre-fill with Playwright ──
         prefill_all(page, buyer, receipt)
 
-        # ── Tier 2: CUA exploration ──
-        actions = run_tier2(page, buyer, receipt)
+        # ── Tier 2: CUA exploration (with Flash fallback on 429) ──
+        try:
+            actions = run_tier2(page, buyer, receipt)
+        except Exception as tier2_err:
+            if "429" in str(tier2_err):
+                print(f"[Form Fill] CUA rate-limited, falling back to Flash: {tier2_err}")
+                actions = run_tier2_flash(page, buyer, receipt)
+            else:
+                raise
 
         # ── Post-CUA: Radix dropdown fix ──
         has_radix = page.get_by_role("combobox").filter(has_text="Select state").count() > 0
