@@ -28,6 +28,28 @@ import EinvoiceStatusBadge from './einvoice-status-badge'
 import EinvoiceMatchReview from './einvoice-match-review'
 import { formatBusinessDate } from '@/lib/utils'
 
+function getUserFriendlyError(rawError: string | null): string {
+  if (!rawError) return 'Something went wrong. Please try again or fill the form manually.'
+  const e = rawError.toLowerCase()
+  if (e.includes('bot_blocked') || e.includes('cloudflare') || e.includes('403'))
+    return '' // Handled by the amber BOT_BLOCKED banner
+  if (e.includes('asyncio') || e.includes('playwright sync'))
+    return 'A temporary system error occurred. Please retry — this usually resolves on the next attempt.'
+  if (e.includes('timeout') || e.includes('timed out'))
+    return 'The merchant form took too long to process. Please retry or fill the form manually.'
+  if (e.includes('navigation') || e.includes('goto'))
+    return 'Could not reach the merchant\'s website. The site may be temporarily down.'
+  if (e.includes('no_merchant_form_url'))
+    return 'No e-invoice form found for this merchant. You can fill it manually if you know the URL.'
+  if (e.includes('validation') || e.includes('required'))
+    return 'The merchant form has required fields we couldn\'t fill automatically. Please fill the form manually.'
+  if (e.includes('no_business_details'))
+    return 'Company details are missing. Please update your business settings and retry.'
+  if (e.includes('gemini') || e.includes('api error'))
+    return 'Our AI service had a temporary issue. Please retry.'
+  return 'We couldn\'t submit the form automatically. You can retry or fill the form manually.'
+}
+
 interface MatchCandidate {
   receivedDocId: string
   supplierName: string
@@ -254,7 +276,7 @@ export default function EinvoiceSection({
                     E-invoice request failed
                   </p>
                   <p className="text-muted-foreground text-xs mt-1">
-                    We couldn&apos;t submit the form automatically. You can retry or fill the form manually.
+                    {getUserFriendlyError(einvoiceAgentError)}
                   </p>
                 </div>
               </div>
