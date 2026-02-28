@@ -480,7 +480,7 @@ export async function createExpenseClaim(
               userName = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ') || userName
             } catch { /* fallback to business name */ }
 
-            if (business?.lhdn_tin && business?.address_line1) {
+            if (business?.lhdn_tin) {
               businessDetails = {
                 name: business.name,
                 userName, // User's personal name for "Full Name" field
