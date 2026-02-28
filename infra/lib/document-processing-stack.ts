@@ -148,36 +148,25 @@ export class DocumentProcessingStack extends cdk.Stack {
     // Triggered by: Python document-processor (boto3) or Vercel API (OIDC)
     // ========================================================================
     const formFillLogGroup = new logs.LogGroup(this, 'FormFillLogs', {
-      logGroupName: `/aws/lambda/finanseal-einvoice-form-fill`,
+      logGroupName: `/aws/lambda/finanseal-einvoice-form-fill-v2`,
       retention: logs.RetentionDays.ONE_MONTH,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    const formFillFunction = new lambdaNode.NodejsFunction(this, 'EinvoiceFormFill', {
-      entry: path.join(__dirname, '../../src/lambda/einvoice-form-fill/handler.ts'),
-      handler: 'handler',
-      runtime: lambda.Runtime.NODEJS_20_X,
-      architecture: lambda.Architecture.X86_64, // Required for @sparticuz/chromium binary
-      functionName: 'finanseal-einvoice-form-fill',
-      description: 'E-Invoice form fill via Gemini CUA + @sparticuz/chromium (019-lhdn-einv-flow-2)',
-      memorySize: 1024, // Chromium needs ~512MB, plus Lambda overhead
+    const formFillFunction = new lambda.DockerImageFunction(this, 'EinvoiceFormFill', {
+      code: lambda.DockerImageCode.fromImageAsset(
+        path.join(__dirname, '../../src/lambda/einvoice-form-fill-python'),
+      ),
+      architecture: lambda.Architecture.X86_64,
+      functionName: 'finanseal-einvoice-form-fill-v2',
+      description: 'E-Invoice form fill — Python + Playwright + Gemini CUA (3-tier self-evolving)',
+      memorySize: 2048, // Playwright Chromium needs more memory in Docker
       timeout: cdk.Duration.minutes(5),
       logGroup: formFillLogGroup,
       environment: {
         GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
         NEXT_PUBLIC_CONVEX_URL: 'https://kindhearted-lynx-129.convex.cloud',
-      },
-      bundling: {
-        externalModules: ['@aws-sdk/*', 'playwright-core', '@sparticuz/chromium'],
-        minify: true,
-        sourceMap: true,
-        commandHooks: {
-          beforeBundling: () => [],
-          beforeInstall: () => [],
-          afterBundling: (_inputDir: string, outputDir: string) => [
-            `cd ${outputDir} && npm init -y --quiet && npm install playwright-core @sparticuz/chromium --production --quiet`,
-          ],
-        },
+        PLAYWRIGHT_BROWSERS_PATH: '/opt/pw-browsers',
       },
     });
 
