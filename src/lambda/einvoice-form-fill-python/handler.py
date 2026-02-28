@@ -4,6 +4,7 @@ E-Invoice Form Fill Lambda (Python + Playwright + Gemini CUA)
 3-tier self-evolving system:
   Tier 1 (~5s):   Saved formConfig → Playwright fills with CSS selectors
   Tier 2 (~120s): Gemini CUA explores → fills → saves formConfig on success
+  Tier 2B (~60s): browser-use + Gemini Flash (fallback when CUA 429 rate-limited)
   Tier 3 (~10s):  On failure → Gemini Flash diagnoses → updates formConfig
 """
 
@@ -446,90 +447,85 @@ TASK:
     return actions
 
 
-# ── Tier 2B: Gemini Flash fallback (when CUA rate-limited) ──
+# ── Tier 2B: browser-use + Gemini Flash (when CUA rate-limited) ──
 
-def run_tier2_flash(page: Page, buyer: dict, receipt: dict) -> int:
-    """Fallback: use Gemini Flash to generate fill actions when CUA model is rate-limited."""
-    print("[Tier 2B] Flash fallback — CUA rate-limited")
+def run_tier2_browser_use(url: str, buyer: dict, receipt: dict) -> bool:
+    """Fallback: browser-use agent with Gemini Flash when CUA is rate-limited.
+    Multi-turn agent loop — much more reliable than one-shot Flash."""
+    import asyncio
 
-    # Take full-page screenshot for Flash
-    full_b64 = base64.b64encode(page.screenshot(type="png", full_page=True)).decode()
+    print("[Tier 2B] browser-use + Gemini Flash fallback — CUA rate-limited")
 
-    # Ask Flash to identify empty fields and map buyer details to them
-    prompt = f"""You are filling a merchant e-invoice form. Analyze this form screenshot.
+    async def _run() -> bool:
+        from browser_use import Agent, BrowserProfile, ChatGoogle
 
-BUYER DETAILS:
+        # Map GEMINI_API_KEY → GOOGLE_API_KEY (langchain-google-genai convention)
+        os.environ["GOOGLE_API_KEY"] = GEMINI_KEY
+
+        llm = ChatGoogle(model="gemini-2.0-flash")
+
+        browser_profile = BrowserProfile(
+            headless=True,
+            disable_security=True,
+            extra_chromium_args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--single-process",
+            ],
+            minimum_wait_page_load_time=1.0,
+            wait_between_actions=0.5,
+            viewport={"width": SCREEN_W, "height": SCREEN_H},
+        )
+
+        task = f"""You are on a merchant e-invoice form at {url}.
+The form requests buyer details for an e-invoice. Many fields are ALREADY PRE-FILLED (receipt number, date, amount).
+
+Fill ONLY the empty fields with these BUYER DETAILS:
 - Full Name: {buyer["userName"]}
 - Email: {buyer["email"]}
 - Phone: {buyer["phone"]}
-- Company: {buyer["name"]}
-- BRN: {buyer["brn"]}  |  TIN: {buyer["tin"]}
-- Address: {buyer["address"]}, {buyer["city"]}, 47100, {buyer["state"]}, Malaysia
+- Company Name: {buyer["name"]}
+- Business Registration Number (BRN): {buyer["brn"]}
+- Tax Identification Number (TIN): {buyer["tin"]}
+- Address: {buyer["address"]}
+- City: {buyer["city"]}
+- Postcode: 47100
+- State: {buyer["state"]}
+- Country: Malaysia
 
-TASK: Return a JSON array of actions to fill ONLY the empty fields.
-Each action: {{"selector": "CSS selector", "value": "text to type", "action": "fill"|"select"|"check"|"click"}}
+RULES:
+1. DO NOT modify pre-filled fields (receipt number, date, amount).
+2. If there is an Individual/Company toggle, select "Company".
+3. For state/city dropdowns, select the matching option.
+4. Check any consent/agreement checkbox.
+5. Click the Submit button when all fields are filled.
+6. If you see validation errors after submit, fix ONLY the specific field mentioned and re-submit."""
 
-Rules:
-- SKIP pre-filled fields (they already have values)
-- For dropdowns, use action "select" with the option text as value
-- Include a consent/checkbox check if visible (action "check")
-- Include submit button click as last action (action "click", selector for Submit button)
-- Use precise CSS selectors (input[name=...], select[name=...], #id, etc.)
+        agent = Agent(
+            task=task,
+            llm=llm,
+            browser_profile=browser_profile,
+            use_vision=True,
+            max_steps=25,
+            max_actions_per_step=3,
+            max_failures=3,
+        )
 
-Return ONLY valid JSON array, no markdown fences."""
+        try:
+            history = await agent.run()
+            success = history.is_done() if hasattr(history, 'is_done') else bool(history)
+            print(f"[Tier 2B] browser-use completed: {success}")
+            return success
+        except Exception as e:
+            print(f"[Tier 2B] browser-use agent error: {e}")
+            return False
+        finally:
+            if agent.browser:
+                await agent.browser.close()
 
-    try:
-        response = gemini_flash(prompt, full_b64)
-        # Parse JSON from response
-        json_match = re.search(r'\[[\s\S]*\]', response)
-        if not json_match:
-            print(f"[Tier 2B] No JSON in response: {response[:200]}")
-            return 0
-
-        actions_list = json.loads(json_match.group())
-        print(f"[Tier 2B] Flash generated {len(actions_list)} actions")
-
-        filled = 0
-        for act in actions_list:
-            selector = act.get("selector", "")
-            value = act.get("value", "")
-            action = act.get("action", "fill")
-
-            if not selector:
-                continue
-
-            try:
-                el = page.locator(selector).first
-                if not el.is_visible(timeout=2000):
-                    print(f"[Tier 2B]   Skip (not visible): {selector}")
-                    continue
-
-                if action == "fill":
-                    el.click(click_count=3, timeout=2000)
-                    page.keyboard.type(value, delay=30)
-                    print(f"[Tier 2B]   Fill: {selector} = {value[:30]}")
-                    filled += 1
-                elif action == "select":
-                    el.select_option(label=value, timeout=3000)
-                    print(f"[Tier 2B]   Select: {selector} = {value}")
-                    filled += 1
-                elif action == "check":
-                    if not el.is_checked():
-                        el.click(timeout=2000)
-                    print(f"[Tier 2B]   Check: {selector}")
-                    filled += 1
-                elif action == "click":
-                    el.click(timeout=5000)
-                    print(f"[Tier 2B]   Click: {selector}")
-                    filled += 1
-            except Exception as e:
-                print(f"[Tier 2B]   Error on {selector}: {e}")
-
-        return filled
-
-    except Exception as e:
-        print(f"[Tier 2B] Flash fallback failed: {e}")
-        return 0
+    return asyncio.run(_run())
 
 
 # ── Tier 3: Troubleshooter ──────────────────────────────────
@@ -754,13 +750,26 @@ def handler(event: dict, context=None) -> dict:
         # ── Pre-fill with Playwright ──
         prefill_all(page, buyer, receipt)
 
-        # ── Tier 2: CUA exploration (with Flash fallback on 429) ──
+        # ── Tier 2: CUA exploration (with browser-use fallback on 429) ──
+        tier2b_used = False
         try:
             actions = run_tier2(page, buyer, receipt)
         except Exception as tier2_err:
             if "429" in str(tier2_err):
-                print(f"[Form Fill] CUA rate-limited, falling back to Flash: {tier2_err}")
-                actions = run_tier2_flash(page, buyer, receipt)
+                print(f"[Form Fill] CUA rate-limited, falling back to browser-use: {tier2_err}")
+                # Close sync browser — browser-use manages its own
+                browser.close()
+                browser = None
+                success = run_tier2_browser_use(url, buyer, receipt)
+                tier2b_used = True
+                dur = int((time.time() - start) * 1000)
+                status_str = "success" if success else "failed"
+                print(f"[Form Fill] Tier 2B done in {dur}ms, status={status_str}")
+                convex_mutation("functions/system:reportEinvoiceFormFillResult", {
+                    "expenseClaimId": claim_id, "emailRef": event["emailRef"],
+                    "status": status_str, "durationMs": dur,
+                })
+                return {"success": success, "durationMs": dur, "tier": "2b"}
             else:
                 raise
 
