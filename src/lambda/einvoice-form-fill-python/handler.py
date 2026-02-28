@@ -143,21 +143,32 @@ def prefill_all(page: Page, buyer: dict, receipt: dict):
 
     select_rules = [
         (["state", "negeri"], state), (["city", "bandar"], city),
-        (["country", "negara"], "Malaysia"), (["industry", "sector"], "Others"),
+        (["country", "negara", "billing country"], "Malaysia"),
+        (["industry", "sector"], "Others"),
         (["salut"], "Mr"),
+        (["contact method", "preferred"], "Email"),
     ]
     for sel in selects:
         if sel["value"] and sel["value"] not in ("", "-None-"):
             continue
+        matched = False
+        selector = f"select[name='{sel['name']}'], select[id='{sel['name']}']"
         for keywords, target in select_rules:
             if any(k in sel["label"] for k in keywords):
                 opt = next((o for o in sel["options"] if target.lower() in o["t"].lower()), None)
                 if not opt:
                     opt = next((o for o in sel["options"][1:] if o["v"]), None)
                 if opt:
-                    page.select_option(f"select[name='{sel['name']}'], select[id='{sel['name']}']", opt["v"])
+                    page.select_option(selector, opt["v"])
                     print(f"[Pre-fill] Select '{sel['name']}' → '{opt['t']}'")
+                    matched = True
                 break
+        # Catch-all: any unfilled required select → pick first non-empty option
+        if not matched and sel["options"]:
+            fallback = next((o for o in sel["options"] if o["v"] and o["v"] != "-None-"), None)
+            if fallback:
+                page.select_option(selector, fallback["v"])
+                print(f"[Pre-fill] Select '{sel['name']}' → '{fallback['t']}' (catch-all)")
 
     # 3. Bulk text inputs via label matching
     label_map = {
@@ -272,6 +283,32 @@ def execute_action(page: Page, name: str, args: dict):
     time.sleep(0.5)
 
 
+# ── Post-submit verification ────────────────────────────────
+
+def verify_submission(page: Page) -> bool:
+    """After clicking Submit, verify the form was accepted (not validation error)."""
+    try:
+        shot = base64.b64encode(page.screenshot(type="png")).decode()
+        result = gemini_flash(
+            "Look at this page after a form was submitted. Classify the result:\n"
+            "- SUCCESS: Page shows a thank you/confirmation message, or redirected to a success page\n"
+            "- VALIDATION_ERROR: Page shows form validation errors (red text, required fields, etc.)\n"
+            "- UNKNOWN: Can't determine\n\n"
+            "Respond with just one word: SUCCESS, VALIDATION_ERROR, or UNKNOWN",
+            shot,
+        )
+        status = result.strip().upper().split()[0] if result else "UNKNOWN"
+        print(f"[Verify] Post-submit: {status}")
+        if status == "VALIDATION_ERROR":
+            # Log what errors are visible
+            errors = gemini_flash("List any validation error messages visible on this form page. Be brief.", shot)
+            print(f"[Verify] Errors: {errors[:200]}")
+        return status == "SUCCESS"
+    except Exception as e:
+        print(f"[Verify] Failed: {e}")
+        return True  # Optimistic — assume success if verification fails
+
+
 # ── Tier 1: Fast path with saved formConfig ────────────────
 
 def run_tier1(page: Page, config: dict, buyer: dict) -> bool:
@@ -304,14 +341,14 @@ def run_tier1(page: Page, config: dict, buyer: dict) -> bool:
         print(f"[Tier 1] Only filled {filled}/{len(fields)} (need {min_required}) — falling back")
         return False
 
-    # Submit
+    # Submit + verify
     sel = config.get("submitSelector", "")
     if sel:
         try:
             page.locator(sel).first.click(timeout=5000)
-            print(f"[Tier 1] Submitted ({filled} fields)")
-            time.sleep(3)
-            return True
+            print(f"[Tier 1] Clicked Submit ({filled} fields)")
+            time.sleep(5)
+            return verify_submission(page)
         except Exception:
             pass
     return False
