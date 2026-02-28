@@ -143,6 +143,7 @@ async function callGeminiVision(geminiKey: string, prompt: string, screenshotB64
 
 async function executeTier1(page: Page, formConfig: FormConfig, buyerDetails: Record<string, string>): Promise<boolean> {
   console.log(`[Form Fill] Tier 1: Using saved formConfig (${formConfig.fields.length} fields)`);
+  let filledCount = 0;
 
   for (const field of formConfig.fields) {
     try {
@@ -196,6 +197,7 @@ async function executeTier1(page: Page, formConfig: FormConfig, buyerDetails: Re
           }
           break;
       }
+      filledCount++;
       console.log(`[Form Fill] Tier 1: ${field.label} → "${value.substring(0, 30)}"`);
     } catch (e) {
       console.log(`[Form Fill] Tier 1: failed "${field.label}": ${e}`);
@@ -213,19 +215,28 @@ async function executeTier1(page: Page, formConfig: FormConfig, buyerDetails: Re
     } catch { /* ok */ }
   }
 
+  // Check if enough fields were filled (at least 3 or 50% of fields)
+  const minRequired = Math.max(3, Math.floor(formConfig.fields.length * 0.5));
+  if (filledCount < minRequired) {
+    console.log(`[Form Fill] Tier 1: only filled ${filledCount}/${formConfig.fields.length} fields (need ${minRequired}) — failing to Tier 2`);
+    return false;
+  }
+
   // Submit
   if (formConfig.submitSelector) {
     try {
       await page.locator(formConfig.submitSelector).first().click({ timeout: 5000 });
-      console.log(`[Form Fill] Tier 1: submitted`);
+      console.log(`[Form Fill] Tier 1: submitted (${filledCount} fields filled)`);
       await new Promise(r => setTimeout(r, 3000));
       return true;
     } catch (e) {
       console.log(`[Form Fill] Tier 1: submit failed: ${e}`);
+      return false;
     }
   }
 
-  return true;
+  console.log(`[Form Fill] Tier 1: no submit selector — failing to Tier 2`);
+  return false;
 }
 
 // ============================================================
@@ -846,57 +857,59 @@ export async function handler(event: FormFillEvent): Promise<{
       console.log(`[Form Fill] Bulk pre-fill failed: ${e}`);
     }
 
-    // 7. Pre-analyze form fields
-    let formFieldsSummary = "";
+    // 7. Gemini Flash reconnaissance — scout the full page to understand form structure
+    let formRecon = "";
     try {
-      const formInfo = await page.evaluate(() => {
-        const labels = Array.from(document.querySelectorAll('label, [class*="label"]'))
-          .map(el => el.textContent?.trim()).filter(Boolean).slice(0, 30);
-        const inputCount = document.querySelectorAll('input:not([type="hidden"]), select, textarea').length;
-        return { labels, inputCount };
-      });
-      formFieldsSummary = `\n\nFORM ANALYSIS: ${formInfo.inputCount} input fields. Labels: ${formInfo.labels.join(', ')}. Fill ALL required fields.`;
-      console.log(`[Form Fill] Form: ${formInfo.inputCount} inputs`);
-    } catch { /* non-fatal */ }
+      const fullPageB64 = (await page.screenshot({ type: "png", fullPage: true })).toString("base64");
+      console.log(`[Form Fill] Scouting form with Gemini Flash...`);
 
-    // 7. Build receipt context (for forms that need receipt details)
+      formRecon = await callGeminiVision(geminiKey,
+        `Analyze this e-invoice form. List EVERY visible form field from top to bottom in this exact format:
+1. [field label] — [field type: text/dropdown/radio/checkbox/date] — [status: empty/pre-filled with "value"]
+
+Example:
+1. Order Number — text — empty
+2. Company Name — text — pre-filled with "Groot Test Account"
+3. Company Industry — dropdown — empty (showing "-None-")
+4. Terms checkbox — checkbox — unchecked
+
+Be thorough. List ALL fields including ones that are pre-filled. Note any radio buttons (e.g. Individual/Company).`,
+        fullPageB64
+      );
+      console.log(`[Form Fill] Recon: ${formRecon.substring(0, 200)}...`);
+    } catch (e) {
+      console.log(`[Form Fill] Recon failed (non-fatal): ${e}`);
+    }
+
+    // 8. Build CUA instruction with recon data
     const receiptContext = ed.referenceNumber
-      ? `\nRECEIPT DETAILS (use if form asks for order/receipt/transaction info):
-- Order/Receipt/Reference Number: ${ed.referenceNumber}
-- Transaction Date/Payment Date: ${ed.date || 'N/A'}
-- Amount: ${ed.amount || 'N/A'}`
+      ? `\nRECEIPT/ORDER DETAILS:\n- Order/Receipt Number: ${ed.referenceNumber}\n- Payment Date: ${ed.date || 'N/A'}\n- Amount: ${ed.amount || 'N/A'}`
       : '';
 
-    // 8. Build CUA instruction — GENERIC (works for any merchant form)
-    const instruction = `You are on a merchant e-invoice request form. Fill ALL visible fields with the buyer details below, then submit.
+    const instruction = `You are filling a merchant e-invoice form. Many fields are ALREADY PRE-FILLED by automation.
 
-BUYER DETAILS — use these to fill any matching fields:
-- Full Name / Contact Person: ${userName}
-- Email / E-Invoice Email: ${bd.email}
-- Phone / Mobile / Company Phone: ${phoneLocal} (may already be pre-filled — if so, skip)
+BUYER DETAILS (use to fill matching fields):
+- Full Name: ${userName}
+- Email: ${bd.email}
+- Phone: ${phoneLocal}
 - Company Name: ${bd.name}
-- Business Registration Number (BRN) / New BRN: ${bd.brn}
-- Tax Identification Number (TIN): ${bd.tin}
-- SST Registration Number: N/A (leave blank if optional)
-- Company Address / Address Line 1: ${streetAddress}
-- City: ${city}
-- Postcode: 47100
-- State: ${state}
-- Country: Malaysia
+- BRN: ${bd.brn}
+- TIN: ${bd.tin}
+- Address: ${streetAddress}
+- City: ${city}, Postcode: 47100, State: ${state}, Country: Malaysia
 ${receiptContext}
 
-INSTRUCTIONS:
-1. MANY FIELDS ARE ALREADY PRE-FILLED. Scroll through the form first to see what's filled. Only fill EMPTY fields.
-2. If there's a "Company" vs "Individual" choice, select "Company".
-3. For empty fields, use the buyer details above. Use your best judgment for field matching.
-4. Dropdowns are ALREADY PRE-FILLED. Do NOT change them unless they show a validation error.
-5. After all fields are filled, check any terms/consent checkbox.
-6. Click Submit / Send / Request button.
-7. If validation errors appear, fix the specific field mentioned and resubmit.
-8. EFFICIENCY: Scroll down in one pass. Do NOT scroll back up unless fixing a validation error.
-${formFieldsSummary}`;
+${formRecon ? `FORM FIELD MAP (from page analysis):\n${formRecon}\n` : ''}
+YOUR TASK:
+1. Scroll down in ONE pass. Fill ONLY empty fields — skip pre-filled ones.
+2. If "Company" vs "Individual" radio exists, select "Company".
+3. Dropdowns are pre-filled — skip unless showing a validation error.
+4. For fields not in buyer details (e.g. Job Title, Salutation), use sensible defaults or leave blank if optional.
+5. Check consent/terms checkbox.
+6. Click Submit.
+7. If validation errors appear, fix ONLY the mentioned field and resubmit.`;
 
-    // 8. CUA agent loop for text fields
+    // 9. CUA agent loop
     console.log(`[Form Fill] Starting CUA loop (max ${MAX_TURNS} turns)`);
     const screenshotB64 = (await page.screenshot({ type: "png" })).toString("base64");
     const contents: any[] = [{
