@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useBusinessProfile } from '@/contexts/business-context'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -158,7 +159,7 @@ export default function UnifiedExpenseDetailsModal({
   const [showDuplicateReview, setShowDuplicateReview] = useState(false)
   const [duplicateMatches, setDuplicateMatches] = useState<any[]>([])
   const [duplicateLoading, setDuplicateLoading] = useState(false)
-  const [businessProfile, setBusinessProfile] = useState<Record<string, any> | null>(null)
+  const { profile: businessProfile } = useBusinessProfile()
 
   // Fetch categories on component mount
   useEffect(() => {
@@ -185,13 +186,7 @@ export default function UnifiedExpenseDetailsModal({
     if (isOpen && claimId) {
       fetchClaimDetails()
     }
-    if (isOpen && businessId) {
-      fetch(`/api/v1/account-management/businesses/profile`)
-        .then(r => r.json())
-        .then(r => { if (r.success) setBusinessProfile(r.data) })
-        .catch(() => {})
-    }
-  }, [isOpen, claimId, businessId])
+  }, [isOpen, claimId])
 
   // Generate signed URL when claim details are loaded
   useEffect(() => {
