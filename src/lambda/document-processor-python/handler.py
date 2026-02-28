@@ -158,11 +158,78 @@ def _lookup_merchant_einvoice_url(vendor_name: str) -> Optional[str]:
     except Exception as e:
         print(f"[Merchant Lookup] Convex query failed: {e}")
 
-    # Fallback: hardcoded table (fast, no network)
+    # Fallback 1: hardcoded table (fast, no network)
     for key, url in _KNOWN_MERCHANT_URLS.items():
         if key in vn or vn in key:
             return url
-    return None
+
+    # Fallback 2: Ask Gemini Flash to find the merchant's e-invoice URL
+    return _discover_merchant_url(vendor_name)
+
+
+def _discover_merchant_url(vendor_name: str) -> Optional[str]:
+    """Ask Gemini Flash if this Malaysian merchant has a public e-invoice form URL.
+    If found, saves to Convex merchant table for future lookups."""
+    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    if not gemini_key or not vendor_name:
+        return None
+
+    try:
+        import urllib.request
+        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}"
+        payload = {
+            "contents": [{"role": "user", "parts": [{"text":
+                f"Does the Malaysian merchant \"{vendor_name}\" have a public e-invoice request form "
+                f"where buyers can submit their company details to receive an e-invoice?\n\n"
+                f"Search for: {vendor_name} malaysia e-invoice company buyer form\n\n"
+                f"If YES, respond with ONLY the exact URL (e.g. https://einvoice.merchant.com.my/)\n"
+                f"If NO or UNSURE, respond with ONLY the word: NONE\n"
+                f"Do NOT guess or fabricate URLs. Only provide URLs you are confident exist."
+            }]}],
+            "generationConfig": {"temperature": 0.0, "maxOutputTokens": 100},
+        }
+        req = urllib.request.Request(api_url, data=json.dumps(payload).encode(),
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            result = json.loads(resp.read())
+            answer = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+
+        if answer.upper() == "NONE" or not answer.startswith("http"):
+            print(f"[Merchant Discovery] No e-invoice URL found for \"{vendor_name}\"")
+            return None
+
+        url = answer.split()[0]  # Take first URL if multiple
+        print(f"[Merchant Discovery] Found URL for \"{vendor_name}\": {url}")
+
+        # Save to Convex for future lookups (agent_discovered source)
+        try:
+            convex_url = os.environ.get("NEXT_PUBLIC_CONVEX_URL", "")
+            if convex_url:
+                save_req = urllib.request.Request(
+                    f"{convex_url}/api/mutation",
+                    data=json.dumps({
+                        "path": "functions/system:upsertMerchantEinvoiceUrl",
+                        "args": {
+                            "merchantName": vendor_name,
+                            "matchPatterns": [vendor_name.lower().strip()],
+                            "einvoiceUrl": url,
+                            "country": "MY",
+                            "urlType": "static",
+                            "source": "agent_discovered",
+                        },
+                        "format": "json",
+                    }).encode(),
+                    headers={"Content-Type": "application/json"},
+                )
+                urllib.request.urlopen(save_req, timeout=5)
+                print(f"[Merchant Discovery] Saved to Convex merchant table")
+        except Exception as e:
+            print(f"[Merchant Discovery] Failed to save to Convex: {e}")
+
+        return url
+    except Exception as e:
+        print(f"[Merchant Discovery] Failed: {e}")
+        return None
 
 
 # =============================================================================
