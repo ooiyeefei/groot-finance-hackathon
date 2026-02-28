@@ -4,7 +4,7 @@ E-Invoice Form Fill Lambda (Python + Playwright + Gemini CUA)
 3-tier self-evolving system:
   Tier 1 (~5s):   Saved formConfig → Playwright fills with CSS selectors
   Tier 2 (~120s): Gemini CUA explores → fills → saves formConfig on success
-  Tier 2B (~60s): browser-use + Gemini Flash (fallback when CUA 429 rate-limited)
+  Tier 2B (~15s): Gemini Flash multi-pass fill (fallback when CUA 429 rate-limited)
   Tier 3 (~10s):  On failure → Gemini Flash diagnoses → updates formConfig
 """
 
@@ -447,107 +447,133 @@ TASK:
     return actions
 
 
-# ── Tier 2B: browser-use + Gemini Flash (when CUA rate-limited) ──
+# ── Tier 2B: Gemini Flash multi-pass fill (when CUA rate-limited) ──
 
-def run_tier2_browser_use(url: str, buyer: dict, receipt: dict) -> bool:
-    """Fallback: browser-use agent with Gemini Flash when CUA is rate-limited.
-    Multi-turn agent loop — much more reliable than one-shot Flash."""
-    import asyncio
+def run_tier2_flash(page: Page, buyer: dict, receipt: dict) -> int:
+    """Fallback: Gemini Flash identifies empty fields from screenshot, then fills via Playwright.
+    Two-pass: 1) recon screenshot → Flash maps buyer details to fields, 2) Playwright fills."""
+    print("[Tier 2B] Gemini Flash fallback — CUA rate-limited")
 
-    print("[Tier 2B] browser-use + Gemini Flash fallback — CUA rate-limited")
+    full_b64 = base64.b64encode(page.screenshot(type="png", full_page=True)).decode()
 
-    # Lambda filesystem: only /tmp is writable. Set browser-use config dirs before import.
-    os.environ["GOOGLE_API_KEY"] = GEMINI_KEY
-    os.environ["HOME"] = "/tmp"  # browser-use reads ~/.browseruse/
-    os.environ["BROWSER_USE_CONFIG_DIR"] = "/tmp/.browseruse"
-    # Ensure browser-use finds the Playwright-installed Chromium
-    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "/opt/pw-browsers"
+    # Pass 1: Flash identifies empty fields and maps buyer details
+    prompt = f"""Analyze this e-invoice form screenshot. Many fields are ALREADY PRE-FILLED.
 
-    async def _run() -> bool:
-        from browser_use import Agent, BrowserProfile, ChatGoogle
-
-        llm = ChatGoogle(model="gemini-2.0-flash")
-
-        # Find the Chromium executable installed by Playwright
-        chromium_path = None
-        pw_browsers = "/opt/pw-browsers"
-        for root, dirs, files in os.walk(pw_browsers):
-            for f in files:
-                if f == "chrome" or f == "chromium":
-                    candidate = os.path.join(root, f)
-                    if os.access(candidate, os.X_OK):
-                        chromium_path = candidate
-                        break
-            if chromium_path:
-                break
-        if chromium_path:
-            print(f"[Tier 2B] Found Chromium: {chromium_path}")
-
-        browser_profile = BrowserProfile(
-            headless=True,
-            disable_security=True,
-            extra_chromium_args=[
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--single-process",
-            ],
-            minimum_wait_page_load_time=1.0,
-            wait_between_actions=0.5,
-            viewport={"width": SCREEN_W, "height": SCREEN_H},
-            # Lambda: all writable paths must go to /tmp
-            user_data_dir="/tmp/bu-user-data",
-            downloads_path="/tmp/bu-downloads",
-            # Point to Playwright-installed Chromium
-            executable_path=chromium_path,
-            browser_binary_location=chromium_path,
-        )
-
-        task = f"""You are on a merchant e-invoice form at {url}.
-The form requests buyer details for an e-invoice. Many fields are ALREADY PRE-FILLED (receipt number, date, amount).
-
-Fill ONLY the empty fields with these BUYER DETAILS:
+BUYER DETAILS:
 - Full Name: {buyer["userName"]}
 - Email: {buyer["email"]}
 - Phone: {buyer["phone"]}
-- Company Name: {buyer["name"]}
-- Business Registration Number (BRN): {buyer["brn"]}
-- Tax Identification Number (TIN): {buyer["tin"]}
-- Address: {buyer["address"]}
-- City: {buyer["city"]}
-- Postcode: 47100
-- State: {buyer["state"]}
-- Country: Malaysia
+- Company: {buyer["name"]}
+- BRN: {buyer["brn"]}  |  TIN: {buyer["tin"]}
+- Address: {buyer["address"]}, {buyer["city"]}, 47100, {buyer["state"]}, Malaysia
 
-RULES:
-1. DO NOT modify pre-filled fields (receipt number, date, amount).
-2. If there is an Individual/Company toggle, select "Company".
-3. For state/city dropdowns, select the matching option.
-4. Check any consent/agreement checkbox.
-5. Click the Submit button when all fields are filled.
-6. If you see validation errors after submit, fix ONLY the specific field mentioned and re-submit."""
+Return a JSON array of ONLY the empty fields that need filling.
+Each entry: {{"label": "field label text", "value": "value to fill", "type": "text"|"select"|"checkbox"}}
 
-        agent = Agent(
-            task=task,
-            llm=llm,
-            browser_profile=browser_profile,
-            use_vision=True,
-            max_steps=25,
-            max_actions_per_step=3,
-            max_failures=3,
-        )
+Rules:
+- SKIP all pre-filled fields (receipt number, date, amount)
+- For Individual/Company choice, set value to "Company"
+- For state dropdown, value should be "{buyer["state"]}"
+- For city dropdown, value should be "{buyer["city"]}"
+- Include consent checkbox if unchecked (type "checkbox", value "true")
+- Do NOT include the submit button
 
-        try:
-            history = await agent.run()
-            success = history.is_done() if hasattr(history, 'is_done') else bool(history)
-            print(f"[Tier 2B] browser-use completed: {success}")
-            return success
-        except Exception as e:
-            print(f"[Tier 2B] browser-use agent error: {e}")
-            return False
+Return ONLY the JSON array, no markdown."""
 
-    return asyncio.run(_run())
+    try:
+        response = gemini_flash(prompt, full_b64)
+        json_match = re.search(r'\[[\s\S]*?\]', response)
+        if not json_match:
+            print(f"[Tier 2B] No JSON in Flash response: {response[:200]}")
+            return 0
+
+        fields = json.loads(json_match.group())
+        print(f"[Tier 2B] Flash identified {len(fields)} empty fields to fill")
+
+        # Pass 2: Use Playwright to fill each field by label matching
+        filled = 0
+        for field in fields:
+            label = field.get("label", "")
+            value = field.get("value", "")
+            ftype = field.get("type", "text")
+
+            if not label or not value:
+                continue
+
+            try:
+                if ftype == "checkbox":
+                    # Find checkbox near the label text
+                    cb = page.locator(f'input[type="checkbox"]').first
+                    if cb.count() > 0 and not cb.is_checked():
+                        cb.click(timeout=3000)
+                        print(f"[Tier 2B]   Check: {label}")
+                        filled += 1
+                    # Also try Radix checkbox
+                    radix_cb = page.locator('button[role="checkbox"]')
+                    if radix_cb.count() > 0 and radix_cb.get_attribute("data-state") != "checked":
+                        radix_cb.click(timeout=3000)
+                        print(f"[Tier 2B]   Check (Radix): {label}")
+                        filled += 1
+                    continue
+
+                if ftype == "select":
+                    # Try native select by label
+                    sel = page.get_by_label(label, exact=False)
+                    if sel.count() > 0 and sel.first.evaluate("el => el.tagName") == "SELECT":
+                        try:
+                            sel.first.select_option(label=value, timeout=3000)
+                            print(f"[Tier 2B]   Select: {label} = {value}")
+                            filled += 1
+                            continue
+                        except Exception:
+                            pass
+                    # Try Radix combobox
+                    radix = page.get_by_role("combobox").filter(has_text=re.compile(label, re.IGNORECASE))
+                    if radix.count() > 0:
+                        radix.first.click(timeout=3000)
+                        time.sleep(0.5)
+                        option = page.get_by_role("option").filter(has_text=re.compile(value, re.IGNORECASE))
+                        if option.count() > 0:
+                            option.first.click(timeout=3000)
+                            print(f"[Tier 2B]   Radix select: {label} = {value}")
+                            filled += 1
+                            continue
+
+                # Default: text input by label
+                inp = page.get_by_label(label, exact=False)
+                if inp.count() > 0:
+                    inp.first.click(click_count=3, timeout=3000)
+                    page.keyboard.type(value, delay=20)
+                    print(f"[Tier 2B]   Fill: {label} = {value[:30]}")
+                    filled += 1
+                else:
+                    # Fallback: try placeholder text
+                    inp2 = page.get_by_placeholder(re.compile(label, re.IGNORECASE))
+                    if inp2.count() > 0:
+                        inp2.first.click(click_count=3, timeout=3000)
+                        page.keyboard.type(value, delay=20)
+                        print(f"[Tier 2B]   Fill (placeholder): {label} = {value[:30]}")
+                        filled += 1
+
+            except Exception as e:
+                print(f"[Tier 2B]   Error on '{label}': {e}")
+
+        # Submit
+        if filled > 0:
+            time.sleep(1)
+            sub = page.locator('button:has-text("Submit"), input[type="submit"]').first
+            if sub.count() > 0:
+                sub.click(timeout=5000)
+                print(f"[Tier 2B]   Clicked Submit")
+                filled += 1
+
+        print(f"[Tier 2B] Flash filled {filled} fields")
+        return filled
+
+    except Exception as e:
+        print(f"[Tier 2B] Flash fallback failed: {e}")
+        traceback.print_exc()
+        return 0
 
 
 # ── Tier 3: Troubleshooter ──────────────────────────────────
@@ -772,26 +798,13 @@ def handler(event: dict, context=None) -> dict:
         # ── Pre-fill with Playwright ──
         prefill_all(page, buyer, receipt)
 
-        # ── Tier 2: CUA exploration (with browser-use fallback on 429) ──
-        tier2b_used = False
+        # ── Tier 2: CUA exploration (with Flash fallback on 429) ──
         try:
             actions = run_tier2(page, buyer, receipt)
         except Exception as tier2_err:
             if "429" in str(tier2_err):
-                print(f"[Form Fill] CUA rate-limited, falling back to browser-use: {tier2_err}")
-                # Close sync browser — browser-use manages its own
-                browser.close()
-                browser = None
-                success = run_tier2_browser_use(url, buyer, receipt)
-                tier2b_used = True
-                dur = int((time.time() - start) * 1000)
-                status_str = "success" if success else "failed"
-                print(f"[Form Fill] Tier 2B done in {dur}ms, status={status_str}")
-                convex_mutation("functions/system:reportEinvoiceFormFillResult", {
-                    "expenseClaimId": claim_id, "emailRef": event["emailRef"],
-                    "status": status_str, "durationMs": dur,
-                })
-                return {"success": success, "durationMs": dur, "tier": "2b"}
+                print(f"[Form Fill] CUA rate-limited, falling back to Flash: {tier2_err}")
+                actions = run_tier2_flash(page, buyer, receipt)
             else:
                 raise
 
