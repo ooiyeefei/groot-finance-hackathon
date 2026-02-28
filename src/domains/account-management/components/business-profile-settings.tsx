@@ -197,25 +197,25 @@ export default function BusinessProfileSettings() {
         },
         body: JSON.stringify({
           name: businessName.trim(),
-          contact_email: businessEmail.trim() || undefined,
-          contact_phone: businessPhone.trim() || undefined,
-          // Structured address
-          address_line1: addressLine1.trim() || undefined,
-          address_line2: addressLine2.trim() || undefined,
-          address_line3: addressLine3.trim() || undefined,
-          city: city.trim() || undefined,
-          state_code: stateCode || undefined,
-          postal_code: postalCode.trim() || undefined,
-          country_code: countryCode || undefined,
-          // e-Invoice fields (send empty string to clear — undefined is a no-op in Convex patch)
+          contact_email: businessEmail.trim(),
+          contact_phone: businessPhone.trim(),
+          // Structured address (send empty string to clear — undefined is a no-op in Convex patch)
+          address_line1: addressLine1.trim(),
+          address_line2: addressLine2.trim(),
+          address_line3: addressLine3.trim(),
+          city: city.trim(),
+          state_code: stateCode,
+          postal_code: postalCode.trim(),
+          country_code: countryCode,
+          // e-Invoice fields
           lhdn_tin: lhdnTin.trim(),
           business_registration_number: businessRegistrationNumber.trim(),
-          msic_code: msicCode.trim() || undefined,
-          msic_description: msicDescription.trim() || undefined,
+          msic_code: msicCode.trim(),
+          msic_description: msicDescription.trim(),
           sst_registration_number: sstRegistrationNumber.trim(),
-          lhdn_client_id: lhdnClientId.trim() || undefined,
+          lhdn_client_id: lhdnClientId.trim(),
           // NOTE: lhdn_client_secret is NOT sent here — stored via separate SSM API call below
-          peppol_participant_id: peppolParticipantId.trim() || undefined,
+          peppol_participant_id: peppolParticipantId.trim(),
           auto_self_bill_exempt_vendors: autoSelfBillExemptVendors,
         })
       })
