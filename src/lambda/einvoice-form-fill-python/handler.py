@@ -460,11 +460,28 @@ def run_tier2_browser_use(url: str, buyer: dict, receipt: dict) -> bool:
     os.environ["GOOGLE_API_KEY"] = GEMINI_KEY
     os.environ["HOME"] = "/tmp"  # browser-use reads ~/.browseruse/
     os.environ["BROWSER_USE_CONFIG_DIR"] = "/tmp/.browseruse"
+    # Ensure browser-use finds the Playwright-installed Chromium
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "/opt/pw-browsers"
 
     async def _run() -> bool:
         from browser_use import Agent, BrowserProfile, ChatGoogle
 
         llm = ChatGoogle(model="gemini-2.0-flash")
+
+        # Find the Chromium executable installed by Playwright
+        chromium_path = None
+        pw_browsers = "/opt/pw-browsers"
+        for root, dirs, files in os.walk(pw_browsers):
+            for f in files:
+                if f == "chrome" or f == "chromium":
+                    candidate = os.path.join(root, f)
+                    if os.access(candidate, os.X_OK):
+                        chromium_path = candidate
+                        break
+            if chromium_path:
+                break
+        if chromium_path:
+            print(f"[Tier 2B] Found Chromium: {chromium_path}")
 
         browser_profile = BrowserProfile(
             headless=True,
@@ -482,6 +499,9 @@ def run_tier2_browser_use(url: str, buyer: dict, receipt: dict) -> bool:
             # Lambda: all writable paths must go to /tmp
             user_data_dir="/tmp/bu-user-data",
             downloads_path="/tmp/bu-downloads",
+            # Point to Playwright-installed Chromium
+            executable_path=chromium_path,
+            browser_binary_location=chromium_path,
         )
 
         task = f"""You are on a merchant e-invoice form at {url}.
@@ -526,9 +546,6 @@ RULES:
         except Exception as e:
             print(f"[Tier 2B] browser-use agent error: {e}")
             return False
-        finally:
-            if agent.browser:
-                await agent.browser.close()
 
     return asyncio.run(_run())
 
