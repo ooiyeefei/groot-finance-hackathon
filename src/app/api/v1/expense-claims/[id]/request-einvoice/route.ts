@@ -133,11 +133,19 @@ export async function POST(
       }
     }
 
+    // Translate Convex/system errors to user-friendly messages
+    const rawError = error instanceof Error ? error.message : 'Failed to request e-invoice'
+    let userError = rawError
+    if (rawError.includes('TIN not configured')) {
+      userError = 'Business TIN is not configured. Please update in Settings → Business Profile.'
+    } else if (rawError.includes('address not configured')) {
+      userError = 'Business address is not configured. Please update in Settings → Business Profile.'
+    } else if (rawError.includes('Server Error') || rawError.includes('Request ID')) {
+      userError = 'Something went wrong. Please check your business settings (TIN, address) and try again.'
+    }
+
     return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to request e-invoice'
-      },
+      { success: false, error: userError },
       { status: 500 }
     )
   }
