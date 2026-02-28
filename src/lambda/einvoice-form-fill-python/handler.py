@@ -866,16 +866,42 @@ def handler(event: dict, context=None) -> dict:
             except Exception as e:
                 print(f"[Form Fill] formConfig save failed: {e}")
 
+        # ── Post-submit: Gemini Flash verification ──
+        verified_success = state_ok  # default to Radix state
+        evidence = ""
+        try:
+            time.sleep(2)  # let page settle after submit
+            shot = base64.b64encode(page.screenshot(type="png", full_page=True)).decode()
+            vresult = gemini_flash(
+                "Analyze this page AFTER a form submit. Is there a success/thank-you/confirmation message? "
+                "Or are there validation errors / the form still showing?\n\n"
+                "Respond in JSON: {\"submitted\": true/false, \"confidence\": 0.0-1.0, \"evidence\": \"what you see\"}",
+                shot,
+            )
+            json_match = re.search(r'\{[\s\S]*?\}', vresult)
+            if json_match:
+                vdata = json.loads(json_match.group())
+                submitted = vdata.get("submitted", False)
+                confidence = vdata.get("confidence", 0.0)
+                evidence = vdata.get("evidence", "")
+                print(f"[Verify] submitted={submitted}, confidence={confidence}, evidence={evidence[:100]}")
+                if confidence >= 0.7:
+                    verified_success = submitted
+        except Exception as ve:
+            print(f"[Verify] Failed: {ve}")
+
         browser.close()
         dur = int((time.time() - start) * 1000)
-        status_str = "success" if state_ok else "failed"
-        print(f"[Form Fill] Done in {dur}ms, {actions} CUA actions, state={status_str}")
+        status_str = "success" if verified_success else "failed"
+        print(f"[Form Fill] Done in {dur}ms, {actions} CUA actions, verified={status_str}, evidence={evidence[:80]}")
 
+        error_msg = None if verified_success else f"Verification: {evidence[:200]}"
         convex_mutation("functions/system:reportEinvoiceFormFillResult", {
             "expenseClaimId": claim_id, "emailRef": event["emailRef"],
             "status": status_str, "durationMs": dur,
+            **({"errorMessage": error_msg} if error_msg else {}),
         })
-        return {"success": state_ok, "durationMs": dur}
+        return {"success": verified_success, "verified": True, "evidence": evidence, "durationMs": dur}
 
     except Exception as e:
         dur = int((time.time() - start) * 1000)

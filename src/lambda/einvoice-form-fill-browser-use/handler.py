@@ -44,10 +44,46 @@ def convex_mutation(path: str, args: dict):
         print(f"[BU] Convex mutation failed: {e}")
 
 
+# ── Gemini Flash verification ───────────────────────────────
+
+def gemini_flash_verify(screenshot_b64: str) -> dict:
+    """Ask Gemini Flash to verify if the form was submitted successfully."""
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_KEY}"
+    prompt = """Analyze this screenshot of a web form page AFTER a submit attempt.
+
+Determine if the form was submitted successfully. Look for:
+- SUCCESS indicators: "thank you", "success", "submitted", "received", confirmation number, green checkmark, redirect to a different page
+- FAILURE indicators: validation errors (red text), "required field", error messages, the form still visible with empty fields, "please fill in"
+- AMBIGUOUS: page looks the same as before, unclear state
+
+Respond in JSON only:
+{"submitted": true/false, "confidence": 0.0-1.0, "evidence": "brief description of what you see"}"""
+
+    payload = {
+        "contents": [{"role": "user", "parts": [
+            {"text": prompt},
+            {"inlineData": {"mimeType": "image/png", "data": screenshot_b64}},
+        ]}],
+        "generationConfig": {"temperature": 0.0, "maxOutputTokens": 512},
+    }
+    req = Request(url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+    try:
+        with urlopen(req, timeout=30) as resp:
+            r = json.loads(resp.read())
+        text = r.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+        import re
+        match = re.search(r'\{[\s\S]*?\}', text)
+        if match:
+            return json.loads(match.group())
+    except Exception as e:
+        print(f"[BU] Verification call failed: {e}")
+    return {"submitted": False, "confidence": 0.0, "evidence": "verification failed"}
+
+
 # ── Async form fill ─────────────────────────────────────────
 
-async def fill_form(url: str, buyer: dict, receipt: dict) -> bool:
-    """Use browser-use agent to fill the merchant e-invoice form."""
+async def fill_form(url: str, buyer: dict, receipt: dict) -> dict:
+    """Use browser-use agent to fill the form. Returns {success, evidence, confidence}."""
     from browser_use import Agent, BrowserProfile, ChatGoogle
 
     llm = ChatGoogle(model="gemini-2.0-flash")
@@ -105,9 +141,46 @@ RULES:
     )
 
     history = await agent.run()
-    success = history.is_done() if hasattr(history, "is_done") else bool(history)
-    print(f"[BU] Agent completed: success={success}, steps={len(history.history) if hasattr(history, 'history') else '?'}")
-    return success
+    agent_done = history.is_done() if hasattr(history, "is_done") else bool(history)
+    steps = len(history.history) if hasattr(history, "history") else "?"
+    print(f"[BU] Agent completed: agent_done={agent_done}, steps={steps}")
+
+    # ── Post-submission verification with Gemini Flash ──
+    # Take screenshot of the final page state and verify with Flash
+    verification = {"submitted": False, "confidence": 0.0, "evidence": "no verification"}
+    try:
+        browser_session = agent._browser_session if hasattr(agent, "_browser_session") else None
+        if not browser_session:
+            browser_session = agent.browser_session if hasattr(agent, "browser_session") else None
+
+        if browser_session:
+            page = await browser_session.get_current_page()
+            if page:
+                import base64
+                screenshot = await page.screenshot(type="png", full_page=True)
+                shot_b64 = base64.b64encode(screenshot).decode()
+                verification = gemini_flash_verify(shot_b64)
+                print(f"[BU] Verification: submitted={verification.get('submitted')}, "
+                      f"confidence={verification.get('confidence')}, "
+                      f"evidence={verification.get('evidence', '')[:100]}")
+    except Exception as e:
+        print(f"[BU] Screenshot/verification failed: {e}")
+
+    # Definitive success = agent thinks done AND Flash confirms submission
+    submitted = verification.get("submitted", False)
+    confidence = verification.get("confidence", 0.0)
+    evidence = verification.get("evidence", "")
+
+    if submitted and confidence >= 0.7:
+        print(f"[BU] VERIFIED SUCCESS: {evidence}")
+        return {"success": True, "verified": True, "confidence": confidence, "evidence": evidence}
+    elif agent_done and not submitted and confidence >= 0.7:
+        print(f"[BU] VERIFIED FAILURE: agent said done but Flash says not submitted: {evidence}")
+        return {"success": False, "verified": True, "confidence": confidence, "evidence": evidence}
+    else:
+        # Low confidence or verification failed — trust agent's assessment but flag it
+        print(f"[BU] UNVERIFIED: agent_done={agent_done}, submitted={submitted}, confidence={confidence}")
+        return {"success": agent_done, "verified": False, "confidence": confidence, "evidence": evidence}
 
 
 # ── Lambda handler ──────────────────────────────────────────
@@ -143,22 +216,27 @@ def handler(event: dict, context=None) -> dict:
 
         print(f"[BU] Buyer: {buyer['userName']}, {buyer['email']}, {state}")
 
-        # Run async agent
-        success = asyncio.run(fill_form(url, buyer, receipt))
+        # Run async agent + verify submission
+        result = asyncio.run(fill_form(url, buyer, receipt))
 
         dur = int((time.time() - start) * 1000)
+        success = result.get("success", False)
+        verified = result.get("verified", False)
+        evidence = result.get("evidence", "")
         status_str = "success" if success else "failed"
-        print(f"[BU] Done in {dur}ms, status={status_str}")
+        print(f"[BU] Done in {dur}ms, status={status_str}, verified={verified}, evidence={evidence[:80]}")
 
         # Report result to Convex
+        error_msg = None if success else f"Form fill {'verified' if verified else 'unverified'} failure: {evidence[:200]}"
         convex_mutation("functions/system:reportEinvoiceFormFillResult", {
             "expenseClaimId": claim_id,
             "emailRef": email_ref,
             "status": status_str,
             "durationMs": dur,
+            **({"errorMessage": error_msg} if error_msg else {}),
         })
 
-        return {"success": success, "durationMs": dur}
+        return {"success": success, "verified": verified, "evidence": evidence, "durationMs": dur}
 
     except Exception as e:
         dur = int((time.time() - start) * 1000)
