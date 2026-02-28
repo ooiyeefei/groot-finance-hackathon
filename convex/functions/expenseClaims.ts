@@ -2661,13 +2661,13 @@ export const requestEinvoice = mutation({
           .filter(Boolean).join(", ")
       : (business.address as string);
 
-    // Clear previous error on retry
-    if (claim.einvoiceAgentError) {
-      await ctx.db.patch(claim._id, {
-        einvoiceAgentError: undefined,
-        updatedAt: Date.now(),
-      });
-    }
+    // Mark as requesting + clear previous error on retry
+    await ctx.db.patch(claim._id, {
+      einvoiceRequestStatus: "requesting",
+      einvoiceRequestedAt: Date.now(),
+      ...(claim.einvoiceAgentError ? { einvoiceAgentError: undefined } : {}),
+      updatedAt: Date.now(),
+    });
 
     // Derive emailRef from claim ID (first 10 chars — deterministic)
     const emailRef = (claim._id as string).substring(0, 10);
