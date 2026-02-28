@@ -183,7 +183,9 @@ export default function BusinessProfileSettings() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Check SES email verification status on mount
+  // SES verification is for the user's Clerk email (used for e-invoice forwarding)
+  const [sesVerifyEmail, setSesVerifyEmail] = useState<string | null>(null)
+
   const checkSesVerification = useCallback(async () => {
     try {
       const res = await fetch('/api/v1/users/verify-email')
@@ -191,11 +193,13 @@ export default function BusinessProfileSettings() {
       if (data.success) {
         const status = data.data.status as 'unverified' | 'pending' | 'verified'
         setSesVerifyStatus(status)
-        // Stop polling once verified
+        setSesVerifyEmail(data.data.email || null)
         if (status === 'verified' && pollingRef.current) {
           clearInterval(pollingRef.current)
           pollingRef.current = null
         }
+      } else {
+        setSesVerifyStatus('unverified')
       }
     } catch {
       setSesVerifyStatus('unverified')
@@ -682,63 +686,19 @@ export default function BusinessProfileSettings() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <label className="block text-sm font-medium text-foreground">
-                    Contact Email
-                  </label>
-                  {sesVerifyStatus === 'verified' && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/30">
-                      <CheckCircle2 className="w-3 h-3" />
-                      SES Verified
-                    </span>
-                  )}
-                  {sesVerifyStatus === 'pending' && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-muted text-muted-foreground border border-border">
-                      <Mail className="w-3 h-3" />
-                      Check inbox
-                    </span>
-                  )}
-                  {sesVerifyStatus === 'unverified' && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30">
-                      Unverified
-                    </span>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="email"
-                    value={businessEmail}
-                    onChange={(e) => setBusinessEmail(e.target.value)}
-                    placeholder="billing@company.com"
-                    className="flex-1 bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
-                  />
-                  {sesVerifyStatus !== 'verified' && sesVerifyStatus !== 'loading' && (
-                    <button
-                      type="button"
-                      onClick={handleSendVerification}
-                      disabled={isSendingVerification || sesVerifyStatus === 'pending'}
-                      className="px-3 py-2 text-sm font-medium bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                    >
-                      {isSendingVerification ? (
-                        <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                      ) : sesVerifyStatus === 'pending' ? (
-                        'Sent'
-                      ) : (
-                        'Verify'
-                      )}
-                    </button>
-                  )}
-                </div>
-                {sesVerifyStatus === 'pending' && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Verification email sent. Click the link in your inbox, then this page will update automatically.
-                  </p>
-                )}
-                {sesVerifyStatus === 'unverified' && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Verify your email for reliable e-invoice delivery via AWS SES.
-                  </p>
-                )}
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Contact Email
+                </label>
+                <input
+                  type="email"
+                  value={businessEmail}
+                  onChange={(e) => setBusinessEmail(e.target.value)}
+                  placeholder="billing@company.com"
+                  className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Appears on invoices and customer-facing documents.
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
@@ -752,6 +712,61 @@ export default function BusinessProfileSettings() {
                   className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
                 />
               </div>
+            </div>
+
+            {/* E-Invoice Email Forwarding — user's personal email for receiving e-invoice copies */}
+            <div className="bg-muted/30 border border-border rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Mail className="w-4 h-4 text-primary" />
+                <span className="text-sm font-medium text-foreground">E-Invoice Email Forwarding</span>
+                {sesVerifyStatus === 'verified' && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/30">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Verified
+                  </span>
+                )}
+                {sesVerifyStatus === 'pending' && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-muted text-muted-foreground border border-border">
+                    Check inbox
+                  </span>
+                )}
+                {sesVerifyStatus === 'unverified' && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30">
+                    Unverified
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mb-3">
+                When merchants send e-invoices, a copy is forwarded to your account email{sesVerifyEmail ? ` (${sesVerifyEmail})` : ''}. Verify to enable reliable delivery via AWS SES.
+              </p>
+              <div className="flex items-center gap-3">
+                {sesVerifyEmail && (
+                  <span className="text-sm text-foreground font-mono bg-input border border-input rounded px-3 py-1.5">
+                    {sesVerifyEmail}
+                  </span>
+                )}
+                {sesVerifyStatus !== 'verified' && sesVerifyStatus !== 'loading' && (
+                  <button
+                    type="button"
+                    onClick={handleSendVerification}
+                    disabled={isSendingVerification || sesVerifyStatus === 'pending'}
+                    className="px-3 py-1.5 text-sm font-medium bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                  >
+                    {isSendingVerification ? (
+                      <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                    ) : sesVerifyStatus === 'pending' ? (
+                      'Verification Sent'
+                    ) : (
+                      'Verify Email'
+                    )}
+                  </button>
+                )}
+              </div>
+              {sesVerifyStatus === 'pending' && (
+                <p className="text-xs text-primary mt-2">
+                  Check your inbox for a verification email from AWS. Click the link to verify.
+                </p>
+              )}
             </div>
 
             {/* e-Invoice Settings (Collapsible) */}
