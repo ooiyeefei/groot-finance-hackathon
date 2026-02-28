@@ -284,15 +284,13 @@ def run_tier1(page: Page, config: dict, buyer: dict) -> bool:
                 continue
             ftype = f.get("type", "text")
             if ftype == "text":
-                el.click(timeout=3000)
-                page.keyboard.press("Control+A")
-                page.keyboard.type(val, delay=20)
+                el.fill(val, timeout=5000)
             elif ftype == "select":
                 page.select_option(f["selector"], label=val)
             elif ftype == "checkbox":
                 el.click(timeout=3000)
             filled += 1
-            print(f"[Tier 1] {f.get('label', '?')} → '{val[:30]}'")
+            print(f"[Tier 1] {f.get('label', '?')} → '{val[:60]}'")
         except Exception as e:
             print(f"[Tier 1] Failed '{f.get('label', '?')}': {e}")
 

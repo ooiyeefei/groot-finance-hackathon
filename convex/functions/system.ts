@@ -1378,6 +1378,7 @@ export const processEinvoiceEmail = mutation({
     einvoiceStoragePath: v.union(v.string(), v.null()),
     rawEmailStoragePath: v.string(),
     hasAttachment: v.boolean(),
+    emailType: v.optional(v.string()), // "einvoice_with_pdf" | "einvoice_in_html" | "confirmation" | etc.
   },
   handler: async (ctx, args) => {
     const claim = await resolveById(ctx.db, "expense_claims", args.claimId);
@@ -1386,34 +1387,69 @@ export const processEinvoiceEmail = mutation({
       return;
     }
 
+    const isConfirmation = args.emailType === "confirmation";
+    const isEinvoice = !isConfirmation && (args.hasAttachment || args.einvoiceStoragePath);
+
+    if (isConfirmation) {
+      // Confirmation email — log it but don't change claim status to "received"
+      // Keep status as "requesting" so we continue waiting for the actual e-invoice
+      await ctx.db.patch(claim._id, {
+        einvoiceRawEmailPath: args.rawEmailStoragePath,
+        updatedAt: Date.now(),
+      });
+
+      try {
+        await ctx.scheduler.runAfter(0, internal.functions.notifications.create, {
+          recipientUserId: claim.userId,
+          businessId: claim.businessId,
+          type: "compliance" as const,
+          severity: "info" as const,
+          title: "E-Invoice Request Confirmed",
+          body: `Merchant confirmed your e-invoice request. The actual e-invoice will arrive separately.`,
+          resourceType: "expense_claim" as const,
+          resourceId: claim._id as string,
+          sourceEvent: `einvoice_confirmation_${claim._id}_${args.messageId}`,
+        });
+      } catch (e) {
+        console.log(`[E-Invoice Email] Notification failed: ${e}`);
+      }
+
+      console.log(`[E-Invoice Email] Confirmation logged for ${args.claimId} — still waiting for e-invoice`);
+      return;
+    }
+
+    // Actual e-invoice received — mark claim as received
     await ctx.db.patch(claim._id, {
       einvoiceRequestStatus: "received" as const,
       einvoiceSource: "merchant_issued" as const,
-      einvoiceAttached: args.hasAttachment,
+      einvoiceAttached: !!isEinvoice,
       einvoiceReceivedAt: Date.now(),
       ...(args.einvoiceStoragePath && { einvoiceStoragePath: args.einvoiceStoragePath }),
       einvoiceRawEmailPath: args.rawEmailStoragePath,
       updatedAt: Date.now(),
     });
 
-    // Send notification to the employee
     try {
+      const attachNote = args.hasAttachment ? " (PDF attached)"
+        : args.emailType === "einvoice_in_html" ? " (HTML e-invoice)"
+        : args.emailType === "einvoice_download_link" ? " (download link available)"
+        : "";
       await ctx.scheduler.runAfter(0, internal.functions.notifications.create, {
         recipientUserId: claim.userId,
         businessId: claim.businessId,
         type: "compliance" as const,
         severity: "info" as const,
         title: "E-Invoice Received",
-        body: `E-invoice received from ${args.fromAddress}${args.hasAttachment ? " (PDF attached)" : " (no attachment)"}`,
+        body: `E-invoice received from ${args.fromAddress}${attachNote}`,
         resourceType: "expense_claim" as const,
         resourceId: claim._id as string,
         sourceEvent: `einvoice_email_${claim._id}_${args.messageId}`,
       });
     } catch (e) {
-      console.log(`[E-Invoice Email] Notification failed (non-critical): ${e}`);
+      console.log(`[E-Invoice Email] Notification failed: ${e}`);
     }
 
-    console.log(`[E-Invoice Email] Updated claim ${args.claimId}: status=received, hasAttachment=${args.hasAttachment}`);
+    console.log(`[E-Invoice Email] Updated ${args.claimId}: status=received, type=${args.emailType}, attached=${!!isEinvoice}`);
   },
 });
 

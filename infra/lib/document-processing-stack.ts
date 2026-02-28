@@ -275,13 +275,14 @@ export class DocumentProcessingStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_20_X,
       architecture: lambda.Architecture.ARM_64,
       functionName: 'finanseal-einvoice-email-processor',
-      description: 'Process incoming merchant e-invoice emails from SES (019-lhdn-einv-flow-2)',
+      description: 'Process incoming merchant e-invoice emails from SES — Gemini Flash classification (019-lhdn-einv-flow-2)',
       memorySize: 256,
-      timeout: cdk.Duration.seconds(30),
+      timeout: cdk.Duration.seconds(60), // Gemini Flash classification adds ~5s
       logGroup: emailProcessorLogGroup,
       environment: {
         NEXT_PUBLIC_CONVEX_URL: 'https://kindhearted-lynx-129.convex.cloud',
         S3_BUCKET_NAME: 'finanseal-bucket',
+        GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
       },
       bundling: {
         externalModules: ['@aws-sdk/*'],

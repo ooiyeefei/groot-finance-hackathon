@@ -2,30 +2,29 @@
  * E-Invoice Email Processor Lambda (019-lhdn-einv-flow-2)
  *
  * Processes incoming merchant e-invoice emails received via AWS SES.
+ * Uses Gemini Flash to classify emails and extract e-invoice data.
+ *
+ * Email types handled:
+ * - Type A: E-invoice with PDF attachment → extract PDF, attach to claim
+ * - Type B: Confirmation "submission received" → log, don't mark as received
+ * - Type C: E-invoice in HTML body (no PDF) → save HTML, extract data with LLM
+ * - Type D: Download link in email → save link for manual download
  *
  * Flow:
- * 1. SES receives email to *@einv.hellogroot.com
- * 2. SES stores raw email in S3 (ses-emails/einvoice/) + triggers this Lambda
- * 3. Lambda parses email ref from To address (einvoice+{ref}@einv.hellogroot.com)
- * 4. Lambda queries Convex for claim details (businessId, userId, claimId)
- * 5. Lambda parses MIME → extracts PDF attachment
- * 6. Lambda saves to S3:
- *    - expense_claims/{bizId}/{userId}/{claimId}/einvoice/raw-email.eml
- *    - expense_claims/{bizId}/{userId}/{claimId}/einvoice/einvoice.pdf
- * 7. Lambda calls Convex mutation to mark claim as "received"
- *
- * S3 paths follow existing pattern: {domain}/{bizId}/{userId}/{docId}/{stage}/{filename}
+ * 1. SES receives email → S3 + triggers this Lambda
+ * 2. Parse emailRef from To: address (einvoice+{ref}@einv.hellogroot.com)
+ * 3. Query Convex for matching expense claim
+ * 4. Gemini Flash classifies email type (einvoice vs confirmation)
+ * 5. Extract PDF/HTML/link based on classification
+ * 6. Save to S3 + update Convex claim status
  */
 
 import { S3Client, GetObjectCommand, CopyObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { simpleParser, ParsedMail } from "mailparser";
 import { Readable } from "stream";
 
-// ============================================================
-// Types
-// ============================================================
+// ── Types ──────────────────────────────────────────────────
 
-/** SES event delivered via Lambda action */
 interface SESEvent {
   Records: Array<{
     eventSource: string;
@@ -34,18 +33,10 @@ interface SESEvent {
         messageId: string;
         source: string;
         destination: string[];
-        commonHeaders: {
-          from: string[];
-          to: string[];
-          subject: string;
-        };
+        commonHeaders: { from: string[]; to: string[]; subject: string };
       };
       receipt: {
-        action: {
-          type: string;
-          bucketName: string;
-          objectKey: string;
-        };
+        action: { type: string; bucketName: string; objectKey: string };
       };
     };
   }>;
@@ -58,122 +49,161 @@ interface ClaimDetails {
   storagePath: string;
 }
 
-// ============================================================
-// Clients
-// ============================================================
+type EmailClassification =
+  | "einvoice_with_pdf"        // Has PDF attachment — extract and attach
+  | "einvoice_in_html"         // E-invoice data in email body (no PDF)
+  | "einvoice_download_link"   // Email contains a link to download the e-invoice
+  | "confirmation_only"        // Just a "submission received" confirmation
+  | "unknown";
 
-const s3Client = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
+interface ClassificationResult {
+  type: EmailClassification;
+  confidence: number;          // 0-1
+  reasoning: string;
+  downloadUrl?: string;        // For einvoice_download_link type
+}
+
+// ── Clients ────────────────────────────────────────────────
+
+const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
 const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL || "";
 const S3_BUCKET = process.env.S3_BUCKET_NAME || "finanseal-bucket";
+const GEMINI_KEY = process.env.GEMINI_API_KEY || "";
 
-// ============================================================
-// Convex HTTP Client
-// ============================================================
+// ── HTTP helpers ───────────────────────────────────────────
 
-async function convexQuery(
-  functionPath: string,
-  args: Record<string, unknown>
-): Promise<unknown> {
-  const response = await fetch(`${CONVEX_URL}/api/query`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path: functionPath, args, format: "json" }),
+async function convexQuery(path: string, args: Record<string, unknown>): Promise<unknown> {
+  const r = await fetch(`${CONVEX_URL}/api/query`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path, args, format: "json" }),
   });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Convex query failed: ${response.status} ${text}`);
-  }
-
-  const result = await response.json();
-  if (result.status === "error") {
-    throw new Error(`Convex query error: ${result.errorMessage}`);
-  }
+  if (!r.ok) throw new Error(`Convex query: ${r.status}`);
+  const result = await r.json();
+  if (result.status === "error") throw new Error(`Convex: ${result.errorMessage}`);
   return result.value;
 }
 
-async function convexMutation(
-  functionPath: string,
-  args: Record<string, unknown>
-): Promise<unknown> {
-  const response = await fetch(`${CONVEX_URL}/api/mutation`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path: functionPath, args, format: "json" }),
+async function convexMutation(path: string, args: Record<string, unknown>): Promise<unknown> {
+  const r = await fetch(`${CONVEX_URL}/api/mutation`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path, args, format: "json" }),
   });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Convex mutation failed: ${response.status} ${text}`);
-  }
-
-  const result = await response.json();
-  if (result.status === "error") {
-    throw new Error(`Convex mutation error: ${result.errorMessage}`);
-  }
+  if (!r.ok) throw new Error(`Convex mutation: ${r.status}`);
+  const result = await r.json();
+  if (result.status === "error") throw new Error(`Convex: ${result.errorMessage}`);
   return result.value;
 }
 
-// ============================================================
-// Email Parsing
-// ============================================================
+// ── S3 helpers ─────────────────────────────────────────────
+
+async function downloadFromS3(bucket: string, key: string): Promise<Buffer> {
+  const response = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  const chunks: Buffer[] = [];
+  for await (const chunk of response.Body as Readable) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks);
+}
+
+async function uploadToS3(key: string, body: Buffer, contentType: string): Promise<void> {
+  await s3.send(new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, Body: body, ContentType: contentType }));
+}
+
+async function copyInS3(sourceKey: string, sourceBucket: string, destKey: string): Promise<void> {
+  await s3.send(new CopyObjectCommand({ Bucket: S3_BUCKET, CopySource: `${sourceBucket}/${sourceKey}`, Key: destKey }));
+}
+
+// ── Email parsing ──────────────────────────────────────────
 
 function parseEmailRef(toAddress: string): string | null {
   const match = toAddress.match(/einvoice\+([^@]+)@/i);
   return match ? match[1] : null;
 }
 
-async function downloadFromS3(bucket: string, key: string): Promise<Buffer> {
-  const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-  const stream = response.Body as Readable;
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream) {
-    chunks.push(Buffer.from(chunk));
-  }
-  return Buffer.concat(chunks);
-}
-
-async function uploadToS3(
-  key: string,
-  body: Buffer,
-  contentType: string
-): Promise<void> {
-  await s3Client.send(new PutObjectCommand({
-    Bucket: S3_BUCKET,
-    Key: key,
-    Body: body,
-    ContentType: contentType,
-  }));
-}
-
-async function copyInS3(sourceKey: string, sourceBucket: string, destKey: string): Promise<void> {
-  await s3Client.send(new CopyObjectCommand({
-    Bucket: S3_BUCKET,
-    CopySource: `${sourceBucket}/${sourceKey}`,
-    Key: destKey,
-  }));
-}
-
 function findPdfAttachment(parsed: ParsedMail): { filename: string; content: Buffer } | null {
-  if (!parsed.attachments || parsed.attachments.length === 0) return null;
-
-  // Prefer PDF, fall back to first attachment
+  if (!parsed.attachments?.length) return null;
   const pdf = parsed.attachments.find(
     (a) => a.contentType === "application/pdf" || a.filename?.toLowerCase().endsWith(".pdf")
   );
-
-  if (pdf) {
-    return { filename: pdf.filename || "einvoice.pdf", content: pdf.content };
-  }
-
-  // If no PDF, take first attachment (could be image, XML, etc.)
-  const first = parsed.attachments[0];
-  return { filename: first.filename || "einvoice-attachment", content: first.content };
+  if (pdf) return { filename: pdf.filename || "einvoice.pdf", content: pdf.content };
+  // XML e-invoice (UBL format used by some merchants)
+  const xml = parsed.attachments.find(
+    (a) => a.contentType?.includes("xml") || a.filename?.toLowerCase().endsWith(".xml")
+  );
+  if (xml) return { filename: xml.filename || "einvoice.xml", content: xml.content };
+  return null;
 }
 
-// ============================================================
-// Handler
-// ============================================================
+// ── Gemini Flash classification ────────────────────────────
+
+async function classifyEmail(subject: string, from: string, textBody: string, hasAttachment: boolean): Promise<ClassificationResult> {
+  if (!GEMINI_KEY) {
+    // Fallback: simple heuristic if no Gemini key
+    if (hasAttachment) return { type: "einvoice_with_pdf", confidence: 0.8, reasoning: "Has attachment (no LLM)" };
+    return { type: "unknown", confidence: 0.3, reasoning: "No Gemini key for classification" };
+  }
+
+  const prompt = `Classify this merchant e-invoice email. This email was sent by a merchant to a buyer who requested an e-invoice for a purchase.
+
+FROM: ${from}
+SUBJECT: ${subject}
+HAS ATTACHMENT: ${hasAttachment ? "Yes (PDF/XML)" : "No"}
+BODY (first 2000 chars):
+${textBody.substring(0, 2000)}
+
+Classify as ONE of:
+- "einvoice_with_pdf": Email has a PDF/XML attachment containing the actual e-invoice document
+- "einvoice_in_html": The e-invoice data (invoice number, amounts, tax details) is embedded in the email body itself (no separate attachment)
+- "einvoice_download_link": Email contains a link/URL to download the e-invoice (e.g. "Click here to download your e-invoice")
+- "confirmation_only": Just a confirmation that the e-invoice request was received/being processed — no actual invoice yet
+- "unknown": Can't determine
+
+Also check: does the email body contain a download URL for the e-invoice? If yes, extract it.
+
+Respond in JSON only:
+{"type":"...","confidence":0.9,"reasoning":"brief explanation","downloadUrl":"url or null"}`;
+
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.0, maxOutputTokens: 512 },
+      }),
+    });
+
+    if (!r.ok) throw new Error(`Gemini: ${r.status}`);
+    const result = await r.json();
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+    // Parse JSON from response
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        type: parsed.type || "unknown",
+        confidence: parsed.confidence || 0.5,
+        reasoning: parsed.reasoning || "",
+        downloadUrl: parsed.downloadUrl || undefined,
+      };
+    }
+  } catch (e) {
+    console.log(`[Email Classify] Gemini failed: ${e}`);
+  }
+
+  // Fallback heuristic
+  if (hasAttachment) return { type: "einvoice_with_pdf", confidence: 0.7, reasoning: "Fallback: has attachment" };
+  const lower = textBody.toLowerCase();
+  if (lower.includes("download") && lower.includes("invoice")) {
+    return { type: "einvoice_download_link", confidence: 0.6, reasoning: "Fallback: mentions download + invoice" };
+  }
+  if (lower.includes("received") || lower.includes("submitted") || lower.includes("processing")) {
+    return { type: "confirmation_only", confidence: 0.6, reasoning: "Fallback: confirmation keywords" };
+  }
+  return { type: "unknown", confidence: 0.3, reasoning: "Fallback: no clear signals" };
+}
+
+// ── Handler ────────────────────────────────────────────────
 
 export async function handler(event: SESEvent) {
   const startTime = Date.now();
@@ -184,93 +214,112 @@ export async function handler(event: SESEvent) {
     const toAddresses = ses.mail.destination;
     const fromAddress = ses.mail.source;
     const subject = ses.mail.commonHeaders.subject;
-    const rawEmailBucket = ses.receipt.action.bucketName;
-    const rawEmailKey = ses.receipt.action.objectKey;
 
-    console.log(`[E-Invoice Email] Processing: ${messageId} from ${fromAddress} to ${toAddresses.join(", ")}`);
+    // SES S3 action stores to: s3://{S3_BUCKET}/ses-emails/einvoice/{messageId}
+    // The Lambda action event doesn't carry the S3 action's bucket/key — construct from known prefix
+    const rawEmailBucket = S3_BUCKET;
+    const rawEmailKey = `ses-emails/einvoice/${messageId}`;
 
-    // Find the einvoice+ address
+    console.log(`[Email] Processing: ${messageId} from ${fromAddress} subject="${subject}"`);
+
+    // 1. Find einvoice+ address
     let emailRef: string | null = null;
     for (const addr of toAddresses) {
       emailRef = parseEmailRef(addr);
       if (emailRef) break;
     }
-
     if (!emailRef) {
-      console.log(`[E-Invoice Email] No einvoice+ address found in: ${toAddresses.join(", ")}`);
+      console.log(`[Email] No einvoice+ address in: ${toAddresses.join(", ")}`);
       continue;
     }
+    console.log(`[Email] emailRef: ${emailRef}`);
 
-    console.log(`[E-Invoice Email] emailRef: ${emailRef}`);
-
-    // Look up expense claim from Convex
+    // 2. Look up expense claim
     const claimDetails = await convexQuery(
-      "functions/system:getClaimByEmailRef",
-      { emailRef }
+      "functions/system:getClaimByEmailRef", { emailRef }
     ) as ClaimDetails | null;
 
     if (!claimDetails) {
-      console.log(`[E-Invoice Email] No claim found for emailRef: ${emailRef}`);
+      console.log(`[Email] No claim found for emailRef: ${emailRef}`);
       continue;
     }
-
     const { claimId, businessId, userId, storagePath } = claimDetails;
-    console.log(`[E-Invoice Email] Matched to claim ${claimId} (biz: ${businessId})`);
+    console.log(`[Email] Matched claim ${claimId} (biz: ${businessId})`);
 
-    // Download raw email from SES S3 bucket
+    // 3. Download and parse email
     const rawEmailBytes = await downloadFromS3(rawEmailBucket, rawEmailKey);
-
-    // Parse MIME
     const parsed = await simpleParser(rawEmailBytes);
-
-    // Build S3 destination paths (aligned with existing pattern)
-    // storagePath from Convex: "{bizId}/{userId}/{claimId}"
-    // Full S3 key: "expense_claims/{storagePath}/einvoice/{filename}"
-    const einvoicePrefix = `expense_claims/${storagePath}/einvoice`;
-
-    // Copy raw email to expense claim folder (audit trail)
-    await copyInS3(rawEmailKey, rawEmailBucket, `${einvoicePrefix}/raw-email.eml`);
-    console.log(`[E-Invoice Email] Saved raw email to ${einvoicePrefix}/raw-email.eml`);
-
-    // Extract and save PDF attachment
+    const textBody = parsed.text || "";
+    const htmlBody = parsed.html || "";
     const attachment = findPdfAttachment(parsed);
-    let einvoiceFilename: string | null = null;
+    const timestamp = Date.now();
 
-    if (attachment) {
-      einvoiceFilename = attachment.filename;
-      const s3Key = `${einvoicePrefix}/${einvoiceFilename}`;
-      const contentType = einvoiceFilename.toLowerCase().endsWith(".pdf")
-        ? "application/pdf"
+    // 4. Classify email with Gemini Flash
+    const classification = await classifyEmail(subject, fromAddress, textBody, !!attachment);
+    console.log(`[Email] Classification: ${classification.type} (${classification.confidence}) — ${classification.reasoning}`);
+
+    // 5. Save raw email (with timestamp to avoid overwriting)
+    const einvoicePrefix = `expense_claims/${storagePath}/einvoice`;
+    await copyInS3(rawEmailKey, rawEmailBucket, `${einvoicePrefix}/${timestamp}-raw-email.eml`);
+
+    // 6. Process based on classification
+    let einvoiceStoragePath: string | null = null;
+
+    if (classification.type === "einvoice_with_pdf" && attachment) {
+      // Type A: PDF/XML attachment → save it
+      const s3Key = `${einvoicePrefix}/${attachment.filename}`;
+      const contentType = attachment.filename.toLowerCase().endsWith(".pdf") ? "application/pdf"
+        : attachment.filename.toLowerCase().endsWith(".xml") ? "application/xml"
         : "application/octet-stream";
       await uploadToS3(s3Key, attachment.content, contentType);
-      console.log(`[E-Invoice Email] Saved attachment to ${s3Key} (${attachment.content.length} bytes)`);
-    } else {
-      console.log(`[E-Invoice Email] No attachment found in email — saving email body as reference`);
-      // Save HTML body as fallback (some merchants send inline e-invoices)
-      if (parsed.html) {
-        const htmlBuffer = Buffer.from(parsed.html as string, "utf-8");
+      einvoiceStoragePath = `${storagePath}/einvoice/${attachment.filename}`;
+      console.log(`[Email] Saved e-invoice PDF: ${s3Key} (${attachment.content.length} bytes)`);
+
+    } else if (classification.type === "einvoice_in_html") {
+      // Type C: E-invoice data in HTML body → save HTML
+      if (htmlBody) {
+        const htmlBuffer = Buffer.from(htmlBody, "utf-8");
         await uploadToS3(`${einvoicePrefix}/einvoice-email.html`, htmlBuffer, "text/html");
-        einvoiceFilename = "einvoice-email.html";
+        einvoiceStoragePath = `${storagePath}/einvoice/einvoice-email.html`;
+        console.log(`[Email] Saved HTML e-invoice: ${einvoicePrefix}/einvoice-email.html`);
       }
+
+    } else if (classification.type === "einvoice_download_link" && classification.downloadUrl) {
+      // Type D: Download link → save the URL for manual or automated download
+      console.log(`[Email] E-invoice download link: ${classification.downloadUrl}`);
+      // Save link as a text file for now — future: auto-download with Playwright
+      const linkBuffer = Buffer.from(classification.downloadUrl, "utf-8");
+      await uploadToS3(`${einvoicePrefix}/download-link.txt`, linkBuffer, "text/plain");
+
+    } else if (classification.type === "confirmation_only") {
+      // Type B: Just a confirmation — log but don't mark as received
+      console.log(`[Email] Confirmation only — not marking as received. Waiting for actual e-invoice.`);
+      // Save for audit trail but don't update claim status
+      await convexMutation("functions/system:processEinvoiceEmail", {
+        claimId, emailRef, fromAddress, subject, messageId,
+        einvoiceStoragePath: null,
+        rawEmailStoragePath: `${storagePath}/einvoice/${timestamp}-raw-email.eml`,
+        hasAttachment: false,
+        emailType: "confirmation",
+      });
+      continue; // Don't mark as received
     }
 
-    // Update Convex with e-invoice storage path
+    // 7. Update Convex — mark claim as e-invoice received (for types A, C, D)
     await convexMutation("functions/system:processEinvoiceEmail", {
       claimId,
       emailRef,
       fromAddress,
       subject,
       messageId,
-      einvoiceStoragePath: einvoiceFilename
-        ? `${storagePath}/einvoice/${einvoiceFilename}`
-        : null,
-      rawEmailStoragePath: `${storagePath}/einvoice/raw-email.eml`,
+      einvoiceStoragePath,
+      rawEmailStoragePath: `${storagePath}/einvoice/${timestamp}-raw-email.eml`,
       hasAttachment: !!attachment,
+      emailType: classification.type,
     });
 
-    console.log(`[E-Invoice Email] Done processing ${messageId} for claim ${claimId}`);
+    console.log(`[Email] Done: ${messageId} → ${classification.type} for claim ${claimId}`);
   }
 
-  const durationMs = Date.now() - startTime;
-  console.log(`[E-Invoice Email] Processed ${event.Records.length} records in ${durationMs}ms`);
+  console.log(`[Email] Processed ${event.Records.length} records in ${Date.now() - startTime}ms`);
 }
