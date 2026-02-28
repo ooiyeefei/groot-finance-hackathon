@@ -712,14 +712,36 @@ export async function handler(event: FormFillEvent): Promise<{
       }
     }
 
-    // 5. Pre-fill phone with Playwright (CUA struggles with country code selectors)
+    // 5. Pre-fill phone with Playwright (check tel inputs AND text inputs with phone-related labels)
     try {
-      const phoneInput = page.locator('input[type="tel"]');
-      if (await phoneInput.count() > 0) {
-        await phoneInput.click({ clickCount: 3 });
+      let phoneFilled = false;
+      // Try input[type="tel"] first
+      const telInput = page.locator('input[type="tel"]');
+      if (await telInput.count() > 0) {
+        await telInput.first().click({ clickCount: 3, timeout: 3000 });
         await page.keyboard.type(phoneLocal, { delay: 30 });
-        console.log(`[Form Fill] Phone pre-filled: ${phoneLocal}`);
+        phoneFilled = true;
       }
+      // Also fill any text inputs labeled "phone" or "mobile" (MR. D.I.Y. uses plain text inputs)
+      if (!phoneFilled) {
+        const phoneInputs = await page.evaluate((phone: string) => {
+          const inputs = Array.from(document.querySelectorAll<HTMLInputElement>('input[type="text"], input:not([type])'));
+          const phoneFields = inputs.filter(i => {
+            const label = (i.closest('label')?.textContent || document.querySelector(`label[for="${i.id}"]`)?.textContent || i.name || i.placeholder || '').toLowerCase();
+            return (label.includes('phone') || label.includes('mobile') || label.includes('telefon')) && !i.value;
+          });
+          return phoneFields.map(i => i.id || i.name).filter(Boolean);
+        }, phoneLocal);
+
+        for (const id of phoneInputs) {
+          const sel = `#${id}, input[name="${id}"]`;
+          await page.locator(sel).first().click({ clickCount: 3, timeout: 3000 }).catch(() => {});
+          await page.keyboard.type(phoneLocal, { delay: 30 });
+          phoneFilled = true;
+          console.log(`[Form Fill] Phone pre-filled (text input): ${id}`);
+        }
+      }
+      if (phoneFilled) console.log(`[Form Fill] Phone pre-filled: ${phoneLocal}`);
     } catch (e) {
       console.log(`[Form Fill] Phone pre-fill failed: ${e}`);
     }
@@ -773,6 +795,57 @@ export async function handler(event: FormFillEvent): Promise<{
       console.log(`[Form Fill] Native select pre-fill: ${e}`);
     }
 
+    // 6b. BULK pre-fill ALL text inputs by label matching (reduces CUA turns dramatically on long forms)
+    try {
+      const labelToValue: Record<string, string> = {
+        'company name': bd.name, 'business name': bd.name,
+        'tax identification': bd.tin, 'tin': bd.tin,
+        'business registration': bd.brn, 'new business registration': bd.brn, 'brn': bd.brn,
+        'e-invoice email': bd.email, 'einvoice email': bd.email,
+        'email address': bd.email, 'your company email': bd.email,
+        'full name': userName, 'first name': userName.split(' ')[0] || userName,
+        'last name': userName.split(' ').slice(1).join(' ') || '',
+        'company address': streetAddress, 'address': streetAddress,
+        'city': city, 'postcode': '47100', 'postal': '47100',
+        'state': state, 'country': 'Malaysia',
+        'order number': ed.referenceNumber || '', 'receipt number': ed.referenceNumber || '', 'reference': ed.referenceNumber || '',
+        'payment date': ed.date || '', 'transaction date': ed.date || '',
+      };
+
+      const filledCount = await page.evaluate((mapping: Record<string, string>) => {
+        let count = 0;
+        const inputs = document.querySelectorAll<HTMLInputElement>('input[type="text"], input[type="email"], input:not([type]), textarea');
+        inputs.forEach(input => {
+          if (input.value || input.type === 'hidden' || input.offsetParent === null) return;
+          const label = (
+            input.closest('label')?.textContent?.trim() ||
+            document.querySelector(`label[for="${input.id}"]`)?.textContent?.trim() ||
+            input.placeholder || input.name || ''
+          ).toLowerCase();
+
+          for (const [key, value] of Object.entries(mapping)) {
+            if (value && label.includes(key)) {
+              // Set value using native setter to trigger React onChange
+              const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+                || Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+              if (nativeSetter) {
+                nativeSetter.call(input, value);
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+                count++;
+              }
+              break;
+            }
+          }
+        });
+        return count;
+      }, labelToValue);
+
+      console.log(`[Form Fill] Bulk pre-filled ${filledCount} text inputs via label matching`);
+    } catch (e) {
+      console.log(`[Form Fill] Bulk pre-fill failed: ${e}`);
+    }
+
     // 7. Pre-analyze form fields
     let formFieldsSummary = "";
     try {
@@ -800,7 +873,7 @@ export async function handler(event: FormFillEvent): Promise<{
 BUYER DETAILS — use these to fill any matching fields:
 - Full Name / Contact Person: ${userName}
 - Email / E-Invoice Email: ${bd.email}
-- Phone / Mobile: ALREADY FILLED — skip any phone field
+- Phone / Mobile / Company Phone: ${phoneLocal} (may already be pre-filled — if so, skip)
 - Company Name: ${bd.name}
 - Business Registration Number (BRN) / New BRN: ${bd.brn}
 - Tax Identification Number (TIN): ${bd.tin}
@@ -813,14 +886,14 @@ BUYER DETAILS — use these to fill any matching fields:
 ${receiptContext}
 
 INSTRUCTIONS:
-1. Start from the TOP of the form. Fill fields as you scroll DOWN — do NOT scroll back up.
+1. MANY FIELDS ARE ALREADY PRE-FILLED. Scroll through the form first to see what's filled. Only fill EMPTY fields.
 2. If there's a "Company" vs "Individual" choice, select "Company".
-3. Fill ALL fields that match the buyer details above. Use your best judgment for field matching.
-4. Dropdown menus (State, City, Industry, etc.) are ALREADY PRE-FILLED. Do NOT change them unless they show an error.
-5. After filling ALL fields, check any terms/consent checkbox.
+3. For empty fields, use the buyer details above. Use your best judgment for field matching.
+4. Dropdowns are ALREADY PRE-FILLED. Do NOT change them unless they show a validation error.
+5. After all fields are filled, check any terms/consent checkbox.
 6. Click Submit / Send / Request button.
-7. If validation errors appear, fix them and resubmit. Do NOT touch the phone field.
-8. EFFICIENCY: Fill multiple visible fields before scrolling. Do not waste turns scrolling back and forth.
+7. If validation errors appear, fix the specific field mentioned and resubmit.
+8. EFFICIENCY: Scroll down in one pass. Do NOT scroll back up unless fixing a validation error.
 ${formFieldsSummary}`;
 
     // 8. CUA agent loop for text fields
