@@ -2649,9 +2649,17 @@ export const requestEinvoice = mutation({
     if (!business.lhdnTin) {
       throw new Error("Business TIN not configured. Please update business settings.");
     }
-    if (!business.address) {
+    // Accept either structured address (addressLine1) or legacy flat address
+    const hasAddress = business.addressLine1 || business.address;
+    if (!hasAddress) {
       throw new Error("Business address not configured. Please update business settings.");
     }
+
+    // Compose address: prefer structured fields, fall back to legacy flat field
+    const composedAddress = business.addressLine1
+      ? [business.addressLine1, business.addressLine2, business.addressLine3, business.city, business.stateCode, business.postalCode]
+          .filter(Boolean).join(", ")
+      : (business.address as string);
 
     // Clear previous error on retry
     if (claim.einvoiceAgentError) {
@@ -2671,7 +2679,7 @@ export const requestEinvoice = mutation({
         name: business.name,
         tin: business.lhdnTin as string,
         brn: (business.businessRegistrationNumber || business.lhdnTin) as string,
-        address: business.address as string,
+        address: composedAddress,
         email: `einvoice+${emailRef}@einv.hellogroot.com`,
         phone: business.contactPhone,
       },
