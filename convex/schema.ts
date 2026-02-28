@@ -642,6 +642,32 @@ export default defineSchema({
     )),
     lastVerifiedAt: v.optional(v.number()),            // Last time URL was confirmed working
     notes: v.optional(v.string()),                     // E.g., "Bot blocked — manual only"
+
+    // ── Per-merchant form config (learned from successful submissions) ──
+    // When present, Playwright fills directly with selectors (Tier 1 — fast, ~5s)
+    // When absent, CUA explores visually (Tier 2 — slow, ~120s)
+    formConfig: v.optional(v.object({
+      // Field mappings: CSS selector → buyer detail key
+      fields: v.array(v.object({
+        label: v.string(),                             // Human-readable: "Company Industry"
+        selector: v.string(),                          // CSS selector: "select[name='industry']"
+        type: v.union(
+          v.literal("text"),                           // Regular text input
+          v.literal("select"),                         // Native <select> dropdown
+          v.literal("radix_select"),                   // Radix UI Select (needs keyboard nav)
+          v.literal("radio"),                          // Radio button
+          v.literal("checkbox"),                       // Checkbox
+        ),
+        buyerDetailKey: v.optional(v.string()),        // Maps to buyerDetails field: "name", "tin", "brn", etc.
+        defaultValue: v.optional(v.string()),          // Fallback when no buyer detail: "Others", "Retail"
+        required: v.boolean(),                         // Form requires this field
+      })),
+      submitSelector: v.optional(v.string()),          // CSS: "button[type='submit']"
+      consentSelector: v.optional(v.string()),         // CSS: "input[type='checkbox']#consent"
+      cuaHints: v.optional(v.string()),                // Extra CUA instructions for edge cases
+      successCount: v.optional(v.number()),            // Times this config worked
+      lastFailureReason: v.optional(v.string()),       // Last known failure for troubleshooter
+    })),
   })
     .index("by_country", ["country", "isActive"])
     .index("by_merchantName", ["merchantName"]),

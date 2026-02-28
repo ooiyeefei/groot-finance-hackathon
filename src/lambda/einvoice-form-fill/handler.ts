@@ -57,7 +57,7 @@ interface GeminiAction {
 
 const SCREEN_WIDTH = 1440;
 const SCREEN_HEIGHT = 900;
-const MAX_TURNS = 30;
+const MAX_TURNS = 40;
 const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL || "";
 
 // MY state codes to full names
@@ -360,7 +360,56 @@ export async function handler(event: FormFillEvent): Promise<{
       console.log(`[Form Fill] Phone pre-fill failed: ${e}`);
     }
 
-    // 6. Pre-analyze form fields
+    // 6. Pre-fill native <select> dropdowns with Playwright (CUA can't click dropdown options reliably)
+    try {
+      const nativeSelects = await page.evaluate((details: { state: string; city: string }) => {
+        const selects = Array.from(document.querySelectorAll('select'));
+        return selects.map(s => {
+          const label = s.closest('label')?.textContent?.trim()
+            || document.querySelector(`label[for="${s.id}"]`)?.textContent?.trim()
+            || s.name || s.id || '';
+          return {
+            name: s.name || s.id || '',
+            label: label.toLowerCase(),
+            options: Array.from(s.options).map(o => ({ value: o.value, text: o.textContent?.trim() || '' })),
+            currentValue: s.value,
+          };
+        }).filter(s => s.options.length > 1);
+      }, { state, city });
+
+      for (const sel of nativeSelects) {
+        if (sel.currentValue && sel.currentValue !== '' && sel.currentValue !== '-None-') continue; // already filled
+
+        const selector = sel.name ? `select[name="${sel.name}"]` : `select[id="${sel.name}"]`;
+        let picked = '';
+
+        // Try to match by label context
+        if (sel.label.includes('state') || sel.label.includes('negeri')) {
+          const opt = sel.options.find(o => o.text.toLowerCase().includes(state.toLowerCase()));
+          if (opt) { await page.selectOption(selector, opt.value); picked = opt.text; }
+        } else if (sel.label.includes('city') || sel.label.includes('bandar')) {
+          const opt = sel.options.find(o => o.text.toLowerCase().includes(city.toLowerCase()));
+          if (opt) { await page.selectOption(selector, opt.value); picked = opt.text; }
+        } else if (sel.label.includes('country') || sel.label.includes('negara')) {
+          const opt = sel.options.find(o => o.text.toLowerCase().includes('malaysia'));
+          if (opt) { await page.selectOption(selector, opt.value); picked = opt.text; }
+        } else if (sel.label.includes('industry') || sel.label.includes('sector')) {
+          // Default to "Others" or first non-placeholder option
+          const opt = sel.options.find(o => o.text.toLowerCase().includes('other'))
+            || sel.options.find(o => o.value && o.value !== '-None-' && o.value !== '');
+          if (opt) { await page.selectOption(selector, opt.value); picked = opt.text; }
+        } else if (sel.label.includes('salut')) {
+          const opt = sel.options.find(o => o.text.includes('Mr')) || sel.options[1];
+          if (opt) { await page.selectOption(selector, opt.value); picked = opt.text; }
+        }
+
+        if (picked) console.log(`[Form Fill] Pre-filled <select> "${sel.name}" → "${picked}"`);
+      }
+    } catch (e) {
+      console.log(`[Form Fill] Native select pre-fill: ${e}`);
+    }
+
+    // 7. Pre-analyze form fields
     let formFieldsSummary = "";
     try {
       const formInfo = await page.evaluate(() => {
@@ -373,32 +422,43 @@ export async function handler(event: FormFillEvent): Promise<{
       console.log(`[Form Fill] Form: ${formInfo.inputCount} inputs`);
     } catch { /* non-fatal */ }
 
-    // 7. Build CUA instruction (phone pre-filled, state/city will be pre-filled after CUA)
-    const instruction = `You are on a merchant e-invoice form. Fill ALL fields and submit.
+    // 7. Build receipt context (for forms that need receipt details)
+    const ed = event.extractedData || {};
+    const receiptContext = ed.referenceNumber
+      ? `\nRECEIPT DETAILS (use if form asks for order/receipt/transaction info):
+- Order/Receipt/Reference Number: ${ed.referenceNumber}
+- Transaction Date/Payment Date: ${ed.date || 'N/A'}
+- Amount: ${ed.amount || 'N/A'}`
+      : '';
 
-IMPORTANT: Mobile Number is ALREADY FILLED. Do NOT touch the phone field.
-IMPORTANT: Company State and City dropdowns will be filled AFTER you fill text fields. Skip them.
+    // 8. Build CUA instruction — GENERIC (works for any merchant form)
+    const instruction = `You are on a merchant e-invoice request form. Fill ALL visible fields with the buyer details below, then submit.
 
-STEP 1 - PERSONAL DETAILS:
-- "Full Name (as per ID)": ${userName}
-- "Email Address": ${bd.email}
-- Mobile Number: ALREADY FILLED — skip
+BUYER DETAILS — use these to fill any matching fields:
+- Full Name / Contact Person: ${userName}
+- Email / E-Invoice Email: ${bd.email}
+- Phone / Mobile: ALREADY FILLED — skip any phone field
+- Company Name: ${bd.name}
+- Business Registration Number (BRN) / New BRN: ${bd.brn}
+- Tax Identification Number (TIN): ${bd.tin}
+- SST Registration Number: N/A (leave blank if optional)
+- Company Address / Address Line 1: ${streetAddress}
+- City: ${city}
+- Postcode: 47100
+- State: ${state}
+- Country: Malaysia
+${receiptContext}
 
-STEP 2 - Scroll down to see DETAILS section
-
-STEP 3 - Click "Company" radio button (NOT Individual)
-
-STEP 4 - COMPANY DETAILS:
-- "Company Name": ${bd.name}
-- "Business Registration Number (BRN)": ${bd.brn}
-- "Tax Identification Number (TIN)": ${bd.tin}
-- "Company Address": ${streetAddress}
-
-STEP 5 - STOP HERE. You are DONE after filling the text fields above.
-Do NOT interact with State/City dropdowns, the terms checkbox, or the Submit button.
-These will be handled automatically after you finish.
-
-When all text fields are filled, stop producing actions.${formFieldsSummary}`;
+INSTRUCTIONS:
+1. Start from the TOP of the form. Fill fields as you scroll DOWN — do NOT scroll back up.
+2. If there's a "Company" vs "Individual" choice, select "Company".
+3. Fill ALL fields that match the buyer details above. Use your best judgment for field matching.
+4. Dropdown menus (State, City, Industry, etc.) are ALREADY PRE-FILLED. Do NOT change them unless they show an error.
+5. After filling ALL fields, check any terms/consent checkbox.
+6. Click Submit / Send / Request button.
+7. If validation errors appear, fix them and resubmit. Do NOT touch the phone field.
+8. EFFICIENCY: Fill multiple visible fields before scrolling. Do not waste turns scrolling back and forth.
+${formFieldsSummary}`;
 
     // 8. CUA agent loop for text fields
     console.log(`[Form Fill] Starting CUA loop (max ${MAX_TURNS} turns)`);
@@ -462,34 +522,47 @@ When all text fields are filled, stop producing actions.${formFieldsSummary}`;
       contents.push({ role: "user", parts: functionResponseParts });
     }
 
-    // 9. Pre-fill state/city dropdowns with Playwright (deterministic, after CUA fills text)
-    console.log(`[Form Fill] Pre-filling state: ${state}`);
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await new Promise(r => setTimeout(r, 1000));
+    // 9. Post-CUA: fix up Radix Select dropdowns if present (CUA can't reliably interact with them)
+    // Only attempt if form has Radix-style "Select state" or "Select city" comboboxes specifically
+    const hasRadixState = await page.getByRole('combobox').filter({ hasText: 'Select state' }).count() > 0;
+    const hasRadixCity = await page.getByRole('combobox').filter({ hasText: 'Select city' }).count() > 0;
+    const hasRadixDropdowns = hasRadixState || hasRadixCity;
+    let stateOk = true;
 
-    const stateOk = await prefillDropdown(page, 'Select state', state);
-    console.log(`[Form Fill] State: ${stateOk ? state : 'FAILED'}`);
+    if (hasRadixDropdowns) {
+      console.log(`[Form Fill] Radix dropdowns detected — pre-filling state/city with Playwright`);
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await new Promise(r => setTimeout(r, 1000));
 
-    if (stateOk) {
-      await new Promise(r => setTimeout(r, 2000)); // Wait for city options to load after state change
-      const cityOk = await prefillDropdown(page, 'Select city', city);
-      console.log(`[Form Fill] City: ${cityOk ? city : 'FAILED'}`);
-    }
+      stateOk = await prefillDropdown(page, 'Select state', state);
+      console.log(`[Form Fill] State: ${stateOk ? state : 'FAILED'}`);
 
-    // 10. Check terms and submit with Playwright (always attempt, even if dropdown partially failed)
-    await new Promise(r => setTimeout(r, 500));
-    const checkbox = page.locator('button[role="checkbox"]');
-    if (await checkbox.count() > 0) {
-      const isChecked = await checkbox.getAttribute('data-state');
-      if (isChecked !== 'checked') await checkbox.click();
-      console.log(`[Form Fill] Terms checked`);
-    }
+      if (stateOk) {
+        await new Promise(r => setTimeout(r, 2000));
+        const cityOk = await prefillDropdown(page, 'Select city', city);
+        console.log(`[Form Fill] City: ${cityOk ? city : 'FAILED'}`);
+      }
 
-    const submitBtn = page.locator('button:has-text("Submit")');
-    if (await submitBtn.count() > 0) {
-      await submitBtn.click();
-      console.log(`[Form Fill] Submitted`);
-      await new Promise(r => setTimeout(r, 5000));
+      // Check terms checkbox (Radix-style)
+      await new Promise(r => setTimeout(r, 500));
+      const checkbox = page.locator('button[role="checkbox"]');
+      if (await checkbox.count() > 0) {
+        const isChecked = await checkbox.getAttribute('data-state');
+        if (isChecked !== 'checked') await checkbox.click();
+        console.log(`[Form Fill] Terms checked (Radix)`);
+      }
+
+      // Submit (Radix forms — CUA was told to stop before submit)
+      const submitBtn = page.locator('button:has-text("Submit")');
+      if (await submitBtn.count() > 0) {
+        await submitBtn.click();
+        console.log(`[Form Fill] Submitted (Playwright)`);
+        await new Promise(r => setTimeout(r, 5000));
+      }
+    } else {
+      console.log(`[Form Fill] No Radix dropdowns — CUA handled the full form`);
+      // CUA already filled everything and submitted (generic instruction includes submit step)
+      await new Promise(r => setTimeout(r, 3000));
     }
 
     // 11. Cleanup

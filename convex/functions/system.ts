@@ -1725,6 +1725,7 @@ export const lookupMerchantEinvoiceUrl = query({
             einvoiceUrl: m.einvoiceUrl,
             urlType: m.urlType,
             notes: m.notes,
+            formConfig: m.formConfig || null,
           };
         }
       }
@@ -1779,6 +1780,56 @@ export const upsertMerchantEinvoiceUrl = mutation({
       lastVerifiedAt: Date.now(),
     });
     return { id, action: "created" };
+  },
+});
+
+/**
+ * Save learned form config for a merchant (after successful submission or troubleshooter investigation).
+ * Called by: form fill Lambda (on success) or troubleshooter agent (after fixing a failure).
+ * This enables Tier 1 (fast Playwright-only) execution for subsequent submissions.
+ */
+export const saveMerchantFormConfig = mutation({
+  args: {
+    merchantName: v.string(),
+    formConfig: v.object({
+      fields: v.array(v.object({
+        label: v.string(),
+        selector: v.string(),
+        type: v.union(v.literal("text"), v.literal("select"), v.literal("radix_select"), v.literal("radio"), v.literal("checkbox")),
+        buyerDetailKey: v.optional(v.string()),
+        defaultValue: v.optional(v.string()),
+        required: v.boolean(),
+      })),
+      submitSelector: v.optional(v.string()),
+      consentSelector: v.optional(v.string()),
+      cuaHints: v.optional(v.string()),
+      successCount: v.optional(v.number()),
+      lastFailureReason: v.optional(v.string()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const merchant = await ctx.db
+      .query("merchant_einvoice_urls")
+      .withIndex("by_merchantName", (q) => q.eq("merchantName", args.merchantName))
+      .first();
+
+    if (!merchant) {
+      console.log(`[System] saveMerchantFormConfig: merchant "${args.merchantName}" not found`);
+      return { success: false, reason: "merchant_not_found" };
+    }
+
+    // Merge with existing config — increment successCount
+    const existingCount = merchant.formConfig?.successCount || 0;
+    await ctx.db.patch(merchant._id, {
+      formConfig: {
+        ...args.formConfig,
+        successCount: existingCount + 1,
+      },
+      lastVerifiedAt: Date.now(),
+    });
+
+    console.log(`[System] Saved formConfig for "${args.merchantName}" (${args.formConfig.fields.length} fields, success #${existingCount + 1})`);
+    return { success: true, successCount: existingCount + 1 };
   },
 });
 
