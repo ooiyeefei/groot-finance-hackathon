@@ -24,6 +24,7 @@ import { usePathname } from 'next/navigation'
 import { formatBusinessDate } from '@/lib/utils'
 import type { DuplicateMatchPreview, DuplicateOverride, MatchTier } from '@/domains/expense-claims/types/duplicate-detection'
 import EinvoiceSection from './einvoice-section'
+import { useBusinessProfile } from '@/contexts/business-context'
 
 interface EditExpenseModalNewProps {
   expenseClaimId: string
@@ -65,6 +66,9 @@ export default function EditExpenseModalNew({
 
   // State for e-invoice data (fetched from claim API)
   const [einvoiceData, setEinvoiceData] = useState<Record<string, any> | null>(null)
+
+  // Business profile from reactive context (for e-invoice warnings)
+  const { profile: bizProfile } = useBusinessProfile()
 
   // State for duplicate detection
   const [showDuplicateModal, setShowDuplicateModal] = useState(false)
@@ -746,11 +750,11 @@ export default function EditExpenseModalNew({
                         lhdnReceivedAt={einvoiceData?.lhdnReceivedAt}
                         currency={formData.original_currency}
                         onRefresh={refreshEinvoiceData}
-                        businessHasTin={!!einvoiceData?.businessHasTin}
-                        businessHasBrn={!!einvoiceData?.businessHasBrn}
-                        businessHasAddress={!!einvoiceData?.businessHasAddress}
-                        businessHasPhone={!!einvoiceData?.businessHasPhone}
-                        businessHasEmail={!!einvoiceData?.businessHasEmail}
+                        businessHasTin={!!bizProfile?.lhdn_tin}
+                        businessHasBrn={!!bizProfile?.business_registration_number}
+                        businessHasAddress={!!bizProfile?.address_line1}
+                        businessHasPhone={!!bizProfile?.contact_phone}
+                        businessHasEmail={!!bizProfile?.contact_email}
                       />
 
                       {/* Expense ID at bottom of content */}
