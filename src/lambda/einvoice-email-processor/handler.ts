@@ -322,10 +322,10 @@ export async function handler(event: SESEvent) {
       emailType: classification.type,
     });
 
-    // 8. Forward e-invoice email to user (non-fatal — don't block on SES errors)
+    // 8. Forward e-invoice email to user (non-fatal — SES → Resend fallback)
     if (claimDetails.userEmail && classification.type !== "confirmation_only") {
       try {
-        await forwardToUser(rawEmailBytes, claimDetails.userEmail, subject, fromAddress);
+        await forwardToUser(rawEmailBytes, claimDetails.userEmail, subject, fromAddress, attachment);
         console.log(`[Email] Forwarded to ${claimDetails.userEmail}`);
       } catch (e) {
         console.log(`[Email] Forward failed (non-fatal): ${e}`);
@@ -345,36 +345,89 @@ async function forwardToUser(
   userEmail: string,
   originalSubject: string,
   originalFrom: string,
+  pdfAttachment?: { filename: string; content: Buffer } | null,
 ): Promise<void> {
-  // Build a simple forwarded email with the original as attachment
-  const boundary = `----=_Part_${Date.now()}`;
-  const forwardedEmail = [
-    `From: Groot Finance <${FORWARD_FROM}>`,
-    `To: ${userEmail}`,
-    `Subject: [E-Invoice] ${originalSubject}`,
-    `MIME-Version: 1.0`,
-    `Content-Type: multipart/mixed; boundary="${boundary}"`,
-    ``,
-    `--${boundary}`,
-    `Content-Type: text/plain; charset=utf-8`,
-    ``,
-    `Your e-invoice has been received from ${originalFrom}.`,
-    `This email is forwarded automatically by Groot Finance.`,
-    ``,
-    `Original subject: ${originalSubject}`,
-    ``,
-    `--${boundary}`,
-    `Content-Type: message/rfc822`,
-    `Content-Disposition: attachment; filename="original-email.eml"`,
-    ``,
-    rawEmailBytes.toString("utf-8"),
-    ``,
-    `--${boundary}--`,
-  ].join("\r\n");
+  const emailSubject = `[E-Invoice] ${originalSubject}`;
+  const emailBody = `Your e-invoice has been received from ${originalFrom}.\nThis email is forwarded automatically by Groot Finance.\n\nOriginal subject: ${originalSubject}`;
 
-  await ses.send(new SendRawEmailCommand({
-    RawMessage: { Data: Buffer.from(forwardedEmail) },
-    Source: FORWARD_FROM,
-    Destinations: [userEmail],
-  }));
+  // Try SES first (free, works for verified emails)
+  try {
+    const boundary = `----=_Part_${Date.now()}`;
+    const forwardedEmail = [
+      `From: Groot Finance <${FORWARD_FROM}>`,
+      `To: ${userEmail}`,
+      `Subject: ${emailSubject}`,
+      `MIME-Version: 1.0`,
+      `Content-Type: multipart/mixed; boundary="${boundary}"`,
+      ``,
+      `--${boundary}`,
+      `Content-Type: text/plain; charset=utf-8`,
+      ``,
+      emailBody,
+      ``,
+      `--${boundary}`,
+      `Content-Type: message/rfc822`,
+      `Content-Disposition: attachment; filename="original-email.eml"`,
+      ``,
+      rawEmailBytes.toString("utf-8"),
+      ``,
+      `--${boundary}--`,
+    ].join("\r\n");
+
+    await ses.send(new SendRawEmailCommand({
+      RawMessage: { Data: Buffer.from(forwardedEmail) },
+      Source: FORWARD_FROM,
+      Destinations: [userEmail],
+    }));
+    console.log(`[Email] Forwarded via SES to ${userEmail}`);
+    return;
+  } catch (sesError) {
+    console.log(`[Email] SES forward failed (trying Resend fallback): ${sesError}`);
+  }
+
+  // Fallback: Resend (no sandbox restrictions)
+  const resendKey = process.env.RESEND_API_KEY;
+  if (!resendKey) {
+    console.log(`[Email] No RESEND_API_KEY — cannot forward`);
+    return;
+  }
+
+  try {
+    const attachments: Array<{ filename: string; content: string }> = [];
+
+    // Attach PDF if available (more useful than raw .eml for the user)
+    if (pdfAttachment) {
+      attachments.push({
+        filename: pdfAttachment.filename,
+        content: pdfAttachment.content.toString("base64"),
+      });
+    }
+
+    const resendPayload: Record<string, unknown> = {
+      from: `Groot Finance <${FORWARD_FROM}>`,
+      to: [userEmail],
+      subject: emailSubject,
+      text: emailBody,
+    };
+    if (attachments.length > 0) {
+      resendPayload.attachments = attachments;
+    }
+
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${resendKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(resendPayload),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Resend ${response.status}: ${err}`);
+    }
+    console.log(`[Email] Forwarded via Resend to ${userEmail}`);
+  } catch (resendError) {
+    console.log(`[Email] Resend forward also failed: ${resendError}`);
+  }
 }

@@ -283,6 +283,7 @@ export class DocumentProcessingStack extends cdk.Stack {
         NEXT_PUBLIC_CONVEX_URL: 'https://kindhearted-lynx-129.convex.cloud',
         S3_BUCKET_NAME: 'finanseal-bucket',
         GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+        RESEND_API_KEY: process.env.RESEND_API_KEY || '',
       },
       bundling: {
         externalModules: ['@aws-sdk/*'],
