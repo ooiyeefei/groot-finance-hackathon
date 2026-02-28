@@ -148,7 +148,7 @@ export class DocumentProcessingStack extends cdk.Stack {
     // Triggered by: Python document-processor (boto3) or Vercel API (OIDC)
     // ========================================================================
     const formFillLogGroup = new logs.LogGroup(this, 'FormFillLogs', {
-      logGroupName: `/aws/lambda/finanseal-einvoice-form-fill-v2`,
+      logGroupName: `/aws/lambda/finanseal-einvoice-form-fill`,
       retention: logs.RetentionDays.ONE_MONTH,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -158,10 +158,10 @@ export class DocumentProcessingStack extends cdk.Stack {
         path.join(__dirname, '../../src/lambda/einvoice-form-fill-python'),
       ),
       architecture: lambda.Architecture.X86_64,
-      functionName: 'finanseal-einvoice-form-fill-v2',
+      functionName: 'finanseal-einvoice-form-fill',
       description: 'E-Invoice form fill — Python + Playwright + Gemini CUA (3-tier self-evolving)',
       memorySize: 2048, // Playwright Chromium needs more memory in Docker
-      timeout: cdk.Duration.minutes(5),
+      timeout: cdk.Duration.minutes(8), // Long forms (MR. D.I.Y. = 20+ fields) need up to 7 min
       logGroup: formFillLogGroup,
       environment: {
         GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',

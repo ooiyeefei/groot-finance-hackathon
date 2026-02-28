@@ -12,9 +12,13 @@ import os
 import base64
 import time
 import traceback
+import re
 from typing import Any, Optional
 from urllib.request import Request, urlopen
 from playwright.sync_api import sync_playwright, Page, Browser
+
+# DSPy imported lazily in troubleshoot() — avoids 10s cold start penalty on every invocation
+dspy = None  # type: ignore
 
 # ── Config ──────────────────────────────────────────────────
 
@@ -404,33 +408,75 @@ TASK:
 
 # ── Tier 3: Troubleshooter ──────────────────────────────────
 
+# ── DSPy Signatures for structured troubleshooting ──────────
+
 def troubleshoot(screenshot_b64: str, error: str, merchant: str):
-    """Gemini Flash diagnoses failure → saves fix suggestions to formConfig."""
+    """DSPy-structured troubleshooting: diagnoses failure → saves fix suggestions."""
     print(f"[Troubleshoot] Diagnosing '{merchant}': {error[:80]}")
     try:
-        diagnosis = gemini_flash(
-            f"Analyze this e-invoice form that FAILED to submit.\n"
-            f"ERROR: {error}\nMERCHANT: {merchant}\n\n"
-            f"Respond in JSON:\n"
-            f'{{"diagnosis":"what went wrong","unfilledFields":[{{"label":"name","suggestedSelector":"CSS","suggestedType":"text|select","suggestedDefault":"value"}}],"fixable":true}}',
+        # Lazy import DSPy (avoids 10s cold start on every invocation)
+        os.environ["DSPY_CACHEDIR"] = "/tmp/dspy_cache"
+        import dspy as _dspy
+        from pydantic import BaseModel as PydanticBaseModel, Field as PydanticField
+
+        class UnfilledField(PydanticBaseModel):
+            label: str = PydanticField(description="Field label, e.g. 'Company Industry'")
+            css_selector: str = PydanticField(description="CSS selector, e.g. 'select[name=industry]'")
+            field_type: str = PydanticField(description="One of: text, select, radio, checkbox")
+            suggested_default: str = PydanticField(default="", description="Default value")
+
+        class FormDiagnosis(_dspy.Signature):
+            """Analyze a failed e-invoice form and diagnose the root cause."""
+            error_message: str = _dspy.InputField(desc="Error that caused the form fill to fail")
+            merchant_name: str = _dspy.InputField(desc="Merchant name")
+            screenshot_description: str = _dspy.InputField(desc="Description of the screenshot")
+            diagnosis: str = _dspy.OutputField(desc="What went wrong")
+            unfilled_fields: list[UnfilledField] = _dspy.OutputField(desc="Fields needing fixes")
+            fixable: bool = _dspy.OutputField(desc="Can this be fixed by filling fields?")
+
+        # Configure DSPy
+        lm = _dspy.LM("gemini/gemini-2.0-flash", api_key=GEMINI_KEY, max_tokens=2048, temperature=0.1)
+        _dspy.settings.configure(lm=lm, adapter=_dspy.JSONAdapter())
+
+        # Gemini Flash describes the screenshot (DSPy doesn't handle images natively)
+        description = gemini_flash(
+            "Describe this e-invoice form screenshot. Focus on:\n"
+            "1. Which fields are filled vs empty\n"
+            "2. Any validation error messages visible\n"
+            "3. The state of dropdowns and checkboxes",
             screenshot_b64,
         )
-        print(f"[Troubleshoot] {diagnosis[:200]}")
-        m = __import__("re").search(r"\{[\s\S]*\}", diagnosis)
-        if not m:
-            return
-        parsed = json.loads(m.group())
-        if parsed.get("unfilledFields") and parsed.get("fixable"):
-            fields = [{"label": f.get("label", ""), "selector": f.get("suggestedSelector", ""),
-                        "type": f.get("suggestedType", "text"), "defaultValue": f.get("suggestedDefault", ""),
-                        "required": True} for f in parsed["unfilledFields"]]
+        print(f"[Troubleshoot] Screenshot: {description[:150]}...")
+
+        # DSPy structured diagnosis
+        result = _dspy.Predict(FormDiagnosis)(
+            error_message=error[:500],
+            merchant_name=merchant,
+            screenshot_description=description[:2000],
+        )
+        print(f"[Troubleshoot] Diagnosis: {result.diagnosis}")
+        print(f"[Troubleshoot] Fixable: {result.fixable}, Fields: {len(result.unfilled_fields)}")
+
+        if result.fixable and result.unfilled_fields:
+            valid_types = {"text", "select", "radix_select", "radio", "checkbox"}
+            fields = []
+            for uf in result.unfilled_fields:
+                ftype = uf.field_type if uf.field_type in valid_types else "text"
+                field: dict[str, Any] = {"label": uf.label, "selector": uf.css_selector,
+                                          "type": ftype, "required": True}
+                if uf.suggested_default:
+                    field["defaultValue"] = uf.suggested_default
+                fields.append(field)
+
             convex_mutation("functions/system:saveMerchantFormConfig", {
                 "merchantName": merchant,
-                "formConfig": {"fields": fields, "lastFailureReason": parsed.get("diagnosis", error[:200])},
+                "formConfig": {"fields": fields, "lastFailureReason": result.diagnosis[:200]},
             })
             print(f"[Troubleshoot] Saved {len(fields)} fix suggestions")
+
     except Exception as e:
         print(f"[Troubleshoot] Failed: {e}")
+        traceback.print_exc()
 
 
 # ── Extract formConfig from filled page (post-success) ─────
@@ -469,17 +515,28 @@ def extract_form_config(page: Page) -> Optional[dict]:
             "phone": "phone", "order": "referenceNumber", "receipt": "referenceNumber",
             "date": "date", "payment": "date",
         }
+        clean_fields = []
         for f in raw["fields"]:
             ll = f["label"].lower()
-            f["buyerDetailKey"] = next((v for k, v in key_map.items() if k in ll), None)
-            if not f.get("buyerDetailKey"):
-                f["defaultValue"] = f.pop("value", "")
+            mapped_key = next((v for k, v in key_map.items() if k in ll), None)
+            clean = {
+                "label": f["label"],
+                "selector": f["selector"],
+                "type": f["type"],
+                "required": bool(f.get("required", False)),
+            }
+            if mapped_key:
+                clean["buyerDetailKey"] = mapped_key
             else:
-                f.pop("value", None)
-            f["required"] = f.get("required", False)
+                clean["defaultValue"] = f.get("value", "")
+            clean_fields.append(clean)
 
-        return {"fields": raw["fields"], "submitSelector": raw.get("submitSelector"),
-                "consentSelector": raw.get("consentSelector")}
+        result: dict[str, Any] = {"fields": clean_fields}
+        if raw.get("submitSelector"):
+            result["submitSelector"] = raw["submitSelector"]
+        if raw.get("consentSelector"):
+            result["consentSelector"] = raw["consentSelector"]
+        return result
     except Exception as e:
         print(f"[Extract] Failed: {e}")
         return None
