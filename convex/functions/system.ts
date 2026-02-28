@@ -1354,10 +1354,14 @@ export const getClaimByEmailRef = query({
     const claim = claims.find((c) => !c.deletedAt);
     if (!claim) return null;
 
+    // Get user email for forwarding e-invoice copies
+    const user = await ctx.db.get(claim.userId);
+
     return {
       claimId: claim._id as string,
       businessId: claim.businessId as string,
       userId: claim.userId as string,
+      userEmail: user?.email || null,
       // S3 storage path pattern: {bizId}/{userId}/{claimId}
       storagePath: `${claim.businessId}/${claim.userId}/${claim._id}`,
     };

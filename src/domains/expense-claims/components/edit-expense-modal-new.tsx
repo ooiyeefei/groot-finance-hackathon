@@ -746,6 +746,11 @@ export default function EditExpenseModalNew({
                         lhdnReceivedAt={einvoiceData?.lhdnReceivedAt}
                         currency={formData.original_currency}
                         onRefresh={refreshEinvoiceData}
+                        businessHasTin={!!einvoiceData?.businessHasTin}
+                        businessHasBrn={!!einvoiceData?.businessHasBrn}
+                        businessHasAddress={!!einvoiceData?.businessHasAddress}
+                        businessHasPhone={!!einvoiceData?.businessHasPhone}
+                        businessHasEmail={!!einvoiceData?.businessHasEmail}
                       />
 
                       {/* Expense ID at bottom of content */}

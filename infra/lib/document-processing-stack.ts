@@ -294,6 +294,12 @@ export class DocumentProcessingStack extends cdk.Stack {
     // S3 read/write: read raw email from SES bucket, write processed files to main bucket
     bucket.grantReadWrite(emailProcessorFunction);
 
+    // SES send permission: forward e-invoice emails to user
+    emailProcessorFunction.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ses:SendRawEmail'],
+      resources: ['*'], // SES requires * for SendRawEmail
+    }));
+
     // Also need read access to the SES email bucket (may be same bucket or different)
     // SES stores raw emails in the same bucket under ses-emails/einvoice/ prefix
 

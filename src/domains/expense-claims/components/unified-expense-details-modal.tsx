@@ -158,6 +158,7 @@ export default function UnifiedExpenseDetailsModal({
   const [showDuplicateReview, setShowDuplicateReview] = useState(false)
   const [duplicateMatches, setDuplicateMatches] = useState<any[]>([])
   const [duplicateLoading, setDuplicateLoading] = useState(false)
+  const [businessProfile, setBusinessProfile] = useState<Record<string, any> | null>(null)
 
   // Fetch categories on component mount
   useEffect(() => {
@@ -179,12 +180,18 @@ export default function UnifiedExpenseDetailsModal({
     }
   }, [isOpen])
 
-  // Fetch claim details
+  // Fetch claim details + business profile
   useEffect(() => {
     if (isOpen && claimId) {
       fetchClaimDetails()
     }
-  }, [isOpen, claimId])
+    if (isOpen && businessId) {
+      fetch(`/api/v1/account-management/businesses/profile`)
+        .then(r => r.json())
+        .then(r => { if (r.success) setBusinessProfile(r.data) })
+        .catch(() => {})
+    }
+  }, [isOpen, claimId, businessId])
 
   // Generate signed URL when claim details are loaded
   useEffect(() => {
@@ -876,6 +883,11 @@ export default function UnifiedExpenseDetailsModal({
                         pendingMatchCandidates={claimDetails.pendingMatchCandidates}
                         currency={claimDetails.currency || claimDetails.transaction?.original_currency}
                         onRefresh={fetchClaimDetails}
+                        businessHasTin={!!businessProfile?.lhdn_tin}
+                        businessHasBrn={!!businessProfile?.business_registration_number}
+                        businessHasAddress={!!businessProfile?.address_line1}
+                        businessHasPhone={!!businessProfile?.contact_phone}
+                        businessHasEmail={!!businessProfile?.contact_email}
                       />
 
                       {/* Document Processing Status */}

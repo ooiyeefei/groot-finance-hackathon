@@ -77,6 +77,12 @@ interface EinvoiceSectionProps {
   pendingMatchCandidates?: MatchCandidate[]
   currency?: string
   onRefresh?: () => void
+  // Business settings completeness (for missing fields warning)
+  businessHasTin?: boolean
+  businessHasBrn?: boolean
+  businessHasAddress?: boolean
+  businessHasPhone?: boolean
+  businessHasEmail?: boolean
 }
 
 /**
@@ -101,6 +107,11 @@ export default function EinvoiceSection({
   pendingMatchCandidates,
   currency = 'MYR',
   onRefresh,
+  businessHasTin,
+  businessHasBrn,
+  businessHasAddress,
+  businessHasPhone,
+  businessHasEmail,
 }: EinvoiceSectionProps) {
   const [requestLoading, setRequestLoading] = useState(false)
   const [uploadLoading, setUploadLoading] = useState(false)
@@ -231,6 +242,42 @@ export default function EinvoiceSection({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Missing Business Details Warning */}
+        {businessHasTin !== undefined && !einvoiceAttached && (() => {
+          const missing: string[] = []
+          if (!businessHasTin) missing.push('Tax ID (TIN)')
+          if (!businessHasBrn) missing.push('Business Registration (BRN)')
+          if (!businessHasAddress) missing.push('Address')
+          if (!businessHasPhone) missing.push('Phone')
+          if (!businessHasEmail) missing.push('Email')
+          if (missing.length === 0) return null
+          return (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+              <div className="flex items-start gap-2">
+                <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-amber-700 dark:text-amber-300 text-sm font-medium">
+                    Business details incomplete
+                  </p>
+                  <p className="text-muted-foreground text-xs mt-1">
+                    Missing: {missing.join(', ')}. These are needed for automated e-invoice requests.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-2 text-xs h-7"
+                    asChild
+                  >
+                    <a href="/en/settings?tab=business-profile">
+                      Update Business Settings
+                    </a>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
+
         {/* Error Display */}
         {error && (
           <div className="text-destructive text-sm bg-destructive/10 rounded px-3 py-2 flex items-center gap-2">

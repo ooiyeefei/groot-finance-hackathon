@@ -20,6 +20,7 @@
  */
 
 import { S3Client, GetObjectCommand, CopyObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { SESClient, SendRawEmailCommand } from "@aws-sdk/client-ses";
 import { simpleParser, ParsedMail } from "mailparser";
 import { Readable } from "stream";
 
@@ -46,6 +47,7 @@ interface ClaimDetails {
   claimId: string;
   businessId: string;
   userId: string;
+  userEmail: string | null;
   storagePath: string;
 }
 
@@ -66,9 +68,11 @@ interface ClassificationResult {
 // ── Clients ────────────────────────────────────────────────
 
 const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
+const ses = new SESClient({ region: process.env.AWS_REGION || "us-west-2" });
 const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL || "";
 const S3_BUCKET = process.env.S3_BUCKET_NAME || "finanseal-bucket";
 const GEMINI_KEY = process.env.GEMINI_API_KEY || "";
+const FORWARD_FROM = "noreply@notifications.hellogroot.com";
 
 // ── HTTP helpers ───────────────────────────────────────────
 
@@ -318,8 +322,59 @@ export async function handler(event: SESEvent) {
       emailType: classification.type,
     });
 
+    // 8. Forward e-invoice email to user (non-fatal — don't block on SES errors)
+    if (claimDetails.userEmail && classification.type !== "confirmation_only") {
+      try {
+        await forwardToUser(rawEmailBytes, claimDetails.userEmail, subject, fromAddress);
+        console.log(`[Email] Forwarded to ${claimDetails.userEmail}`);
+      } catch (e) {
+        console.log(`[Email] Forward failed (non-fatal): ${e}`);
+      }
+    }
+
     console.log(`[Email] Done: ${messageId} → ${classification.type} for claim ${claimId}`);
   }
 
   console.log(`[Email] Processed ${event.Records.length} records in ${Date.now() - startTime}ms`);
+}
+
+// ── Forward e-invoice to user's email ──────────────────────
+
+async function forwardToUser(
+  rawEmailBytes: Buffer,
+  userEmail: string,
+  originalSubject: string,
+  originalFrom: string,
+): Promise<void> {
+  // Build a simple forwarded email with the original as attachment
+  const boundary = `----=_Part_${Date.now()}`;
+  const forwardedEmail = [
+    `From: Groot Finance <${FORWARD_FROM}>`,
+    `To: ${userEmail}`,
+    `Subject: [E-Invoice] ${originalSubject}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    ``,
+    `--${boundary}`,
+    `Content-Type: text/plain; charset=utf-8`,
+    ``,
+    `Your e-invoice has been received from ${originalFrom}.`,
+    `This email is forwarded automatically by Groot Finance.`,
+    ``,
+    `Original subject: ${originalSubject}`,
+    ``,
+    `--${boundary}`,
+    `Content-Type: message/rfc822`,
+    `Content-Disposition: attachment; filename="original-email.eml"`,
+    ``,
+    rawEmailBytes.toString("utf-8"),
+    ``,
+    `--${boundary}--`,
+  ].join("\r\n");
+
+  await ses.send(new SendRawEmailCommand({
+    RawMessage: { Data: Buffer.from(forwardedEmail) },
+    Source: FORWARD_FROM,
+    Destinations: [userEmail],
+  }));
 }
