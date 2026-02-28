@@ -4,6 +4,12 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
   FileCheck,
   FileUp,
   Loader2,
@@ -16,6 +22,7 @@ import {
   Ban,
   Eye,
   FileText,
+  Info,
 } from 'lucide-react'
 import EinvoiceStatusBadge from './einvoice-status-badge'
 import EinvoiceMatchReview from './einvoice-match-review'
@@ -175,6 +182,21 @@ export default function EinvoiceSection({
         <CardTitle className="text-foreground text-sm flex items-center gap-2">
           <FileCheck className="w-4 h-4 text-muted-foreground" />
           E-Invoice
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary cursor-help">
+                  Beta
+                  <Info className="w-2.5 h-2.5" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-[260px] text-xs">
+                <p>
+                  Automated e-invoice requests work with many Malaysian merchants, but each merchant has a different system. Some may require manual submission. We appreciate your understanding as we improve coverage.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           {hasAnyEinvoiceData && (
             <EinvoiceStatusBadge
               einvoiceRequestStatus={einvoiceRequestStatus}
