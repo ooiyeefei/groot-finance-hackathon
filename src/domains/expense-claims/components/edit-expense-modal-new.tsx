@@ -19,7 +19,7 @@ import ExpenseFormFields from './expense-form-fields'
 import LineItemTable from './line-item-table'
 import DuplicateWarningModal from './duplicate-warning-modal'
 import DocumentPreviewWithAnnotations from '@/domains/invoices/components/document-preview-with-annotations'
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { usePathname } from 'next/navigation'
 import { formatBusinessDate } from '@/lib/utils'
 import type { DuplicateMatchPreview, DuplicateOverride, MatchTier } from '@/domains/expense-claims/types/duplicate-detection'
@@ -263,6 +263,30 @@ export default function EditExpenseModalNew({
       if (result.success && result.data) setEinvoiceData(result.data)
     } catch { /* non-fatal */ }
   }, [expenseClaimId])
+
+  // Poll for status changes when einvoice is "requesting" (Lambda processing)
+  const einvoicePollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  useEffect(() => {
+    const status = einvoiceData?.einvoiceRequestStatus
+    if (status === 'requesting' || status === 'in_progress') {
+      // Start polling every 5s
+      if (!einvoicePollRef.current) {
+        einvoicePollRef.current = setInterval(refreshEinvoiceData, 5000)
+      }
+    } else {
+      // Stop polling when status changes
+      if (einvoicePollRef.current) {
+        clearInterval(einvoicePollRef.current)
+        einvoicePollRef.current = null
+      }
+    }
+    return () => {
+      if (einvoicePollRef.current) {
+        clearInterval(einvoicePollRef.current)
+        einvoicePollRef.current = null
+      }
+    }
+  }, [einvoiceData?.einvoiceRequestStatus, refreshEinvoiceData])
 
   // Generate signed URL when receipt info is loaded
   useEffect(() => {

@@ -32,6 +32,7 @@ SCREEN_W, SCREEN_H = 1440, 900
 MAX_TURNS = 40
 CONVEX_URL = os.environ.get("NEXT_PUBLIC_CONVEX_URL", "")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
+BU_LAMBDA_ARN = os.environ.get("EINVOICE_FORM_FILL_BU_LAMBDA_ARN", "")
 
 STATE_CODES = {
     "JHR": "Johor", "KDH": "Kedah", "KTN": "Kelantan", "MLK": "Melaka",
@@ -798,13 +799,33 @@ def handler(event: dict, context=None) -> dict:
         # ── Pre-fill with Playwright ──
         prefill_all(page, buyer, receipt)
 
-        # ── Tier 2: CUA exploration (with Flash fallback on 429) ──
+        # ── Tier 2: CUA exploration (with browser-use Lambda fallback on 429) ──
         try:
             actions = run_tier2(page, buyer, receipt)
         except Exception as tier2_err:
             if "429" in str(tier2_err):
-                print(f"[Form Fill] CUA rate-limited, falling back to Flash: {tier2_err}")
-                actions = run_tier2_flash(page, buyer, receipt)
+                if BU_LAMBDA_ARN:
+                    # Tier 2B: invoke separate browser-use Lambda (fully async, no nest_asyncio conflicts)
+                    print(f"[Form Fill] CUA rate-limited, invoking browser-use Lambda: {tier2_err}")
+                    browser.close()
+                    browser = None  # prevent double-close
+                    import boto3
+                    lambda_client = boto3.client("lambda")
+                    bu_resp = lambda_client.invoke(
+                        FunctionName=BU_LAMBDA_ARN,
+                        InvocationType="RequestResponse",  # sync — wait for result
+                        Payload=json.dumps(event).encode(),
+                    )
+                    bu_result = json.loads(bu_resp["Payload"].read())
+                    dur = int((time.time() - start) * 1000)
+                    success = bu_result.get("success", False)
+                    print(f"[Form Fill] Tier 2B result: {bu_result}, total {dur}ms")
+                    # browser-use Lambda already reported to Convex
+                    return {"success": success, "durationMs": dur, "tier": "2b"}
+                else:
+                    # No browser-use Lambda configured — fall back to Flash
+                    print(f"[Form Fill] CUA rate-limited, Flash fallback: {tier2_err}")
+                    actions = run_tier2_flash(page, buyer, receipt)
             else:
                 raise
 

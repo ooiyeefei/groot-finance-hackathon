@@ -186,6 +186,43 @@ export class DocumentProcessingStack extends cdk.Stack {
     });
 
     // ========================================================================
+    // E-Invoice Form Fill — browser-use + Gemini Flash (Tier 2B)
+    // Fully async Lambda — no nest_asyncio conflicts.
+    // Invoked by the main form-fill Lambda when CUA hits 429 rate limit.
+    // ========================================================================
+    const formFillBuLogGroup = new logs.LogGroup(this, 'FormFillBuLogs', {
+      logGroupName: `/aws/lambda/finanseal-einvoice-form-fill-bu`,
+      retention: logs.RetentionDays.ONE_MONTH,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const formFillBuFunction = new lambda.DockerImageFunction(this, 'EinvoiceFormFillBU', {
+      code: lambda.DockerImageCode.fromImageAsset(
+        path.join(__dirname, '../../src/lambda/einvoice-form-fill-browser-use'),
+      ),
+      architecture: lambda.Architecture.X86_64,
+      functionName: 'finanseal-einvoice-form-fill-bu',
+      description: 'E-Invoice form fill — browser-use + Gemini Flash (Tier 2B, CUA 429 fallback)',
+      memorySize: 2048,
+      timeout: cdk.Duration.minutes(5),
+      logGroup: formFillBuLogGroup,
+      environment: {
+        GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+        NEXT_PUBLIC_CONVEX_URL: 'https://kindhearted-lynx-129.convex.cloud',
+        PLAYWRIGHT_BROWSERS_PATH: '/opt/pw-browsers',
+      },
+    });
+
+    // Main form-fill Lambda can invoke browser-use Lambda
+    formFillBuFunction.grantInvoke(formFillFunction);
+
+    // Pass browser-use Lambda ARN to main form-fill Lambda
+    formFillFunction.addEnvironment(
+      'EINVOICE_FORM_FILL_BU_LAMBDA_ARN',
+      formFillBuFunction.functionArn
+    );
+
+    // ========================================================================
     // LHDN Polling Lambda (019-lhdn-einv-flow-2)
     // Node.js Lambda that polls LHDN MyInvois API for received e-invoices.
     // Each business has their own LHDN credentials (entered via business settings UI):
