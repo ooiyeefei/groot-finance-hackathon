@@ -456,11 +456,13 @@ def run_tier2_browser_use(url: str, buyer: dict, receipt: dict) -> bool:
 
     print("[Tier 2B] browser-use + Gemini Flash fallback — CUA rate-limited")
 
+    # Lambda filesystem: only /tmp is writable. Set browser-use config dirs before import.
+    os.environ["GOOGLE_API_KEY"] = GEMINI_KEY
+    os.environ["HOME"] = "/tmp"  # browser-use reads ~/.browseruse/
+    os.environ["BROWSER_USE_CONFIG_DIR"] = "/tmp/.browseruse"
+
     async def _run() -> bool:
         from browser_use import Agent, BrowserProfile, ChatGoogle
-
-        # Map GEMINI_API_KEY → GOOGLE_API_KEY (langchain-google-genai convention)
-        os.environ["GOOGLE_API_KEY"] = GEMINI_KEY
 
         llm = ChatGoogle(model="gemini-2.0-flash")
 
@@ -477,6 +479,9 @@ def run_tier2_browser_use(url: str, buyer: dict, receipt: dict) -> bool:
             minimum_wait_page_load_time=1.0,
             wait_between_actions=0.5,
             viewport={"width": SCREEN_W, "height": SCREEN_H},
+            # Lambda: all writable paths must go to /tmp
+            user_data_dir="/tmp/bu-user-data",
+            downloads_path="/tmp/bu-downloads",
         )
 
         task = f"""You are on a merchant e-invoice form at {url}.
