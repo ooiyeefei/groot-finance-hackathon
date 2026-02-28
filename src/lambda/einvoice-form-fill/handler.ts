@@ -1,18 +1,13 @@
 /**
  * E-Invoice Form Fill Lambda (019-lhdn-einv-flow-2)
  *
- * Uses Gemini CUA + @sparticuz/chromium for form filling.
- * Runs real Chromium with --headless=new (required for Radix UI dropdowns).
+ * 3-tier execution strategy:
+ * - Tier 1 (fast, ~5s): Merchant has saved formConfig → Playwright fills with CSS selectors
+ * - Tier 2 (slow, ~120s): First-time merchant → CUA explores, fills, submits
+ * - Tier 3 (on failure): Troubleshooter Gemini vision diagnoses → updates formConfig
  *
- * Architecture:
- * - @sparticuz/chromium: Chromium binary for Lambda (--headless=new)
- * - Gemini CUA: sees screenshots, outputs UI actions
- * - Playwright-core: executes actions in the browser
- * - This Lambda: orchestrates the agent loop
- *
- * Hybrid approach:
- * - Playwright pre-fills phone + state/city dropdowns (deterministic)
- * - Gemini CUA fills text fields + submits (autonomous)
+ * On success: extracts field selectors → saves formConfig → next run uses Tier 1
+ * On failure: takes screenshot → Gemini diagnoses root cause → updates formConfig
  */
 
 import { chromium, type Browser, type Page } from "playwright-core";
@@ -51,6 +46,24 @@ interface GeminiAction {
   args: Record<string, any>;
 }
 
+interface FormFieldConfig {
+  label: string;
+  selector: string;
+  type: "text" | "select" | "radix_select" | "radio" | "checkbox";
+  buyerDetailKey?: string;
+  defaultValue?: string;
+  required: boolean;
+}
+
+interface FormConfig {
+  fields: FormFieldConfig[];
+  submitSelector?: string;
+  consentSelector?: string;
+  cuaHints?: string;
+  successCount?: number;
+  lastFailureReason?: string;
+}
+
 // ============================================================
 // Constants
 // ============================================================
@@ -86,6 +99,309 @@ async function convexMutation(
   const result = await response.json();
   if (result.status === "error") throw new Error(`Convex: ${result.errorMessage}`);
   return result.value;
+}
+
+async function convexQuery(
+  functionPath: string,
+  args: Record<string, unknown>
+): Promise<unknown> {
+  const response = await fetch(`${CONVEX_URL}/api/query`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: functionPath, args, format: "json" }),
+  });
+  if (!response.ok) return null;
+  const result = await response.json();
+  return result.status === "success" ? result.value : null;
+}
+
+// ============================================================
+// Gemini Vision (non-CUA) — for troubleshooting failures
+// ============================================================
+
+async function callGeminiVision(geminiKey: string, prompt: string, screenshotB64: string): Promise<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [
+        { text: prompt },
+        { inlineData: { mimeType: "image/png", data: screenshotB64 } },
+      ]}],
+      generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
+    }),
+  });
+  if (!response.ok) return `Gemini error: ${response.status}`;
+  const result = await response.json();
+  return result.candidates?.[0]?.content?.parts?.[0]?.text || "No response";
+}
+
+// ============================================================
+// Tier 1: Fast path — Playwright-only with saved formConfig
+// ============================================================
+
+async function executeTier1(page: Page, formConfig: FormConfig, buyerDetails: Record<string, string>): Promise<boolean> {
+  console.log(`[Form Fill] Tier 1: Using saved formConfig (${formConfig.fields.length} fields)`);
+
+  for (const field of formConfig.fields) {
+    try {
+      const value = (field.buyerDetailKey && buyerDetails[field.buyerDetailKey]) || field.defaultValue || '';
+      if (!value) continue;
+
+      const el = page.locator(field.selector).first();
+      if (await el.count() === 0) {
+        console.log(`[Form Fill] Tier 1: selector not found: ${field.selector}`);
+        continue;
+      }
+
+      switch (field.type) {
+        case "text":
+          await el.click({ timeout: 3000 });
+          await page.keyboard.press("Control+A");
+          await page.keyboard.type(value, { delay: 20 });
+          break;
+        case "select":
+          await page.selectOption(field.selector, { label: value }).catch(() =>
+            page.selectOption(field.selector, value)
+          );
+          break;
+        case "radio":
+          await el.click({ timeout: 3000 });
+          break;
+        case "checkbox":
+          if (await el.getAttribute('data-state') !== 'checked' && !(await el.isChecked().catch(() => false))) {
+            await el.click({ timeout: 3000 });
+          }
+          break;
+        case "radix_select":
+          // Use proven keyboard approach
+          await el.focus({ timeout: 3000 });
+          await page.keyboard.press('Space');
+          await new Promise(r => setTimeout(r, 800));
+          const options = await page.getByRole('option');
+          const optCount = await options.count();
+          for (let i = 0; i < optCount; i++) {
+            const optText = await options.nth(i).textContent();
+            if (optText?.toLowerCase().includes(value.toLowerCase())) {
+              // Navigate to this option
+              for (let j = 0; j < i; j++) {
+                await page.keyboard.press('ArrowDown');
+                await new Promise(r => setTimeout(r, 60));
+              }
+              await page.keyboard.press('Space');
+              await new Promise(r => setTimeout(r, 500));
+              break;
+            }
+          }
+          break;
+      }
+      console.log(`[Form Fill] Tier 1: ${field.label} → "${value.substring(0, 30)}"`);
+    } catch (e) {
+      console.log(`[Form Fill] Tier 1: failed "${field.label}": ${e}`);
+    }
+  }
+
+  // Consent checkbox
+  if (formConfig.consentSelector) {
+    try {
+      const consent = page.locator(formConfig.consentSelector).first();
+      if (await consent.count() > 0) {
+        await consent.click({ timeout: 3000 });
+        console.log(`[Form Fill] Tier 1: consent checked`);
+      }
+    } catch { /* ok */ }
+  }
+
+  // Submit
+  if (formConfig.submitSelector) {
+    try {
+      await page.locator(formConfig.submitSelector).first().click({ timeout: 5000 });
+      console.log(`[Form Fill] Tier 1: submitted`);
+      await new Promise(r => setTimeout(r, 3000));
+      return true;
+    } catch (e) {
+      console.log(`[Form Fill] Tier 1: submit failed: ${e}`);
+    }
+  }
+
+  return true;
+}
+
+// ============================================================
+// Extract formConfig from filled page (Phase 2 — post-success)
+// ============================================================
+
+async function extractFormConfig(page: Page): Promise<FormConfig | null> {
+  try {
+    const config = await page.evaluate(() => {
+      const fields: Array<{
+        label: string; selector: string;
+        type: "text" | "select" | "radix_select" | "radio" | "checkbox";
+        value: string; required: boolean;
+      }> = [];
+
+      // Text inputs
+      document.querySelectorAll<HTMLInputElement>('input[type="text"], input[type="email"], input[type="tel"], input:not([type])').forEach(input => {
+        if (!input.value || input.type === 'hidden') return;
+        const label = input.closest('label')?.textContent?.trim()
+          || document.querySelector(`label[for="${input.id}"]`)?.textContent?.trim()
+          || input.placeholder || input.name || '';
+        const selector = input.id ? `#${input.id}` : input.name ? `input[name="${input.name}"]` : '';
+        if (selector && label) {
+          fields.push({ label: label.substring(0, 60), selector, type: "text", value: input.value, required: input.required });
+        }
+      });
+
+      // Native selects
+      document.querySelectorAll<HTMLSelectElement>('select').forEach(sel => {
+        if (sel.selectedIndex <= 0) return;
+        const label = sel.closest('label')?.textContent?.trim()
+          || document.querySelector(`label[for="${sel.id}"]`)?.textContent?.trim()
+          || sel.name || '';
+        const selector = sel.id ? `#${sel.id}` : sel.name ? `select[name="${sel.name}"]` : '';
+        if (selector) {
+          const optText = sel.options[sel.selectedIndex]?.textContent?.trim() || '';
+          fields.push({ label: label.substring(0, 60), selector, type: "select", value: optText, required: sel.required });
+        }
+      });
+
+      // Textareas
+      document.querySelectorAll<HTMLTextAreaElement>('textarea').forEach(ta => {
+        if (!ta.value) return;
+        const label = ta.closest('label')?.textContent?.trim() || ta.name || '';
+        const selector = ta.id ? `#${ta.id}` : ta.name ? `textarea[name="${ta.name}"]` : '';
+        if (selector) {
+          fields.push({ label: label.substring(0, 60), selector, type: "text", value: ta.value, required: ta.required });
+        }
+      });
+
+      // Find submit button
+      const submitBtn = document.querySelector('button[type="submit"], input[type="submit"], button:last-of-type');
+      const submitSelector = submitBtn ? (
+        (submitBtn as HTMLElement).id ? `#${(submitBtn as HTMLElement).id}` :
+        submitBtn.textContent?.includes('Submit') ? 'button:has-text("Submit")' : ''
+      ) : '';
+
+      // Find consent checkbox
+      const consentCheck = document.querySelector('input[type="checkbox"][name*="agree"], input[type="checkbox"][name*="consent"], button[role="checkbox"]');
+      const consentSelector = consentCheck ? (
+        (consentCheck as HTMLElement).id ? `#${(consentCheck as HTMLElement).id}` :
+        consentCheck.getAttribute('role') === 'checkbox' ? 'button[role="checkbox"]' :
+        'input[type="checkbox"]'
+      ) : '';
+
+      return { fields, submitSelector, consentSelector };
+    });
+
+    if (!config || config.fields.length === 0) return null;
+
+    // Map field values to buyerDetailKeys based on label content
+    const formFields: FormFieldConfig[] = config.fields.map(f => {
+      const ll = f.label.toLowerCase();
+      let buyerDetailKey: string | undefined;
+      if (ll.includes('company name') || ll.includes('business name')) buyerDetailKey = 'name';
+      else if (ll.includes('tin') || ll.includes('tax identification')) buyerDetailKey = 'tin';
+      else if (ll.includes('brn') || ll.includes('business registration') || ll.includes('new business')) buyerDetailKey = 'brn';
+      else if (ll.includes('email') && ll.includes('invoice')) buyerDetailKey = 'email';
+      else if (ll.includes('email') && !ll.includes('invoice')) buyerDetailKey = 'email';
+      else if (ll.includes('full name') || ll.includes('first name')) buyerDetailKey = 'userName';
+      else if (ll.includes('last name')) buyerDetailKey = 'userLastName';
+      else if (ll.includes('address') && !ll.includes('email')) buyerDetailKey = 'addressLine1';
+      else if (ll.includes('city') || ll.includes('bandar')) buyerDetailKey = 'city';
+      else if (ll.includes('state') || ll.includes('negeri')) buyerDetailKey = 'state';
+      else if (ll.includes('postcode') || ll.includes('postal')) buyerDetailKey = 'postcode';
+      else if (ll.includes('country')) buyerDetailKey = 'country';
+      else if (ll.includes('phone') || ll.includes('mobile')) buyerDetailKey = 'phone';
+      else if (ll.includes('order') || ll.includes('receipt') || ll.includes('reference')) buyerDetailKey = 'referenceNumber';
+      else if (ll.includes('date') || ll.includes('payment')) buyerDetailKey = 'date';
+
+      return {
+        label: f.label,
+        selector: f.selector,
+        type: f.type,
+        buyerDetailKey,
+        defaultValue: !buyerDetailKey ? f.value : undefined, // Keep non-mapped values as defaults
+        required: f.required,
+      };
+    });
+
+    return {
+      fields: formFields,
+      submitSelector: config.submitSelector || undefined,
+      consentSelector: config.consentSelector || undefined,
+    };
+  } catch (e) {
+    console.log(`[Form Fill] extractFormConfig failed: ${e}`);
+    return null;
+  }
+}
+
+// ============================================================
+// Troubleshooter (Phase 3 — Gemini vision diagnosis on failure)
+// ============================================================
+
+async function troubleshootFailure(
+  geminiKey: string,
+  screenshotB64: string,
+  errorMessage: string,
+  merchantName: string,
+): Promise<void> {
+  console.log(`[Troubleshooter] Diagnosing failure for "${merchantName}": ${errorMessage.substring(0, 80)}`);
+
+  const diagnosis = await callGeminiVision(geminiKey, `You are a web form automation troubleshooter. Analyze this screenshot of a merchant e-invoice form that FAILED to submit.
+
+ERROR: ${errorMessage}
+MERCHANT: ${merchantName}
+
+Look at the screenshot and answer:
+1. What validation errors are visible? (e.g. "Company Industry cannot be none")
+2. Which fields appear to be empty/unfilled that should have values?
+3. Are there any dropdown menus that weren't selected?
+4. What CSS selectors could be used to target the problematic fields?
+5. What default values should be used for fields like Industry/Category?
+
+Respond in JSON format:
+{
+  "diagnosis": "brief description of what went wrong",
+  "unfilledFields": [
+    {"label": "field name", "suggestedSelector": "CSS selector", "suggestedType": "text|select", "suggestedDefault": "value"}
+  ],
+  "fixable": true/false
+}`, screenshotB64);
+
+  console.log(`[Troubleshooter] Diagnosis: ${diagnosis.substring(0, 300)}`);
+
+  // Try to parse and save the suggested fixes to formConfig
+  try {
+    // Extract JSON from the response (might have markdown wrapping)
+    const jsonMatch = diagnosis.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return;
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (parsed.unfilledFields?.length > 0 && parsed.fixable) {
+      // Build partial formConfig with the fixes
+      const fixFields: FormFieldConfig[] = parsed.unfilledFields.map((f: any) => ({
+        label: f.label || 'Unknown',
+        selector: f.suggestedSelector || '',
+        type: f.suggestedType || 'text',
+        defaultValue: f.suggestedDefault || '',
+        required: true,
+      }));
+
+      // Save to Convex — troubleshooter updates the formConfig with fix hints
+      await convexMutation("functions/system:saveMerchantFormConfig", {
+        merchantName,
+        formConfig: {
+          fields: fixFields,
+          lastFailureReason: parsed.diagnosis || errorMessage.substring(0, 200),
+        },
+      });
+      console.log(`[Troubleshooter] Saved ${fixFields.length} fix suggestions to formConfig`);
+    }
+  } catch (e) {
+    console.log(`[Troubleshooter] Failed to parse/save diagnosis: ${e}`);
+  }
 }
 
 // ============================================================
@@ -345,8 +661,56 @@ export async function handler(event: FormFillEvent): Promise<{
     const streetAddress = bd.addressLine1 || bd.address.split(",")[0] || bd.address;
     const city = bd.city || "Puchong";
     const state = STATE_CODE_MAP[bd.stateCode || ''] || bd.stateCode || "Selangor";
+    const ed = event.extractedData || {};
+    const merchantName = ed.vendorName || '';
 
     console.log(`[Form Fill] Buyer: ${userName}, ${bd.email}, state: ${state}, city: ${city}`);
+
+    // Build flat buyerDetails map for Tier 1
+    const buyerDetailsMap: Record<string, string> = {
+      name: bd.name, userName, tin: bd.tin, brn: bd.brn,
+      email: bd.email, phone: phoneLocal,
+      addressLine1: streetAddress, address: streetAddress,
+      city, state, postcode: '47100', country: 'Malaysia',
+      referenceNumber: ed.referenceNumber || '', date: ed.date || '',
+    };
+
+    // ── TIER 1: Check for saved formConfig ──
+    let usedTier1 = false;
+    if (merchantName) {
+      try {
+        const lookup = await convexQuery("functions/system:lookupMerchantEinvoiceUrl", {
+          vendorName: merchantName, country: "MY",
+        }) as { formConfig?: FormConfig } | null;
+
+        if (lookup?.formConfig?.fields?.length && (lookup.formConfig.successCount || 0) > 0) {
+          console.log(`[Form Fill] ⚡ Tier 1: found formConfig for "${merchantName}" (${lookup.formConfig.fields.length} fields, ${lookup.formConfig.successCount} successes)`);
+          const tier1Ok = await executeTier1(page, lookup.formConfig, buyerDetailsMap);
+          if (tier1Ok) {
+            usedTier1 = true;
+            await browser.close();
+            const durationMs = Date.now() - startTime;
+            console.log(`[Form Fill] ⚡ Tier 1 completed in ${durationMs}ms`);
+
+            await convexMutation("functions/system:reportEinvoiceFormFillResult", {
+              expenseClaimId: event.expenseClaimId, emailRef: event.emailRef,
+              status: "success", durationMs,
+            });
+            // Increment success count
+            try {
+              await convexMutation("functions/system:saveMerchantFormConfig", {
+                merchantName, formConfig: lookup.formConfig,
+              });
+            } catch { /* non-fatal */ }
+
+            return { success: true, durationMs };
+          }
+          console.log(`[Form Fill] Tier 1 failed — falling back to Tier 2 (CUA)`);
+        }
+      } catch (e) {
+        console.log(`[Form Fill] Tier 1 lookup failed: ${e}`);
+      }
+    }
 
     // 5. Pre-fill phone with Playwright (CUA struggles with country code selectors)
     try {
@@ -423,7 +787,6 @@ export async function handler(event: FormFillEvent): Promise<{
     } catch { /* non-fatal */ }
 
     // 7. Build receipt context (for forms that need receipt details)
-    const ed = event.extractedData || {};
     const receiptContext = ed.referenceNumber
       ? `\nRECEIPT DETAILS (use if form asks for order/receipt/transaction info):
 - Order/Receipt/Reference Number: ${ed.referenceNumber}
@@ -565,6 +928,22 @@ ${formFieldsSummary}`;
       await new Promise(r => setTimeout(r, 3000));
     }
 
+    // ── Phase 2: On success, extract and save formConfig ──
+    if (stateOk && merchantName) {
+      try {
+        const formConfig = await extractFormConfig(page);
+        if (formConfig && formConfig.fields.length > 0) {
+          await convexMutation("functions/system:saveMerchantFormConfig", {
+            merchantName,
+            formConfig,
+          });
+          console.log(`[Form Fill] 📝 Saved formConfig: ${formConfig.fields.length} fields (next run uses Tier 1)`);
+        }
+      } catch (e) {
+        console.log(`[Form Fill] formConfig save failed (non-fatal): ${e}`);
+      }
+    }
+
     // 11. Cleanup
     await browser.close();
 
@@ -585,6 +964,25 @@ ${formFieldsSummary}`;
     const errorMessage = error instanceof Error ? error.message : `Unknown: ${JSON.stringify(error)}`;
     console.error(`[Form Fill] Failed in ${durationMs}ms: ${errorMessage}`);
     if (error instanceof Error && error.stack) console.error(`[Form Fill] Stack: ${error.stack.substring(0, 500)}`);
+
+    // ── Phase 3: On failure, troubleshoot with Gemini vision ──
+    const geminiKey = process.env.GEMINI_API_KEY;
+    const merchantName = event.extractedData?.vendorName || '';
+    if (geminiKey && merchantName && browser && !errorMessage.startsWith('BOT_BLOCKED')) {
+      try {
+        // Take diagnostic screenshot before closing browser
+        const pages = browser.contexts()?.[0]?.pages();
+        if (pages?.length) {
+          const screenshotB64 = (await pages[0].screenshot({ type: "png" })).toString("base64");
+          // Fire-and-forget — don't let troubleshooter delay error reporting
+          troubleshootFailure(geminiKey, screenshotB64, errorMessage, merchantName)
+            .catch(e => console.log(`[Troubleshooter] Error: ${e}`));
+        }
+      } catch (e) {
+        console.log(`[Troubleshooter] Screenshot failed: ${e}`);
+      }
+    }
+
     if (browser) try { await browser.close(); } catch { /* ignore */ }
 
     try {
@@ -596,6 +994,9 @@ ${formFieldsSummary}`;
         durationMs,
       });
     } catch (e) { console.error(`[Form Fill] Convex report failed: ${e}`); }
+
+    // Wait briefly for troubleshooter to finish (it's async but we have a few seconds before Lambda exits)
+    await new Promise(r => setTimeout(r, 3000));
 
     return { success: false, error: errorMessage, durationMs };
   }
