@@ -810,7 +810,11 @@ def handler(event: dict, context=None) -> dict:
                     browser.close()
                     browser = None  # prevent double-close
                     import boto3
-                    lambda_client = boto3.client("lambda")
+                    from botocore.config import Config
+                    # browser-use Lambda can take 2-3 min — increase read timeout to avoid boto3 retries
+                    lambda_client = boto3.client("lambda", config=Config(
+                        read_timeout=300, retries={"max_attempts": 0}
+                    ))
                     bu_resp = lambda_client.invoke(
                         FunctionName=BU_LAMBDA_ARN,
                         InvocationType="RequestResponse",  # sync — wait for result
