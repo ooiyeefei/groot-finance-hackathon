@@ -224,7 +224,7 @@ export default function EinvoiceSection({
               </div>
             </div>
           ) : (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 space-y-2.5">
               <div className="flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
                 <div>
@@ -236,6 +236,20 @@ export default function EinvoiceSection({
                   </p>
                 </div>
               </div>
+              {merchantFormUrl && (
+                <div className="pl-6">
+                  <Button
+                    size="sm"
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    asChild
+                  >
+                    <a href={merchantFormUrl} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                      Open Form
+                    </a>
+                  </Button>
+                </div>
+              )}
             </div>
           )
         )}

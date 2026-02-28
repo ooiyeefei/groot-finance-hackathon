@@ -15,6 +15,11 @@ import traceback
 import re
 from typing import Any, Optional
 from urllib.request import Request, urlopen
+
+# Fix: Playwright sync API fails if an asyncio loop already exists (from DSPy/litellm warm start)
+import nest_asyncio
+nest_asyncio.apply()
+
 from playwright.sync_api import sync_playwright, Page, Browser
 
 # DSPy imported lazily in troubleshoot() — avoids 10s cold start penalty on every invocation
