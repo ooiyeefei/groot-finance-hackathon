@@ -268,7 +268,7 @@ export default function EinvoiceSection({
                     className="mt-2 text-xs h-7"
                     asChild
                   >
-                    <a href="/en/settings?tab=business-profile">
+                    <a href="/en/business-settings?tab=business-profile">
                       Update Business Settings
                     </a>
                   </Button>
