@@ -1873,3 +1873,53 @@ export const saveMerchantFormConfig = mutation({
   },
 });
 
+// ============================================
+// SES EMAIL VERIFICATION (019-lhdn-einv-flow-2)
+// ============================================
+
+/**
+ * Mark a user's email as SES-verified.
+ * Called by the verify-email API route after confirming with SES.
+ */
+export const markSesEmailVerified = mutation({
+  args: {
+    email: v.string(),
+    verified: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", args.email))
+      .first();
+
+    if (!user) {
+      console.log(`[System] markSesEmailVerified: user not found for email ${args.email}`);
+      return { success: false, reason: "user_not_found" };
+    }
+
+    await ctx.db.patch(user._id, {
+      sesEmailVerified: args.verified,
+      updatedAt: Date.now(),
+    });
+
+    console.log(`[System] SES email verified=${args.verified} for ${args.email}`);
+    return { success: true };
+  },
+});
+
+/**
+ * Check if a user's email is SES-verified.
+ * Called by the einvoice-email-processor Lambda before forwarding.
+ */
+export const isSesEmailVerified = query({
+  args: { email: v.string() },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", args.email))
+      .first();
+
+    return { verified: user?.sesEmailVerified === true };
+  },
+});
+

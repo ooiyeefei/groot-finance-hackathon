@@ -98,6 +98,9 @@ export default defineSchema({
       digestTime: v.optional(v.number()),
     })),
 
+    // SES Email Verification (019-lhdn-einv-flow-2)
+    sesEmailVerified: v.optional(v.boolean()),  // Whether user's email is verified in AWS SES
+
     // Timestamps (Convex adds _creationTime automatically)
     updatedAt: v.optional(v.number()),      // Unix timestamp
   })
