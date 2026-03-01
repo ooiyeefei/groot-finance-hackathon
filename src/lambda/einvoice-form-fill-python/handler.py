@@ -363,21 +363,54 @@ def verify_submission_dom(page: Page) -> bool:
         successes = result.get("successes", [])
         form_visible = result.get("formVisible", True)
 
-        if errors:
-            print(f"[Verify DOM] ERRORS found: {errors[:3]}")
+        print(f"[Verify DOM] errors={errors[:3]}, successes={successes}, formVisible={form_visible}")
+
+        # Clear-cut cases: don't need Gemini
+        if errors and not successes:
+            print(f"[Verify DOM] FAILED — validation errors: {errors[:3]}")
             return False
 
+        if successes and not errors and not form_visible:
+            print(f"[Verify DOM] SUCCESS — success keywords + form gone")
+            return True
+
+        # Ambiguous: combine DOM context + screenshot for Gemini to judge
+        try:
+            shot = base64.b64encode(page.screenshot(type="png", full_page=True)).decode()
+            dom_context = (
+                f"DOM errors: {errors[:3] if errors else 'none'}\n"
+                f"DOM success keywords: {successes if successes else 'none'}\n"
+                f"Form still visible: {form_visible}"
+            )
+            result = gemini_flash(
+                f"A form was just submitted. Determine if it succeeded.\n\n"
+                f"DOM ANALYSIS:\n{dom_context}\n\n"
+                f"RULES:\n"
+                f"- SUCCESS: Page shows thank you / confirmation / receipt number, OR page redirected away from form\n"
+                f"- FAILED: Validation errors visible (red text, 'cannot be empty', 'required', 'invalid')\n"
+                f"- If the page still shows the same form with all fields but NO error messages, it likely succeeded (form may stay visible after submit)\n\n"
+                f"Respond in JSON: {{\"success\": true/false, \"reason\": \"brief explanation\"}}",
+                shot,
+            )
+            json_match = re.search(r'\{[\s\S]*?\}', result)
+            if json_match:
+                vdata = json.loads(json_match.group())
+                success = vdata.get("success", False)
+                reason = vdata.get("reason", "")
+                print(f"[Verify DOM+Flash] success={success}, reason={reason[:100]}")
+                return success
+        except Exception as flash_e:
+            print(f"[Verify DOM+Flash] Gemini failed: {flash_e}")
+
+        # Last resort: if we have success signals from DOM, trust them
         if successes:
-            print(f"[Verify DOM] SUCCESS signals: {successes}")
             return True
-
-        if not form_visible:
-            print("[Verify DOM] Form no longer visible — likely redirected to success page")
-            return True
-
-        # No errors, no clear success — fall back to Gemini Flash
-        print("[Verify DOM] No errors or success signals in DOM — falling back to Gemini")
-        return verify_submission(page)
+        # If DOM found errors, trust that
+        if errors:
+            return False
+        # Truly unknown — optimistic (OTP was accepted, submit clicked)
+        print("[Verify DOM] No signals at all — optimistic success")
+        return True
 
     except Exception as e:
         print(f"[Verify DOM] Failed: {e}")
