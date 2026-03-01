@@ -146,25 +146,45 @@ RULES:
     print(f"[BU] Agent completed: agent_done={agent_done}, steps={steps}")
 
     # ── Post-submission verification with Gemini Flash ──
-    # Take screenshot of the final page state and verify with Flash
+    # Extract the last screenshot from agent history and verify with Flash
     verification = {"submitted": False, "confidence": 0.0, "evidence": "no verification"}
     try:
-        browser_session = agent._browser_session if hasattr(agent, "_browser_session") else None
-        if not browser_session:
-            browser_session = agent.browser_session if hasattr(agent, "browser_session") else None
+        import base64 as b64mod
+        last_screenshot = None
 
-        if browser_session:
-            page = await browser_session.get_current_page()
-            if page:
-                import base64
-                screenshot = await page.screenshot(type="png", full_page=True)
-                shot_b64 = base64.b64encode(screenshot).decode()
-                verification = gemini_flash_verify(shot_b64)
-                print(f"[BU] Verification: submitted={verification.get('submitted')}, "
-                      f"confidence={verification.get('confidence')}, "
-                      f"evidence={verification.get('evidence', '')[:100]}")
+        # Method 1: Get screenshot from agent history (most reliable)
+        if hasattr(history, "history") and history.history:
+            for step in reversed(history.history):
+                state = getattr(step, "state", None) or getattr(step, "browser_state", None)
+                if state:
+                    screenshot_b64 = getattr(state, "screenshot", None)
+                    if screenshot_b64:
+                        last_screenshot = screenshot_b64
+                        break
+
+        # Method 2: Try to take a fresh screenshot if browser is still open
+        if not last_screenshot:
+            for attr in ("browser", "_browser", "browser_session", "_browser_session"):
+                session = getattr(agent, attr, None)
+                if session:
+                    try:
+                        page = await session.get_current_page()
+                        if page:
+                            raw = await page.screenshot(type="png", full_page=True)
+                            last_screenshot = b64mod.b64encode(raw).decode()
+                            break
+                    except Exception:
+                        continue
+
+        if last_screenshot:
+            verification = gemini_flash_verify(last_screenshot)
+            print(f"[BU] Verification: submitted={verification.get('submitted')}, "
+                  f"confidence={verification.get('confidence')}, "
+                  f"evidence={verification.get('evidence', '')[:100]}")
+        else:
+            print("[BU] No screenshot available for verification")
     except Exception as e:
-        print(f"[BU] Screenshot/verification failed: {e}")
+        print(f"[BU] Verification failed: {e}")
 
     # Definitive success = agent thinks done AND Flash confirms submission
     submitted = verification.get("submitted", False)
