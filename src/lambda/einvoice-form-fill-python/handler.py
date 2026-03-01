@@ -29,7 +29,7 @@ dspy = None  # type: ignore
 # ── Config ──────────────────────────────────────────────────
 
 SCREEN_W, SCREEN_H = 1440, 900
-MAX_TURNS = 40
+MAX_TURNS = 50
 CONVEX_URL = os.environ.get("NEXT_PUBLIC_CONVEX_URL", "")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 BU_LAMBDA_ARN = os.environ.get("EINVOICE_FORM_FILL_BU_LAMBDA_ARN", "")
@@ -396,15 +396,17 @@ RECEIPT DATA (use for receipt/bill/store fields):
 {f"FORM FIELDS (from page analysis):\\n{recon}" if recon else ""}
 
 TASK:
-1. If the form asks for Store Code / Shop Number, check the RECEIPT IMAGE for "Shop No." or similar.
+1. If the form asks for Store Code / Shop Number, use the Store Code from RECEIPT DATA.
 2. Fill Bill Number / Receipt Number with the Tax Invoice No from RECEIPT DATA.
 3. Fill amount fields with the Total Amount from RECEIPT DATA.
 4. Fill date fields with the Date from RECEIPT DATA.
 5. Select "Company" if Individual/Company choice exists.
 6. Fill buyer/customer detail fields with BUYER DETAILS above.
-7. For any field not covered above, check the RECEIPT IMAGE for the answer.
-8. Check consent checkbox → click Submit.
-9. Fix validation errors if any (only the specific field mentioned)."""
+7. For Country dropdown: click the dropdown, then TYPE "Malaysia" to filter — do NOT scroll through the entire list.
+8. For any long dropdown: TYPE the first few letters to filter/jump instead of scrolling.
+9. For any field not covered above, check the RECEIPT IMAGE for the answer.
+10. Check consent checkbox → click Submit.
+11. Fix validation errors if any (only the specific field mentioned)."""
 
     shot = base64.b64encode(page.screenshot(type="png")).decode()
     # Build CUA context: receipt image (reference) + form screenshot (current page)
