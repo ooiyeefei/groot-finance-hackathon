@@ -107,20 +107,50 @@ function CountryDeclarationBanner({ businessId, onComplete }: {
 }) {
   const [country, setCountry] = useState<'SG' | 'MY'>('MY')
   const [regNumber, setRegNumber] = useState('')
+  const [tin, setTin] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [tinVerified, setTinVerified] = useState(false)
 
   // @ts-ignore - Convex API types cause deep type error
   const setBusinessRegion = useMutation(api.functions.businesses.setBusinessRegion)
 
-  const isValid = regNumber.trim() && isValidRegNumber(regNumber.trim(), country)
+  const isRegValid = regNumber.trim() && isValidRegNumber(regNumber.trim(), country)
+  // MY requires TIN verification; SG only needs BRN format
+  const isTinRequired = country === 'MY'
+  const isTinFormatValid = !isTinRequired || (tin.trim().length >= 10 && /^[A-Z0-9]+$/i.test(tin.trim()))
+  const isValid = isRegValid && (!isTinRequired || isTinFormatValid)
 
   const handleSubmit = async () => {
     if (!isValid) return
     setIsSubmitting(true)
     setSubmitError(null)
+    setTinVerified(false)
 
     try {
+      // Step 1: Verify TIN with LHDN (MY only)
+      if (isTinRequired) {
+        const verifyRes = await fetch('/api/v1/billing/verify-tin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tin: tin.trim() }),
+        })
+        const verifyData = await verifyRes.json()
+
+        if (!verifyRes.ok || (!verifyData.verified && !verifyData.warning)) {
+          setSubmitError(verifyData.error || 'TIN verification failed')
+          setIsSubmitting(false)
+          return
+        }
+
+        if (verifyData.warning) {
+          console.warn('[Billing] TIN verification skipped:', verifyData.warning)
+        }
+
+        setTinVerified(true)
+      }
+
+      // Step 2: Lock country + currency
       const normalized = normalizeRegNumber(regNumber)
       const currency = COUNTRY_TO_CURRENCY[country] || 'MYR'
       await setBusinessRegion({
@@ -200,10 +230,37 @@ function CountryDeclarationBanner({ businessId, onComplete }: {
           )}
         </div>
 
+        {/* TIN field — Malaysia only (verified against LHDN) */}
+        {isTinRequired && (
+          <div className="space-y-2">
+            <Label className="text-foreground font-medium">
+              Tax Identification Number (TIN) <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              type="text"
+              placeholder="e.g. IG24210777100"
+              value={tin}
+              onChange={(e) => {
+                setTin(e.target.value)
+                setSubmitError(null)
+                setTinVerified(false)
+              }}
+              className={cn(
+                "bg-input border-border text-foreground h-10",
+                tin.trim() && !isTinFormatValid && "border-destructive focus-visible:ring-destructive"
+              )}
+            />
+            <p className="text-sm text-muted-foreground">
+              Your LHDN TIN will be verified against the MyInvois system to confirm your business identity.
+            </p>
+          </div>
+        )}
+
         {/* Currency Preview */}
         <div className="rounded-md bg-muted/50 p-3">
           <p className="text-sm text-muted-foreground">
             Your billing currency will be locked to <span className="font-medium text-foreground">{COUNTRY_TO_CURRENCY[country] || 'MYR'}</span>
+            {isTinRequired && ' after TIN verification with LHDN'}
           </p>
         </div>
 
@@ -222,10 +279,10 @@ function CountryDeclarationBanner({ businessId, onComplete }: {
           {isSubmitting ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Setting up...
+              {isTinRequired && !tinVerified ? 'Verifying with LHDN...' : 'Locking currency...'}
             </>
           ) : (
-            'Confirm Country & Lock Currency'
+            isTinRequired ? 'Verify & Lock Currency' : 'Confirm Country & Lock Currency'
           )}
         </Button>
       </CardContent>
