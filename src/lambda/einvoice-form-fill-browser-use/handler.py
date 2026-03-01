@@ -136,7 +136,8 @@ RULES:
 9. Check any consent/agreement checkbox.
 10. Click the Submit button when all fields are filled.
 11. If you see validation errors, fix the specific field and re-submit.
-12. When you see a success/thank-you message, you are done."""
+12. When you see a success/thank-you message, you are done.
+13. For forms requiring OTP/TAC: The system email (einvoice+{ref}@einv.hellogroot.com) is used for receiving the OTP. After filling all fields, click "Request OTP". The OTP will be handled automatically — just wait."""
 
     agent = Agent(
         task=task,

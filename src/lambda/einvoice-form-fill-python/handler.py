@@ -311,6 +311,98 @@ def verify_submission(page: Page) -> bool:
         return True  # Optimistic — assume success if verification fails
 
 
+# ── OTP email helpers ──────────────────────────────────────
+# Future: For SMS OTP merchants, use AWS Pinpoint (MY supports 2-way SMS via short codes)
+# Architecture: Pinpoint → SNS → Lambda → same poll pattern, different S3 prefix
+
+def extract_otp_code(raw_email: str) -> Optional[str]:
+    """Extract 6-digit OTP/TAC code from raw email content."""
+    # Priority 1: Labeled codes (OTP, TAC, verification code)
+    m = re.search(r'(?:OTP|TAC|verification\s+code|one.time\s+password)[:\s]*(\d{6})', raw_email, re.IGNORECASE)
+    if m:
+        return m.group(1)
+
+    # Priority 2: HTML-wrapped standalone 6-digit (e.g. <b>123456</b> or <span>123456</span>)
+    m = re.search(r'>\s*(\d{6})\s*<', raw_email)
+    if m:
+        return m.group(1)
+
+    # Priority 3: 6-digit near verification keywords
+    for keyword in ['verify', 'code', 'access', 'confirm', 'enter', 'submit']:
+        pattern = rf'(?:{keyword}).{{0,80}}(\d{{6}})|(\d{{6}}).{{0,80}}(?:{keyword})'
+        m = re.search(pattern, raw_email, re.IGNORECASE | re.DOTALL)
+        if m:
+            return m.group(1) or m.group(2)
+
+    return None
+
+
+def poll_otp_email(email_ref: str, timeout: int = 60) -> Optional[str]:
+    """Poll S3 for OTP email matching the given email_ref. Returns OTP code or None."""
+    import boto3 as _boto3
+    from email import message_from_bytes
+
+    s3 = _boto3.client("s3")
+    bucket = "finanseal-bucket"
+    prefix = "ses-emails/einvoice/"
+    cutoff = time.time() - 120  # only check emails from last 2 minutes
+
+    print(f"[OTP] Polling for OTP email: einvoice+{email_ref}@... (timeout={timeout}s)")
+
+    for attempt in range(timeout // 5):
+        try:
+            resp = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=20)
+            objects = sorted(
+                [o for o in resp.get("Contents", []) if o["LastModified"].timestamp() > cutoff],
+                key=lambda o: o["LastModified"],
+                reverse=True,  # newest first
+            )
+
+            for obj in objects:
+                try:
+                    email_bytes = s3.get_object(Bucket=bucket, Key=obj["Key"])["Body"].read()
+                    msg = message_from_bytes(email_bytes)
+
+                    # Check To: header contains our emailRef
+                    to_header = msg.get("To", "")
+                    if f"einvoice+{email_ref}@" not in to_header.lower():
+                        continue
+
+                    # Extract body text
+                    body = ""
+                    if msg.is_multipart():
+                        for part in msg.walk():
+                            ct = part.get_content_type()
+                            if ct in ("text/plain", "text/html"):
+                                payload = part.get_payload(decode=True)
+                                if payload:
+                                    body += payload.decode("utf-8", errors="ignore")
+                    else:
+                        payload = msg.get_payload(decode=True)
+                        if payload:
+                            body = payload.decode("utf-8", errors="ignore")
+
+                    code = extract_otp_code(body)
+                    if code:
+                        print(f"[OTP] Found OTP code: {code} (from {obj['Key']})")
+                        return code
+                    else:
+                        print(f"[OTP] Email matched ref but no OTP found in body")
+                except Exception as inner_e:
+                    print(f"[OTP] Error reading {obj['Key']}: {inner_e}")
+                    continue
+
+        except Exception as e:
+            print(f"[OTP] S3 list error: {e}")
+
+        if attempt < (timeout // 5) - 1:
+            print(f"[OTP] No OTP yet, retrying in 5s... ({(attempt+1)*5}/{timeout}s)")
+            time.sleep(5)
+
+    print(f"[OTP] Timeout — no OTP email found after {timeout}s")
+    return None
+
+
 # ── Tier 1: Fast path with saved formConfig ────────────────
 
 def run_tier1(page: Page, config: dict, buyer: dict) -> bool:
@@ -354,6 +446,222 @@ def run_tier1(page: Page, config: dict, buyer: dict) -> bool:
         except Exception:
             pass
     return False
+
+
+# ── 99 Speed Mart dedicated flow ──────────────────────────
+
+def _devextreme_type_filter(page: Page, selector: str, value: str) -> bool:
+    """Type-to-filter a DevExtreme dropdown. Returns True if option selected."""
+    try:
+        el = page.locator(selector).first
+        el.click(timeout=5000)
+        time.sleep(0.5)
+        # Type to filter
+        page.keyboard.type(value[:4], delay=50)
+        time.sleep(0.8)
+        # Click matching option from dropdown list
+        option = page.locator(f'.dx-list-item:has-text("{value}")').first
+        if option.count() > 0:
+            option.click(timeout=3000)
+            print(f"[99SM] DevExtreme dropdown → '{value}'")
+            return True
+        # Fallback: try dx-item
+        option = page.locator(f'.dx-item:has-text("{value}")').first
+        if option.count() > 0:
+            option.click(timeout=3000)
+            print(f"[99SM] DevExtreme dropdown → '{value}' (dx-item)")
+            return True
+        # Close dropdown
+        page.keyboard.press("Escape")
+        return False
+    except Exception as e:
+        print(f"[99SM] DevExtreme filter failed for '{value}': {e}")
+        page.keyboard.press("Escape")
+        return False
+
+
+def run_99speedmart_flow(page: Page, buyer: dict, email_ref: str) -> bool:
+    """Dedicated form fill for 99 Speed Mart (99einvoice.com). Returns True on success."""
+    system_email = f"einvoice+{email_ref}@einv.hellogroot.com"
+    print(f"[99SM] Starting 99 Speed Mart flow, email={system_email}")
+
+    try:
+        # Step 1: Receipt page — click "Next" button
+        print("[99SM] Step 1: Click Next on receipt page")
+        next_btn = page.locator('button:has-text("Next"), .dx-button:has-text("Next")').first
+        if next_btn.count() > 0:
+            next_btn.click(timeout=10000)
+            time.sleep(2)
+            page.wait_for_load_state("networkidle", timeout=10000)
+        else:
+            print("[99SM] No Next button found — may already be on form page")
+        time.sleep(1)
+
+        # Step 2: Validate identity
+        print("[99SM] Step 2: Validate identity (BRN + TIN)")
+
+        # Open ID Type dropdown → select "Business Registration Number (BRN)"
+        id_type_dropdown = page.locator('[aria-label*="ID Type" i], [placeholder*="ID Type" i], .dx-selectbox:has-text("ID Type")').first
+        if id_type_dropdown.count() == 0:
+            # Try broader selector for DevExtreme dropdowns
+            id_type_dropdown = page.locator('div:has(> label:has-text("ID Type")) .dx-selectbox, div:has(> label:has-text("ID Type")) .dx-dropdowneditor').first
+        if id_type_dropdown.count() > 0:
+            id_type_dropdown.click(timeout=5000)
+            time.sleep(0.5)
+            brn_option = page.locator('.dx-list-item:has-text("Business Registration"), .dx-item:has-text("Business Registration"), [role="option"]:has-text("Business Registration")').first
+            if brn_option.count() > 0:
+                brn_option.click(timeout=3000)
+                print("[99SM] Selected ID Type: Business Registration Number")
+            else:
+                page.keyboard.press("Escape")
+                print("[99SM] BRN option not found in dropdown")
+            time.sleep(0.5)
+
+        # Fill ID Number (BRN)
+        id_input = page.locator('input[aria-label*="ID Number" i], input[placeholder*="ID Number" i]').first
+        if id_input.count() == 0:
+            id_input = page.locator('div:has(> label:has-text("ID Number")) input').first
+        if id_input.count() > 0:
+            id_input.click(timeout=3000)
+            id_input.fill(buyer["brn"])
+            print(f"[99SM] Filled ID Number: {buyer['brn']}")
+
+        # Fill TIN
+        tin_input = page.locator('input[aria-label*="TIN" i], input[placeholder*="TIN" i]').first
+        if tin_input.count() == 0:
+            tin_input = page.locator('div:has(> label:has-text("TIN")) input').first
+        if tin_input.count() > 0:
+            tin_input.click(timeout=3000)
+            tin_input.fill(buyer["tin"])
+            print(f"[99SM] Filled TIN: {buyer['tin']}")
+
+        # Click "Validate" button
+        validate_btn = page.locator('button:has-text("Validate"), .dx-button:has-text("Validate")').first
+        if validate_btn.count() > 0:
+            validate_btn.click(timeout=5000)
+            print("[99SM] Clicked Validate")
+            time.sleep(2)
+
+            # Wait for fields to enable (poll disabled attribute removal, up to 15s)
+            for i in range(15):
+                disabled_count = page.evaluate("""() => {
+                    return document.querySelectorAll('input[disabled], .dx-state-disabled').length;
+                }""")
+                if disabled_count == 0:
+                    print(f"[99SM] Fields enabled after {i+1}s")
+                    break
+                time.sleep(1)
+            else:
+                print("[99SM] Warning: Some fields still disabled after 15s")
+
+        # Step 3: Fill customer details
+        print("[99SM] Step 3: Fill customer details")
+
+        # Email — use system email, NOT user email
+        email_input = page.locator('input[aria-label*="Email" i], input[placeholder*="Email" i], input[type="email"]').first
+        if email_input.count() == 0:
+            email_input = page.locator('div:has(> label:has-text("Email")) input').first
+        if email_input.count() > 0:
+            email_input.click(timeout=3000)
+            email_input.fill(system_email)
+            print(f"[99SM] Filled Email: {system_email}")
+
+        # Contact / Phone
+        phone_input = page.locator('input[aria-label*="Contact" i], input[placeholder*="Contact" i], input[aria-label*="Phone" i], input[type="tel"]').first
+        if phone_input.count() == 0:
+            phone_input = page.locator('div:has(> label:has-text("Contact")) input, div:has(> label:has-text("Phone")) input').first
+        if phone_input.count() > 0:
+            phone_input.click(timeout=3000)
+            phone_input.fill(buyer["phone"])
+            print(f"[99SM] Filled Contact: {buyer['phone']}")
+
+        # Address Line 1
+        addr_input = page.locator('input[aria-label*="Address" i], input[placeholder*="Address" i]').first
+        if addr_input.count() == 0:
+            addr_input = page.locator('div:has(> label:has-text("Address")) input').first
+        if addr_input.count() > 0:
+            addr_input.click(timeout=3000)
+            addr_input.fill(buyer["address"])
+            print(f"[99SM] Filled Address: {buyer['address'][:50]}")
+
+        # Postal Zone
+        postal_input = page.locator('input[aria-label*="Postal" i], input[placeholder*="Postal" i], input[aria-label*="Postcode" i]').first
+        if postal_input.count() == 0:
+            postal_input = page.locator('div:has(> label:has-text("Postal")) input').first
+        if postal_input.count() > 0:
+            postal_input.click(timeout=3000)
+            postal_input.fill("47100")
+            print("[99SM] Filled Postal Zone: 47100")
+
+        # City
+        city_input = page.locator('input[aria-label*="City" i], input[placeholder*="City" i]').first
+        if city_input.count() == 0:
+            city_input = page.locator('div:has(> label:has-text("City")) input').first
+        if city_input.count() > 0:
+            city_input.click(timeout=3000)
+            city_input.fill(buyer["city"])
+            print(f"[99SM] Filled City: {buyer['city']}")
+
+        # State — DevExtreme type-to-filter dropdown
+        state_dd = page.locator('[aria-label*="State" i] .dx-dropdowneditor-input-wrapper, div:has(> label:has-text("State")) .dx-dropdowneditor-input-wrapper').first
+        if state_dd.count() > 0:
+            _devextreme_type_filter(page, '[aria-label*="State" i] .dx-dropdowneditor-input-wrapper, div:has(> label:has-text("State")) .dx-dropdowneditor-input-wrapper', buyer["state"])
+        time.sleep(0.5)
+
+        # Country — DevExtreme type-to-filter dropdown
+        country_dd = page.locator('[aria-label*="Country" i] .dx-dropdowneditor-input-wrapper, div:has(> label:has-text("Country")) .dx-dropdowneditor-input-wrapper').first
+        if country_dd.count() > 0:
+            _devextreme_type_filter(page, '[aria-label*="Country" i] .dx-dropdowneditor-input-wrapper, div:has(> label:has-text("Country")) .dx-dropdowneditor-input-wrapper', "Malaysia")
+        time.sleep(0.5)
+
+        # Step 4: OTP flow
+        print("[99SM] Step 4: Request OTP")
+        otp_btn = page.locator('button:has-text("Request OTP"), .dx-button:has-text("Request OTP"), button:has-text("Send OTP"), button:has-text("Request TAC")').first
+        if otp_btn.count() > 0:
+            otp_btn.click(timeout=5000)
+            print("[99SM] Clicked Request OTP — polling for email...")
+            time.sleep(2)
+
+            otp_code = poll_otp_email(email_ref, timeout=60)
+            if not otp_code:
+                print("[99SM] OTP polling failed — no code received")
+                return False
+
+            # Fill OTP field
+            otp_input = page.locator('input[aria-label*="OTP" i], input[placeholder*="OTP" i], input[aria-label*="TAC" i], input[name*="otp" i]').first
+            if otp_input.count() == 0:
+                otp_input = page.locator('div:has(> label:has-text("OTP")) input, div:has(> label:has-text("TAC")) input').first
+            if otp_input.count() > 0:
+                otp_input.click(timeout=3000)
+                otp_input.fill(otp_code)
+                print(f"[99SM] Filled OTP: {otp_code}")
+            else:
+                print("[99SM] OTP input field not found!")
+                return False
+
+            # Click Submit
+            submit_btn = page.locator('button:has-text("Submit"), .dx-button:has-text("Submit")').first
+            if submit_btn.count() > 0:
+                submit_btn.click(timeout=5000)
+                print("[99SM] Clicked Submit")
+                time.sleep(5)
+            else:
+                print("[99SM] Submit button not found!")
+                return False
+        else:
+            print("[99SM] No OTP button found — trying direct submit")
+            submit_btn = page.locator('button:has-text("Submit"), .dx-button:has-text("Submit")').first
+            if submit_btn.count() > 0:
+                submit_btn.click(timeout=5000)
+                time.sleep(5)
+
+        # Verify submission with Gemini Flash
+        return verify_submission(page)
+
+    except Exception as e:
+        print(f"[99SM] Flow failed: {e}")
+        traceback.print_exc()
+        return False
 
 
 # ── Tier 2: Gemini CUA exploration ─────────────────────────
@@ -407,7 +715,8 @@ TASK:
 9. For any long dropdown: TYPE the first few letters to filter/jump instead of scrolling.
 10. For any field not covered above, check the RECEIPT IMAGE for the answer.
 11. Check consent checkbox → click Submit.
-12. Fix validation errors if any (only the specific field mentioned)."""
+12. Fix validation errors if any (only the specific field mentioned).
+13. For forms requiring OTP/TAC: Use the system email (einvoice+{ref}@einv.hellogroot.com) for the email field. After filling all fields, click "Request OTP" or "Send OTP". The OTP will be handled automatically — just wait for the code to appear and then submit."""
 
     shot = base64.b64encode(page.screenshot(type="png")).decode()
     # Build CUA context: receipt image (reference) + form screenshot (current page)
@@ -837,7 +1146,22 @@ def handler(event: dict, context=None) -> dict:
             pass
         time.sleep(2)
 
-        # ── Tier 0: Detect unautomatable forms (OTP, CAPTCHA) ──
+        # ── 99 Speed Mart: dedicated Tier 1 flow (short-circuits CUA) ──
+        if "99einvoice.com" in url:
+            print("[Form Fill] 🏪 99 Speed Mart detected — using dedicated flow")
+            success = run_99speedmart_flow(page, buyer, event.get("emailRef", ""))
+            dur = int((time.time() - start) * 1000)
+            status_str = "success" if success else "failed"
+            browser.close()
+            error_msg = None if success else "99SM dedicated flow failed"
+            convex_mutation("functions/system:reportEinvoiceFormFillResult", {
+                "expenseClaimId": claim_id, "emailRef": event["emailRef"],
+                "status": status_str, "durationMs": dur,
+                **({"errorMessage": error_msg} if error_msg else {}),
+            })
+            return {"success": success, "durationMs": dur, "tier": "99sm"}
+
+        # ── Tier 0: Detect OTP/CAPTCHA — attempt automation if emailRef exists ──
         try:
             # Check visible text AND full page source (catches hidden/multi-step OTP fields)
             otp_detected = page.evaluate("""() => {
@@ -849,8 +1173,13 @@ def handler(event: dict, context=None) -> dict:
                 return hasRequestOtp || (hasOtpLabel && srcHasOtp);
             }""")
             if otp_detected:
-                print("[Form Fill] ⛔ OTP/verification gate detected — cannot automate")
-                raise RuntimeError("MANUAL_ONLY: This merchant requires OTP verification. Please fill the form manually using your company details and the system email.")
+                email_ref = event.get("emailRef", "")
+                if email_ref:
+                    print(f"[Form Fill] OTP detected — emailRef exists ({email_ref}), will attempt automated OTP via email")
+                    # Don't fail fast — let CUA fill the form, then we'll intercept the OTP email
+                else:
+                    print("[Form Fill] ⛔ OTP detected — no emailRef, cannot automate")
+                    raise RuntimeError("MANUAL_ONLY: This merchant requires OTP verification. Please fill the form manually using your company details and the system email.")
         except RuntimeError:
             raise
         except Exception as e:

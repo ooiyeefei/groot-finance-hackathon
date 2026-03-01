@@ -56,6 +56,7 @@ type EmailClassification =
   | "einvoice_in_html"         // E-invoice data in email body (no PDF)
   | "einvoice_download_link"   // Email contains a link to download the e-invoice
   | "confirmation_only"        // Just a "submission received" confirmation
+  | "otp_tac"                  // OTP/TAC verification code email — not an e-invoice
   | "unknown";
 
 interface ClassificationResult {
@@ -158,6 +159,7 @@ Classify as ONE of:
 - "einvoice_in_html": The e-invoice data (invoice number, amounts, tax details) is embedded in the email body itself (no separate attachment)
 - "einvoice_download_link": Email contains a link/URL to download the e-invoice (e.g. "Click here to download your e-invoice")
 - "confirmation_only": Just a confirmation that the e-invoice request was received/being processed — no actual invoice yet
+- "otp_tac": OTP/TAC verification code email — contains a one-time password for form verification, NOT an e-invoice. Look for keywords like OTP, TAC, verification code, one-time password, and a 4-8 digit code.
 - "unknown": Can't determine
 
 Also check: does the email body contain a download URL for the e-invoice? If yes, extract it.
@@ -198,6 +200,9 @@ Respond in JSON only:
   // Fallback heuristic
   if (hasAttachment) return { type: "einvoice_with_pdf", confidence: 0.7, reasoning: "Fallback: has attachment" };
   const lower = textBody.toLowerCase();
+  if (/\b(otp|tac|one.time\s+password|verification\s+code)\b/.test(lower) && /\b\d{4,8}\b/.test(textBody)) {
+    return { type: "otp_tac", confidence: 0.8, reasoning: "Fallback: OTP/TAC keywords + digit code" };
+  }
   if (lower.includes("download") && lower.includes("invoice")) {
     return { type: "einvoice_download_link", confidence: 0.6, reasoning: "Fallback: mentions download + invoice" };
   }
@@ -307,6 +312,12 @@ export async function handler(event: SESEvent) {
         emailType: "confirmation",
       });
       continue; // Don't mark as received
+
+    } else if (classification.type === "otp_tac") {
+      // Type E: OTP/TAC email — log but don't update claim status (not an e-invoice)
+      // The OTP is consumed by the form-fill Lambda via S3 polling, not here
+      console.log(`[Email] OTP/TAC email detected — not updating claim. OTP will be consumed by form-fill Lambda.`);
+      continue; // Don't process further — raw email already saved to S3 by SES
     }
 
     // 7. Update Convex — mark claim as e-invoice received (for types A, C, D)
