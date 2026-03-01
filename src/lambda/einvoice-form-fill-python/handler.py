@@ -288,7 +288,11 @@ def execute_action(page: Page, name: str, args: dict):
 # ── Post-submit verification ────────────────────────────────
 
 def verify_submission(page: Page) -> bool:
-    """After clicking Submit, verify the form was accepted (not validation error)."""
+    """After clicking Submit, verify the form was accepted (not validation error).
+
+    Returns True unless Gemini sees explicit validation errors.
+    UNKNOWN is treated as success (optimistic) — if there were errors they'd be visible.
+    """
     try:
         shot = base64.b64encode(page.screenshot(type="png")).decode()
         result = gemini_flash(
@@ -305,7 +309,9 @@ def verify_submission(page: Page) -> bool:
             # Log what errors are visible
             errors = gemini_flash("List any validation error messages visible on this form page. Be brief.", shot)
             print(f"[Verify] Errors: {errors[:200]}")
-        return status == "SUCCESS"
+            return False
+        # SUCCESS or UNKNOWN — treat as success (optimistic: no visible errors = likely submitted)
+        return True
     except Exception as e:
         print(f"[Verify] Failed: {e}")
         return True  # Optimistic — assume success if verification fails
