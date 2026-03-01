@@ -402,7 +402,7 @@ TASK:
 4. Fill date fields with the Date from RECEIPT DATA.
 5. Select "Company" if Individual/Company choice exists.
 6. Fill buyer/customer detail fields with BUYER DETAILS above.
-7. IMPORTANT — Cascading dropdowns (Country/State/City): Fill City FIRST, then State, then Country LAST. Child dropdowns often reset when a parent changes, so filling bottom-up avoids losing your selections.
+7. IMPORTANT — Cascading dropdowns (Country/State/City): Always fill top-down — Country FIRST, then State, then City. Each parent populates the child options. NEVER go back to re-select a parent after filling children (it resets them).
 8. For Country dropdown: click the dropdown, then TYPE "Malaysia" to filter — do NOT scroll through the entire list.
 9. For any long dropdown: TYPE the first few letters to filter/jump instead of scrolling.
 10. For any field not covered above, check the RECEIPT IMAGE for the answer.
@@ -836,6 +836,25 @@ def handler(event: dict, context=None) -> dict:
         except Exception:
             pass
         time.sleep(2)
+
+        # ── Tier 0: Detect unautomatable forms (OTP, CAPTCHA) ──
+        try:
+            # Check visible text AND full page source (catches hidden/multi-step OTP fields)
+            otp_detected = page.evaluate("""() => {
+                const src = document.documentElement.innerHTML.toLowerCase();
+                const buttons = Array.from(document.querySelectorAll('button'));
+                const hasRequestOtp = buttons.some(b => b.textContent.toLowerCase().includes('request otp'));
+                const hasOtpLabel = !!document.querySelector('[id*="otp" i], [name*="otp" i], label[for*="otp" i]');
+                const srcHasOtp = src.includes('request otp') || src.includes('otp:') || src.includes('one-time password');
+                return hasRequestOtp || (hasOtpLabel && srcHasOtp);
+            }""")
+            if otp_detected:
+                print("[Form Fill] ⛔ OTP/verification gate detected — cannot automate")
+                raise RuntimeError("MANUAL_ONLY: This merchant requires OTP verification. Please fill the form manually using your company details and the system email.")
+        except RuntimeError:
+            raise
+        except Exception as e:
+            print(f"[Form Fill] OTP detection check failed (non-fatal): {e}")
 
         # ── Tier 1: Check for saved formConfig ──
         if merchant:

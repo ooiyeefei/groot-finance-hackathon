@@ -36,6 +36,8 @@ function getUserFriendlyError(rawError: string | null): string {
   const e = rawError.toLowerCase()
   if (e.includes('bot_blocked') || e.includes('cloudflare') || e.includes('403'))
     return '' // Handled by the amber BOT_BLOCKED banner
+  if (e.includes('manual_only'))
+    return '' // Handled by the amber BOT_BLOCKED banner (same UX — manual fill required)
   if (e.includes('asyncio') || e.includes('playwright sync'))
     return 'A temporary system error occurred. Please retry — this usually resolves on the next attempt.'
   if (e.includes('timeout') || e.includes('timed out'))
@@ -301,13 +303,15 @@ export default function EinvoiceSection({
 
         {/* Agent Error */}
         {einvoiceAgentError && einvoiceRequestStatus === 'failed' && (
-          einvoiceAgentError.startsWith('BOT_BLOCKED') && merchantFormUrl ? (
+          (einvoiceAgentError.startsWith('BOT_BLOCKED') || einvoiceAgentError.startsWith('MANUAL_ONLY')) && merchantFormUrl ? (
             <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 space-y-2.5">
               <div className="flex items-start gap-2">
                 <Ban className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <div>
                   <p className="text-amber-700 dark:text-amber-300 text-sm font-medium">
-                    This merchant doesn&apos;t support automated requests
+                    {einvoiceAgentError.startsWith('MANUAL_ONLY')
+                      ? 'This merchant requires verification (OTP)'
+                      : 'This merchant doesn\u0027t support automated requests'}
                   </p>
                   <p className="text-muted-foreground text-xs mt-1">
                     Fill the form manually — use the email below so we auto-attach the e-invoice when it arrives.

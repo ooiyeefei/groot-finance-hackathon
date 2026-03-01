@@ -131,7 +131,7 @@ RULES:
 4. Fill date/time fields with the Date from RECEIPT DATA.
 5. If there is an Individual/Company toggle, select "Company".
 6. Fill buyer/customer fields with BUYER DETAILS above.
-7. IMPORTANT — Cascading dropdowns (Country/State/City): Fill City FIRST, then State, then Country LAST. Child dropdowns often reset when a parent changes, so filling bottom-up avoids losing your selections.
+7. IMPORTANT — Cascading dropdowns (Country/State/City): Always fill top-down — Country FIRST, then State, then City. Each parent populates the child options. NEVER go back to re-select a parent after filling children (it resets them).
 8. For state/city dropdowns, select the matching option. For long dropdowns, TYPE the first few letters to filter instead of scrolling.
 9. Check any consent/agreement checkbox.
 10. Click the Submit button when all fields are filled.
