@@ -255,9 +255,9 @@ def handler(event: dict, context=None) -> dict:
                 import boto3 as _boto3
                 import base64 as _b64
                 s3 = _boto3.client("s3")
-                resp = s3.get_object(Bucket="finanseal-bucket", Key=receipt_image_path)
+                s3_key = receipt_image_path if receipt_image_path.startswith("expense_claims/") else f"expense_claims/{receipt_image_path}"
+                resp = s3.get_object(Bucket="finanseal-bucket", Key=s3_key)
                 img_b64 = _b64.b64encode(resp["Body"].read()).decode()
-                store_code = gemini_flash_verify.__wrapped__ if hasattr(gemini_flash_verify, '__wrapped__') else None  # not needed
                 # Use raw Gemini Flash to extract store code
                 extract_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_KEY}"
                 payload = {

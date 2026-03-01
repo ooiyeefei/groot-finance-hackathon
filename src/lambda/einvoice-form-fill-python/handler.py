@@ -777,7 +777,9 @@ def handler(event: dict, context=None) -> dict:
             try:
                 import boto3 as _boto3
                 s3 = _boto3.client("s3")
-                resp = s3.get_object(Bucket="finanseal-bucket", Key=receipt_image_path)
+                # storagePath may omit the domain prefix — ensure it starts with expense_claims/
+                s3_key = receipt_image_path if receipt_image_path.startswith("expense_claims/") else f"expense_claims/{receipt_image_path}"
+                resp = s3.get_object(Bucket="finanseal-bucket", Key=s3_key)
                 receipt_image_b64 = base64.b64encode(resp["Body"].read()).decode()
                 print(f"[Form Fill] Receipt image loaded: {receipt_image_path} ({len(receipt_image_b64)//1024}KB)")
             except Exception as e:
