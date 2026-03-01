@@ -607,33 +607,42 @@ def run_99speedmart_flow(page: Page, buyer: dict, email_ref: str) -> bool:
         _dx_select_option(page, "Customer State", buyer["state"])
         _dx_select_option(page, "Customer Country", "Malaysia")
 
-        # Step 4: OTP flow
+        # Step 4: OTP flow — retry up to 3 times (99SM email delivery can be slow/flaky)
         print("[99SM] Step 4: Request OTP")
-        otp_btn = page.get_by_role("button", name="Request OTP")
-        if otp_btn.count() > 0 and not otp_btn.is_disabled():
+        otp_code = None
+        for otp_attempt in range(3):
+            otp_btn = page.get_by_role("button", name="Request OTP")
+            if otp_btn.count() == 0 or otp_btn.is_disabled():
+                print(f"[99SM] Request OTP button not found or disabled (attempt {otp_attempt+1})")
+                if otp_attempt == 0:
+                    return False
+                break
+
             otp_btn.click(timeout=5000)
-            print("[99SM] Clicked Request OTP — polling for email...")
-            time.sleep(2)
+            print(f"[99SM] Clicked Request OTP (attempt {otp_attempt+1}/3) — polling for email...")
+            time.sleep(3)
 
-            otp_code = poll_otp_email(email_ref, timeout=60)
-            if not otp_code:
-                print("[99SM] OTP polling failed — no code received")
-                return False
+            otp_code = poll_otp_email(email_ref, timeout=45)
+            if otp_code:
+                break
+            print(f"[99SM] OTP not received on attempt {otp_attempt+1} — will retry")
+            time.sleep(5)  # brief pause before retry
 
-            # OTP field is a spinbutton in this form
-            _dx_fill_textbox(page, "OTP", otp_code)
+        if not otp_code:
+            print("[99SM] OTP polling failed after 3 attempts — no code received")
+            return False
 
-            # Click Submit
-            submit_btn = page.get_by_role("button", name="Submit")
-            if submit_btn.count() > 0:
-                submit_btn.click(timeout=5000)
-                print("[99SM] Clicked Submit")
-                time.sleep(5)
-            else:
-                print("[99SM] Submit button not found!")
-                return False
+        # OTP field is a spinbutton in this form
+        _dx_fill_textbox(page, "OTP", otp_code)
+
+        # Click Submit
+        submit_btn = page.get_by_role("button", name="Submit")
+        if submit_btn.count() > 0:
+            submit_btn.click(timeout=5000)
+            print("[99SM] Clicked Submit")
+            time.sleep(5)
         else:
-            print("[99SM] Request OTP button not found or disabled")
+            print("[99SM] Submit button not found!")
             return False
 
         # Verify submission with Gemini Flash
