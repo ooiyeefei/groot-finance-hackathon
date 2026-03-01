@@ -450,174 +450,153 @@ def run_tier1(page: Page, config: dict, buyer: dict) -> bool:
 
 # ── 99 Speed Mart dedicated flow ──────────────────────────
 
-def _devextreme_type_filter(page: Page, selector: str, value: str) -> bool:
-    """Type-to-filter a DevExtreme dropdown. Returns True if option selected."""
+def _dx_select_option(page: Page, combobox_name: str, option_text: str) -> bool:
+    """Open a DevExtreme combobox by accessible name, select option containing text."""
     try:
-        el = page.locator(selector).first
-        el.click(timeout=5000)
-        time.sleep(0.5)
-        # Type to filter
-        page.keyboard.type(value[:4], delay=50)
+        # Open dropdown via the "Select" button adjacent to the combobox
+        cb = page.get_by_role("combobox", name=re.compile(combobox_name, re.IGNORECASE)).first
+        if cb.count() == 0:
+            print(f"[99SM] Combobox '{combobox_name}' not found")
+            return False
+        cb.click(timeout=5000)
         time.sleep(0.8)
-        # Click matching option from dropdown list
-        option = page.locator(f'.dx-list-item:has-text("{value}")').first
+
+        # Click matching option from listbox
+        option = page.get_by_role("option", name=re.compile(option_text, re.IGNORECASE)).first
         if option.count() > 0:
             option.click(timeout=3000)
-            print(f"[99SM] DevExtreme dropdown → '{value}'")
+            print(f"[99SM] Selected '{combobox_name}' → '{option_text}'")
+            time.sleep(0.5)
             return True
-        # Fallback: try dx-item
-        option = page.locator(f'.dx-item:has-text("{value}")').first
+
+        # Fallback: type to filter then click
+        page.keyboard.type(option_text[:4], delay=50)
+        time.sleep(0.8)
+        option = page.get_by_role("option", name=re.compile(option_text, re.IGNORECASE)).first
         if option.count() > 0:
             option.click(timeout=3000)
-            print(f"[99SM] DevExtreme dropdown → '{value}' (dx-item)")
+            print(f"[99SM] Selected '{combobox_name}' → '{option_text}' (typed)")
+            time.sleep(0.5)
             return True
-        # Close dropdown
+
         page.keyboard.press("Escape")
+        print(f"[99SM] Option '{option_text}' not found in '{combobox_name}'")
         return False
     except Exception as e:
-        print(f"[99SM] DevExtreme filter failed for '{value}': {e}")
-        page.keyboard.press("Escape")
+        print(f"[99SM] Dropdown '{combobox_name}' failed: {e}")
+        try:
+            page.keyboard.press("Escape")
+        except Exception:
+            pass
+        return False
+
+
+def _dx_fill_textbox(page: Page, label_name: str, value: str) -> bool:
+    """Fill a DevExtreme textbox by accessible name. Handles disabled state gracefully."""
+    try:
+        tb = page.get_by_role("textbox", name=re.compile(label_name, re.IGNORECASE)).first
+        if tb.count() == 0:
+            # Also try spinbutton (DevExtreme numeric fields like OTP)
+            tb = page.get_by_role("spinbutton", name=re.compile(label_name, re.IGNORECASE)).first
+        if tb.count() == 0:
+            print(f"[99SM] Textbox '{label_name}' not found")
+            return False
+        if tb.is_disabled():
+            print(f"[99SM] Textbox '{label_name}' is disabled — skipping")
+            return False
+        tb.click(timeout=3000)
+        tb.fill(value)
+        print(f"[99SM] Filled '{label_name}' → '{value[:60]}'")
+        return True
+    except Exception as e:
+        print(f"[99SM] Fill '{label_name}' failed: {e}")
         return False
 
 
 def run_99speedmart_flow(page: Page, buyer: dict, email_ref: str) -> bool:
-    """Dedicated form fill for 99 Speed Mart (99einvoice.com). Returns True on success."""
+    """Dedicated form fill for 99 Speed Mart (99einvoice.com). Returns True on success.
+
+    Form structure (from live DOM inspection):
+    - Page 1: Receipt Details (pre-filled, read-only) + "Next" button
+    - Page 2: Customer Details form with DevExtreme widgets:
+        - Customer Identification Type (combobox): "_ Business registration number"
+        - Customer Identification Number (textbox): BRN
+        - Customer TIN (textbox): TIN
+        - [Validate] button → unlocks remaining fields
+        - Customer Name (auto-filled after validate), SST, Email, Contact,
+          Address 1/2/3, Postal Zone, City, State (combobox), Country (combobox)
+        - OTP (spinbutton), [Request OTP] button, [Submit] button
+    """
     system_email = f"einvoice+{email_ref}@einv.hellogroot.com"
     print(f"[99SM] Starting 99 Speed Mart flow, email={system_email}")
 
     try:
         # Step 1: Receipt page — click "Next" button
         print("[99SM] Step 1: Click Next on receipt page")
-        next_btn = page.locator('button:has-text("Next"), .dx-button:has-text("Next")').first
+        next_btn = page.get_by_role("button", name="Next")
         if next_btn.count() > 0:
             next_btn.click(timeout=10000)
             time.sleep(2)
-            page.wait_for_load_state("networkidle", timeout=10000)
+            try:
+                page.wait_for_load_state("networkidle", timeout=10000)
+            except Exception:
+                pass
         else:
             print("[99SM] No Next button found — may already be on form page")
         time.sleep(1)
 
-        # Step 2: Validate identity
+        # Step 2: Validate identity (BRN + TIN)
         print("[99SM] Step 2: Validate identity (BRN + TIN)")
 
-        # Open ID Type dropdown → select "Business Registration Number (BRN)"
-        id_type_dropdown = page.locator('[aria-label*="ID Type" i], [placeholder*="ID Type" i], .dx-selectbox:has-text("ID Type")').first
-        if id_type_dropdown.count() == 0:
-            # Try broader selector for DevExtreme dropdowns
-            id_type_dropdown = page.locator('div:has(> label:has-text("ID Type")) .dx-selectbox, div:has(> label:has-text("ID Type")) .dx-dropdowneditor').first
-        if id_type_dropdown.count() > 0:
-            id_type_dropdown.click(timeout=5000)
-            time.sleep(0.5)
-            brn_option = page.locator('.dx-list-item:has-text("Business Registration"), .dx-item:has-text("Business Registration"), [role="option"]:has-text("Business Registration")').first
-            if brn_option.count() > 0:
-                brn_option.click(timeout=3000)
-                print("[99SM] Selected ID Type: Business Registration Number")
-            else:
-                page.keyboard.press("Escape")
-                print("[99SM] BRN option not found in dropdown")
-            time.sleep(0.5)
+        # Select ID Type: "Business registration number" (option text has "_ " prefix in DOM)
+        _dx_select_option(page, "Customer Identification Type", "Business registration")
 
-        # Fill ID Number (BRN)
-        id_input = page.locator('input[aria-label*="ID Number" i], input[placeholder*="ID Number" i]').first
-        if id_input.count() == 0:
-            id_input = page.locator('div:has(> label:has-text("ID Number")) input').first
-        if id_input.count() > 0:
-            id_input.click(timeout=3000)
-            id_input.fill(buyer["brn"])
-            print(f"[99SM] Filled ID Number: {buyer['brn']}")
+        # Fill ID Number (BRN) and TIN
+        _dx_fill_textbox(page, "Customer Identification Number", buyer["brn"])
+        _dx_fill_textbox(page, "Customer TIN", buyer["tin"])
 
-        # Fill TIN
-        tin_input = page.locator('input[aria-label*="TIN" i], input[placeholder*="TIN" i]').first
-        if tin_input.count() == 0:
-            tin_input = page.locator('div:has(> label:has-text("TIN")) input').first
-        if tin_input.count() > 0:
-            tin_input.click(timeout=3000)
-            tin_input.fill(buyer["tin"])
-            print(f"[99SM] Filled TIN: {buyer['tin']}")
-
-        # Click "Validate" button
-        validate_btn = page.locator('button:has-text("Validate"), .dx-button:has-text("Validate")').first
+        # Click Validate → wait for fields to unlock
+        validate_btn = page.get_by_role("button", name="Validate")
         if validate_btn.count() > 0:
             validate_btn.click(timeout=5000)
             print("[99SM] Clicked Validate")
-            time.sleep(2)
+            time.sleep(3)
 
-            # Wait for fields to enable (poll disabled attribute removal, up to 15s)
+            # Wait for Customer Email field to become enabled (up to 15s)
             for i in range(15):
-                disabled_count = page.evaluate("""() => {
-                    return document.querySelectorAll('input[disabled], .dx-state-disabled').length;
-                }""")
-                if disabled_count == 0:
+                email_field = page.get_by_role("textbox", name=re.compile("Customer Email", re.IGNORECASE)).first
+                if email_field.count() > 0 and not email_field.is_disabled():
                     print(f"[99SM] Fields enabled after {i+1}s")
                     break
                 time.sleep(1)
             else:
-                print("[99SM] Warning: Some fields still disabled after 15s")
+                print("[99SM] Warning: Fields still disabled after 15s — validation may have failed")
+                # Take screenshot for debugging
+                try:
+                    shot = base64.b64encode(page.screenshot(type="png", full_page=True)).decode()
+                    desc = gemini_flash("Describe what you see on this form page. Any error messages? Is there a validation failure?", shot)
+                    print(f"[99SM] Debug screenshot: {desc[:200]}")
+                except Exception:
+                    pass
+                return False
 
-        # Step 3: Fill customer details
+        # Step 3: Fill customer details (fields now enabled)
         print("[99SM] Step 3: Fill customer details")
 
-        # Email — use system email, NOT user email
-        email_input = page.locator('input[aria-label*="Email" i], input[placeholder*="Email" i], input[type="email"]').first
-        if email_input.count() == 0:
-            email_input = page.locator('div:has(> label:has-text("Email")) input').first
-        if email_input.count() > 0:
-            email_input.click(timeout=3000)
-            email_input.fill(system_email)
-            print(f"[99SM] Filled Email: {system_email}")
+        _dx_fill_textbox(page, "Customer Email", system_email)
+        _dx_fill_textbox(page, "Customer Contact Number", buyer["phone"])
+        _dx_fill_textbox(page, "Customer Address 1", buyer["address"])
+        _dx_fill_textbox(page, "Customer Postal Zone", "47100")
+        _dx_fill_textbox(page, "Customer City", buyer["city"])
 
-        # Contact / Phone
-        phone_input = page.locator('input[aria-label*="Contact" i], input[placeholder*="Contact" i], input[aria-label*="Phone" i], input[type="tel"]').first
-        if phone_input.count() == 0:
-            phone_input = page.locator('div:has(> label:has-text("Contact")) input, div:has(> label:has-text("Phone")) input').first
-        if phone_input.count() > 0:
-            phone_input.click(timeout=3000)
-            phone_input.fill(buyer["phone"])
-            print(f"[99SM] Filled Contact: {buyer['phone']}")
-
-        # Address Line 1
-        addr_input = page.locator('input[aria-label*="Address" i], input[placeholder*="Address" i]').first
-        if addr_input.count() == 0:
-            addr_input = page.locator('div:has(> label:has-text("Address")) input').first
-        if addr_input.count() > 0:
-            addr_input.click(timeout=3000)
-            addr_input.fill(buyer["address"])
-            print(f"[99SM] Filled Address: {buyer['address'][:50]}")
-
-        # Postal Zone
-        postal_input = page.locator('input[aria-label*="Postal" i], input[placeholder*="Postal" i], input[aria-label*="Postcode" i]').first
-        if postal_input.count() == 0:
-            postal_input = page.locator('div:has(> label:has-text("Postal")) input').first
-        if postal_input.count() > 0:
-            postal_input.click(timeout=3000)
-            postal_input.fill("47100")
-            print("[99SM] Filled Postal Zone: 47100")
-
-        # City
-        city_input = page.locator('input[aria-label*="City" i], input[placeholder*="City" i]').first
-        if city_input.count() == 0:
-            city_input = page.locator('div:has(> label:has-text("City")) input').first
-        if city_input.count() > 0:
-            city_input.click(timeout=3000)
-            city_input.fill(buyer["city"])
-            print(f"[99SM] Filled City: {buyer['city']}")
-
-        # State — DevExtreme type-to-filter dropdown
-        state_dd = page.locator('[aria-label*="State" i] .dx-dropdowneditor-input-wrapper, div:has(> label:has-text("State")) .dx-dropdowneditor-input-wrapper').first
-        if state_dd.count() > 0:
-            _devextreme_type_filter(page, '[aria-label*="State" i] .dx-dropdowneditor-input-wrapper, div:has(> label:has-text("State")) .dx-dropdowneditor-input-wrapper', buyer["state"])
-        time.sleep(0.5)
-
-        # Country — DevExtreme type-to-filter dropdown
-        country_dd = page.locator('[aria-label*="Country" i] .dx-dropdowneditor-input-wrapper, div:has(> label:has-text("Country")) .dx-dropdowneditor-input-wrapper').first
-        if country_dd.count() > 0:
-            _devextreme_type_filter(page, '[aria-label*="Country" i] .dx-dropdowneditor-input-wrapper, div:has(> label:has-text("Country")) .dx-dropdowneditor-input-wrapper', "Malaysia")
-        time.sleep(0.5)
+        # State + Country are combobox dropdowns
+        _dx_select_option(page, "Customer State", buyer["state"])
+        _dx_select_option(page, "Customer Country", "Malaysia")
 
         # Step 4: OTP flow
         print("[99SM] Step 4: Request OTP")
-        otp_btn = page.locator('button:has-text("Request OTP"), .dx-button:has-text("Request OTP"), button:has-text("Send OTP"), button:has-text("Request TAC")').first
-        if otp_btn.count() > 0:
+        otp_btn = page.get_by_role("button", name="Request OTP")
+        if otp_btn.count() > 0 and not otp_btn.is_disabled():
             otp_btn.click(timeout=5000)
             print("[99SM] Clicked Request OTP — polling for email...")
             time.sleep(2)
@@ -627,20 +606,11 @@ def run_99speedmart_flow(page: Page, buyer: dict, email_ref: str) -> bool:
                 print("[99SM] OTP polling failed — no code received")
                 return False
 
-            # Fill OTP field
-            otp_input = page.locator('input[aria-label*="OTP" i], input[placeholder*="OTP" i], input[aria-label*="TAC" i], input[name*="otp" i]').first
-            if otp_input.count() == 0:
-                otp_input = page.locator('div:has(> label:has-text("OTP")) input, div:has(> label:has-text("TAC")) input').first
-            if otp_input.count() > 0:
-                otp_input.click(timeout=3000)
-                otp_input.fill(otp_code)
-                print(f"[99SM] Filled OTP: {otp_code}")
-            else:
-                print("[99SM] OTP input field not found!")
-                return False
+            # OTP field is a spinbutton in this form
+            _dx_fill_textbox(page, "OTP", otp_code)
 
             # Click Submit
-            submit_btn = page.locator('button:has-text("Submit"), .dx-button:has-text("Submit")').first
+            submit_btn = page.get_by_role("button", name="Submit")
             if submit_btn.count() > 0:
                 submit_btn.click(timeout=5000)
                 print("[99SM] Clicked Submit")
@@ -649,11 +619,8 @@ def run_99speedmart_flow(page: Page, buyer: dict, email_ref: str) -> bool:
                 print("[99SM] Submit button not found!")
                 return False
         else:
-            print("[99SM] No OTP button found — trying direct submit")
-            submit_btn = page.locator('button:has-text("Submit"), .dx-button:has-text("Submit")').first
-            if submit_btn.count() > 0:
-                submit_btn.click(timeout=5000)
-                time.sleep(5)
+            print("[99SM] Request OTP button not found or disabled")
+            return False
 
         # Verify submission with Gemini Flash
         return verify_submission(page)
