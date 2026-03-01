@@ -288,11 +288,7 @@ def execute_action(page: Page, name: str, args: dict):
 # ── Post-submit verification ────────────────────────────────
 
 def verify_submission(page: Page) -> bool:
-    """After clicking Submit, verify the form was accepted (not validation error).
-
-    Returns True unless Gemini sees explicit validation errors.
-    UNKNOWN is treated as success (optimistic) — if there were errors they'd be visible.
-    """
+    """After clicking Submit, verify the form was accepted (not validation error)."""
     try:
         shot = base64.b64encode(page.screenshot(type="png")).decode()
         result = gemini_flash(
@@ -309,12 +305,83 @@ def verify_submission(page: Page) -> bool:
             # Log what errors are visible
             errors = gemini_flash("List any validation error messages visible on this form page. Be brief.", shot)
             print(f"[Verify] Errors: {errors[:200]}")
-            return False
-        # SUCCESS or UNKNOWN — treat as success (optimistic: no visible errors = likely submitted)
-        return True
+        return status == "SUCCESS"
     except Exception as e:
         print(f"[Verify] Failed: {e}")
         return True  # Optimistic — assume success if verification fails
+
+
+def verify_submission_dom(page: Page) -> bool:
+    """DOM-based post-submit verification for DevExtreme forms.
+
+    Checks the actual DOM for validation errors, success messages, and page changes.
+    More reliable than screenshot + Gemini for forms with known UI frameworks.
+    """
+    try:
+        time.sleep(2)  # let page settle after submit
+
+        result = page.evaluate("""() => {
+            const errors = [];
+            const successes = [];
+
+            // DevExtreme validation errors
+            document.querySelectorAll('.dx-invalid-message, .dx-validation-summary-item').forEach(el => {
+                const t = el.textContent?.trim();
+                if (t) errors.push(t);
+            });
+
+            // Generic toast/alert errors
+            document.querySelectorAll('[role="alert"], .toast-error, .error-message').forEach(el => {
+                const t = el.textContent?.trim();
+                if (t && t.toLowerCase().includes('error') || t.toLowerCase().includes('cannot') || t.toLowerCase().includes('invalid'))
+                    errors.push(t);
+            });
+
+            // Visible validation error text (red text near form fields)
+            document.querySelectorAll('[class*="error"], [class*="invalid"]').forEach(el => {
+                const t = el.textContent?.trim();
+                if (t && t.length < 200) errors.push(t);
+            });
+
+            // Success indicators
+            const bodyText = document.body.innerText.toLowerCase();
+            const successKeywords = ['thank you', 'successfully', 'submitted', 'confirmed', 'request received', 'invoice request'];
+            for (const kw of successKeywords) {
+                if (bodyText.includes(kw)) successes.push(kw);
+            }
+
+            // Check if form is still visible (if form gone → likely redirected to success)
+            const formVisible = !!document.querySelector('form:not([style*="display: none"])');
+
+            // Check URL change (some forms redirect on success)
+            const url = window.location.href;
+
+            return { errors, successes, formVisible, url };
+        }""")
+
+        errors = result.get("errors", [])
+        successes = result.get("successes", [])
+        form_visible = result.get("formVisible", True)
+
+        if errors:
+            print(f"[Verify DOM] ERRORS found: {errors[:3]}")
+            return False
+
+        if successes:
+            print(f"[Verify DOM] SUCCESS signals: {successes}")
+            return True
+
+        if not form_visible:
+            print("[Verify DOM] Form no longer visible — likely redirected to success page")
+            return True
+
+        # No errors, no clear success — fall back to Gemini Flash
+        print("[Verify DOM] No errors or success signals in DOM — falling back to Gemini")
+        return verify_submission(page)
+
+    except Exception as e:
+        print(f"[Verify DOM] Failed: {e}")
+        return verify_submission(page)
 
 
 # ── OTP email helpers ──────────────────────────────────────
@@ -651,8 +718,8 @@ def run_99speedmart_flow(page: Page, buyer: dict, email_ref: str) -> bool:
             print("[99SM] Submit button not found!")
             return False
 
-        # Verify submission with Gemini Flash
-        return verify_submission(page)
+        # Verify submission — DOM-based check first, Gemini Flash fallback
+        return verify_submission_dom(page)
 
     except Exception as e:
         print(f"[99SM] Flow failed: {e}")
