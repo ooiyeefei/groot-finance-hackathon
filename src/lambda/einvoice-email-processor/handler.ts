@@ -119,7 +119,8 @@ async function copyInS3(sourceKey: string, sourceBucket: string, destKey: string
 // ── Email parsing ──────────────────────────────────────────
 
 function parseEmailRef(toAddress: string): string | null {
-  const match = toAddress.match(/einvoice\+([^@]+)@/i);
+  // Match both formats: einvoice+ref@ (plus addressing) and einvoice.ref@ (dot format for 99SM etc.)
+  const match = toAddress.match(/einvoice[+.]([^@]+)@/i);
   return match ? match[1] : null;
 }
 
