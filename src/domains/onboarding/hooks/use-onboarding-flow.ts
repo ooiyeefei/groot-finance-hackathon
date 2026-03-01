@@ -18,7 +18,7 @@ import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import type { OnboardingWizardData, BusinessType } from '@/domains/onboarding/types'
 import { getSuggestedCategories } from '@/domains/onboarding/lib/business-type-defaults'
-import { isValidRegNumber } from '@/lib/validation/registration-number'
+// BRN validation moved to activation/checkout — not needed in onboarding
 
 // Hook return interface
 export interface UseOnboardingFlowReturn {
@@ -113,14 +113,9 @@ export function useOnboardingFlow(): UseOnboardingFlowReturn {
    */
   const validateCurrentStep = useCallback((): boolean => {
     switch (currentStep) {
-      case 1: // Business Details (name, country, currency, registration number)
+      case 1: // Business Details (name, country, currency)
+        // BRN not required at onboarding — collected at activation/checkout instead
         if (!wizardData.businessName?.trim()) return false
-        // 019: Require valid registration number for SG and MY
-        if (wizardData.countryCode === 'SG' || wizardData.countryCode === 'MY') {
-          const regNum = wizardData.businessRegNumber?.trim()
-          if (!regNum) return false
-          return isValidRegNumber(regNum, wizardData.countryCode as 'SG' | 'MY')
-        }
         return true
 
       case 2: // Business Type
