@@ -1018,15 +1018,11 @@ main .p-6 {
   }
 
   /* ---- 2. TABLES: HORIZONTAL SCROLL ---- */
-  table {
-    display: block;
-    overflow-x: auto;
+  /* Don't change table display — that breaks column alignment.
+     Instead, tables inside overflow-x-auto containers already scroll.
+     Only ensure table parents can scroll if needed. */
+  .overflow-x-auto {
     -webkit-overflow-scrolling: touch;
-  }
-  thead, tbody, tr {
-    display: table;
-    width: 100%;
-    table-layout: auto;
   }
 
   /* ---- 3. TEXT OVERFLOW PREVENTION ---- */
