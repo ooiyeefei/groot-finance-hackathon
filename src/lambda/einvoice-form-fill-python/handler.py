@@ -873,9 +873,11 @@ def handler(event: dict, context=None) -> dict:
             time.sleep(2)  # let page settle after submit
             shot = base64.b64encode(page.screenshot(type="png", full_page=True)).decode()
             vresult = gemini_flash(
-                "Analyze this page AFTER a form submit. Is there a success/thank-you/confirmation message? "
-                "Or are there validation errors / the form still showing?\n\n"
-                "Respond in JSON: {\"submitted\": true/false, \"confidence\": 0.0-1.0, \"evidence\": \"what you see\"}",
+                "Analyze this page AFTER a form submit attempt. Classify:\n"
+                "- submitted=true ONLY if you see a clear success message (thank you, confirmation, receipt number, green checkmark, or redirected to a different/blank page)\n"
+                "- submitted=false if: the SAME form is still visible, OR there are ANY validation errors (red text, 'required', 'invalid'), OR the form fields are still editable\n"
+                "IMPORTANT: Validation errors = NOT submitted (submitted=false)\n\n"
+                "Respond in JSON only: {\"submitted\": true/false, \"confidence\": 0.0-1.0, \"evidence\": \"what you see\"}",
                 shot,
             )
             json_match = re.search(r'\{[\s\S]*?\}', vresult)

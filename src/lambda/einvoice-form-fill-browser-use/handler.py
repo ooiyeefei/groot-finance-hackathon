@@ -49,12 +49,12 @@ def convex_mutation(path: str, args: dict):
 def gemini_flash_verify(screenshot_b64: str) -> dict:
     """Ask Gemini Flash to verify if the form was submitted successfully."""
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_KEY}"
-    prompt = """Analyze this screenshot of a web form page AFTER a submit attempt.
+    prompt = """Analyze this screenshot of a web form page AFTER a submit attempt. Classify:
 
-Determine if the form was submitted successfully. Look for:
-- SUCCESS indicators: "thank you", "success", "submitted", "received", confirmation number, green checkmark, redirect to a different page
-- FAILURE indicators: validation errors (red text), "required field", error messages, the form still visible with empty fields, "please fill in"
-- AMBIGUOUS: page looks the same as before, unclear state
+- submitted=true ONLY if you see a clear success message (thank you, confirmation, receipt number, green checkmark, or redirected to a different/blank page)
+- submitted=false if: the SAME form is still visible, OR there are ANY validation errors (red text, 'required', 'invalid'), OR the form fields are still editable
+
+IMPORTANT: Validation errors visible on page = NOT submitted (submitted=false). The form showing with fields still editable = NOT submitted.
 
 Respond in JSON only:
 {"submitted": true/false, "confidence": 0.0-1.0, "evidence": "brief description of what you see"}"""
