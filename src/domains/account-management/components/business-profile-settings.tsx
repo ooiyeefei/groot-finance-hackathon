@@ -687,7 +687,7 @@ export default function BusinessProfileSettings() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
-                  Contact Email
+                  Company Contact Email
                 </label>
                 <input
                   type="email"
@@ -737,7 +737,7 @@ export default function BusinessProfileSettings() {
                 )}
               </div>
               <p className="text-xs text-muted-foreground mb-3">
-                When merchants send e-invoices, a copy is forwarded to your account email{sesVerifyEmail ? ` (${sesVerifyEmail})` : ''}. Verify to enable reliable delivery via AWS SES.
+                Verify your email to enable reliable email delivery.
               </p>
               <div className="flex items-center gap-3">
                 {sesVerifyEmail && (
