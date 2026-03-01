@@ -592,6 +592,8 @@ def run_99speedmart_flow(page: Page, buyer: dict, email_ref: str) -> bool:
         # Step 3: Fill customer details (fields now enabled)
         print("[99SM] Step 3: Fill customer details")
 
+        # Customer Name — unlocked by validation but not auto-populated
+        _dx_fill_textbox(page, "Customer Name", buyer["name"])
         _dx_fill_textbox(page, "Customer Email", system_email)
         _dx_fill_textbox(page, "Customer Contact Number", buyer["phone"])
         _dx_fill_textbox(page, "Customer Address 1", buyer["address"])
