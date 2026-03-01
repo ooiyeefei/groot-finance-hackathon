@@ -347,7 +347,7 @@ def poll_otp_email(email_ref: str, timeout: int = 60) -> Optional[str]:
     prefix = "ses-emails/einvoice/"
     cutoff = time.time() - 120  # only check emails from last 2 minutes
 
-    print(f"[OTP] Polling for OTP email: einvoice+{email_ref}@... (timeout={timeout}s)")
+    print(f"[OTP] Polling for OTP email: einvoice[+.]{email_ref}@... (timeout={timeout}s)")
 
     for attempt in range(timeout // 5):
         try:
@@ -365,7 +365,9 @@ def poll_otp_email(email_ref: str, timeout: int = 60) -> Optional[str]:
 
                     # Check To: header contains our emailRef
                     to_header = msg.get("To", "")
-                    if f"einvoice+{email_ref}@" not in to_header.lower():
+                    # Match both + and . formats: einvoice+ref@ or einvoice.ref@
+                    to_lower = to_header.lower()
+                    if f"einvoice+{email_ref}@" not in to_lower and f"einvoice.{email_ref}@" not in to_lower:
                         continue
 
                     # Extract body text
@@ -536,7 +538,8 @@ def run_99speedmart_flow(page: Page, buyer: dict, email_ref: str) -> bool:
           Address 1/2/3, Postal Zone, City, State (combobox), Country (combobox)
         - OTP (spinbutton), [Request OTP] button, [Submit] button
     """
-    system_email = f"einvoice+{email_ref}@einv.hellogroot.com"
+    # Use dot instead of + in email — many merchant forms reject + as invalid character
+    system_email = f"einvoice.{email_ref}@einv.hellogroot.com"
     print(f"[99SM] Starting 99 Speed Mart flow, email={system_email}")
 
     try:
