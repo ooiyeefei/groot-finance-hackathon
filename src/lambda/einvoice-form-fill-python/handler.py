@@ -492,7 +492,11 @@ def _dx_select_option(page: Page, combobox_name: str, option_text: str) -> bool:
 
 
 def _dx_fill_textbox(page: Page, label_name: str, value: str) -> bool:
-    """Fill a DevExtreme textbox by accessible name. Handles disabled state gracefully."""
+    """Fill a DevExtreme textbox by accessible name using keyboard typing.
+
+    DevExtreme widgets ignore Playwright's .fill() because they bind to keyboard
+    events, not the native DOM value property. Must use click → select all → type.
+    """
     try:
         tb = page.get_by_role("textbox", name=re.compile(label_name, re.IGNORECASE)).first
         if tb.count() == 0:
@@ -505,7 +509,12 @@ def _dx_fill_textbox(page: Page, label_name: str, value: str) -> bool:
             print(f"[99SM] Textbox '{label_name}' is disabled — skipping")
             return False
         tb.click(timeout=3000)
-        tb.fill(value)
+        page.keyboard.press("Control+A")
+        page.keyboard.press("Backspace")
+        page.keyboard.type(value, delay=30)
+        # Tab out to trigger DevExtreme's onValueChanged
+        page.keyboard.press("Tab")
+        time.sleep(0.3)
         print(f"[99SM] Filled '{label_name}' → '{value[:60]}'")
         return True
     except Exception as e:
