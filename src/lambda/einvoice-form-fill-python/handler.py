@@ -775,12 +775,14 @@ def handler(event: dict, context=None) -> dict:
         receipt_image_path = event.get("receiptImagePath")
         if receipt_image_path:
             try:
+                # Use urllib to download from S3 via presigned URL — avoids boto3 asyncio conflict with Playwright
                 import boto3 as _boto3
                 s3 = _boto3.client("s3")
-                # storagePath may omit the domain prefix — ensure it starts with expense_claims/
                 s3_key = receipt_image_path if receipt_image_path.startswith("expense_claims/") else f"expense_claims/{receipt_image_path}"
-                resp = s3.get_object(Bucket="finanseal-bucket", Key=s3_key)
-                receipt_image_b64 = base64.b64encode(resp["Body"].read()).decode()
+                presigned = s3.generate_presigned_url("get_object", Params={"Bucket": "finanseal-bucket", "Key": s3_key}, ExpiresIn=300)
+                req = Request(presigned)
+                with urlopen(req, timeout=15) as resp:
+                    receipt_image_b64 = base64.b64encode(resp.read()).decode()
                 print(f"[Form Fill] Receipt image loaded: {receipt_image_path} ({len(receipt_image_b64)//1024}KB)")
             except Exception as e:
                 print(f"[Form Fill] Receipt image download failed: key={receipt_image_path}, error={e}")
