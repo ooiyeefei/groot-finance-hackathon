@@ -753,8 +753,17 @@ def handler(event: dict, context=None) -> dict:
             "address": bd.get("addressLine1") or bd["address"].split(",")[0],
             "city": bd.get("city", "Puchong"), "state": state,
         }
-        receipt = event.get("extractedData", {})
+        raw_receipt = event.get("extractedData", {})
+        # Normalize field names (auto-trigger uses amount/date, manual retry uses totalAmount/transactionDate)
+        receipt = {
+            "referenceNumber": raw_receipt.get("referenceNumber") or raw_receipt.get("receipt_number"),
+            "totalAmount": raw_receipt.get("totalAmount") or raw_receipt.get("amount"),
+            "currency": raw_receipt.get("currency", "MYR"),
+            "transactionDate": raw_receipt.get("transactionDate") or raw_receipt.get("date"),
+            "vendorName": raw_receipt.get("vendorName") or raw_receipt.get("vendor_name"),
+        }
         print(f"[Form Fill] Buyer: {buyer['userName']}, {buyer['email']}, {state}")
+        print(f"[Form Fill] Receipt: ref={receipt['referenceNumber']}, amt={receipt['totalAmount']}, date={receipt['transactionDate']}, vendor={receipt['vendorName']}")
 
         # Launch browser (Lambda needs --no-sandbox + --disable-dev-shm-usage)
         pw = sync_playwright().start()

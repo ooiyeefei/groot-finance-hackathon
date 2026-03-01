@@ -238,7 +238,14 @@ def handler(event: dict, context=None) -> dict:
             "city": bd.get("city", "Puchong"),
             "state": state,
         }
-        receipt = event.get("extractedData", {})
+        raw_receipt = event.get("extractedData", {})
+        receipt = {
+            "referenceNumber": raw_receipt.get("referenceNumber") or raw_receipt.get("receipt_number"),
+            "totalAmount": raw_receipt.get("totalAmount") or raw_receipt.get("amount"),
+            "currency": raw_receipt.get("currency", "MYR"),
+            "transactionDate": raw_receipt.get("transactionDate") or raw_receipt.get("date"),
+            "vendorName": raw_receipt.get("vendorName") or raw_receipt.get("vendor_name"),
+        }
 
         print(f"[BU] Buyer: {buyer['userName']}, {buyer['email']}, {state}")
 
