@@ -330,17 +330,20 @@ def verify_submission_dom(page: Page) -> bool:
                 if (t) errors.push(t);
             });
 
-            // Generic toast/alert errors
+            // Generic toast/alert errors (short text only — long text is likely dropdown lists)
             document.querySelectorAll('[role="alert"], .toast-error, .error-message').forEach(el => {
                 const t = el.textContent?.trim();
-                if (t && t.toLowerCase().includes('error') || t.toLowerCase().includes('cannot') || t.toLowerCase().includes('invalid'))
-                    errors.push(t);
+                if (t && t.length < 100) {
+                    const tl = t.toLowerCase();
+                    if (tl.includes('error') || tl.includes('cannot') || tl.includes('invalid') || tl.includes('required') || tl.includes('failed'))
+                        errors.push(t);
+                }
             });
 
-            // Visible validation error text (red text near form fields)
-            document.querySelectorAll('[class*="error"], [class*="invalid"]').forEach(el => {
+            // DevExtreme-specific visible validation errors (red text under fields)
+            document.querySelectorAll('.dx-invalid-message-content, .dx-validationsummary .dx-item-content').forEach(el => {
                 const t = el.textContent?.trim();
-                if (t && t.length < 200) errors.push(t);
+                if (t && t.length < 100) errors.push(t);
             });
 
             // Success indicators
