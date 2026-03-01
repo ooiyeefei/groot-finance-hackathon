@@ -594,7 +594,7 @@ export const getBusinessProfileByStringId = query({
       address: business.address ?? null,
       contact_email: business.contactEmail ?? null,
       contact_phone: business.contactPhone ?? null,
-      home_currency: business.homeCurrency ?? "SGD",
+      home_currency: business.homeCurrency ?? "MYR",
       country_code: business.countryCode ?? null,
       logo_url: business.logoStoragePath ?? business.logoUrl ?? null,
       logo_fallback_color: business.logoFallbackColor ?? null,

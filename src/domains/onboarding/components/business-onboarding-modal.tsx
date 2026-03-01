@@ -114,7 +114,7 @@ export default function BusinessOnboardingModal({
   } = useOnboardingFlow()
 
   // Local state for step 1 form
-  const [homeCurrency, setHomeCurrency] = useState('SGD')
+  const [homeCurrency, setHomeCurrency] = useState('MYR')
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
 
@@ -148,7 +148,7 @@ export default function BusinessOnboardingModal({
   useEffect(() => {
     if (!isOpen) {
       resetWizard()
-      setHomeCurrency('SGD')
+      setHomeCurrency('MYR')
       setSubmitError(null)
       setBrewingMessageIndex(0)
     }
@@ -195,7 +195,7 @@ export default function BusinessOnboardingModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: wizardData.businessName,
-          countryCode: wizardData.countryCode || 'SG',
+          countryCode: wizardData.countryCode || 'MY',
           homeCurrency: homeCurrency,
           businessType: wizardData.businessType,
           customCOGSNames: wizardData.customCOGSNames || [],
@@ -399,7 +399,7 @@ export default function BusinessOnboardingModal({
                 <div className="space-y-2">
                   <Label className="text-base font-medium text-foreground">Country</Label>
                   <Select
-                    value={wizardData.countryCode || 'SG'}
+                    value={wizardData.countryCode || 'MY'}
                     onValueChange={handleCountryChange}
                   >
                     <SelectTrigger className="bg-input border-border text-foreground h-10">
@@ -619,7 +619,7 @@ export default function BusinessOnboardingModal({
                         <span className="text-muted-foreground">Country:</span>
                         <p className="font-medium text-foreground">
                           {COUNTRIES.find((c) => c.code === wizardData.countryCode)?.name ||
-                            wizardData.countryCode || 'Singapore'}
+                            wizardData.countryCode || 'Malaysia'}
                         </p>
                       </div>
                       <div>
