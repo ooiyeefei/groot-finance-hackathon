@@ -386,6 +386,7 @@ BUYER DETAILS (use for buyer/customer fields):
 - Address: {buyer["address"]}, {buyer["city"]}, 47100, {buyer["state"]}, Malaysia
 
 RECEIPT DATA (use for receipt/bill/store fields):
+- Store Code / Shop Number: {receipt.get("storeCode", "N/A")}
 - Bill Number / Tax Invoice No: {receipt.get("referenceNumber", "N/A")}
 - Total Amount: {receipt.get("totalAmount", "N/A")}
 - Currency: {receipt.get("currency", "MYR")}
@@ -784,6 +785,21 @@ def handler(event: dict, context=None) -> dict:
                 with urlopen(req, timeout=15) as resp:
                     receipt_image_b64 = base64.b64encode(resp.read()).decode()
                 print(f"[Form Fill] Receipt image loaded: {receipt_image_path} ({len(receipt_image_b64)//1024}KB)")
+
+                # Pre-extract store code from receipt image via Gemini Flash
+                if not receipt.get("storeCode"):
+                    try:
+                        code = gemini_flash(
+                            "Extract the Store Code, Shop Number, or Branch Code from this receipt. "
+                            "Look for labels like 'Shop No.', 'Store Code', 'Branch', 'Outlet'. "
+                            "Return ONLY the code (e.g. KK9219), nothing else. If not found, return N/A.",
+                            receipt_image_b64,
+                        ).strip()
+                        if code and code != "N/A" and len(code) < 20:
+                            receipt["storeCode"] = code
+                            print(f"[Form Fill] Extracted store code: {code}")
+                    except Exception as se:
+                        print(f"[Form Fill] Store code extraction failed: {se}")
             except Exception as e:
                 print(f"[Form Fill] Receipt image download failed: key={receipt_image_path}, error={e}")
 
