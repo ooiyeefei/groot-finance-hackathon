@@ -2691,6 +2691,8 @@ export const requestEinvoice = mutation({
         transactionDate: claim.transactionDate || null,
         vendorName: claim.vendorName || null,
       },
+      // Receipt image path for CUA vision (fallback to look at receipt for missing fields)
+      receiptImagePath: claim.convertedImagePath || claim.storagePath || null,
     };
   },
 });

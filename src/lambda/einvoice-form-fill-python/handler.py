@@ -358,7 +358,7 @@ def run_tier1(page: Page, config: dict, buyer: dict) -> bool:
 
 # ── Tier 2: Gemini CUA exploration ─────────────────────────
 
-def run_tier2(page: Page, buyer: dict, receipt: dict) -> int:
+def run_tier2(page: Page, buyer: dict, receipt: dict, receipt_image_b64: str | None = None) -> int:
     """CUA fills the form visually. Returns action count."""
     # Recon: Gemini Flash scouts the full page
     recon = ""
@@ -395,20 +395,25 @@ RECEIPT DATA (use for receipt/bill/store fields):
 {f"FORM FIELDS (from page analysis):\\n{recon}" if recon else ""}
 
 TASK:
-1. If the form asks for Store Code / Shop Number, look at the Vendor/Store Name or the URL for a code (e.g. KK9219 from receipt).
+1. If the form asks for Store Code / Shop Number, check the RECEIPT IMAGE for "Shop No." or similar.
 2. Fill Bill Number / Receipt Number with the Tax Invoice No from RECEIPT DATA.
 3. Fill amount fields with the Total Amount from RECEIPT DATA.
 4. Fill date fields with the Date from RECEIPT DATA.
 5. Select "Company" if Individual/Company choice exists.
 6. Fill buyer/customer detail fields with BUYER DETAILS above.
-7. Check consent checkbox → click Submit.
-8. Fix validation errors if any (only the specific field mentioned)."""
+7. For any field not covered above, check the RECEIPT IMAGE for the answer.
+8. Check consent checkbox → click Submit.
+9. Fix validation errors if any (only the specific field mentioned)."""
 
     shot = base64.b64encode(page.screenshot(type="png")).decode()
-    contents = [{"role": "user", "parts": [
-        {"text": instruction},
-        {"inlineData": {"mimeType": "image/png", "data": shot}},
-    ]}]
+    # Build CUA context: receipt image (reference) + form screenshot (current page)
+    parts: list[dict] = [{"text": instruction}]
+    if receipt_image_b64:
+        parts.append({"text": "RECEIPT IMAGE (reference — read Store Code, dates, amounts from this):"})
+        parts.append({"inlineData": {"mimeType": "image/png", "data": receipt_image_b64}})
+        parts.append({"text": "FORM PAGE (current — fill the fields below):"})
+    parts.append({"inlineData": {"mimeType": "image/png", "data": shot}})
+    contents = [{"role": "user", "parts": parts}]
 
     actions = 0
     for turn in range(MAX_TURNS):
@@ -765,6 +770,19 @@ def handler(event: dict, context=None) -> dict:
         print(f"[Form Fill] Buyer: {buyer['userName']}, {buyer['email']}, {state}")
         print(f"[Form Fill] Receipt: ref={receipt['referenceNumber']}, amt={receipt['totalAmount']}, date={receipt['transactionDate']}, vendor={receipt['vendorName']}")
 
+        # Download receipt image from S3 for CUA vision (to read Store Code, etc.)
+        receipt_image_b64 = None
+        receipt_image_path = event.get("receiptImagePath")
+        if receipt_image_path:
+            try:
+                import boto3 as _boto3
+                s3 = _boto3.client("s3")
+                resp = s3.get_object(Bucket="finanseal-bucket", Key=receipt_image_path)
+                receipt_image_b64 = base64.b64encode(resp["Body"].read()).decode()
+                print(f"[Form Fill] Receipt image loaded: {receipt_image_path} ({len(receipt_image_b64)//1024}KB)")
+            except Exception as e:
+                print(f"[Form Fill] Receipt image download failed: {e}")
+
         # Launch browser (Lambda needs --no-sandbox + --disable-dev-shm-usage)
         pw = sync_playwright().start()
         browser = pw.chromium.launch(
@@ -819,7 +837,7 @@ def handler(event: dict, context=None) -> dict:
 
         # ── Tier 2: CUA exploration (with browser-use Lambda fallback on 429) ──
         try:
-            actions = run_tier2(page, buyer, receipt)
+            actions = run_tier2(page, buyer, receipt, receipt_image_b64)
         except Exception as tier2_err:
             if "429" in str(tier2_err):
                 if BU_LAMBDA_ARN:

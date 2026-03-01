@@ -92,6 +92,7 @@ export async function POST(
         merchantFormUrl: result.merchantFormUrl,
         buyerDetails: result.buyerDetails,
         extractedData: result.receiptData || { referenceNumber: null },
+        receiptImagePath: result.receiptImagePath || null,
         emailRef,
         expenseClaimId,
       }),

@@ -117,6 +117,7 @@ BUYER DETAILS (for buyer/customer fields):
 - Address: {buyer["address"]}, {buyer["city"]}, 47100, {buyer["state"]}, Malaysia
 
 RECEIPT DATA (for receipt/bill/store fields):
+- Store Code / Shop Number: {receipt.get("storeCode", "N/A")}
 - Bill Number / Tax Invoice No: {receipt.get("referenceNumber", "N/A")}
 - Total Amount: {receipt.get("totalAmount", "N/A")}
 - Currency: {receipt.get("currency", "MYR")}
@@ -246,6 +247,35 @@ def handler(event: dict, context=None) -> dict:
             "transactionDate": raw_receipt.get("transactionDate") or raw_receipt.get("date"),
             "vendorName": raw_receipt.get("vendorName") or raw_receipt.get("vendor_name"),
         }
+
+        # Pre-extract store code from receipt image if available
+        receipt_image_path = event.get("receiptImagePath")
+        if receipt_image_path and not receipt.get("storeCode"):
+            try:
+                import boto3 as _boto3
+                import base64 as _b64
+                s3 = _boto3.client("s3")
+                resp = s3.get_object(Bucket="finanseal-bucket", Key=receipt_image_path)
+                img_b64 = _b64.b64encode(resp["Body"].read()).decode()
+                store_code = gemini_flash_verify.__wrapped__ if hasattr(gemini_flash_verify, '__wrapped__') else None  # not needed
+                # Use raw Gemini Flash to extract store code
+                extract_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_KEY}"
+                payload = {
+                    "contents": [{"role": "user", "parts": [
+                        {"text": "Extract the Store Code / Shop Number / Branch Code from this receipt. Return ONLY the code (e.g. KK9219), nothing else. If not found, return N/A."},
+                        {"inlineData": {"mimeType": "image/png", "data": img_b64}},
+                    ]}],
+                    "generationConfig": {"temperature": 0.0, "maxOutputTokens": 50},
+                }
+                req = Request(extract_url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+                with urlopen(req, timeout=15) as resp:
+                    r = json.loads(resp.read())
+                code = r.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+                if code and code != "N/A":
+                    receipt["storeCode"] = code
+                    print(f"[BU] Extracted store code from receipt: {code}")
+            except Exception as e:
+                print(f"[BU] Store code extraction failed: {e}")
 
         print(f"[BU] Buyer: {buyer['userName']}, {buyer['email']}, {state}")
 
