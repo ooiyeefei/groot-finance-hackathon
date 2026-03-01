@@ -340,6 +340,48 @@ export const dismiss = mutation({
 });
 
 /**
+ * Dismiss all notifications for current user + business
+ */
+export const dismissAll = mutation({
+  args: {
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) throw new Error("User not found");
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+    if (!membership) throw new Error("Not a member of this business");
+
+    const notifications = await ctx.db
+      .query("notifications")
+      .withIndex("by_recipient_business_status", (q) =>
+        q.eq("recipientUserId", user._id).eq("businessId", args.businessId)
+      )
+      .collect();
+
+    const active = notifications.filter((n) => n.status !== "dismissed");
+    const now = Date.now();
+    for (const notification of active) {
+      await ctx.db.patch(notification._id, {
+        status: "dismissed",
+        dismissedAt: now,
+      });
+    }
+
+    return { count: active.length };
+  },
+});
+
+/**
  * Update notification preferences for the current user
  */
 export const updatePreferences = mutation({

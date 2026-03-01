@@ -23,6 +23,7 @@ export function useNotifications(businessId: string | null) {
   const markAsReadMutation = useMutation(api.functions.notifications.markAsRead)
   const markAllAsReadMutation = useMutation(api.functions.notifications.markAllAsRead)
   const dismissMutation = useMutation(api.functions.notifications.dismiss)
+  const dismissAllMutation = useMutation(api.functions.notifications.dismissAll)
 
   const markAsRead = useCallback(async (id: string) => {
     await markAsReadMutation({ notificationId: id as Id<"notifications"> })
@@ -36,6 +37,11 @@ export function useNotifications(businessId: string | null) {
   const dismiss = useCallback(async (id: string) => {
     await dismissMutation({ notificationId: id as Id<"notifications"> })
   }, [dismissMutation])
+
+  const dismissAll = useCallback(async () => {
+    if (!convexBusinessId) return
+    await dismissAllMutation({ businessId: convexBusinessId })
+  }, [dismissAllMutation, convexBusinessId])
 
   const loadMore = useCallback(() => {
     if (notifications?.notifications && notifications.notifications.length > 0) {
@@ -51,6 +57,7 @@ export function useNotifications(businessId: string | null) {
     markAsRead,
     markAllAsRead,
     dismiss,
+    dismissAll,
     loadMore,
     hasMore: notifications?.hasMore ?? false,
   }

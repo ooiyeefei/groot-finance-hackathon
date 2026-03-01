@@ -1,6 +1,6 @@
 'use client'
 
-import { Bell, CheckCheck, Settings } from 'lucide-react'
+import { Bell, CheckCheck, Trash2 } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { NotificationItem } from './notification-item'
@@ -19,6 +19,7 @@ export function NotificationPanel({ businessId, open, onOpenChange }: Notificati
     markAsRead,
     markAllAsRead,
     dismiss,
+    dismissAll,
     loadMore,
     hasMore,
     unreadCount,
@@ -42,6 +43,17 @@ export function NotificationPanel({ businessId, open, onOpenChange }: Notificati
                 >
                   <CheckCheck className="w-3.5 h-3.5 mr-1" />
                   Mark all read
+                </Button>
+              )}
+              {notifications.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => dismissAll()}
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-1" />
+                  Clear all
                 </Button>
               )}
             </div>
