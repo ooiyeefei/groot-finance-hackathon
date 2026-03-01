@@ -781,7 +781,7 @@ def handler(event: dict, context=None) -> dict:
                 receipt_image_b64 = base64.b64encode(resp["Body"].read()).decode()
                 print(f"[Form Fill] Receipt image loaded: {receipt_image_path} ({len(receipt_image_b64)//1024}KB)")
             except Exception as e:
-                print(f"[Form Fill] Receipt image download failed: {e}")
+                print(f"[Form Fill] Receipt image download failed: key={receipt_image_path}, error={e}")
 
         # Launch browser (Lambda needs --no-sandbox + --disable-dev-shm-usage)
         pw = sync_playwright().start()
