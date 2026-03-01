@@ -721,7 +721,7 @@ def handler(event: dict, context: DurableContext):
                     "amount": extraction_result.get("total_amount"),
                     "date": extraction_result.get("transaction_date"),
                 },
-                "receiptImagePath": request.converted_image_path or request.storage_path,
+                "receiptImagePath": conversion_result.get("first_image_path") or request.storage_path,
                 "emailRef": email_ref,
                 "expenseClaimId": doc_id,
             }
