@@ -203,16 +203,19 @@ export async function cancelDocument(
 
 /**
  * Validate a TIN with LHDN.
+ * Optionally cross-validate against a BRN (idType=BRN, idValue=brn).
  */
 export async function validateTin(
   tin: string,
-  accessToken: string
+  accessToken: string,
+  crossValidate?: { idType: string; idValue: string }
 ): Promise<boolean> {
   try {
-    await lhdnFetch<void>(
-      `${LHDN_API_PATHS.VALIDATE_TIN}${tin}`,
-      accessToken
-    )
+    let path = `${LHDN_API_PATHS.VALIDATE_TIN}${tin}`
+    if (crossValidate) {
+      path += `?idType=${encodeURIComponent(crossValidate.idType)}&idValue=${encodeURIComponent(crossValidate.idValue)}`
+    }
+    await lhdnFetch<void>(path, accessToken)
     return true
   } catch (error) {
     if (error instanceof LhdnApiError && error.statusCode === 404) {

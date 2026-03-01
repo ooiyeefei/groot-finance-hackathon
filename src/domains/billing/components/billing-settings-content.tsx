@@ -28,7 +28,7 @@ import { cn } from '@/lib/utils'
 import InvoiceList from '@/domains/billing/components/invoice-list'
 import { useQuery, useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
-import { isValidRegNumber, normalizeRegNumber, getRegNumberFormatHint } from '@/lib/validation/registration-number'
+// Registration validation removed from this component — verification handled by /api/v1/billing/verify-registration
 import { COUNTRY_TO_CURRENCY } from '@/lib/stripe/catalog'
 
 /**
@@ -101,62 +101,57 @@ function CelebrationOverlay({ show, onComplete }: { show: boolean; onComplete: (
  * 019: Country declaration banner for businesses without subscribedCurrency.
  * Collects country and registration number, then locks the billing currency.
  */
+// Per-country registration field config
+const REGISTRATION_CONFIG = {
+  MY: { label: 'Tax Identification Number (TIN)', placeholder: 'e.g. IG24210777100', hint: 'Your LHDN TIN — verified against MyInvois to confirm your business.' },
+  SG: { label: 'Unique Entity Number (UEN)', placeholder: 'e.g. 200012345X', hint: 'Your ACRA UEN — format verified to confirm your business.' },
+} as const
+
 function CountryDeclarationBanner({ businessId, onComplete }: {
   businessId: string
   onComplete: () => void
 }) {
   const [country, setCountry] = useState<'SG' | 'MY'>('MY')
-  const [regNumber, setRegNumber] = useState('')
-  const [tin, setTin] = useState('')
+  const [registrationId, setRegistrationId] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const [tinVerified, setTinVerified] = useState(false)
 
   // @ts-ignore - Convex API types cause deep type error
   const setBusinessRegion = useMutation(api.functions.businesses.setBusinessRegion)
 
-  const isRegValid = regNumber.trim() && isValidRegNumber(regNumber.trim(), country)
-  // MY requires TIN verification; SG only needs BRN format
-  const isTinRequired = country === 'MY'
-  const isTinFormatValid = !isTinRequired || (tin.trim().length >= 10 && /^[A-Z0-9]+$/i.test(tin.trim()))
-  const isValid = isRegValid && (!isTinRequired || isTinFormatValid)
+  const config = REGISTRATION_CONFIG[country]
+  const isValid = registrationId.trim().length >= 8
 
   const handleSubmit = async () => {
     if (!isValid) return
     setIsSubmitting(true)
     setSubmitError(null)
-    setTinVerified(false)
 
     try {
-      // Step 1: Verify TIN with LHDN (MY only)
-      if (isTinRequired) {
-        const verifyRes = await fetch('/api/v1/billing/verify-tin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tin: tin.trim() }),
-        })
-        const verifyData = await verifyRes.json()
+      // Step 1: Verify registration ID (MY: LHDN TIN, SG: UEN checksum)
+      const verifyRes = await fetch('/api/v1/billing/verify-registration', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ country, registrationId: registrationId.trim() }),
+      })
+      const verifyData = await verifyRes.json()
 
-        if (!verifyRes.ok || (!verifyData.verified && !verifyData.warning)) {
-          setSubmitError(verifyData.error || 'TIN verification failed')
-          setIsSubmitting(false)
-          return
-        }
-
-        if (verifyData.warning) {
-          console.warn('[Billing] TIN verification skipped:', verifyData.warning)
-        }
-
-        setTinVerified(true)
+      if (!verifyRes.ok || (!verifyData.verified && !verifyData.warning)) {
+        setSubmitError(verifyData.error || 'Verification failed')
+        setIsSubmitting(false)
+        return
       }
 
-      // Step 2: Lock country + currency
-      const normalized = normalizeRegNumber(regNumber)
+      if (verifyData.warning) {
+        console.warn('[Billing] Verification warning:', verifyData.warning)
+      }
+
+      // Step 2: Lock country + currency (registrationId used as businessRegNumber for uniqueness)
       const currency = COUNTRY_TO_CURRENCY[country] || 'MYR'
       await setBusinessRegion({
-        businessId: businessId as never, // Convex ID type
+        businessId: businessId as never,
         countryCode: country,
-        businessRegNumber: normalized,
+        businessRegNumber: registrationId.trim().toUpperCase(),
         subscribedCurrency: currency,
       })
       onComplete()
@@ -191,7 +186,7 @@ function CountryDeclarationBanner({ businessId, onComplete }: {
             value={country}
             onChange={(e) => {
               setCountry(e.target.value as 'SG' | 'MY')
-              setRegNumber('')
+              setRegistrationId('')
               setSubmitError(null)
             }}
             className="w-full h-10 rounded-md border border-border bg-input px-3 text-foreground"
@@ -201,66 +196,30 @@ function CountryDeclarationBanner({ businessId, onComplete }: {
           </select>
         </div>
 
-        {/* Registration Number */}
+        {/* Registration ID — adapts per country (MY: TIN, SG: UEN) */}
         <div className="space-y-2">
           <Label className="text-foreground font-medium">
-            Business Registration Number <span className="text-destructive">*</span>
+            {config.label} <span className="text-destructive">*</span>
           </Label>
           <Input
             type="text"
-            placeholder={country === 'SG' ? 'e.g. 200012345X' : 'e.g. 1234567-H'}
-            value={regNumber}
+            placeholder={config.placeholder}
+            value={registrationId}
             onChange={(e) => {
-              setRegNumber(e.target.value)
+              setRegistrationId(e.target.value)
               setSubmitError(null)
             }}
-            className={cn(
-              "bg-input border-border text-foreground h-10",
-              regNumber.trim() && !isValidRegNumber(regNumber.trim(), country) &&
-              "border-destructive focus-visible:ring-destructive"
-            )}
+            className="bg-input border-border text-foreground h-10"
           />
           <p className="text-sm text-muted-foreground">
-            {getRegNumberFormatHint(country)}
+            {config.hint}
           </p>
-          {regNumber.trim() && !isValidRegNumber(regNumber.trim(), country) && (
-            <p className="text-sm text-destructive">
-              Invalid format for {country === 'SG' ? 'Singapore UEN' : 'Malaysia SSM/ROC'} number
-            </p>
-          )}
         </div>
-
-        {/* TIN field — Malaysia only (verified against LHDN) */}
-        {isTinRequired && (
-          <div className="space-y-2">
-            <Label className="text-foreground font-medium">
-              Tax Identification Number (TIN) <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              type="text"
-              placeholder="e.g. IG24210777100"
-              value={tin}
-              onChange={(e) => {
-                setTin(e.target.value)
-                setSubmitError(null)
-                setTinVerified(false)
-              }}
-              className={cn(
-                "bg-input border-border text-foreground h-10",
-                tin.trim() && !isTinFormatValid && "border-destructive focus-visible:ring-destructive"
-              )}
-            />
-            <p className="text-sm text-muted-foreground">
-              Your LHDN TIN will be verified against the MyInvois system to confirm your business identity.
-            </p>
-          </div>
-        )}
 
         {/* Currency Preview */}
         <div className="rounded-md bg-muted/50 p-3">
           <p className="text-sm text-muted-foreground">
-            Your billing currency will be locked to <span className="font-medium text-foreground">{COUNTRY_TO_CURRENCY[country] || 'MYR'}</span>
-            {isTinRequired && ' after TIN verification with LHDN'}
+            Your billing currency will be locked to <span className="font-medium text-foreground">{COUNTRY_TO_CURRENCY[country] || 'MYR'}</span> after verification
           </p>
         </div>
 
@@ -279,10 +238,10 @@ function CountryDeclarationBanner({ businessId, onComplete }: {
           {isSubmitting ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              {isTinRequired && !tinVerified ? 'Verifying with LHDN...' : 'Locking currency...'}
+              Verifying...
             </>
           ) : (
-            isTinRequired ? 'Verify & Lock Currency' : 'Confirm Country & Lock Currency'
+            'Verify & Lock Currency'
           )}
         </Button>
       </CardContent>
