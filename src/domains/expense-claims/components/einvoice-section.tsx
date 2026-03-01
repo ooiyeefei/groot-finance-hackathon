@@ -515,12 +515,12 @@ export default function EinvoiceSection({
         {/* Attached E-Invoice Document */}
         {einvoiceAttached && einvoiceStoragePath && (
           <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-green-600 dark:text-green-400" />
-                <div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileText className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
+                <div className="min-w-0">
                   <p className="text-green-600 dark:text-green-400 text-sm font-medium">E-Invoice Attached</p>
-                  <p className="text-muted-foreground text-xs">
+                  <p className="text-muted-foreground text-xs truncate">
                     {einvoiceStoragePath.split('/').pop()}
                   </p>
                 </div>
@@ -530,7 +530,7 @@ export default function EinvoiceSection({
                 variant="outline"
                 onClick={handleViewEinvoicePdf}
                 disabled={pdfLoading}
-                className="border-green-500/30 text-green-600 dark:text-green-400 hover:bg-green-500/10"
+                className="border-green-500/30 text-green-600 dark:text-green-400 hover:bg-green-500/10 shrink-0"
               >
                 {pdfLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin mr-1" />
