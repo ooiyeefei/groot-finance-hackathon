@@ -23,6 +23,9 @@ import {
   Eye,
   FileText,
   Info,
+  Copy,
+  Check,
+  Mail,
 } from 'lucide-react'
 import EinvoiceStatusBadge from './einvoice-status-badge'
 import EinvoiceMatchReview from './einvoice-match-review'
@@ -117,6 +120,16 @@ export default function EinvoiceSection({
   const [uploadLoading, setUploadLoading] = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [emailCopied, setEmailCopied] = useState(false)
+
+  const systemEmail = einvoiceEmailRef ? `einvoice+${einvoiceEmailRef}@einv.hellogroot.com` : null
+
+  const handleCopyEmail = async () => {
+    if (!systemEmail) return
+    await navigator.clipboard.writeText(systemEmail)
+    setEmailCopied(true)
+    setTimeout(() => setEmailCopied(false), 2000)
+  }
 
   const hasAnyEinvoiceData = merchantFormUrl || einvoiceRequestStatus || einvoiceAttached ||
     (pendingMatchCandidates && pendingMatchCandidates.length > 0)
@@ -297,10 +310,39 @@ export default function EinvoiceSection({
                     This merchant doesn&apos;t support automated requests
                   </p>
                   <p className="text-muted-foreground text-xs mt-1">
-                    Please fill the form manually using your company details. Once you receive the e-invoice, upload it here.
+                    Fill the form manually — use the email below so we auto-attach the e-invoice when it arrives.
                   </p>
                 </div>
               </div>
+
+              {/* Manual steps with system email */}
+              {systemEmail && (
+                <div className="pl-6 space-y-2">
+                  <div className="flex items-center gap-2 bg-background border border-border rounded-md px-3 py-2">
+                    <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs font-mono text-foreground truncate flex-1">{systemEmail}</span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0 shrink-0"
+                      onClick={handleCopyEmail}
+                    >
+                      {emailCopied ? (
+                        <Check className="w-3.5 h-3.5 text-green-500" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </div>
+                  <ol className="text-muted-foreground text-xs space-y-1 list-decimal list-inside">
+                    <li>Open the merchant form below</li>
+                    <li>Fill in your company details</li>
+                    <li>Use the email above for the e-invoice delivery</li>
+                    <li>We&apos;ll auto-attach it when it arrives</li>
+                  </ol>
+                </div>
+              )}
+
               <div className="pl-6">
                 <Button
                   size="sm"
@@ -327,6 +369,38 @@ export default function EinvoiceSection({
                   </p>
                 </div>
               </div>
+
+              {/* Manual fallback with system email */}
+              {systemEmail && merchantFormUrl && (
+                <div className="pl-6 space-y-2">
+                  <p className="text-muted-foreground text-xs">
+                    You can fill the form manually — use this email so we auto-attach the e-invoice:
+                  </p>
+                  <div className="flex items-center gap-2 bg-background border border-border rounded-md px-3 py-2">
+                    <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs font-mono text-foreground truncate flex-1">{systemEmail}</span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0 shrink-0"
+                      onClick={handleCopyEmail}
+                    >
+                      {emailCopied ? (
+                        <Check className="w-3.5 h-3.5 text-green-500" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </div>
+                  <ol className="text-muted-foreground text-xs space-y-1 list-decimal list-inside">
+                    <li>Open the merchant form below</li>
+                    <li>Fill in your company details</li>
+                    <li>Use the email above for the e-invoice delivery</li>
+                    <li>We&apos;ll auto-attach it when it arrives</li>
+                  </ol>
+                </div>
+              )}
+
               {merchantFormUrl && (
                 <div className="pl-6">
                   <Button

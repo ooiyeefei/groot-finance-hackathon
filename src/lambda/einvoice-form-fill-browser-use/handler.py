@@ -131,11 +131,12 @@ RULES:
 4. Fill date/time fields with the Date from RECEIPT DATA.
 5. If there is an Individual/Company toggle, select "Company".
 6. Fill buyer/customer fields with BUYER DETAILS above.
-7. For state/city dropdowns, select the matching option.
-8. Check any consent/agreement checkbox.
-9. Click the Submit button when all fields are filled.
-10. If you see validation errors, fix the specific field and re-submit.
-11. When you see a success/thank-you message, you are done."""
+7. IMPORTANT — Cascading dropdowns (Country/State/City): Fill City FIRST, then State, then Country LAST. Child dropdowns often reset when a parent changes, so filling bottom-up avoids losing your selections.
+8. For state/city dropdowns, select the matching option. For long dropdowns, TYPE the first few letters to filter instead of scrolling.
+9. Check any consent/agreement checkbox.
+10. Click the Submit button when all fields are filled.
+11. If you see validation errors, fix the specific field and re-submit.
+12. When you see a success/thank-you message, you are done."""
 
     agent = Agent(
         task=task,

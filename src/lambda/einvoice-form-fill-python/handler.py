@@ -402,11 +402,12 @@ TASK:
 4. Fill date fields with the Date from RECEIPT DATA.
 5. Select "Company" if Individual/Company choice exists.
 6. Fill buyer/customer detail fields with BUYER DETAILS above.
-7. For Country dropdown: click the dropdown, then TYPE "Malaysia" to filter — do NOT scroll through the entire list.
-8. For any long dropdown: TYPE the first few letters to filter/jump instead of scrolling.
-9. For any field not covered above, check the RECEIPT IMAGE for the answer.
-10. Check consent checkbox → click Submit.
-11. Fix validation errors if any (only the specific field mentioned)."""
+7. IMPORTANT — Cascading dropdowns (Country/State/City): Fill City FIRST, then State, then Country LAST. Child dropdowns often reset when a parent changes, so filling bottom-up avoids losing your selections.
+8. For Country dropdown: click the dropdown, then TYPE "Malaysia" to filter — do NOT scroll through the entire list.
+9. For any long dropdown: TYPE the first few letters to filter/jump instead of scrolling.
+10. For any field not covered above, check the RECEIPT IMAGE for the answer.
+11. Check consent checkbox → click Submit.
+12. Fix validation errors if any (only the specific field mentioned)."""
 
     shot = base64.b64encode(page.screenshot(type="png")).decode()
     # Build CUA context: receipt image (reference) + form screenshot (current page)
