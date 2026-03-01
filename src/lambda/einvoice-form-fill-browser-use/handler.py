@@ -105,30 +105,36 @@ async def fill_form(url: str, buyer: dict, receipt: dict) -> dict:
         downloads_path="/tmp/bu-downloads",
     )
 
-    task = f"""Navigate to {url} and fill the e-invoice buyer details form.
-Many fields are ALREADY PRE-FILLED (receipt number, date, amount) — DO NOT change them.
+    task = f"""Navigate to {url} and fill the e-invoice form.
+Some fields may be PRE-FILLED — do NOT change pre-filled fields.
 
-Fill ONLY the empty fields with these BUYER DETAILS:
+BUYER DETAILS (for buyer/customer fields):
 - Full Name: {buyer["userName"]}
 - Email: {buyer["email"]}
 - Phone: {buyer["phone"]}
 - Company Name: {buyer["name"]}
-- Business Registration Number (BRN): {buyer["brn"]}
-- Tax Identification Number (TIN): {buyer["tin"]}
-- Address: {buyer["address"]}
-- City: {buyer["city"]}
-- Postcode: 47100
-- State: {buyer["state"]}
-- Country: Malaysia
+- BRN: {buyer["brn"]}  |  TIN: {buyer["tin"]}
+- Address: {buyer["address"]}, {buyer["city"]}, 47100, {buyer["state"]}, Malaysia
+
+RECEIPT DATA (for receipt/bill/store fields):
+- Bill Number / Tax Invoice No: {receipt.get("referenceNumber", "N/A")}
+- Total Amount: {receipt.get("totalAmount", "N/A")}
+- Currency: {receipt.get("currency", "MYR")}
+- Date: {receipt.get("transactionDate", "N/A")}
+- Vendor/Store Name: {receipt.get("vendorName", "N/A")}
 
 RULES:
-1. DO NOT modify pre-filled fields (receipt number, date, amount).
-2. If there is an Individual/Company toggle or radio, select "Company".
-3. For state/city dropdowns, select the matching option. Scroll through the list if needed.
-4. Check any consent/agreement/terms checkbox.
-5. After all fields are filled, click the Submit button.
-6. If you see validation errors after submit, fix ONLY the specific field and re-submit.
-7. When you see a success/thank-you message, you are done."""
+1. If form asks for Store Code / Shop Number, use the code from Vendor/Store Name or the URL.
+2. Fill Bill Number / Receipt Number with the Tax Invoice No from RECEIPT DATA.
+3. Fill amount fields with the Total Amount from RECEIPT DATA.
+4. Fill date/time fields with the Date from RECEIPT DATA.
+5. If there is an Individual/Company toggle, select "Company".
+6. Fill buyer/customer fields with BUYER DETAILS above.
+7. For state/city dropdowns, select the matching option.
+8. Check any consent/agreement checkbox.
+9. Click the Submit button when all fields are filled.
+10. If you see validation errors, fix the specific field and re-submit.
+11. When you see a success/thank-you message, you are done."""
 
     agent = Agent(
         task=task,

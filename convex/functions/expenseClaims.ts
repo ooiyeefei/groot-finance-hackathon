@@ -2683,7 +2683,14 @@ export const requestEinvoice = mutation({
         email: `einvoice+${emailRef}@einv.hellogroot.com`,
         phone: business.contactPhone,
       },
-      receiptReferenceNumber: claim.referenceNumber,
+      // Pass all OCR-extracted receipt data for merchant form fields
+      receiptData: {
+        referenceNumber: claim.referenceNumber || null,
+        totalAmount: claim.totalAmount || null,
+        currency: claim.currency || "MYR",
+        transactionDate: claim.transactionDate || null,
+        vendorName: claim.vendorName || null,
+      },
     };
   },
 });

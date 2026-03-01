@@ -91,9 +91,7 @@ export async function POST(
       Payload: JSON.stringify({
         merchantFormUrl: result.merchantFormUrl,
         buyerDetails: result.buyerDetails,
-        extractedData: {
-          referenceNumber: result.receiptReferenceNumber,
-        },
+        extractedData: result.receiptData || { referenceNumber: null },
         emailRef,
         expenseClaimId,
       }),

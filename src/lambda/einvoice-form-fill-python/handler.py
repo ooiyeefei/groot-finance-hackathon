@@ -377,23 +377,32 @@ def run_tier2(page: Page, buyer: dict, receipt: dict) -> int:
     # Build CUA instruction
     instruction = f"""You are filling a merchant e-invoice form. Many fields are ALREADY PRE-FILLED.
 
-BUYER DETAILS:
+BUYER DETAILS (use for buyer/customer fields):
 - Full Name: {buyer["userName"]}
 - Email: {buyer["email"]}
 - Phone: {buyer["phone"]}
 - Company: {buyer["name"]}
 - BRN: {buyer["brn"]}  |  TIN: {buyer["tin"]}
 - Address: {buyer["address"]}, {buyer["city"]}, 47100, {buyer["state"]}, Malaysia
-- Order/Receipt: {receipt.get("referenceNumber", "N/A")}  |  Date: {receipt.get("date", "N/A")}
+
+RECEIPT DATA (use for receipt/bill/store fields):
+- Bill Number / Tax Invoice No: {receipt.get("referenceNumber", "N/A")}
+- Total Amount: {receipt.get("totalAmount", "N/A")}
+- Currency: {receipt.get("currency", "MYR")}
+- Date: {receipt.get("transactionDate", "N/A")}
+- Vendor/Store Name: {receipt.get("vendorName", "N/A")}
 
 {f"FORM FIELDS (from page analysis):\\n{recon}" if recon else ""}
 
 TASK:
-1. Scroll DOWN in one pass. Fill ONLY empty fields.
-2. Select "Company" if Individual/Company choice exists.
-3. Skip pre-filled fields and dropdowns.
-4. Check consent checkbox → click Submit.
-5. Fix validation errors if any (only the specific field mentioned)."""
+1. If the form asks for Store Code / Shop Number, look at the Vendor/Store Name or the URL for a code (e.g. KK9219 from receipt).
+2. Fill Bill Number / Receipt Number with the Tax Invoice No from RECEIPT DATA.
+3. Fill amount fields with the Total Amount from RECEIPT DATA.
+4. Fill date fields with the Date from RECEIPT DATA.
+5. Select "Company" if Individual/Company choice exists.
+6. Fill buyer/customer detail fields with BUYER DETAILS above.
+7. Check consent checkbox → click Submit.
+8. Fix validation errors if any (only the specific field mentioned)."""
 
     shot = base64.b64encode(page.screenshot(type="png")).decode()
     contents = [{"role": "user", "parts": [
