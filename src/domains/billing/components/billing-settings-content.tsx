@@ -171,9 +171,9 @@ function CountryDeclarationBanner({ businessId, onComplete }: {
             <Globe className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           </div>
           <div>
-            <CardTitle className="text-foreground">Set Your Business Country</CardTitle>
+            <CardTitle className="text-foreground">Set Up Payment Profile</CardTitle>
             <CardDescription>
-              Required to lock your billing currency. This cannot be changed later.
+              Verify your business identity to activate your subscription. Your billing currency will be locked based on your registered country.
             </CardDescription>
           </div>
         </div>
@@ -181,7 +181,7 @@ function CountryDeclarationBanner({ businessId, onComplete }: {
       <CardContent className="space-y-4">
         {/* Country Selection */}
         <div className="space-y-2">
-          <Label className="text-foreground font-medium">Country</Label>
+          <Label className="text-foreground font-medium">Registered Country</Label>
           <select
             value={country}
             onChange={(e) => {
@@ -219,7 +219,7 @@ function CountryDeclarationBanner({ businessId, onComplete }: {
         {/* Currency Preview */}
         <div className="rounded-md bg-muted/50 p-3">
           <p className="text-sm text-muted-foreground">
-            Your billing currency will be locked to <span className="font-medium text-foreground">{COUNTRY_TO_CURRENCY[country] || 'MYR'}</span> after verification
+            Your billing currency will be permanently set to <span className="font-medium text-foreground">{COUNTRY_TO_CURRENCY[country] || 'MYR'}</span>. Your operational currency can still be changed in business settings.
           </p>
         </div>
 
