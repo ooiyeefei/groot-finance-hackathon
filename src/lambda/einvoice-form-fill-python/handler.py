@@ -1159,27 +1159,45 @@ def download_einvoice(event: dict) -> dict:
         context = browser.new_context(accept_downloads=True)
         page = context.new_page()
 
-        # Navigate and wait for content
-        page.goto(download_url, wait_until="networkidle", timeout=30000)
-        time.sleep(3)
-
-        # Strategy 1: Check if page triggered a download
         pdf_bytes = None
 
-        # Strategy 2: Look for a download button and click it
-        dl_btn = page.locator('a:has-text("Download"), button:has-text("Download"), a[href*=".pdf"]').first
-        if dl_btn.count() > 0:
-            with page.expect_download(timeout=15000) as download_info:
-                dl_btn.click()
-            download = download_info.value
-            path = download.path()
-            if path:
-                with open(path, "rb") as f:
-                    pdf_bytes = f.read()
-                print(f"[Download] Got PDF via download button: {len(pdf_bytes)} bytes")
+        # Strategy 1: Intercept PDF response from network (catches auto-downloads)
+        pdf_responses: list[bytes] = []
+        page.on("response", lambda resp: pdf_responses.append(resp.body()) if "pdf" in (resp.headers.get("content-type", "")) else None)
 
-        # Strategy 3: If no download triggered, print page as PDF
+        # Navigate — use domcontentloaded (SPA pages never reach networkidle)
+        page.goto(download_url, wait_until="domcontentloaded", timeout=30000)
+        time.sleep(5)  # let JS app render and potentially auto-download
+
+        # Check if a PDF was intercepted from network
+        if pdf_responses:
+            pdf_bytes = pdf_responses[0]
+            print(f"[Download] Intercepted PDF from network response: {len(pdf_bytes)} bytes")
+
+        # Strategy 2: Look for a download button/link and click it
         if not pdf_bytes:
+            dl_btn = page.locator('a:has-text("Download"), button:has-text("Download"), a[href*=".pdf"], button:has-text("Print")').first
+            if dl_btn.count() > 0:
+                try:
+                    with page.expect_download(timeout=15000) as download_info:
+                        dl_btn.click()
+                    download = download_info.value
+                    dl_path = download.path()
+                    if dl_path:
+                        with open(dl_path, "rb") as f:
+                            pdf_bytes = f.read()
+                        print(f"[Download] Got PDF via download button: {len(pdf_bytes)} bytes")
+                except Exception as dl_err:
+                    print(f"[Download] Download button click failed: {dl_err}")
+                    # Click might have triggered network PDF — recheck
+                    if pdf_responses:
+                        pdf_bytes = pdf_responses[-1]
+                        print(f"[Download] Got PDF from network after button click: {len(pdf_bytes)} bytes")
+
+        # Strategy 3: Print page as PDF (last resort — captures the rendered content)
+        if not pdf_bytes:
+            # Wait a bit more for any lazy content to load
+            time.sleep(3)
             print("[Download] No download triggered — printing page as PDF")
             pdf_bytes = page.pdf(format="A4", print_background=True)
             print(f"[Download] Printed page as PDF: {len(pdf_bytes)} bytes")
