@@ -320,13 +320,14 @@ export class DocumentProcessingStack extends cdk.Stack {
       functionName: 'finanseal-einvoice-email-processor',
       description: 'Process incoming merchant e-invoice emails from SES — Gemini Flash classification (019-lhdn-einv-flow-2)',
       memorySize: 256,
-      timeout: cdk.Duration.seconds(60), // Gemini Flash classification adds ~5s
+      timeout: cdk.Duration.seconds(120), // Gemini classification + optional Playwright PDF download via form-fill Lambda
       logGroup: emailProcessorLogGroup,
       environment: {
         NEXT_PUBLIC_CONVEX_URL: 'https://kindhearted-lynx-129.convex.cloud',
         S3_BUCKET_NAME: 'finanseal-bucket',
         GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
         RESEND_API_KEY: process.env.RESEND_API_KEY || '',
+        EINVOICE_FORM_FILL_LAMBDA_ARN: formFillFunction.functionArn,
       },
       bundling: {
         externalModules: ['@aws-sdk/*'],
@@ -337,6 +338,9 @@ export class DocumentProcessingStack extends cdk.Stack {
 
     // S3 read/write: read raw email from SES bucket, write processed files to main bucket
     bucket.grantReadWrite(emailProcessorFunction);
+
+    // Allow email processor to invoke form-fill Lambda for Playwright PDF downloads
+    formFillFunction.grantInvoke(emailProcessorFunction);
 
     // SES send permission: forward e-invoice emails to user
     emailProcessorFunction.addToRolePolicy(new iam.PolicyStatement({

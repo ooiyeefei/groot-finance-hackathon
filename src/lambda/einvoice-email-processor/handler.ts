@@ -21,6 +21,7 @@
 
 import { S3Client, GetObjectCommand, CopyObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { SESClient, SendRawEmailCommand } from "@aws-sdk/client-ses";
+import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { simpleParser, ParsedMail } from "mailparser";
 import { Readable } from "stream";
 
@@ -70,10 +71,12 @@ interface ClassificationResult {
 
 const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
 const ses = new SESClient({ region: process.env.AWS_REGION || "us-west-2" });
+const lambdaClient = new LambdaClient({ region: process.env.AWS_REGION || "us-west-2" });
 const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL || "";
 const S3_BUCKET = process.env.S3_BUCKET_NAME || "finanseal-bucket";
 const GEMINI_KEY = process.env.GEMINI_API_KEY || "";
 const FORWARD_FROM = "noreply@notifications.hellogroot.com";
+const FORM_FILL_LAMBDA_ARN = process.env.EINVOICE_FORM_FILL_LAMBDA_ARN || "";
 
 // ── HTTP helpers ───────────────────────────────────────────
 
@@ -295,11 +298,67 @@ export async function handler(event: SESEvent) {
       }
 
     } else if (classification.type === "einvoice_download_link" && classification.downloadUrl) {
-      // Type D: Download link → save the URL for manual or automated download
+      // Type D: Download link → attempt to download the actual PDF
       console.log(`[Email] E-invoice download link: ${classification.downloadUrl}`);
-      // Save link as a text file for now — future: auto-download with Playwright
-      const linkBuffer = Buffer.from(classification.downloadUrl, "utf-8");
-      await uploadToS3(`${einvoicePrefix}/download-link.txt`, linkBuffer, "text/plain");
+
+      let pdfDownloaded = false;
+
+      // Step 1: Try direct fetch — works for direct PDF links
+      try {
+        const dlRes = await fetch(classification.downloadUrl, {
+          redirect: "follow",
+          headers: { "User-Agent": "Mozilla/5.0 GrootFinance/1.0" },
+        });
+        const contentType = dlRes.headers.get("content-type") || "";
+
+        if (contentType.includes("application/pdf")) {
+          const pdfBuffer = Buffer.from(await dlRes.arrayBuffer());
+          const pdfFilename = `einvoice-${emailRef}.pdf`;
+          await uploadToS3(`${einvoicePrefix}/${pdfFilename}`, pdfBuffer, "application/pdf");
+          einvoiceStoragePath = `${storagePath}/einvoice/${pdfFilename}`;
+          pdfDownloaded = true;
+          console.log(`[Email] Downloaded PDF directly: ${pdfFilename} (${pdfBuffer.length} bytes)`);
+        } else {
+          console.log(`[Email] Direct fetch returned ${contentType} (not PDF) — trying Playwright download`);
+        }
+      } catch (fetchErr) {
+        console.log(`[Email] Direct fetch failed: ${fetchErr} — trying Playwright download`);
+      }
+
+      // Step 2: If not PDF, invoke form-fill Lambda with Playwright to download
+      if (!pdfDownloaded && FORM_FILL_LAMBDA_ARN) {
+        try {
+          console.log(`[Email] Invoking form-fill Lambda for Playwright PDF download`);
+          const downloadPayload = {
+            action: "download-einvoice",
+            downloadUrl: classification.downloadUrl,
+            s3Key: `${einvoicePrefix}/einvoice-${emailRef}.pdf`,
+            s3Bucket: S3_BUCKET,
+          };
+          const invokeRes = await lambdaClient.send(new InvokeCommand({
+            FunctionName: FORM_FILL_LAMBDA_ARN,
+            InvocationType: "RequestResponse",
+            Payload: Buffer.from(JSON.stringify(downloadPayload)),
+          }));
+          const result = JSON.parse(Buffer.from(invokeRes.Payload || []).toString());
+          if (result?.success) {
+            einvoiceStoragePath = `${storagePath}/einvoice/einvoice-${emailRef}.pdf`;
+            pdfDownloaded = true;
+            console.log(`[Email] Playwright downloaded PDF: ${einvoiceStoragePath}`);
+          } else {
+            console.log(`[Email] Playwright download failed: ${result?.error || "unknown"}`);
+          }
+        } catch (lambdaErr) {
+          console.log(`[Email] Lambda invoke failed: ${lambdaErr}`);
+        }
+      }
+
+      // Step 3: Fallback — save the download link for manual access
+      if (!pdfDownloaded) {
+        const linkBuffer = Buffer.from(classification.downloadUrl, "utf-8");
+        await uploadToS3(`${einvoicePrefix}/download-link.txt`, linkBuffer, "text/plain");
+        console.log(`[Email] Saved download link as fallback (PDF not downloadable automatically)`);
+      }
 
     } else if (classification.type === "confirmation_only") {
       // Type B: Just a confirmation — log but don't mark as received

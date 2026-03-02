@@ -1139,9 +1139,79 @@ def extract_form_config(page: Page) -> Optional[dict]:
         return None
 
 
+# ── Download e-invoice PDF via Playwright ────────────────────
+
+def download_einvoice(event: dict) -> dict:
+    """Navigate to a download URL with Playwright, capture the PDF, save to S3."""
+    download_url = event["downloadUrl"]
+    s3_key = event["s3Key"]
+    s3_bucket = event.get("s3Bucket", "finanseal-bucket")
+
+    print(f"[Download] Starting PDF download: {download_url[:80]}")
+
+    try:
+        pw = sync_playwright().start()
+        browser = pw.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage",
+                   "--disable-gpu", "--headless=new", "--single-process"],
+        )
+        context = browser.new_context(accept_downloads=True)
+        page = context.new_page()
+
+        # Navigate and wait for content
+        page.goto(download_url, wait_until="networkidle", timeout=30000)
+        time.sleep(3)
+
+        # Strategy 1: Check if page triggered a download
+        pdf_bytes = None
+
+        # Strategy 2: Look for a download button and click it
+        dl_btn = page.locator('a:has-text("Download"), button:has-text("Download"), a[href*=".pdf"]').first
+        if dl_btn.count() > 0:
+            with page.expect_download(timeout=15000) as download_info:
+                dl_btn.click()
+            download = download_info.value
+            path = download.path()
+            if path:
+                with open(path, "rb") as f:
+                    pdf_bytes = f.read()
+                print(f"[Download] Got PDF via download button: {len(pdf_bytes)} bytes")
+
+        # Strategy 3: If no download triggered, print page as PDF
+        if not pdf_bytes:
+            print("[Download] No download triggered — printing page as PDF")
+            pdf_bytes = page.pdf(format="A4", print_background=True)
+            print(f"[Download] Printed page as PDF: {len(pdf_bytes)} bytes")
+
+        browser.close()
+
+        # Save to S3
+        import boto3 as _boto3
+        _boto3.client("s3").put_object(
+            Bucket=s3_bucket, Key=s3_key, Body=pdf_bytes, ContentType="application/pdf"
+        )
+        print(f"[Download] Saved to S3: {s3_key} ({len(pdf_bytes)} bytes)")
+        return {"success": True, "s3Key": s3_key, "size": len(pdf_bytes)}
+
+    except Exception as e:
+        print(f"[Download] Failed: {e}")
+        traceback.print_exc()
+        try:
+            if browser:
+                browser.close()
+        except Exception:
+            pass
+        return {"success": False, "error": str(e)}
+
+
 # ── Main handler ────────────────────────────────────────────
 
 def handler(event: dict, context=None) -> dict:
+    # Dispatch: download-einvoice mode (invoked by email processor)
+    if event.get("action") == "download-einvoice":
+        return download_einvoice(event)
+
     start = time.time()
     browser: Optional[Browser] = None
     claim_id = event["expenseClaimId"]
