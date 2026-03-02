@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { authenticate, validateTin } from '@/lib/lhdn/client'
+import { LHDN_API_PATHS } from '@/lib/lhdn/constants'
 
 // UEN checksum validation (Singapore) — more rigorous than regex
 // Ref: https://www.uen.gov.sg/ueninternet/faces/pages/admin/aboutUEN.jspx
@@ -49,17 +49,53 @@ export async function POST(request: NextRequest) {
     const cleanId = registrationId.trim().toUpperCase()
 
     // ── Malaysia: Verify TIN with LHDN ──
+    // Uses GROOT's platform credentials (LHDN_VERIFY_*), NOT per-tenant e-invoice credentials (LHDN_CLIENT_*)
     if (country === 'MY') {
       try {
-        const token = await authenticate(cleanId)
-        const isValid = await validateTin(cleanId, token.accessToken)
+        const verifyClientId = process.env.LHDN_VERIFY_CLIENT_ID
+        const verifyClientSecret = process.env.LHDN_VERIFY_CLIENT_SECRET
+        const baseUrl = process.env.LHDN_API_URL || 'https://preprod-api.myinvois.hasil.gov.my'
 
-        if (!isValid) {
+        if (!verifyClientId || !verifyClientSecret) {
+          throw new Error('LHDN_VERIFY_CLIENT_ID or LHDN_VERIFY_CLIENT_SECRET is not configured')
+        }
+
+        // Step 1: Authenticate with LHDN using platform credentials + onbehalfof TIN
+        const tokenBody = new URLSearchParams({
+          client_id: verifyClientId,
+          client_secret: verifyClientSecret,
+          grant_type: 'client_credentials',
+          scope: 'InvoicingAPI',
+        })
+        const tokenRes = await fetch(`${baseUrl}${LHDN_API_PATHS.TOKEN}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'onbehalfof': cleanId,
+          },
+          body: tokenBody.toString(),
+        })
+        if (!tokenRes.ok) {
+          const errText = await tokenRes.text()
+          throw new Error(`LHDN auth failed (${tokenRes.status}): ${errText.substring(0, 200)}`)
+        }
+        const tokenData = await tokenRes.json() as { access_token: string }
+
+        // Step 2: Validate TIN exists
+        const validateRes = await fetch(`${baseUrl}${LHDN_API_PATHS.VALIDATE_TIN}${cleanId}`, {
+          headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
+        })
+
+        if (validateRes.status === 404) {
           return NextResponse.json({
             success: false,
             error: 'TIN not found in LHDN records. Please check your Tax Identification Number.',
             verified: false,
           }, { status: 422 })
+        }
+
+        if (!validateRes.ok) {
+          throw new Error(`LHDN validate failed (${validateRes.status})`)
         }
 
         return NextResponse.json({ success: true, verified: true, registrationId: cleanId })
