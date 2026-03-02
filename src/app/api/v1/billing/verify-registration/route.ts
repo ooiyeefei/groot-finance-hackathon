@@ -52,12 +52,12 @@ export async function POST(request: NextRequest) {
     // Uses GROOT's platform credentials (LHDN_VERIFY_*), NOT per-tenant e-invoice credentials (LHDN_CLIENT_*)
     if (country === 'MY') {
       try {
-        const verifyClientId = process.env.LHDN_VERIFY_CLIENT_ID
-        const verifyClientSecret = process.env.LHDN_VERIFY_CLIENT_SECRET
+        const verifyClientId = process.env.LHDN_SYSTEM_CLIENT_ID
+        const verifyClientSecret = process.env.LHDN_SYSTEM_CLIENT_SECRET
         const baseUrl = process.env.LHDN_API_URL || 'https://preprod-api.myinvois.hasil.gov.my'
 
         if (!verifyClientId || !verifyClientSecret) {
-          throw new Error('LHDN_VERIFY_CLIENT_ID or LHDN_VERIFY_CLIENT_SECRET is not configured')
+          throw new Error('LHDN_SYSTEM_CLIENT_ID or LHDN_SYSTEM_CLIENT_SECRET is not configured')
         }
 
         // Step 1: Authenticate with LHDN using platform credentials + onbehalfof TIN
