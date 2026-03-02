@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     if (country === 'MY') {
       try {
         const token = await authenticate(cleanId)
-        const isValid = await validateTin(cleanId, token.access_token)
+        const isValid = await validateTin(cleanId, token.accessToken)
 
         if (!isValid) {
           return NextResponse.json({
