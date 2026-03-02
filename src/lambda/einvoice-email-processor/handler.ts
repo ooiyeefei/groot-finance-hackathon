@@ -395,13 +395,25 @@ export async function handler(event: SESEvent) {
     // 8. Forward e-invoice email to user (non-fatal — SES if verified, Resend otherwise)
     if (claimDetails.userEmail && classification.type !== "confirmation_only") {
       try {
-        // Check if user's email is SES-verified (for sandbox mode)
+        // If we downloaded a PDF (e.g. via Playwright), read it from S3 to attach
+        let forwardAttachment = attachment;
+        if (!forwardAttachment && einvoiceStoragePath?.endsWith(".pdf")) {
+          try {
+            const pdfS3Key = `expense_claims/${einvoiceStoragePath}`;
+            const pdfBuffer = await downloadFromS3(S3_BUCKET, pdfS3Key);
+            forwardAttachment = { filename: `einvoice-${emailRef}.pdf`, content: pdfBuffer };
+            console.log(`[Email] Attached downloaded PDF to forward (${pdfBuffer.length} bytes)`);
+          } catch (pdfErr) {
+            console.log(`[Email] Could not read PDF for forwarding: ${pdfErr}`);
+          }
+        }
+
         const verifyResult = await convexQuery(
           "functions/system:isSesEmailVerified", { email: claimDetails.userEmail }
         ) as { verified: boolean } | null;
         const useSes = verifyResult?.verified === true;
 
-        await forwardToUser(rawEmailBytes, claimDetails.userEmail, subject, fromAddress, attachment, useSes);
+        await forwardToUser(rawEmailBytes, claimDetails.userEmail, subject, fromAddress, forwardAttachment, useSes);
         console.log(`[Email] Forwarded to ${claimDetails.userEmail} via ${useSes ? "SES" : "Resend"}`);
       } catch (e) {
         console.log(`[Email] Forward failed (non-fatal): ${e}`);
