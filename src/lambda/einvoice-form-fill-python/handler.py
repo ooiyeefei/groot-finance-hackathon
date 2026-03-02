@@ -1163,16 +1163,34 @@ def download_einvoice(event: dict) -> dict:
 
         # Strategy 1: Intercept PDF response from network (catches auto-downloads)
         pdf_responses: list[bytes] = []
-        page.on("response", lambda resp: pdf_responses.append(resp.body()) if "pdf" in (resp.headers.get("content-type", "")) else None)
+        def _capture_pdf(resp):
+            try:
+                ct = resp.headers.get("content-type", "")
+                if "pdf" in ct or resp.url.endswith(".pdf"):
+                    pdf_responses.append(resp.body())
+                    print(f"[Download] Intercepted PDF from {resp.url[:80]} ({ct})")
+            except Exception:
+                pass  # response body may not be available
+        page.on("response", _capture_pdf)
 
         # Navigate — use domcontentloaded (SPA pages never reach networkidle)
         page.goto(download_url, wait_until="domcontentloaded", timeout=30000)
-        time.sleep(5)  # let JS app render and potentially auto-download
 
-        # Check if a PDF was intercepted from network
-        if pdf_responses:
-            pdf_bytes = pdf_responses[0]
-            print(f"[Download] Intercepted PDF from network response: {len(pdf_bytes)} bytes")
+        # Wait for SPA to fully render — poll for meaningful content (up to 15s)
+        for i in range(15):
+            time.sleep(1)
+            # Check if PDF was intercepted from network
+            if pdf_responses:
+                pdf_bytes = pdf_responses[0]
+                print(f"[Download] Got PDF from network intercept: {len(pdf_bytes)} bytes")
+                break
+            # Check if page has rendered meaningful content (not just the shell)
+            body_len = page.evaluate("() => document.body.innerText.length")
+            if body_len > 100:
+                print(f"[Download] Page rendered ({body_len} chars) after {i+1}s")
+                break
+        else:
+            print("[Download] Page still loading after 15s — proceeding anyway")
 
         # Strategy 2: Look for a download button/link and click it
         if not pdf_bytes:
@@ -1189,15 +1207,17 @@ def download_einvoice(event: dict) -> dict:
                         print(f"[Download] Got PDF via download button: {len(pdf_bytes)} bytes")
                 except Exception as dl_err:
                     print(f"[Download] Download button click failed: {dl_err}")
-                    # Click might have triggered network PDF — recheck
+                    # Button click might have triggered a network PDF
+                    time.sleep(3)
                     if pdf_responses:
                         pdf_bytes = pdf_responses[-1]
-                        print(f"[Download] Got PDF from network after button click: {len(pdf_bytes)} bytes")
+                        print(f"[Download] Got PDF from network after click: {len(pdf_bytes)} bytes")
 
-        # Strategy 3: Print page as PDF (last resort — captures the rendered content)
+        # Strategy 3: Print page as PDF (last resort — captures the rendered page)
         if not pdf_bytes:
-            # Wait a bit more for any lazy content to load
-            time.sleep(3)
+            time.sleep(3)  # extra time for lazy content
+            body_text = page.evaluate("() => document.body.innerText")
+            print(f"[Download] Page text ({len(body_text)} chars): {body_text[:200]}")
             print("[Download] No download triggered — printing page as PDF")
             pdf_bytes = page.pdf(format="A4", print_background=True)
             print(f"[Download] Printed page as PDF: {len(pdf_bytes)} bytes")

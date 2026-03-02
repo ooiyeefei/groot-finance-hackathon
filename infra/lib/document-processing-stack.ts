@@ -170,8 +170,8 @@ export class DocumentProcessingStack extends cdk.Stack {
       },
     });
 
-    // Form fill Lambda needs to read receipt images from S3 for CUA vision
-    bucket.grantRead(formFillFunction);
+    // Form fill Lambda needs S3 read (receipt images for CUA) + write (download-einvoice saves PDFs)
+    bucket.grantReadWrite(formFillFunction);
 
     // Grant Python Lambda permission to invoke the form fill Lambda
     formFillFunction.grantInvoke(this.documentProcessorFunction);
