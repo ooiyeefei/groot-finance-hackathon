@@ -298,12 +298,12 @@ export async function handler(event: SESEvent) {
       }
 
     } else if (classification.type === "einvoice_download_link" && classification.downloadUrl) {
-      // Type D: Download link → attempt to download the actual PDF
+      // Type D: Download link → fetch e-invoice data or PDF
       console.log(`[Email] E-invoice download link: ${classification.downloadUrl}`);
 
-      let pdfDownloaded = false;
+      let downloaded = false;
 
-      // Step 1: Try direct fetch — works for direct PDF links
+      // Step 1: Try direct fetch — works for merchants serving PDFs directly
       try {
         const dlRes = await fetch(classification.downloadUrl, {
           redirect: "follow",
@@ -316,48 +316,58 @@ export async function handler(event: SESEvent) {
           const pdfFilename = `einvoice-${emailRef}.pdf`;
           await uploadToS3(`${einvoicePrefix}/${pdfFilename}`, pdfBuffer, "application/pdf");
           einvoiceStoragePath = `${storagePath}/einvoice/${pdfFilename}`;
-          pdfDownloaded = true;
+          downloaded = true;
           console.log(`[Email] Downloaded PDF directly: ${pdfFilename} (${pdfBuffer.length} bytes)`);
         } else {
-          console.log(`[Email] Direct fetch returned ${contentType} (not PDF) — trying Playwright download`);
+          console.log(`[Email] Direct fetch returned ${contentType} — trying API extraction`);
         }
       } catch (fetchErr) {
-        console.log(`[Email] Direct fetch failed: ${fetchErr} — trying Playwright download`);
+        console.log(`[Email] Direct fetch failed: ${fetchErr}`);
       }
 
-      // Step 2: If not PDF, invoke form-fill Lambda with Playwright to download
-      if (!pdfDownloaded && FORM_FILL_LAMBDA_ARN) {
+      // Step 2: For known SPA merchants, call their API directly to get structured e-invoice data
+      if (!downloaded && classification.downloadUrl.includes("99einvoice.com")) {
         try {
-          console.log(`[Email] Invoking form-fill Lambda for Playwright PDF download`);
-          const downloadPayload = {
-            action: "download-einvoice",
-            downloadUrl: classification.downloadUrl,
-            s3Key: `${einvoicePrefix}/einvoice-${emailRef}.pdf`,
-            s3Bucket: S3_BUCKET,
-          };
-          const invokeRes = await lambdaClient.send(new InvokeCommand({
-            FunctionName: FORM_FILL_LAMBDA_ARN,
-            InvocationType: "RequestResponse",
-            Payload: Buffer.from(JSON.stringify(downloadPayload)),
-          }));
-          const result = JSON.parse(Buffer.from(invokeRes.Payload || []).toString());
-          if (result?.success) {
-            einvoiceStoragePath = `${storagePath}/einvoice/einvoice-${emailRef}.pdf`;
-            pdfDownloaded = true;
-            console.log(`[Email] Playwright downloaded PDF: ${einvoiceStoragePath}`);
-          } else {
-            console.log(`[Email] Playwright download failed: ${result?.error || "unknown"}`);
+          const urlParams = new URLSearchParams(classification.downloadUrl.split("?")[1] || "");
+          const invoiceId = urlParams.get("invoiceId");
+          const companyCode = urlParams.get("companyCode");
+
+          if (invoiceId && companyCode) {
+            console.log(`[Email] Calling 99SM API: invoiceId=${invoiceId}, companyCode=${companyCode}`);
+            const apiRes = await fetch(
+              "https://99einvoice.com:7890/v1/api/web/fast/documents/listing/specific/public/pdf/details",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ Id: invoiceId, companyCode, IrbmUuid: null }),
+              }
+            );
+
+            if (apiRes.ok) {
+              const apiData = await apiRes.json() as { webApiResult?: Array<Record<string, unknown>> };
+              const records = apiData?.webApiResult;
+              if (records?.length) {
+                const jsonBuffer = Buffer.from(JSON.stringify(records[0], null, 2), "utf-8");
+                await uploadToS3(`${einvoicePrefix}/einvoice-data.json`, jsonBuffer, "application/json");
+                einvoiceStoragePath = `${storagePath}/einvoice/einvoice-data.json`;
+                downloaded = true;
+                const rec = records[0] as Record<string, string>;
+                console.log(`[Email] Saved e-invoice data: ${rec.invoiceId || rec.myInvoiceInternalId} — ${rec.myInvoiceStatus} (${rec.supplierPartyRegistrationName})`);
+              }
+            } else {
+              console.log(`[Email] 99SM API returned ${apiRes.status}`);
+            }
           }
-        } catch (lambdaErr) {
-          console.log(`[Email] Lambda invoke failed: ${lambdaErr}`);
+        } catch (apiErr) {
+          console.log(`[Email] 99SM API call failed: ${apiErr}`);
         }
       }
 
       // Step 3: Fallback — save the download link for manual access
-      if (!pdfDownloaded) {
+      if (!downloaded) {
         const linkBuffer = Buffer.from(classification.downloadUrl, "utf-8");
         await uploadToS3(`${einvoicePrefix}/download-link.txt`, linkBuffer, "text/plain");
-        console.log(`[Email] Saved download link as fallback (PDF not downloadable automatically)`);
+        console.log(`[Email] Saved download link as fallback`);
       }
 
     } else if (classification.type === "confirmation_only") {
