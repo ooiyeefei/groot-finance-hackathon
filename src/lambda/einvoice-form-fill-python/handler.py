@@ -1142,7 +1142,14 @@ def extract_form_config(page: Page) -> Optional[dict]:
 # ── Download e-invoice PDF via Playwright ────────────────────
 
 def download_einvoice(event: dict) -> dict:
-    """Navigate to a download URL with Playwright, capture the PDF, save to S3."""
+    """Navigate to a download URL with Playwright, capture the PDF, save to S3.
+
+    For SPA-based download pages (like 99SM's e-engage), the PDF is generated
+    client-side and loaded into an iframe as a blob: URL. Strategy:
+    1. Navigate to the page, wait for #pdfIframe to appear
+    2. Extract the blob URL from the iframe src
+    3. Fetch the blob via page.evaluate and return as base64
+    """
     download_url = event["downloadUrl"]
     s3_key = event["s3Key"]
     s3_bucket = event.get("s3Bucket", "finanseal-bucket")
@@ -1156,45 +1163,43 @@ def download_einvoice(event: dict) -> dict:
             args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage",
                    "--disable-gpu", "--headless=new", "--single-process"],
         )
-        context = browser.new_context(accept_downloads=True)
-        page = context.new_page()
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
 
         pdf_bytes = None
 
-        # Strategy 1: Intercept PDF response from network (catches auto-downloads)
-        pdf_responses: list[bytes] = []
-        def _capture_pdf(resp):
-            try:
-                ct = resp.headers.get("content-type", "")
-                if "pdf" in ct or resp.url.endswith(".pdf"):
-                    pdf_responses.append(resp.body())
-                    print(f"[Download] Intercepted PDF from {resp.url[:80]} ({ct})")
-            except Exception:
-                pass  # response body may not be available
-        page.on("response", _capture_pdf)
-
         # Navigate — use domcontentloaded (SPA pages never reach networkidle)
-        page.goto(download_url, wait_until="domcontentloaded", timeout=30000)
+        page.goto(download_url, wait_until="domcontentloaded", timeout=45000)
 
-        # Wait for SPA to fully render — poll for meaningful content (up to 15s)
-        for i in range(15):
+        # Strategy 1: Wait for iframe with blob: PDF (SPA pattern — 99SM, etc.)
+        for i in range(30):
             time.sleep(1)
-            # Check if PDF was intercepted from network
-            if pdf_responses:
-                pdf_bytes = pdf_responses[0]
-                print(f"[Download] Got PDF from network intercept: {len(pdf_bytes)} bytes")
+            blob_result = page.evaluate("""() => {
+                const iframe = document.querySelector('#pdfIframe, iframe[src^="blob:"]');
+                if (iframe && iframe.src && iframe.src.startsWith('blob:')) {
+                    return iframe.src;
+                }
+                return null;
+            }""")
+            if blob_result:
+                print(f"[Download] Found PDF blob iframe after {i+1}s: {blob_result[:60]}")
+                # Fetch the blob content as base64
+                b64_pdf = page.evaluate("""async (blobUrl) => {
+                    const resp = await fetch(blobUrl);
+                    const blob = await resp.blob();
+                    return new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                        reader.readAsDataURL(blob);
+                    });
+                }""", blob_result)
+                if b64_pdf:
+                    pdf_bytes = base64.b64decode(b64_pdf)
+                    print(f"[Download] Extracted PDF from blob: {len(pdf_bytes)} bytes")
                 break
-            # Check if page has rendered meaningful content (not just the shell)
-            body_len = page.evaluate("() => document.body.innerText.length")
-            if body_len > 100:
-                print(f"[Download] Page rendered ({body_len} chars) after {i+1}s")
-                break
-        else:
-            print("[Download] Page still loading after 15s — proceeding anyway")
 
-        # Strategy 2: Look for a download button/link and click it
+        # Strategy 2: Look for download button if no blob found
         if not pdf_bytes:
-            dl_btn = page.locator('a:has-text("Download"), button:has-text("Download"), a[href*=".pdf"], button:has-text("Print")').first
+            dl_btn = page.locator('a:has-text("Download"), button:has-text("Download"), a[href*=".pdf"]').first
             if dl_btn.count() > 0:
                 try:
                     with page.expect_download(timeout=15000) as download_info:
@@ -1206,21 +1211,17 @@ def download_einvoice(event: dict) -> dict:
                             pdf_bytes = f.read()
                         print(f"[Download] Got PDF via download button: {len(pdf_bytes)} bytes")
                 except Exception as dl_err:
-                    print(f"[Download] Download button click failed: {dl_err}")
-                    # Button click might have triggered a network PDF
-                    time.sleep(3)
-                    if pdf_responses:
-                        pdf_bytes = pdf_responses[-1]
-                        print(f"[Download] Got PDF from network after click: {len(pdf_bytes)} bytes")
+                    print(f"[Download] Download button failed: {dl_err}")
 
-        # Strategy 3: Print page as PDF (last resort — captures the rendered page)
+        # Strategy 3: Print rendered page as PDF (last resort)
         if not pdf_bytes:
-            time.sleep(3)  # extra time for lazy content
-            body_text = page.evaluate("() => document.body.innerText")
-            print(f"[Download] Page text ({len(body_text)} chars): {body_text[:200]}")
-            print("[Download] No download triggered — printing page as PDF")
-            pdf_bytes = page.pdf(format="A4", print_background=True)
-            print(f"[Download] Printed page as PDF: {len(pdf_bytes)} bytes")
+            body_len = page.evaluate("() => document.body.innerText.length")
+            print(f"[Download] No PDF found — printing page as PDF (body: {body_len} chars)")
+            if body_len > 50:
+                pdf_bytes = page.pdf(format="A4", print_background=True)
+                print(f"[Download] Printed page as PDF: {len(pdf_bytes)} bytes")
+            else:
+                print("[Download] Page is blank — cannot generate PDF")
 
         browser.close()
 

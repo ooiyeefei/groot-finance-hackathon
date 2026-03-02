@@ -325,41 +325,30 @@ export async function handler(event: SESEvent) {
         console.log(`[Email] Direct fetch failed: ${fetchErr}`);
       }
 
-      // Step 2: For known SPA merchants, call their API directly to get structured e-invoice data
-      if (!downloaded && classification.downloadUrl.includes("99einvoice.com")) {
+      // Step 2: Invoke form-fill Lambda (Playwright) to render SPA and extract PDF
+      if (!downloaded && FORM_FILL_LAMBDA_ARN) {
         try {
-          const urlParams = new URLSearchParams(classification.downloadUrl.split("?")[1] || "");
-          const invoiceId = urlParams.get("invoiceId");
-          const companyCode = urlParams.get("companyCode");
-
-          if (invoiceId && companyCode) {
-            console.log(`[Email] Calling 99SM API: invoiceId=${invoiceId}, companyCode=${companyCode}`);
-            const apiRes = await fetch(
-              "https://99einvoice.com:7890/v1/api/web/fast/documents/listing/specific/public/pdf/details",
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ Id: invoiceId, companyCode, IrbmUuid: null }),
-              }
-            );
-
-            if (apiRes.ok) {
-              const apiData = await apiRes.json() as { webApiResult?: Array<Record<string, unknown>> };
-              const records = apiData?.webApiResult;
-              if (records?.length) {
-                const jsonBuffer = Buffer.from(JSON.stringify(records[0], null, 2), "utf-8");
-                await uploadToS3(`${einvoicePrefix}/einvoice-data.json`, jsonBuffer, "application/json");
-                einvoiceStoragePath = `${storagePath}/einvoice/einvoice-data.json`;
-                downloaded = true;
-                const rec = records[0] as Record<string, string>;
-                console.log(`[Email] Saved e-invoice data: ${rec.invoiceId || rec.myInvoiceInternalId} — ${rec.myInvoiceStatus} (${rec.supplierPartyRegistrationName})`);
-              }
-            } else {
-              console.log(`[Email] 99SM API returned ${apiRes.status}`);
-            }
+          console.log(`[Email] Invoking Playwright Lambda for PDF extraction`);
+          const invokeRes = await lambdaClient.send(new InvokeCommand({
+            FunctionName: FORM_FILL_LAMBDA_ARN,
+            InvocationType: "RequestResponse",
+            Payload: Buffer.from(JSON.stringify({
+              action: "download-einvoice",
+              downloadUrl: classification.downloadUrl,
+              s3Key: `${einvoicePrefix}/einvoice-${emailRef}.pdf`,
+              s3Bucket: S3_BUCKET,
+            })),
+          }));
+          const result = JSON.parse(Buffer.from(invokeRes.Payload || []).toString());
+          if (result?.success && result?.size > 1000) {
+            einvoiceStoragePath = `${storagePath}/einvoice/einvoice-${emailRef}.pdf`;
+            downloaded = true;
+            console.log(`[Email] Playwright extracted PDF: ${result.size} bytes`);
+          } else {
+            console.log(`[Email] Playwright extraction failed: ${result?.error || `size=${result?.size}`}`);
           }
-        } catch (apiErr) {
-          console.log(`[Email] 99SM API call failed: ${apiErr}`);
+        } catch (lambdaErr) {
+          console.log(`[Email] Lambda invoke failed: ${lambdaErr}`);
         }
       }
 
