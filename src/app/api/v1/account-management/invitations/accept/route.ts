@@ -11,6 +11,7 @@ import { auth } from '@clerk/nextjs/server'
 import { rateLimiters } from '@/domains/security/lib/rate-limit'
 import { acceptInvitation, validateInvitation } from '@/domains/account-management/lib/invitation.service'
 import { validateBody, acceptInvitationSchema } from '@/lib/validations'
+import { sendBrandedVerificationEmail } from '@/lib/aws/ses-verification'
 
 export async function POST(request: NextRequest) {
   try {
@@ -43,6 +44,13 @@ export async function POST(request: NextRequest) {
     const result = await acceptInvitation(token, userId, fullName)
 
     console.log(`[Invitation Accept V1 API] Invitation accepted: ${userId}`)
+
+    // Auto-trigger SES email verification for e-invoice forwarding (fire-and-forget)
+    if (result.success && result.email) {
+      sendBrandedVerificationEmail(result.email).catch((err) => {
+        console.warn(`[Invitation Accept V1 API] SES verification send failed (non-fatal):`, err)
+      })
+    }
 
     return NextResponse.json(result)
 

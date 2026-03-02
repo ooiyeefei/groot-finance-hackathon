@@ -59,7 +59,7 @@ export async function acceptInvitation(
   token: string,
   clerkUserId: string,
   fullName?: string
-): Promise<{ success: boolean; message: string; profile?: any; alreadyProcessed?: boolean; crossBusiness?: boolean }> {
+): Promise<{ success: boolean; message: string; profile?: any; alreadyProcessed?: boolean; crossBusiness?: boolean; email?: string }> {
   // Validate token
   const tokenData = await _validateInvitationToken(token)
 
@@ -98,7 +98,8 @@ export async function acceptInvitation(
       ? 'Cross-business invitation accepted successfully'
       : 'Invitation accepted successfully',
     profile: membership,
-    crossBusiness
+    crossBusiness,
+    email: tokenData.email,
   }
 }
 

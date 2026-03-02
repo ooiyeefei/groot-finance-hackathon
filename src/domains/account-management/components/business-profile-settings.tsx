@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { X, Camera, Building2, DollarSign, ChevronDown, ChevronRight, FileText, CheckCircle2, Mail } from 'lucide-react'
 import { ComingSoonBadge } from '@/components/ui/coming-soon-badge'
 import Image from 'next/image'
@@ -15,6 +16,7 @@ import { MSIC_CODES } from '@/lib/data/msic-codes'
 
 export default function BusinessProfileSettings() {
   const { profile, isLoading, updateProfile } = useBusinessProfile()
+  const searchParams = useSearchParams()
   const [isUpdating, setIsUpdating] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [businessName, setBusinessName] = useState('')
@@ -213,6 +215,21 @@ export default function BusinessProfileSettings() {
     }
   }, [checkSesVerification])
 
+  // Handle redirect from SES verification email link
+  useEffect(() => {
+    const emailVerified = searchParams.get('email_verified')
+    if (emailVerified === 'success') {
+      setSesVerifyStatus('verified')
+      checkSesVerification()
+      addToast({ type: 'success', title: 'Email verified', description: 'Your email has been verified for e-invoice forwarding.' })
+      // Clean up query param from URL
+      window.history.replaceState({}, '', window.location.pathname)
+    } else if (emailVerified === 'failed') {
+      addToast({ type: 'error', title: 'Verification failed', description: 'Email verification failed. Please try again.' })
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [searchParams, addToast, checkSesVerification])
+
   const handleSendVerification = async () => {
     setIsSendingVerification(true)
     try {
@@ -220,7 +237,7 @@ export default function BusinessProfileSettings() {
       const data = await res.json()
       if (data.success) {
         setSesVerifyStatus('pending')
-        addToast({ type: 'success', title: 'Verification email sent', description: 'Check your inbox and click the verification link from AWS.' })
+        addToast({ type: 'success', title: 'Verification email sent', description: 'Check your inbox and click the verification link.' })
         // Start polling every 5s
         pollingRef.current = setInterval(checkSesVerification, 5000)
       } else {
