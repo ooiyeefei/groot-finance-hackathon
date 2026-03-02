@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ── Singapore: Verify UEN format (checksum) ──
+    // ── Singapore: Verify UEN against ACRA open data (data.gov.sg) ──
     if (country === 'SG') {
       if (!isValidUenChecksum(cleanId)) {
         return NextResponse.json({
@@ -130,8 +130,58 @@ export async function POST(request: NextRequest) {
         }, { status: 422 })
       }
 
-      // TODO: Add data.gov.sg entity lookup for name verification when available
-      return NextResponse.json({ success: true, verified: true, registrationId: cleanId })
+      try {
+        // Query ACRA's "Entities Registered with ACRA" dataset via data.gov.sg API
+        const ACRA_DATASET_ID = 'd_3f960c10fed6145404ca7b821f263b87'
+        const filters = encodeURIComponent(JSON.stringify({ uen: cleanId }))
+        const acraRes = await fetch(
+          `https://data.gov.sg/api/action/datastore_search?resource_id=${ACRA_DATASET_ID}&filters=${filters}&limit=1`
+        )
+
+        if (acraRes.ok) {
+          const acraData = await acraRes.json() as {
+            success: boolean
+            result?: { records: Array<{ uen: string; entity_name: string; uen_status_desc: string }> }
+          }
+
+          if (acraData.success && acraData.result?.records?.length) {
+            const entity = acraData.result.records[0]
+            console.log(`[Verify Registration] ACRA match: ${entity.entity_name} (${entity.uen_status_desc})`)
+            return NextResponse.json({
+              success: true,
+              verified: true,
+              registrationId: cleanId,
+              entityName: entity.entity_name,
+              entityStatus: entity.uen_status_desc,
+            })
+          }
+
+          // UEN not found in ACRA dataset
+          return NextResponse.json({
+            success: false,
+            error: 'UEN not found in ACRA records. Please check your Unique Entity Number.',
+            verified: false,
+          }, { status: 422 })
+        }
+
+        // data.gov.sg API error — fall back to format validation only
+        console.warn(`[Verify Registration] data.gov.sg error (${acraRes.status}) — format-only fallback`)
+        return NextResponse.json({
+          success: true,
+          verified: true,
+          registrationId: cleanId,
+          warning: 'ACRA lookup unavailable. UEN format validated only.',
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        console.warn(`[Verify Registration] ACRA lookup failed: ${message} — format-only fallback`)
+        return NextResponse.json({
+          success: true,
+          verified: true,
+          registrationId: cleanId,
+          warning: 'ACRA lookup unavailable. UEN format validated only.',
+        })
+      }
     }
 
     return NextResponse.json(
