@@ -41,13 +41,11 @@ const VERIFICATION_EMAIL_HTML = `<!DOCTYPE html>
   <tr><td style="padding:0 32px 32px;">
     <h2 style="margin:0 0 8px;font-size:18px;font-weight:600;color:#18181b;">Verify your email</h2>
     <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#52525b;">
-      Click the button below to verify your email address for e-invoice email forwarding.
+      Click the link below to verify your email address for e-invoice email forwarding.
       This enables reliable delivery of e-invoice documents to your inbox.
     </p>
-    <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-      <a href="{{VerificationUrl}}" style="display:inline-block;background-color:#2563eb;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;padding:12px 32px;border-radius:8px;">
-        Verify Email Address
-      </a>
+    <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="background-color:#2563eb;border-radius:8px;padding:12px 32px;">
+      <span style="color:#ffffff;font-size:14px;font-weight:600;">{{VerificationUrl}}</span>
     </td></tr></table>
     <p style="margin:24px 0 0;font-size:12px;line-height:1.5;color:#a1a1aa;">
       If you didn't request this verification, you can safely ignore this email.
