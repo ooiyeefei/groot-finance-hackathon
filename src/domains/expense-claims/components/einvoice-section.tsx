@@ -556,16 +556,22 @@ export default function EinvoiceSection({
           </div>
         )}
 
-        {/* No E-Invoice Portal Identified */}
+        {/* No E-Invoice Portal Identified — Self-Bill CTA */}
         {!merchantFormUrl && !einvoiceAttached && !einvoiceRequestStatus && (
-          <div className="bg-muted/50 border border-border rounded-lg p-3 space-y-2">
-            <p className="text-muted-foreground text-sm">
-              No e-invoice portal identified for this merchant. They may not issue e-invoices, or we don&apos;t have their form URL yet.
+          <div className="bg-violet-500/10 border border-violet-500/30 rounded-lg p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <FileCheck className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+              <p className="text-violet-700 dark:text-violet-300 text-sm font-medium">
+                No e-invoice portal found for this merchant
+              </p>
+            </div>
+            <p className="text-muted-foreground text-xs pl-6">
+              This merchant may not issue e-invoices. Need one for tax compliance?
+              We can generate a self-billed e-invoice for you.
             </p>
-            <p className="text-muted-foreground text-xs">
-              Need a self-billed e-invoice for tax compliance? We have that ready for you — click below to get started.
-            </p>
-            <FeatureInterestButton featureName="Self-Billed E-Invoice (Expense Claims)" />
+            <div className="pl-6">
+              <FeatureInterestButton featureName="Self-Billed E-Invoice (Expense Claims)" />
+            </div>
           </div>
         )}
 
