@@ -243,6 +243,10 @@ export const runDetectionAlgorithms = internalMutation({
     const criticalInsights = await runCriticalAlertDetection(ctx, args.businessId, args.memberUserIds);
     insightsCreated += criticalInsights;
 
+    // 6. Stale Payable Detection — AP entries aging without dueDate or payment activity
+    const stalePayableInsights = await runStalePayableDetection(ctx, args.businessId, args.memberUserIds);
+    insightsCreated += stalePayableInsights;
+
     console.log(`[ActionCenterJobs] Business ${args.businessId}: Created ${insightsCreated} insights`);
     return insightsCreated;
   },
@@ -295,7 +299,7 @@ async function runAnomalyDetection(
 
   // Check each category for anomalies
   for (const [category, amounts] of Object.entries(byCategory)) {
-    if (amounts.length < 5) continue; // Need enough data points
+    if (amounts.length < 3) continue; // Need enough data points
 
     const mean = amounts.reduce((sum, a) => sum + a, 0) / amounts.length;
     const squaredDiffs = amounts.map((a) => Math.pow(a - mean, 2));
@@ -1142,7 +1146,8 @@ async function runDuplicateTransactionAlerts(
       firstTxn.homeCurrencyAmount || firstTxn.originalAmount || 0
     );
 
-    if (amount < 1000) continue;
+    // Skip trivial amounts (< 5 in home currency) to avoid noise from rounding
+    if (amount < 5) continue;
 
     const existingAlerts = await ctx.db
       .query("actionCenterInsights")
@@ -1150,15 +1155,17 @@ async function runDuplicateTransactionAlerts(
       .collect();
 
     const txnIds = txns.map((t: any) => t._id.toString()).sort().join(",");
+    // Dedup: skip if insight exists for these transactions (regardless of age, unless actioned)
     const isDuplicate = existingAlerts.some(
       (i: any) =>
         i.metadata?.duplicateGroupIds === txnIds &&
-        i.detectedAt > Date.now() - 7 * 24 * 60 * 60 * 1000
+        i.status !== "actioned" &&
+        i.detectedAt > Date.now() - 14 * 24 * 60 * 60 * 1000
     );
 
     if (isDuplicate) continue;
 
-    const priority = amount >= 10000 ? "high" : "medium";
+    const priority = amount >= 10000 ? "high" : amount >= 1000 ? "medium" : "low";
 
     for (const userId of memberUserIds) {
       await ctx.db.insert("actionCenterInsights", {
@@ -1208,6 +1215,92 @@ export const runDeadlineTracking = internalAction({
   },
 });
 
+/**
+ * Stale Payable Detection — Flag pending AP entries aging without dueDate or payment
+ *
+ * Catches payables that slip through the cracks because:
+ * - No dueDate set → markOverduePayables cron won't flag them
+ * - Status still "pending" but no payment activity
+ * - Sitting for 30+ days without attention
+ */
+async function runStalePayableDetection(
+  ctx: any,
+  businessId: any,
+  memberUserIds: string[]
+): Promise<number> {
+  const entries = await ctx.db
+    .query("accounting_entries")
+    .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
+    .collect();
+
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+
+  // Find pending expense/COGS entries that are old and have no dueDate
+  const staleEntries = entries.filter((e: any) => {
+    if (e.deletedAt) return false;
+    if (e.status !== "pending") return false;
+    if (e.transactionType !== "Expense" && e.transactionType !== "Cost of Goods Sold") return false;
+    if (e.dueDate) return false; // Has dueDate — handled by markOverduePayables cron
+    if (!e._creationTime || e._creationTime > thirtyDaysAgo) return false; // Less than 30 days old
+    return true;
+  });
+
+  if (staleEntries.length === 0) return 0;
+
+  // Dedup: check for existing stale payable insight within 7 days
+  const existingInsights = await ctx.db
+    .query("actionCenterInsights")
+    .withIndex("by_category", (q: any) => q.eq("category", "deadline"))
+    .collect();
+
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const isDuplicate = existingInsights.some(
+    (i: any) =>
+      i.businessId === businessId.toString() &&
+      i.metadata?.insightType === "stale_payables" &&
+      i.detectedAt > sevenDaysAgo
+  );
+
+  if (isDuplicate) return 0;
+
+  const totalAmount = staleEntries.reduce(
+    (sum: number, e: any) => sum + Math.abs(e.homeCurrencyAmount || e.originalAmount || 0),
+    0
+  );
+
+  // Calculate age of oldest entry
+  const oldestCreation = Math.min(...staleEntries.map((e: any) => e._creationTime));
+  const daysOld = Math.floor((Date.now() - oldestCreation) / (24 * 60 * 60 * 1000));
+  const priority = daysOld > 90 ? "high" : daysOld > 60 ? "medium" : "low";
+
+  let insightsCreated = 0;
+  for (const userId of memberUserIds) {
+    await ctx.db.insert("actionCenterInsights", {
+      userId,
+      businessId: businessId.toString(),
+      category: "deadline" as const,
+      priority: priority as "high" | "medium" | "low",
+      status: "new" as const,
+      title: `${staleEntries.length} unpaid bill${staleEntries.length > 1 ? "s" : ""} aging ${daysOld}+ days`,
+      description: `${staleEntries.length} payable${staleEntries.length > 1 ? "s" : ""} totaling ${totalAmount.toLocaleString()} have no due date set and have been pending for ${daysOld}+ days. Set due dates or record payments.`,
+      affectedEntities: staleEntries.map((e: any) => e._id.toString()),
+      recommendedAction: `Set due dates on these payables and schedule payments. Bills without due dates are easy to forget.`,
+      detectedAt: Date.now(),
+      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      metadata: {
+        insightType: "stale_payables",
+        count: staleEntries.length,
+        totalAmount,
+        daysOld,
+        vendors: [...new Set(staleEntries.map((e: any) => e.vendorName).filter(Boolean))],
+      },
+    });
+    insightsCreated++;
+  }
+
+  return insightsCreated;
+}
+
 // ============================================
 // EVENT-DRIVEN INSIGHT GENERATION
 // ============================================
@@ -1253,7 +1346,7 @@ export const analyzeNewTransaction = internalMutation({
         e._id.toString() !== args.transactionId.toString() // exclude this txn from baseline
     );
 
-    if (categoryExpenses.length < 5) return 0; // Not enough history
+    if (categoryExpenses.length < 3) return 0; // Not enough history
 
     const amounts = categoryExpenses.map((e: any) => Math.abs(e.homeCurrencyAmount || e.originalAmount || 0));
     const mean = amounts.reduce((sum: number, a: number) => sum + a, 0) / amounts.length;
