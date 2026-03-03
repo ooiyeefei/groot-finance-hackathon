@@ -3,16 +3,15 @@
 /**
  * Download My Data — PDPA Right of Access
  * One-click personal data export across all businesses as a ZIP of CSVs.
- * Reuses existing export engine for CSV generation.
+ * Fetches fresh data on EVERY click (not cached subscription).
  */
 
 import { useState } from 'react'
-import { useQuery } from 'convex/react'
+import { useConvex } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { Download, Loader2, AlertCircle } from 'lucide-react'
 import { generateFlatExport } from '@/domains/exports/lib/export-engine'
 
-// Field definitions for each module's CSV export (simplified Generic format)
 const PROFILE_COLUMNS = ['Email', 'Full Name', 'Currency', 'Timezone', 'Language', 'Account Created']
 
 const EXPENSE_FIELDS = [
@@ -60,17 +59,23 @@ function sanitizeFolderName(name: string): string {
 export default function DownloadMyData() {
   const [isExporting, setIsExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  const myData = useQuery(api.functions.exportJobs.getMyDataExport)
+  const convex = useConvex()
 
   const handleDownload = async () => {
-    if (!myData || isExporting) return
+    if (isExporting) return
 
     setIsExporting(true)
     setError(null)
 
     try {
-      // Dynamic import JSZip only when needed
+      // Fetch FRESH data on every click (not cached)
+      const myData = await convex.query(api.functions.exportJobs.getMyDataExport)
+
+      if (!myData) {
+        setError('Unable to fetch your data. Please try again.')
+        return
+      }
+
       const JSZip = (await import('jszip')).default
       const zip = new JSZip()
 
@@ -90,6 +95,7 @@ export default function DownloadMyData() {
       zip.file(`${rootFolder}/profile.csv`, profileCsv)
 
       // Generate per-business, per-module CSVs
+      let totalRecords = 0
       for (const business of myData.businesses.filter((b): b is NonNullable<typeof b> => b !== null)) {
         const folderName = sanitizeFolderName(business.businessName)
         const bizPath = `${rootFolder}/${folderName}`
@@ -103,6 +109,7 @@ export default function DownloadMyData() {
 
         for (const mod of modules) {
           if (mod.data && mod.data.length > 0) {
+            totalRecords += mod.data.length
             const csv = generateFlatExport(
               mod.data as Record<string, unknown>[],
               mod.fields,
@@ -131,32 +138,8 @@ export default function DownloadMyData() {
     }
   }
 
-  const hasData = myData && (
-    myData.businesses.length > 0 ||
-    myData.profile.email
-  )
-
-  const totalRecords = myData?.businesses.reduce((sum, biz) => {
-    if (!biz) return sum
-    return sum +
-      (biz.modules.expense_claims?.length || 0) +
-      (biz.modules.invoices?.length || 0) +
-      (biz.modules.leave_requests?.length || 0) +
-      (biz.modules.accounting_entries?.length || 0)
-  }, 0) || 0
-
   return (
     <div>
-      {myData && totalRecords > 0 && (
-        <p className="text-sm text-muted-foreground mb-3">
-          {totalRecords} records across {myData.businesses.length} business{myData.businesses.length !== 1 ? 'es' : ''} — includes profile, expense claims, invoices, leave requests, and accounting entries.
-        </p>
-      )}
-      {myData && totalRecords === 0 && (
-        <p className="text-sm text-muted-foreground mb-3">
-          Your profile data will be exported. No business records found.
-        </p>
-      )}
       {error && (
         <div className="flex items-center gap-1.5 mb-3 text-sm text-destructive">
           <AlertCircle className="w-4 h-4" />
@@ -165,7 +148,7 @@ export default function DownloadMyData() {
       )}
       <button
         onClick={handleDownload}
-        disabled={isExporting || !hasData}
+        disabled={isExporting}
         className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         {isExporting ? (
