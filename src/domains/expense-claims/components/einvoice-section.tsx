@@ -563,7 +563,7 @@ export default function EinvoiceSection({
               No e-invoice portal identified for this merchant. They may not issue e-invoices, or we don&apos;t have their form URL yet.
             </p>
             <p className="text-muted-foreground text-xs">
-              Need a self-billed e-invoice for tax compliance? Let us know — we&apos;re building this feature.
+              Need a self-billed e-invoice for tax compliance? We have that ready for you — click below to get started.
             </p>
             <FeatureInterestButton featureName="Self-Billed E-Invoice (Expense Claims)" />
           </div>
