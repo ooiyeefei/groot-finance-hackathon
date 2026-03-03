@@ -18,7 +18,7 @@ export function LhdnDetailSection() {
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">
           Submit e-Invoices to LHDN MyInvois for Malaysian tax compliance.
-          This feature is currently under development.
+          Be among the first to try it — request early access below.
         </p>
         <FeatureInterestButton featureName="LHDN e-Invoice" />
       </CardContent>

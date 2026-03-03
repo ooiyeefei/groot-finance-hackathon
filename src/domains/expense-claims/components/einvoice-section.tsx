@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import EinvoiceStatusBadge from './einvoice-status-badge'
 import EinvoiceMatchReview from './einvoice-match-review'
+import { FeatureInterestButton } from '@/components/ui/feature-interest-button'
 import { formatBusinessDate } from '@/lib/utils'
 
 function getUserFriendlyError(rawError: string | null): string {
@@ -552,6 +553,19 @@ export default function EinvoiceSection({
               currency={currency}
               onResolved={onRefresh}
             />
+          </div>
+        )}
+
+        {/* No E-Invoice Portal Identified */}
+        {!merchantFormUrl && !einvoiceAttached && !einvoiceRequestStatus && (
+          <div className="bg-muted/50 border border-border rounded-lg p-3 space-y-2">
+            <p className="text-muted-foreground text-sm">
+              No e-invoice portal identified for this merchant. They may not issue e-invoices, or we don&apos;t have their form URL yet.
+            </p>
+            <p className="text-muted-foreground text-xs">
+              Need a self-billed e-invoice for tax compliance? We have that ready for you — click below to get started.
+            </p>
+            <FeatureInterestButton featureName="Self-Billed E-Invoice (Expense Claims)" />
           </div>
         )}
 

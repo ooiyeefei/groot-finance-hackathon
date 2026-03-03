@@ -18,7 +18,7 @@ export function PeppolTransmissionPanel() {
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">
           Transmit invoices to Singapore recipients via the Peppol network.
-          This feature is currently under development.
+          Be among the first to try it — request early access below.
         </p>
         <FeatureInterestButton featureName="Peppol InvoiceNow" />
       </CardContent>

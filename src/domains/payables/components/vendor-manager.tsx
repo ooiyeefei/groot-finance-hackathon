@@ -22,6 +22,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { VENDOR_STATUSES, PAYMENT_TERMS_OPTIONS } from '@/lib/constants/statuses'
 import { formatCurrency } from '@/lib/utils/format-number'
+import { ComingSoonBadge } from '@/components/ui/coming-soon-badge'
+import { FeatureInterestButton } from '@/components/ui/feature-interest-button'
 import VendorProfilePanel from './vendor-profile-panel'
 
 const PAYMENT_TERMS_LABELS: Record<string, string> = {
@@ -217,6 +219,25 @@ export default function VendorManager() {
           </Button>
         </div>
       </div>
+
+      {/* Self-Billed E-Invoice — Early Access */}
+      <Card className="bg-card border-border">
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-foreground">Self-Billed E-Invoice</span>
+                <ComingSoonBadge />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Auto-generate self-billed e-invoices for vendors who don&apos;t issue their own.
+                Required for LHDN tax compliance when purchasing from exempt suppliers.
+              </p>
+            </div>
+            <FeatureInterestButton featureName="Self-Billed E-Invoice (Vendors)" />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Inline create form */}
       {showCreateForm && (
