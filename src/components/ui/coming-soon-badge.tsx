@@ -9,11 +9,11 @@ export function ComingSoonBadge({ className }: ComingSoonBadgeProps) {
     <span
       className={cn(
         'inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium',
-        'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 animate-pulse',
+        'bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-violet-500/30',
         className
       )}
     >
-      Coming Soon
+      Early Access
     </span>
   )
 }

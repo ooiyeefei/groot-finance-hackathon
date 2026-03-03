@@ -220,7 +220,7 @@ export default function VendorManager() {
         </div>
       </div>
 
-      {/* Self-Billed E-Invoice — Coming Soon */}
+      {/* Self-Billed E-Invoice — Early Access */}
       <Card className="bg-card border-border">
         <CardContent className="p-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
