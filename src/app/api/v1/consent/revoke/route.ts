@@ -12,12 +12,18 @@ import { ConvexHttpClient } from 'convex/browser'
 import { api } from '@/convex/_generated/api'
 import { z } from 'zod'
 
-function getConvexClient(): ConvexHttpClient {
+async function getAuthenticatedConvexClient() {
   const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL
   if (!convexUrl) {
     throw new Error('NEXT_PUBLIC_CONVEX_URL is not configured')
   }
-  return new ConvexHttpClient(convexUrl)
+  const convex = new ConvexHttpClient(convexUrl)
+  const clerkAuth = await auth()
+  const token = await clerkAuth.getToken({ template: 'convex' })
+  if (token) {
+    convex.setAuth(token)
+  }
+  return convex
 }
 
 const revokeConsentSchema = z.object({
@@ -46,7 +52,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const convex = getConvexClient()
+    const convex = await getAuthenticatedConvexClient()
 
     const result = await convex.mutation(api.functions.consent.revokeConsent, {
       policyType: parsed.data.policyType,
