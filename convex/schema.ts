@@ -2150,4 +2150,29 @@ export default defineSchema({
   })
     .index("by_businessId_status", ["businessId", "status"])
     .index("by_status", ["status"]),
+
+  // ============================================
+  // COMPLIANCE: PDPA Consent Records
+  // ============================================
+
+  consent_records: defineTable({
+    userId: v.id("users"),
+    businessId: v.optional(v.id("businesses")),
+    policyType: v.union(v.literal("privacy_policy"), v.literal("terms_of_service")),
+    policyVersion: v.string(),
+    acceptedAt: v.number(),
+    ipAddress: v.optional(v.string()),
+    userAgent: v.optional(v.string()),
+    source: v.union(
+      v.literal("onboarding"),
+      v.literal("invitation"),
+      v.literal("banner"),
+      v.literal("settings")
+    ),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_policyType", ["userId", "policyType"])
+    .index("by_userId_policyType_policyVersion", ["userId", "policyType", "policyVersion"])
+    .index("by_businessId", ["businessId"]),
 });

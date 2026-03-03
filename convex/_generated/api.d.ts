@@ -21,6 +21,7 @@ import type * as functions_attendanceRecords from "../functions/attendanceRecord
 import type * as functions_audit from "../functions/audit.js";
 import type * as functions_businesses from "../functions/businesses.js";
 import type * as functions_catalogItems from "../functions/catalogItems.js";
+import type * as functions_consent from "../functions/consent.js";
 import type * as functions_conversations from "../functions/conversations.js";
 import type * as functions_creditPacks from "../functions/creditPacks.js";
 import type * as functions_customers from "../functions/customers.js";
@@ -96,6 +97,7 @@ declare const fullApi: ApiFromModules<{
   "functions/audit": typeof functions_audit;
   "functions/businesses": typeof functions_businesses;
   "functions/catalogItems": typeof functions_catalogItems;
+  "functions/consent": typeof functions_consent;
   "functions/conversations": typeof functions_conversations;
   "functions/creditPacks": typeof functions_creditPacks;
   "functions/customers": typeof functions_customers;

@@ -173,12 +173,15 @@ def prefill_all(page: Page, buyer: dict, receipt: dict):
                 print(f"[Pre-fill] Select '{sel['name']}' → '{fallback['t']}' (catch-all)")
 
     # 3. Bulk text inputs via label matching
+    # Keys that must overwrite even if field already has a value (e.g. form defaults like abc@example.com)
+    force_overwrite_keys = {"email", "e-invoice email", "einvoice email", "email address", "your company email"}
     label_map = {
         "company name": buyer["name"], "business name": buyer["name"],
         "tax identification": buyer["tin"], "tin": buyer["tin"],
         "business registration": buyer["brn"], "new business": buyer["brn"],
         "e-invoice email": buyer["email"], "einvoice email": buyer["email"],
         "email address": buyer["email"], "your company email": buyer["email"],
+        "email": buyer["email"],
         "full name": buyer["userName"], "first name": buyer["userName"].split()[0],
         "last name": " ".join(buyer["userName"].split()[1:]) or "",
         "company address": buyer["address"], "address": buyer["address"],
@@ -188,21 +191,26 @@ def prefill_all(page: Page, buyer: dict, receipt: dict):
         "receipt number": receipt.get("referenceNumber", ""),
         "payment date": receipt.get("date", ""),
     }
-    count = page.evaluate("""(mapping) => {
+    force_keys_json = json.dumps(list(force_overwrite_keys))
+    count = page.evaluate("""([mapping, forceKeys]) => {
+        const forceSet = new Set(forceKeys);
         let n = 0;
         document.querySelectorAll('input[type="text"], input[type="email"], input:not([type]), textarea').forEach(el => {
-            if (el.value || el.type === 'hidden' || !el.offsetParent) return;
+            if (el.type === 'hidden' || !el.offsetParent) return;
             const label = (el.closest('label')?.textContent || document.querySelector('label[for="'+el.id+'"]')?.textContent || el.placeholder || el.name || '').toLowerCase();
             for (const [key, value] of Object.entries(mapping)) {
                 if (value && label.includes(key)) {
-                    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+                    // Skip non-empty fields UNLESS the key is in forceSet (e.g. email must overwrite defaults)
+                    if (el.value && !forceSet.has(key)) break;
+                    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+                              || Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
                     if (setter) { setter.call(el, value); el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); n++; }
                     break;
                 }
             }
         });
         return n;
-    }""", label_map)
+    }""", [label_map, json.loads(force_keys_json)])
     print(f"[Pre-fill] Bulk filled {count} text inputs")
 
 
@@ -245,6 +253,90 @@ def prefill_radix_dropdown(page: Page, trigger_text: str, target: str) -> bool:
     return False
 
 
+def prefill_custom_dropdowns(page: Page, buyer: dict):
+    """Handle non-native, non-Radix cascading dropdowns (Country → State → City).
+    Strategy: find dropdown trigger by label, click to open, type to filter, then select.
+    Must be done top-down: Country FIRST → State → City (each parent populates child)."""
+
+    cascading_fields = [
+        ("country", "Malaysia"),
+        ("state", buyer["state"]),
+        ("city", buyer["city"]),
+    ]
+
+    for label_hint, target_value in cascading_fields:
+        if not target_value:
+            continue
+        try:
+            # 1. Find clickable dropdown trigger near the label
+            #    Handles: div-based custom dropdowns, react-select, ant-select, etc.
+            opened = page.evaluate("""([hint, targetVal]) => {
+                // Find all elements whose associated label matches the hint
+                const labels = Array.from(document.querySelectorAll('label'));
+                const matchLabel = labels.find(l => l.textContent?.toLowerCase().includes(hint));
+                if (!matchLabel) return { found: false };
+
+                // Check sibling/nearby elements for dropdown trigger
+                const container = matchLabel.closest('.form-group, .field, [class*="field"], [class*="form-row"]')
+                                || matchLabel.parentElement;
+                if (!container) return { found: false };
+
+                // Try: native <select> (already handled by prefill_all, but re-check in cascade context)
+                const sel = container.querySelector('select');
+                if (sel) {
+                    const opt = Array.from(sel.options).find(o => o.textContent?.toLowerCase().includes(targetVal.toLowerCase()));
+                    if (opt) { sel.value = opt.value; sel.dispatchEvent(new Event('change', {bubbles:true})); return { found: true, type: 'native_select', value: opt.textContent }; }
+                }
+
+                // Try: clickable div/span/button that acts as dropdown trigger
+                const triggers = container.querySelectorAll('[class*="select"], [class*="dropdown"], [role="combobox"], [role="listbox"], button, [class*="trigger"]');
+                for (const t of triggers) {
+                    if (t.offsetParent) { t.click(); return { found: true, type: 'custom_trigger', element: t.tagName }; }
+                }
+
+                return { found: false };
+            }""", [label_hint, target_value])
+
+            if not opened or not opened.get("found"):
+                continue
+
+            if opened.get("type") == "native_select":
+                print(f"[Pre-fill] Cascade select '{label_hint}' → '{opened.get('value', target_value)}' ✓")
+                time.sleep(1)  # Wait for child dropdown to populate
+                continue
+
+            # 2. Dropdown opened — type to filter
+            time.sleep(0.5)
+            page.keyboard.type(target_value, delay=30)
+            time.sleep(0.8)
+
+            # 3. Select the matching option (try multiple patterns)
+            selected = page.evaluate("""(targetVal) => {
+                // Look for visible option/listitem matching the target
+                const candidates = document.querySelectorAll('[role="option"], [role="listbox"] li, .option, [class*="option"], [class*="menu-item"], li');
+                for (const c of candidates) {
+                    if (!c.offsetParent) continue;
+                    if (c.textContent?.toLowerCase().includes(targetVal.toLowerCase())) {
+                        c.click();
+                        return true;
+                    }
+                }
+                return false;
+            }""", target_value)
+
+            if selected:
+                print(f"[Pre-fill] Cascade dropdown '{label_hint}' → '{target_value}' ✓")
+            else:
+                # Fallback: press Enter to select first filtered result
+                page.keyboard.press("Enter")
+                print(f"[Pre-fill] Cascade dropdown '{label_hint}' → '{target_value}' (Enter fallback)")
+
+            time.sleep(1.5)  # Wait for child dropdown to populate before next cascade level
+
+        except Exception as e:
+            print(f"[Pre-fill] Cascade dropdown '{label_hint}' failed: {e}")
+
+
 # ── CUA action executor ────────────────────────────────────
 
 def execute_action(page: Page, name: str, args: dict):
@@ -272,7 +364,15 @@ def execute_action(page: Page, name: str, args: dict):
     elif name == "hover_at":
         page.mouse.move(d(args["x"], SCREEN_W), d(args["y"], SCREEN_H))
     elif name == "key_combination":
-        page.keyboard.press(args.get("keys", ""))
+        raw = args.get("keys", "")
+        # Normalize CUA key names → Playwright format (e.g. "control+a" → "Control+A", "backspace" → "Backspace")
+        key_map = {"control": "Control", "ctrl": "Control", "shift": "Shift", "alt": "Alt", "meta": "Meta",
+                   "backspace": "Backspace", "delete": "Delete", "enter": "Enter", "escape": "Escape",
+                   "tab": "Tab", "space": "Space", "arrowup": "ArrowUp", "arrowdown": "ArrowDown",
+                   "arrowleft": "ArrowLeft", "arrowright": "ArrowRight", "home": "Home", "end": "End"}
+        parts = [key_map.get(p.strip().lower(), p.strip()) for p in raw.split("+")]
+        normalized = "+".join(parts)
+        page.keyboard.press(normalized)
     elif name in ("open_web_browser", "wait_5_seconds"):
         if name == "wait_5_seconds":
             time.sleep(5)
@@ -809,13 +909,20 @@ TASK:
 4. Fill date fields with the Date from RECEIPT DATA.
 5. Select "Company" if Individual/Company choice exists.
 6. Fill buyer/customer detail fields with BUYER DETAILS above.
-7. IMPORTANT — Cascading dropdowns (Country/State/City): Always fill top-down — Country FIRST, then State, then City. Each parent populates the child options. NEVER go back to re-select a parent after filling children (it resets them).
-8. For Country dropdown: click the dropdown, then TYPE "Malaysia" to filter — do NOT scroll through the entire list.
-9. For any long dropdown: TYPE the first few letters to filter/jump instead of scrolling.
-10. For any field not covered above, check the RECEIPT IMAGE for the answer.
-11. Check consent checkbox → click Submit.
-12. Fix validation errors if any (only the specific field mentioned).
-13. For forms requiring OTP/TAC: Use the system email (einvoice+{ref}@einv.hellogroot.com) for the email field. After filling all fields, click "Request OTP" or "Send OTP". The OTP will be handled automatically — just wait for the code to appear and then submit."""
+7. CRITICAL — Email field: If the email field shows a default/placeholder (e.g. abc@example.com), you MUST overwrite it with the Email from BUYER DETAILS. Click the field, select all (Ctrl+A), then type the correct email.
+8. IMPORTANT — Cascading dropdowns (Country/State/City): Always fill top-down — Country FIRST, then State, then City. Each parent populates the child options. NEVER go back to re-select a parent after filling children (it resets them).
+9. For ANY dropdown that won't respond to typing: try these approaches IN ORDER:
+   a. Click the dropdown trigger/arrow → wait for list → click the matching option
+   b. If no list appears, click the field → type the first few letters to filter → press Enter or click the match
+   c. If still stuck, try clicking different parts of the dropdown area (the text area vs. the arrow icon)
+   d. LAST RESORT: use key_combination "ArrowDown" repeatedly to cycle through options
+10. For Country dropdown: click the dropdown, then TYPE "Malaysia" to filter — do NOT scroll through the entire list.
+11. For any long dropdown: TYPE the first few letters to filter/jump instead of scrolling.
+12. KEYBOARD KEYS: Use correct capitalized names — "Backspace" (not "backspace"), "Control+A" (not "control+a"), "Delete" (not "delete"), "Enter" (not "enter"), "ArrowDown" (not "arrowdown").
+13. For any field not covered above, check the RECEIPT IMAGE for the answer.
+14. Check consent checkbox → click Submit.
+15. Fix validation errors if any (only the specific field mentioned).
+16. For forms requiring OTP/TAC: Use the system email ({buyer["email"]}) for the email field. After filling all fields, click "Request OTP" or "Send OTP". The OTP will be handled automatically — just wait for the code to appear and then submit."""
 
     shot = base64.b64encode(page.screenshot(type="png")).decode()
     # Build CUA context: receipt image (reference) + form screenshot (current page)
@@ -1413,6 +1520,7 @@ def handler(event: dict, context=None) -> dict:
 
         # ── Pre-fill with Playwright ──
         prefill_all(page, buyer, receipt)
+        prefill_custom_dropdowns(page, buyer)
 
         # ── Tier 2: CUA exploration (with browser-use Lambda fallback on 429) ──
         try:

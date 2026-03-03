@@ -133,7 +133,12 @@ export async function updateUserProfile(
     throw new Error('Failed to get authenticated Convex client')
   }
 
-  // Update profile fields (fullName, homeCurrency)
+  // If name is changing, sync to Clerk first (identity-first pattern)
+  if (updates.full_name !== undefined && updates.full_name !== null) {
+    await syncNameToClerk(clerkUserId, updates.full_name)
+  }
+
+  // Update profile fields (fullName, homeCurrency) in Convex for immediate UI feedback
   if (updates.full_name !== undefined || updates.preferred_currency !== undefined) {
     await client.mutation(api.functions.users.updateProfile, {
       fullName: updates.full_name ?? undefined,
@@ -372,8 +377,41 @@ export async function assignManager(
 }
 
 /**
+ * Sync a name change to Clerk (identity provider) using the SDK directly.
+ * Clerk is source of truth for identity — the existing user.updated webhook
+ * syncs the change back to Convex automatically.
+ */
+async function syncNameToClerk(
+  clerkUserId: string,
+  fullName: string
+): Promise<void> {
+  const trimmed = fullName.trim()
+  const spaceIndex = trimmed.indexOf(' ')
+  const firstName = spaceIndex > 0 ? trimmed.slice(0, spaceIndex) : trimmed
+  const lastName = spaceIndex > 0 ? trimmed.slice(spaceIndex + 1) : ''
+
+  try {
+    const clerk = await clerkClient()
+    await clerk.users.updateUser(clerkUserId, {
+      firstName: firstName || undefined,
+      lastName: lastName || undefined,
+    })
+    console.log(`[User Service] Clerk profile synced: ${clerkUserId} → ${trimmed}`)
+  } catch (error: unknown) {
+    console.error(`[User Service] Clerk update failed for ${clerkUserId}:`, error)
+    const clerkError = error as { status?: number; errors?: Array<{ message: string }> }
+    if (clerkError.status === 404) {
+      throw new Error('User not found in identity provider')
+    }
+    throw new Error(clerkError.errors?.[0]?.message || 'Failed to update identity provider profile')
+  }
+}
+
+/**
  * Update user's full name
- * Can be used by user themselves or by admin for other users
+ * Can be used by user themselves or by admin for other users.
+ * Updates Clerk first (identity-first pattern), then Convex for immediate UI feedback.
+ * The Clerk webhook will also sync to Convex for consistency.
  */
 export async function updateUserName(
   targetUserId: string,
@@ -395,17 +433,38 @@ export async function updateUserName(
     throw new Error('Failed to get authenticated Convex client')
   }
 
-  // If updating self, use the regular updateProfile
+  // Resolve the target user's Clerk ID for the Clerk API call
+  let targetClerkUserId: string | undefined
+
+  if (targetUserId === currentUserId) {
+    // Self-edit via profile settings: targetUserId IS the Clerk ID
+    targetClerkUserId = currentUserId
+  } else {
+    // Admin editing another user: targetUserId is a Convex user _id
+    if (!canManageUsers) {
+      throw new Error('Admin permissions required to update other users')
+    }
+    // Look up the user by Convex ID to get their Clerk ID
+    const user = await client.query(api.functions.users.getById, {
+      id: targetUserId
+    })
+    targetClerkUserId = user?.clerkUserId
+  }
+
+  if (!targetClerkUserId) {
+    throw new Error('Target user not found')
+  }
+
+  // Step 1: Update Clerk FIRST (identity provider = source of truth)
+  await syncNameToClerk(targetClerkUserId, fullName)
+
+  // Step 2: Also update Convex directly for immediate UI feedback
+  // (The webhook will fire shortly and confirm the same data)
   if (targetUserId === currentUserId) {
     await client.mutation(api.functions.users.updateProfile, {
       fullName: fullName.trim()
     })
   } else {
-    // Admin updating another user
-    if (!canManageUsers) {
-      throw new Error('Admin permissions required to update other users')
-    }
-
     await client.mutation(api.functions.users.updateFullNameByAdmin, {
       targetUserId,
       fullName: fullName.trim(),
@@ -413,7 +472,7 @@ export async function updateUserName(
     })
   }
 
-  console.log(`[User Service] Name updated: ${targetUserId} → ${fullName.trim()}`)
+  console.log(`[User Service] Name synced to Clerk and Convex: ${targetUserId} → ${fullName.trim()}`)
 }
 
 /**

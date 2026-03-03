@@ -223,6 +223,11 @@ formatBusinessDate('2025-10-31')  // "Oct 31, 2025" (no timezone shift)
 - Convex (new `export_code_mappings` table), Convex File Storage (export files) (001-master-accounting-export)
 - TypeScript 5.9.3, Node.js 20.x + Convex 1.31.3 (crons, internalMutation, storage API) (001-pdpa-data-retention-cleanup)
 - Convex document database (existing tables), Convex File Storage (export files) (001-pdpa-data-retention-cleanup)
+- Markdown (GitHub-flavored) — no code to compile or deploy + None — pure documentation deliverable (001-pdpa-sec-measures-doc)
+- Git repository at `docs/compliance/security-measures.md` (001-pdpa-sec-measures-doc)
+- TypeScript 5.9.3 + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, Clerk 6.30.0, Radix UI, lucide-react (001-pdpa-consent-collect)
+- Convex (new `consent_records` table, real-time subscriptions) (001-pdpa-consent-collect)
+- TypeScript 5.9.3 / Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, Clerk 6.30.0, React 19.1.2, JSZip (new — for client-side ZIP generation) (001-pdpa-data-rights)
 
 ## Recent Changes
 - 001-category-3-mcp: Added MCP Server with API key management

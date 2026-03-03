@@ -14,6 +14,8 @@ import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
+import { useConsent } from '@/domains/compliance/hooks/use-consent'
 
 interface InvitationData {
   email: string
@@ -40,6 +42,10 @@ function AcceptInvitationContent() {
   const [fullName, setFullName] = useState('')
   const [nameError, setNameError] = useState<string | null>(null)
 
+  const { hasConsent, isLoading: consentLoading } = useConsent()
+  const [consentChecked, setConsentChecked] = useState(false)
+  const [consentError, setConsentError] = useState(false)
+
   const token = searchParams.get('token')
 
   // Helper function to retry API calls with exponential backoff on auth errors
@@ -65,11 +71,30 @@ function AcceptInvitationContent() {
   const handleAcceptInvitation = async (name?: string) => {
     if (!token) return
 
+    // Consent gate: block acceptance if user hasn't consented yet
+    if (!hasConsent && !consentChecked) {
+      setConsentError(true)
+      return
+    }
+
     setAccepting(true)
     setError(null)
     setNameError(null)
 
     try {
+      // Record consent before accepting invitation (if not already consented)
+      if (!hasConsent && consentChecked) {
+        await fetch('/api/v1/consent/record', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            policyType: 'privacy_policy',
+            policyVersion: process.env.NEXT_PUBLIC_CURRENT_POLICY_VERSION || '2026-03-03',
+            source: 'invitation',
+          }),
+        })
+      }
+
       const response = await fetchWithRetry('/api/v1/account-management/invitations/accept', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -339,6 +364,39 @@ function AcceptInvitationContent() {
                 )}
               </div>
 
+              {!hasConsent && !consentLoading && (
+                <div className="space-y-2 mt-2 mb-1">
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id="consent-name-form"
+                      checked={consentChecked}
+                      onCheckedChange={(checked) => {
+                        setConsentChecked(checked === true)
+                        if (checked) setConsentError(false)
+                      }}
+                      className="mt-0.5"
+                    />
+                    <label htmlFor="consent-name-form" className="text-sm text-muted-foreground leading-snug cursor-pointer">
+                      I agree to the{' '}
+                      <a
+                        href="https://hellogroot.com/privacy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        Privacy Policy
+                      </a>{' '}
+                      and consent to processing of my personal data as described
+                    </label>
+                  </div>
+                  {consentError && (
+                    <p className="text-destructive text-sm">
+                      You must accept the Privacy Policy to continue
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="space-y-3">
                 {accepting ? (
                   <Button disabled className="w-full">
@@ -407,6 +465,39 @@ function AcceptInvitationContent() {
             </div>
           ) : (
             <div className="space-y-3">
+              {!hasConsent && !consentLoading && (
+                <div className="space-y-2 mt-2 mb-1">
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id="consent-main"
+                      checked={consentChecked}
+                      onCheckedChange={(checked) => {
+                        setConsentChecked(checked === true)
+                        if (checked) setConsentError(false)
+                      }}
+                      className="mt-0.5"
+                    />
+                    <label htmlFor="consent-main" className="text-sm text-muted-foreground leading-snug cursor-pointer">
+                      I agree to the{' '}
+                      <a
+                        href="https://hellogroot.com/privacy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        Privacy Policy
+                      </a>{' '}
+                      and consent to processing of my personal data as described
+                    </label>
+                  </div>
+                  {consentError && (
+                    <p className="text-destructive text-sm">
+                      You must accept the Privacy Policy to continue
+                    </p>
+                  )}
+                </div>
+              )}
+
               {accepting ? (
                 <Button disabled className="w-full">
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
