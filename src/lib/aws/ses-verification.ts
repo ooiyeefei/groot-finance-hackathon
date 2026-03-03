@@ -63,7 +63,7 @@ function getSESClient(): SESClient {
 export async function sendBrandedVerificationEmail(email: string): Promise<void> {
   const ses = getSESClient()
 
-  // Try branded template first (requires SES production access)
+  // Try branded template first (requires SES production access + pre-created template)
   try {
     await ses.send(new SendCustomVerificationEmailCommand({
       EmailAddress: email,
@@ -73,15 +73,8 @@ export async function sendBrandedVerificationEmail(email: string): Promise<void>
     return
   } catch (error: unknown) {
     const err = error as { name?: string }
-    // Fall back to default if production access not granted or template missing
-    if (
-      err.name === 'ProductionAccessNotGranted' ||
-      err.name === 'CustomVerificationEmailTemplateDoesNotExistException'
-    ) {
-      console.log(`[SES Verification] Branded template unavailable (${err.name}), using default`)
-    } else {
-      throw error
-    }
+    // Any failure from branded send → fall back to default
+    console.log(`[SES Verification] Branded send failed (${err.name}), falling back to default`)
   }
 
   // Fallback: default AWS verification email (works in sandbox)
