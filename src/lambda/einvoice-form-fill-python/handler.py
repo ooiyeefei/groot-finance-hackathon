@@ -815,7 +815,7 @@ TASK:
 10. For any field not covered above, check the RECEIPT IMAGE for the answer.
 11. Check consent checkbox → click Submit.
 12. Fix validation errors if any (only the specific field mentioned).
-13. For forms requiring OTP/TAC: Use the system email (einvoice+{ref}@einv.hellogroot.com) for the email field. After filling all fields, click "Request OTP" or "Send OTP". The OTP will be handled automatically — just wait for the code to appear and then submit."""
+13. For forms requiring OTP/TAC: Use the system email ({buyer["email"]}) for the email field. After filling all fields, click "Request OTP" or "Send OTP". The OTP will be handled automatically — just wait for the code to appear and then submit."""
 
     shot = base64.b64encode(page.screenshot(type="png")).decode()
     # Build CUA context: receipt image (reference) + form screenshot (current page)
