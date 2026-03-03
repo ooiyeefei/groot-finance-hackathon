@@ -260,13 +260,13 @@ function AcceptInvitationContent() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-md bg-gray-800 border-border">
+        <Card className="w-full max-w-md bg-card border-border">
           <CardContent className="flex flex-col items-center justify-center py-8">
-            <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-4" />
-            <h2 className="text-lg font-semibold text-white mb-2">
+            <Loader2 className="w-8 h-8 text-primary animate-spin mb-4" />
+            <h2 className="text-lg font-semibold text-foreground mb-2">
               Validating Invitation
             </h2>
-            <p className="text-gray-400 text-center">
+            <p className="text-muted-foreground text-center">
               Please wait while we verify your invitation...
             </p>
           </CardContent>
@@ -278,22 +278,22 @@ function AcceptInvitationContent() {
   if (error) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-md bg-gray-800 border-border">
+        <Card className="w-full max-w-md bg-card border-border">
           <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-red-500" />
+            <CardTitle className="text-foreground flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-destructive" />
               Invitation Error
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <Alert className="bg-red-900/20 border-red-700 mb-4">
-              <AlertDescription className="text-gray-300">
+            <Alert className="bg-destructive/10 border-destructive/30 mb-4">
+              <AlertDescription className="text-foreground">
                 {error}
               </AlertDescription>
             </Alert>
             <Button
               onClick={() => router.push(`/${locale}`)}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground text-white"
             >
               Return to Home
             </Button>
@@ -306,16 +306,16 @@ function AcceptInvitationContent() {
   if (success) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-md bg-gray-800 border-border">
+        <Card className="w-full max-w-md bg-card border-border">
           <CardContent className="flex flex-col items-center justify-center py-8">
-            <CheckCircle className="w-12 h-12 text-green-500 mb-4" />
-            <h2 className="text-xl font-semibold text-white mb-2">
+            <CheckCircle className="w-12 h-12 text-green-600 dark:text-green-400 mb-4" />
+            <h2 className="text-xl font-semibold text-foreground mb-2">
               Welcome to {invitation?.businessName}!
             </h2>
-            <p className="text-gray-400 text-center mb-4">
+            <p className="text-muted-foreground text-center mb-4">
               Your invitation has been accepted successfully. You now have {invitation?.role} access to the organization.
             </p>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-muted-foreground">
               Redirecting to dashboard...
             </p>
           </CardContent>
@@ -327,22 +327,22 @@ function AcceptInvitationContent() {
   if (showNameForm && isSignedIn) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-md bg-gray-800 border-border">
+        <Card className="w-full max-w-md bg-card border-border">
           <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
-              <User className="w-5 h-5 text-blue-500" />
+            <CardTitle className="text-foreground flex items-center gap-2">
+              <User className="w-5 h-5 text-primary" />
               Complete Your Profile
             </CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleNameSubmit} className="space-y-4">
-              <div className="text-gray-300 mb-4">
+              <div className="text-foreground mb-4">
                 <p className="mb-2">Welcome to <strong>{invitation?.businessName}</strong>!</p>
-                <p className="text-sm text-gray-400">Please enter your full name to complete your profile setup.</p>
+                <p className="text-sm text-muted-foreground">Please enter your full name to complete your profile setup.</p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="fullName" className="text-gray-300">
+                <Label htmlFor="fullName" className="text-foreground">
                   Full Name
                 </Label>
                 <Input
@@ -351,13 +351,13 @@ function AcceptInvitationContent() {
                   placeholder="Enter your full name"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                  className="bg-input border-border text-foreground placeholder:text-muted-foreground"
                   autoFocus
                 />
                 {nameError && (
-                  <Alert className="bg-red-900/20 border-red-700">
+                  <Alert className="bg-destructive/10 border-destructive/30">
                     <AlertCircle className="w-4 h-4" />
-                    <AlertDescription className="text-red-400">
+                    <AlertDescription className="text-destructive">
                       {nameError}
                     </AlertDescription>
                   </Alert>
@@ -406,14 +406,14 @@ function AcceptInvitationContent() {
                 ) : (
                   <Button
                     type="submit"
-                    className="w-full bg-green-600 hover:bg-green-700"
+                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
                   >
                     Complete Profile & Join Team
                   </Button>
                 )}
                 <Button
                   onClick={handleSignOut}
-                  className="w-full bg-red-600 hover:bg-red-700 text-white"
+                  className="w-full bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                   type="button"
                 >
                   Sign Out & Use Different Account
@@ -428,35 +428,35 @@ function AcceptInvitationContent() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <Card className="w-full max-w-md bg-gray-800 border-border">
+      <Card className="w-full max-w-md bg-card border-border">
         <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
-            <UserPlus className="w-5 h-5 text-blue-500" />
+          <CardTitle className="text-foreground flex items-center gap-2">
+            <UserPlus className="w-5 h-5 text-primary" />
             Join {invitation?.businessName}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="text-gray-300">
+          <div className="text-foreground">
             <p className="mb-2">You&apos;ve been invited to join <strong>{invitation?.businessName}</strong> as a <strong>{invitation?.role}</strong>.</p>
-            <p className="text-sm text-gray-400">Email: {invitation?.email}</p>
+            <p className="text-sm text-muted-foreground">Email: {invitation?.email}</p>
           </div>
 
           {!isSignedIn ? (
             <div className="space-y-3">
               <Button
                 onClick={handleSignUp}
-                className="w-full bg-blue-600 hover:bg-blue-700"
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
               >
                 Sign Up to Accept Invitation
               </Button>
-              <p className="text-xs text-gray-500 text-center">
+              <p className="text-xs text-muted-foreground text-center">
                 Already have an account?{' '}
                 <button
                   onClick={() => {
                     const signInUrl = `/${locale}/sign-in?email=${encodeURIComponent(invitation?.email || '')}&redirect_url=${encodeURIComponent(window.location.href)}`
                     window.location.href = signInUrl
                   }}
-                  className="text-blue-500 hover:text-blue-400 underline font-medium"
+                  className="text-primary hover:text-primary/80 underline font-medium"
                 >
                   Sign in
                 </button>{' '}
@@ -507,13 +507,13 @@ function AcceptInvitationContent() {
                 <>
                   <Button
                     onClick={() => handleAcceptInvitation()}
-                    className="w-full bg-green-600 hover:bg-green-700"
+                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
                   >
                     Accept Invitation
                   </Button>
                   <Button
                     onClick={handleSignOut}
-                    className="w-full bg-red-600 hover:bg-red-700 text-white"
+                    className="w-full bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                   >
                     Sign Out & Use Different Account
                   </Button>
@@ -531,13 +531,13 @@ export default function AcceptInvitationPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-md bg-gray-800 border-border">
+        <Card className="w-full max-w-md bg-card border-border">
           <CardContent className="flex flex-col items-center justify-center py-8">
-            <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-4" />
-            <h2 className="text-lg font-semibold text-white mb-2">
+            <Loader2 className="w-8 h-8 text-primary animate-spin mb-4" />
+            <h2 className="text-lg font-semibold text-foreground mb-2">
               Loading Invitation
             </h2>
-            <p className="text-gray-400 text-center">
+            <p className="text-muted-foreground text-center">
               Please wait while we load your invitation...
             </p>
           </CardContent>

@@ -2,19 +2,27 @@
 
 import { useState } from 'react'
 import { useUser } from '@clerk/nextjs'
+import { usePathname } from 'next/navigation'
 import { useConsent } from '@/domains/compliance/hooks/use-consent'
 import { Shield } from 'lucide-react'
 
 const CURRENT_POLICY_VERSION = process.env.NEXT_PUBLIC_CURRENT_POLICY_VERSION || '2026-03-03'
 
+// Pages where the banner should not show (they have their own consent UI)
+const HIDDEN_PATHS = ['/invitations/', '/sign-in', '/sign-up', '/onboarding']
+
 export function ConsentBanner() {
   const { isSignedIn } = useUser()
+  const pathname = usePathname()
   const { hasConsent, wasRevoked, isLoading } = useConsent()
   const [isAccepting, setIsAccepting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Hide banner if: not signed in, loading, already consented, or revoked (overlay handles revoked state)
-  if (!isSignedIn || isLoading || hasConsent || wasRevoked) return null
+  // Hide banner on pages that have their own consent checkbox
+  const isHiddenPath = HIDDEN_PATHS.some((path) => pathname?.includes(path))
+
+  // Hide banner if: not signed in, loading, already consented, revoked, or on a page with its own consent UI
+  if (!isSignedIn || isLoading || hasConsent || wasRevoked || isHiddenPath) return null
 
   async function handleAccept() {
     setIsAccepting(true)
