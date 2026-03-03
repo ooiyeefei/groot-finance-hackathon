@@ -285,6 +285,14 @@ async function runAnomalyDetection(
 
   let insightsCreated = 0;
 
+  // Pre-fetch existing anomaly insights for dedup (one query instead of per-txn)
+  const existingAnomalyInsights = await ctx.db
+    .query("actionCenterInsights")
+    .withIndex("by_category", (q: any) => q.eq("category", "anomaly"))
+    .collect();
+
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
   // Check each category for anomalies
   for (const [category, amounts] of Object.entries(byCategory)) {
     if (amounts.length < 5) continue; // Need enough data points
@@ -308,6 +316,17 @@ async function runAnomalyDetection(
 
       const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
       if (amount <= threshold2Sigma) continue;
+
+      // Dedup: skip if an anomaly insight for this transaction exists within 7 days
+      const txnIdStr = txn._id.toString();
+      const isDuplicate = existingAnomalyInsights.some(
+        (i: any) =>
+          i.metadata?.transactionId === txnIdStr &&
+          i.businessId === businessId.toString() &&
+          i.detectedAt > sevenDaysAgo
+      );
+
+      if (isDuplicate) continue;
 
       const deviation = ((amount - mean) / stdDev).toFixed(1);
       const priority = amount > threshold3Sigma ? "high" : "medium";
@@ -1186,6 +1205,217 @@ export const runDeadlineTracking = internalAction({
     console.log(`[ActionCenterJobs] Would check deadlines for ${businesses.length} businesses`);
 
     return { businessesChecked: businesses.length, deadlinesFound: 0 };
+  },
+});
+
+// ============================================
+// EVENT-DRIVEN INSIGHT GENERATION
+// ============================================
+
+/**
+ * Lightweight anomaly check for a single new transaction.
+ * Scheduled from accountingEntries.create so insights surface immediately
+ * instead of waiting up to 4 hours for the cron.
+ *
+ * Only runs anomaly detection (the most valuable for real-time feedback).
+ * Other detection types (cashflow, vendor, etc.) remain on the 4h cron.
+ */
+export const analyzeNewTransaction = internalMutation({
+  args: {
+    transactionId: v.id("accounting_entries"),
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    const txn = await ctx.db.get(args.transactionId);
+    if (!txn || txn.deletedAt) return 0;
+
+    // Only check expenses for anomalies
+    if (txn.transactionType !== "Expense") return 0;
+
+    const category = txn.category || "uncategorized";
+    const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
+    if (amount === 0) return 0;
+
+    // Get historical stats for this category (last 90 days)
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const entries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", args.businessId))
+      .collect();
+
+    const categoryExpenses = entries.filter(
+      (e: any) =>
+        !e.deletedAt &&
+        e.transactionType === "Expense" &&
+        (e.category || "uncategorized") === category &&
+        e.transactionDate &&
+        e.transactionDate >= ninetyDaysAgo &&
+        e._id.toString() !== args.transactionId.toString() // exclude this txn from baseline
+    );
+
+    if (categoryExpenses.length < 5) return 0; // Not enough history
+
+    const amounts = categoryExpenses.map((e: any) => Math.abs(e.homeCurrencyAmount || e.originalAmount || 0));
+    const mean = amounts.reduce((sum: number, a: number) => sum + a, 0) / amounts.length;
+    const squaredDiffs = amounts.map((a: number) => Math.pow(a - mean, 2));
+    const variance = squaredDiffs.reduce((sum: number, d: number) => sum + d, 0) / amounts.length;
+    const stdDev = Math.sqrt(variance);
+
+    if (stdDev === 0) return 0;
+
+    const threshold2Sigma = mean + 2 * stdDev;
+    if (amount <= threshold2Sigma) return 0; // Not anomalous
+
+    // Check for existing anomaly insight for this transaction
+    const existingInsights = await ctx.db
+      .query("actionCenterInsights")
+      .withIndex("by_category", (q: any) => q.eq("category", "anomaly"))
+      .collect();
+
+    const txnIdStr = args.transactionId.toString();
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const isDuplicate = existingInsights.some(
+      (i: any) =>
+        i.metadata?.transactionId === txnIdStr &&
+        i.businessId === args.businessId.toString() &&
+        i.detectedAt > sevenDaysAgo
+    );
+
+    if (isDuplicate) return 0;
+
+    // Get business members
+    const memberships = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", args.businessId))
+      .collect();
+
+    const memberUserIds = memberships
+      .filter((m: any) => m.status === "active" && ["owner", "finance_admin", "admin"].includes(m.role))
+      .map((m: any) => m.userId.toString());
+
+    if (memberUserIds.length === 0) return 0;
+
+    const threshold3Sigma = mean + 3 * stdDev;
+    const deviation = ((amount - mean) / stdDev).toFixed(1);
+    const priority = amount > threshold3Sigma ? "high" : "medium";
+
+    let insightsCreated = 0;
+    for (const userId of memberUserIds) {
+      await ctx.db.insert("actionCenterInsights", {
+        userId,
+        businessId: args.businessId.toString(),
+        category: "anomaly" as const,
+        priority: priority as "high" | "medium",
+        status: "new" as const,
+        title: `Unusual ${category} expense detected`,
+        description: `A ${category} expense of ${amount.toLocaleString()} is ${deviation}σ above your average of ${mean.toLocaleString()}.`,
+        affectedEntities: [txnIdStr],
+        recommendedAction: `Review this transaction to ensure it's legitimate and correctly categorized.`,
+        detectedAt: Date.now(),
+        metadata: {
+          deviation: parseFloat(deviation),
+          baseline: mean,
+          category,
+          transactionId: txnIdStr,
+        },
+      });
+      insightsCreated++;
+    }
+
+    if (insightsCreated > 0) {
+      console.log(
+        `[ActionCenterJobs] Real-time anomaly: ${category} expense ${amount} (${deviation}σ) → ${insightsCreated} insights`
+      );
+    }
+
+    // --- VENDOR PRICING SURGE DETECTION ---
+    // Check if this vendor's price has spiked vs their historical average
+    const vendorName = txn.vendorName;
+    const vendorId = txn.vendorId;
+
+    if (vendorName || vendorId) {
+      const vendorKey = vendorId?.toString() || vendorName || "";
+
+      // Get historical expenses from this vendor (last 90 days, excluding this transaction)
+      const vendorExpenses = entries.filter(
+        (e: any) =>
+          !e.deletedAt &&
+          e.transactionType === "Expense" &&
+          e.transactionDate &&
+          e.transactionDate >= ninetyDaysAgo &&
+          e._id.toString() !== args.transactionId.toString() &&
+          ((e.vendorId && e.vendorId.toString() === vendorKey) ||
+           (!e.vendorId && e.vendorName === vendorName))
+      );
+
+      if (vendorExpenses.length >= 3) { // Need enough history
+        const historicalAmounts = vendorExpenses.map(
+          (e: any) => Math.abs(e.homeCurrencyAmount || e.originalAmount || 0)
+        );
+        const vendorMean = historicalAmounts.reduce((s: number, a: number) => s + a, 0) / historicalAmounts.length;
+
+        if (vendorMean > 0) {
+          const surgePercent = ((amount - vendorMean) / vendorMean) * 100;
+
+          // Alert if price surged >30% vs historical average for this vendor
+          if (surgePercent > 30) {
+            // Dedup: check existing pricing surge insights
+            const existingOptInsights = await ctx.db
+              .query("actionCenterInsights")
+              .withIndex("by_category", (q: any) => q.eq("category", "optimization"))
+              .collect();
+
+            const sevenDaysAgoMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+            const surgeDuplicate = existingOptInsights.some(
+              (i: any) =>
+                i.metadata?.vendorKey === vendorKey &&
+                i.metadata?.insightType === "vendor_pricing_surge" &&
+                i.businessId === args.businessId.toString() &&
+                i.detectedAt > sevenDaysAgoMs
+            );
+
+            if (!surgeDuplicate) {
+              const surgePriority = surgePercent > 100 ? "high" : surgePercent > 50 ? "medium" : "low";
+              const displayName = vendorName || "Unknown Vendor";
+
+              for (const userId of memberUserIds) {
+                await ctx.db.insert("actionCenterInsights", {
+                  userId,
+                  businessId: args.businessId.toString(),
+                  category: "optimization" as const,
+                  priority: surgePriority as "high" | "medium" | "low",
+                  status: "new" as const,
+                  title: `Pricing surge from ${displayName}`,
+                  description: `A charge of ${amount.toLocaleString()} from ${displayName} is ${surgePercent.toFixed(0)}% above their historical average of ${vendorMean.toLocaleString()}.`,
+                  affectedEntities: [txnIdStr],
+                  recommendedAction: `Review this charge and verify pricing with ${displayName}. Compare against previous invoices.`,
+                  detectedAt: Date.now(),
+                  expiresAt: Date.now() + 14 * 24 * 60 * 60 * 1000,
+                  metadata: {
+                    vendorKey,
+                    vendorName: displayName,
+                    currentAmount: amount,
+                    historicalAverage: vendorMean,
+                    surgePercent,
+                    transactionId: txnIdStr,
+                    insightType: "vendor_pricing_surge",
+                  },
+                });
+                insightsCreated++;
+              }
+
+              if (insightsCreated > 0) {
+                console.log(
+                  `[ActionCenterJobs] Vendor pricing surge: ${displayName} +${surgePercent.toFixed(0)}% → ${insightsCreated} insights`
+                );
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return insightsCreated;
   },
 });
 

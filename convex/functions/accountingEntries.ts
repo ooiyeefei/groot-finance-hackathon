@@ -649,6 +649,15 @@ export const create = mutation({
       }
     }
 
+    // Schedule real-time anomaly detection for this transaction
+    // Surfaces insights immediately instead of waiting for the 4h cron
+    if (args.businessId) {
+      await ctx.scheduler.runAfter(0, internal.functions.actionCenterJobs.analyzeNewTransaction, {
+        transactionId: entryId,
+        businessId: args.businessId,
+      });
+    }
+
     return entryId;
   },
 });
@@ -1393,33 +1402,72 @@ export const markOverduePayables = internalMutation({
       }
     }
 
-    // Create Action Center insight per business
+    // Create Action Center insights per business (with dedup + aging escalation)
+    // Pre-fetch existing deadline insights for dedup
+    const existingDeadlineInsights = await ctx.db
+      .query("actionCenterInsights")
+      .withIndex("by_category", (q: any) => q.eq("category", "deadline"))
+      .collect();
+
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+
     for (const [businessId, entries] of entriesByBusiness) {
+      // Dedup: skip if we already created a batch overdue payable insight for this business within 24h
+      const isDuplicate = existingDeadlineInsights.some(
+        (i) =>
+          i.businessId === businessId &&
+          i.metadata?.insightType === "overdue_payables_batch" &&
+          i.detectedAt > oneDayAgo
+      );
+
+      if (isDuplicate) continue;
+
       const totalAmount = entries.reduce(
         (sum, e) => sum + (e.homeCurrencyAmount ?? e.originalAmount) - (e.paidAmount ?? 0),
         0
       );
 
-      // Get business members for insight
+      // Aging-based priority: oldest overdue entry determines severity
+      const oldestDueDate = entries
+        .map((e) => e.dueDate!)
+        .sort()[0];
+      const daysOverdue = Math.floor(
+        (Date.now() - new Date(oldestDueDate).getTime()) / (24 * 60 * 60 * 1000)
+      );
+      const priority = daysOverdue > 30 ? "critical" : daysOverdue > 14 ? "high" : "medium";
+
+      // Get business members (admin/owner roles only)
       const members = await ctx.db
         .query("business_memberships")
-        .withIndex("by_businessId", (q) => q.eq("businessId", entries[0].businessId!))
+        .withIndex("by_businessId", (q: any) => q.eq("businessId", entries[0].businessId!))
         .collect();
 
-      const activeMembers = members.filter((m) => m.status === "active");
+      const targetMembers = members.filter(
+        (m) => m.status === "active" && ["owner", "finance_admin", "admin"].includes(m.role)
+      );
 
-      for (const member of activeMembers) {
+      for (const member of targetMembers) {
         await ctx.db.insert("actionCenterInsights", {
           userId: member.userId.toString(),
           businessId,
-          category: "deadline",
-          priority: "high",
-          status: "new",
-          title: `${entries.length} bill${entries.length > 1 ? "s" : ""} now overdue`,
-          description: `${entries.length} payable${entries.length > 1 ? "s" : ""} totaling ${totalAmount.toLocaleString()} are now past due.`,
+          category: "deadline" as const,
+          priority: priority as "critical" | "high" | "medium",
+          status: "new" as const,
+          title: `${entries.length} bill${entries.length > 1 ? "s" : ""} overdue${daysOverdue > 14 ? ` (${daysOverdue}+ days)` : ""}`,
+          description: `${entries.length} payable${entries.length > 1 ? "s" : ""} totaling ${totalAmount.toLocaleString()} are past due. The oldest is ${daysOverdue} days overdue.`,
           affectedEntities: entries.map((e) => e._id.toString()),
-          recommendedAction: "Review overdue payables and prioritize payments",
+          recommendedAction: daysOverdue > 30
+            ? "Urgent: Contact vendors immediately to avoid penalties or service disruption."
+            : "Review overdue payables and prioritize payments.",
           detectedAt: Date.now(),
+          expiresAt: Date.now() + 3 * 24 * 60 * 60 * 1000, // Refresh every 3 days via cron
+          metadata: {
+            insightType: "overdue_payables_batch",
+            count: entries.length,
+            totalAmount,
+            daysOverdue,
+            oldestDueDate,
+          },
         });
       }
     }

@@ -635,6 +635,12 @@ export const send = mutation({
       accountingEntryId: entryId,
     });
 
+    // Schedule real-time anomaly detection for this income entry
+    await ctx.scheduler.runAfter(0, internal.functions.actionCenterJobs.analyzeNewTransaction, {
+      transactionId: entryId,
+      businessId: args.businessId,
+    });
+
     return args.id;
   },
 });
@@ -1068,12 +1074,110 @@ export const markOverdue = internalMutation({
       )
       .collect();
 
+    // Group newly-overdue invoices by business for insight generation
+    const byBusiness = new Map<string, typeof sentInvoices>();
+
     for (const invoice of sentInvoices) {
       await ctx.db.patch(invoice._id, {
         status: "overdue",
         updatedAt: Date.now(),
       });
       markedCount++;
+
+      const businessKey = invoice.businessId.toString();
+      const group = byBusiness.get(businessKey) ?? [];
+      group.push(invoice);
+      byBusiness.set(businessKey, group);
+    }
+
+    // Also check EXISTING overdue invoices for aging escalation
+    const existingOverdue = await ctx.db
+      .query("sales_invoices")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("status"), "overdue"),
+          q.eq(q.field("deletedAt"), undefined)
+        )
+      )
+      .collect();
+
+    for (const invoice of existingOverdue) {
+      // Skip if already in newly-overdue batch
+      if (sentInvoices.some((i) => i._id === invoice._id)) continue;
+      const businessKey = invoice.businessId.toString();
+      const group = byBusiness.get(businessKey) ?? [];
+      group.push(invoice);
+      byBusiness.set(businessKey, group);
+    }
+
+    // Generate insights per business (with dedup)
+    const existingInsights = await ctx.db
+      .query("actionCenterInsights")
+      .withIndex("by_category", (q: any) => q.eq("category", "deadline"))
+      .collect();
+
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+
+    for (const [businessId, invoices] of byBusiness) {
+      // Dedup: skip if we created an overdue AR insight for this business within 24h
+      const isDuplicate = existingInsights.some(
+        (i) =>
+          i.businessId === businessId &&
+          i.metadata?.insightType === "overdue_receivables_batch" &&
+          i.detectedAt > oneDayAgo
+      );
+      if (isDuplicate) continue;
+
+      const totalOutstanding = invoices.reduce(
+        (sum, inv) => sum + (inv.balanceDue ?? inv.totalAmount),
+        0
+      );
+
+      // Aging: oldest overdue determines priority
+      const oldestDueDate = invoices
+        .map((inv) => inv.dueDate)
+        .filter(Boolean)
+        .sort()[0] || today;
+      const daysOverdue = Math.floor(
+        (Date.now() - new Date(oldestDueDate).getTime()) / (24 * 60 * 60 * 1000)
+      );
+      const priority = daysOverdue > 30 ? "critical" : daysOverdue > 14 ? "high" : "medium";
+
+      // Get admin/owner members
+      const firstInvoice = invoices[0];
+      const members = await ctx.db
+        .query("business_memberships")
+        .withIndex("by_businessId", (q: any) => q.eq("businessId", firstInvoice.businessId))
+        .collect();
+
+      const targetMembers = members.filter(
+        (m: any) => m.status === "active" && ["owner", "finance_admin", "admin"].includes(m.role)
+      );
+
+      for (const member of targetMembers) {
+        await ctx.db.insert("actionCenterInsights", {
+          userId: member.userId.toString(),
+          businessId,
+          category: "deadline" as const,
+          priority: priority as "critical" | "high" | "medium",
+          status: "new" as const,
+          title: `${invoices.length} invoice${invoices.length > 1 ? "s" : ""} overdue${daysOverdue > 14 ? ` (${daysOverdue}+ days)` : ""}`,
+          description: `${invoices.length} unpaid invoice${invoices.length > 1 ? "s" : ""} totaling ${totalOutstanding.toLocaleString()} are overdue. Follow up with customers to collect payment.`,
+          affectedEntities: invoices.map((inv) => inv._id.toString()),
+          recommendedAction: daysOverdue > 30
+            ? "Urgent: Send final payment reminders and consider escalation for invoices 30+ days overdue."
+            : "Send payment reminders to customers with overdue invoices.",
+          detectedAt: Date.now(),
+          expiresAt: Date.now() + 3 * 24 * 60 * 60 * 1000, // Refresh every 3 days via cron
+          metadata: {
+            insightType: "overdue_receivables_batch",
+            count: invoices.length,
+            totalOutstanding,
+            daysOverdue,
+            oldestDueDate,
+          },
+        });
+      }
     }
 
     console.log(`[markOverdue] Marked ${markedCount} invoices as overdue`);

@@ -211,8 +211,9 @@ export const getPendingCount = query({
       .withIndex("by_business_priority", (q) => q.eq("businessId", business._id.toString()))
       .collect();
 
-    // Filter to new status only
-    const newInsights = insights.filter((i) => i.status === "new");
+    // Filter to current user's new insights only (consistent with list query)
+    const userIdStr = user._id.toString();
+    const newInsights = insights.filter((i) => i.status === "new" && i.userId === userIdStr);
 
     // Filter out expired
     const now = Date.now();
@@ -560,6 +561,65 @@ export const deleteExpired = internalMutation({
     }
 
     return { deleted: deletedCount };
+  },
+});
+
+/**
+ * One-time cleanup: Deduplicate existing insights.
+ *
+ * Groups by (userId + category + metadata.transactionId) for anomaly insights,
+ * and by (userId + category + title) for all others.
+ * Keeps the oldest insight per group, deletes the rest.
+ *
+ * Run via Convex dashboard: npx convex run functions/actionCenterInsights:deduplicateExisting
+ */
+export const deduplicateExisting = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const allInsights = await ctx.db
+      .query("actionCenterInsights")
+      .collect();
+
+    // Build dedup key for each insight
+    const groups: Record<string, typeof allInsights> = {};
+
+    for (const insight of allInsights) {
+      let key: string;
+      if (insight.category === "anomaly" && (insight.metadata as any)?.transactionId) {
+        // For anomaly insights: dedup by user + transactionId
+        key = `${insight.userId}::anomaly::${(insight.metadata as any).transactionId}`;
+      } else {
+        // For other insights: dedup by user + category + title
+        key = `${insight.userId}::${insight.category}::${insight.title}`;
+      }
+
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(insight);
+    }
+
+    let deletedCount = 0;
+
+    for (const [, insights] of Object.entries(groups)) {
+      if (insights.length <= 1) continue;
+
+      // Sort by detectedAt ascending (keep oldest)
+      insights.sort((a, b) => a.detectedAt - b.detectedAt);
+
+      // Delete all but the first (oldest)
+      for (let i = 1; i < insights.length; i++) {
+        await ctx.db.delete(insights[i]._id);
+        deletedCount++;
+      }
+    }
+
+    console.log(
+      `[ActionCenterInsights] Deduplication complete: deleted ${deletedCount} duplicates ` +
+      `from ${allInsights.length} total insights (${allInsights.length - deletedCount} remaining)`
+    );
+
+    return { deleted: deletedCount, remaining: allInsights.length - deletedCount };
   },
 });
 

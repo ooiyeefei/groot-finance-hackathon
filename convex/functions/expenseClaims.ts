@@ -1192,6 +1192,12 @@ export const updateStatus = mutation({
           // Link the accounting entry back to the expense claim
           updateData.accountingEntryId = accountingEntryId;
 
+          // Schedule real-time anomaly detection for this expense
+          await ctx.scheduler.runAfter(0, internal.functions.actionCenterJobs.analyzeNewTransaction, {
+            transactionId: accountingEntryId,
+            businessId: claim.businessId,
+          });
+
           console.log(`[Convex] Created accounting entry ${accountingEntryId} for approved expense claim ${claim._id} with ${lineItems.length} line items`);
 
           // ============================================

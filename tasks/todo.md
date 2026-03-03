@@ -1,42 +1,41 @@
-# Standardize Trial → Pro Plan + Lock Screen
+# AI Action Center — Duplicate Insights Bug Fix
 
-**Goal**: Remove fake "trial" plan concept. Trial is a STATUS (`trialing`), not a PLAN. All new signups get Pro plan with 14-day free trial. After trial ends, account locks until they choose a plan.
+## Problem
+AI Action Center shows duplicate insights (same anomaly card 3x), stale insights that don't refresh, and inflated badge counts.
 
----
+## Root Cause
+`runAnomalyDetection` in `actionCenterJobs.ts` used `ctx.db.insert()` directly — **bypassing all deduplication checks**. Every 4h cron run re-detected the same anomalous transactions and created new insights. 82% of insights in production were duplicates (19/23).
 
-## Phase 1: Migration + Start-Trial Route
-- [ ] 1a. Write one-time Convex migration: `planName: 'trial'/'free'/null` → `planName: 'pro'` for existing trialing businesses
-- [ ] 1b. Update `start-trial/route.ts`: subscribe to **Pro** price, set `planName: 'pro'`
+Secondary: `getPendingCount` didn't filter by userId, inflating the badge.
 
-## Phase 2: Remove 'trial' as PlanKey
-- [ ] 2a. `catalog.ts`: Remove `TRIAL_PLAN`, remove `'trial'` from `PlanKey` type, update `normalizePlanKey()`
-- [ ] 2b. `mcp-permissions.ts`: Update `PlanKey` type, replace `'trial'` references
+## Changes
 
-## Phase 3: Update API Routes
-- [ ] 3a. `subscription/route.ts`: Replace `planKey === 'trial'` → `subscriptionStatus === 'trialing'`
-- [ ] 3b. `checkout/route.ts`: Replace `planName !== 'trial'` → status-based
-- [ ] 3c. `usage/route.ts`: Default to `'starter'` not `'trial'`
-- [ ] 3d. `trial-status/route.ts`: Replace `planName === 'trial'` → status check
+### 1. Fix anomaly detection dedup (`convex/functions/actionCenterJobs.ts`)
+- [x] Added 7-day transactionId-based dedup check before inserting anomaly insights
+- [x] Pre-fetches existing anomaly insights once (batch query, not per-transaction)
+- [x] Matches dedup pattern used by all other detectors (vendor, cashflow, deadline)
 
-## Phase 4: Update Convex Functions
-- [ ] 4a. `aiMessageUsage.ts`, `salesInvoiceUsage.ts`, `einvoiceUsage.ts`: Remove `case "trial":`
-- [ ] 4b. `businesses.ts`: Replace `planName === "trial"` → status-based logic
+### 2. Fix getPendingCount userId filter (`convex/functions/actionCenterInsights.ts`)
+- [x] Added `i.userId === userIdStr` filter to match the `list` query behavior
+- [x] Badge count now reflects current user's insights only
 
-## Phase 5: Update Components
-- [ ] 5a. `subscription-card.tsx`: `plan.name === 'trial'` → `subscription.status === 'trialing'`
-- [ ] 5b. `upgrade-banner.tsx`: Same
-- [ ] 5c. `pricing-table.tsx`: Remove 'trial' from plan ordering
-- [ ] 5d. `billing-settings-content.tsx` + `billing/page.tsx`: Same
+### 3. Deduplication cleanup (`convex/functions/actionCenterInsights.ts`)
+- [x] Added `deduplicateExisting` internalMutation
+- [x] Ran in production: deleted 19 duplicates, 4 remaining
+- [x] Groups by (userId + category + transactionId) for anomalies, (userId + category + title) for others
 
-## Phase 6: Update Onboarding
-- [ ] 6a. `business-initialization.service.ts`: Remove `plan === 'trial'` mapping
-- [ ] 6b. `use-plan-selection.ts`: Ensure start-trial triggers for signups
+### 4. Event-driven insight generation (`convex/functions/actionCenterJobs.ts` + `accountingEntries.ts`)
+- [x] Added `analyzeNewTransaction` internalMutation — lightweight single-transaction anomaly check
+- [x] Hooked into `accountingEntries.create` via `ctx.scheduler.runAfter(0, ...)`
+- [x] Anomalies now surface immediately when transactions are created, not 4h later
+- [x] Only runs for expenses, only for users with admin/owner roles
 
-## Phase 7: Lock Screen (New)
-- [ ] 7a. Create `subscription-lock-overlay.tsx` — blur + upgrade prompt (default Pro, can pick Starter)
-- [ ] 7b. Add to `[locale]/layout.tsx`
-- [ ] 7c. Trigger on `status === 'paused'` OR trial expired
+### 5. Build & Deploy
+- [x] `next build` passes
+- [x] `convex deploy --yes` successful
+- [x] Dedup cleanup ran in production
 
-## Phase 8: Deploy & Verify
-- [ ] 8a. `npx convex deploy --yes`
-- [ ] 8b. `npm run build` passes
+## Review
+- Anomaly detection was the ONLY detector without dedup — all others (categorization, cashflow, vendor concentration, vendor spending, vendor risk, deadline, cash balance, duplicate txn) had proper checks
+- The `internalCreate` mutation in `actionCenterInsights.ts` has a 24h dedup, but was never called by the detection algorithms — they all use `ctx.db.insert()` directly. This is a known architectural debt.
+- Installed missing `jszip` and `heic2any` dependencies (pre-existing build failures unrelated to this change)

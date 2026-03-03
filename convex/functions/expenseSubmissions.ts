@@ -793,6 +793,12 @@ async function approveOneClaim(
     updatedAt: now,
   });
 
+  // Schedule real-time anomaly detection for this expense
+  await ctx.scheduler.runAfter(0, internal.functions.actionCenterJobs.analyzeNewTransaction, {
+    transactionId: accountingEntryId,
+    businessId: claim.businessId,
+  });
+
   // Insert normalized line items
   if (lineItems.length > 0) {
     for (const item of lineItems) {
