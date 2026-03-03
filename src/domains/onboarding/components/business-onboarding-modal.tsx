@@ -450,7 +450,7 @@ export default function BusinessOnboardingModal({
                    via CountryDeclarationBanner in billing settings. */}
 
                 {/* PDPA Consent Checkbox */}
-                <div className="space-y-2">
+                <div className="space-y-2 max-w-[66%]">
                   <div className="flex items-start gap-3">
                     <Checkbox
                       id="pdpaConsent"
