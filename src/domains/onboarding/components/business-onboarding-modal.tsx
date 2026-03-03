@@ -33,6 +33,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -115,6 +116,8 @@ export default function BusinessOnboardingModal({
 
   // Local state for step 1 form
   const [homeCurrency, setHomeCurrency] = useState('MYR')
+  const [consentChecked, setConsentChecked] = useState(false)
+  const [consentError, setConsentError] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
 
@@ -149,6 +152,8 @@ export default function BusinessOnboardingModal({
     if (!isOpen) {
       resetWizard()
       setHomeCurrency('MYR')
+      setConsentChecked(false)
+      setConsentError(false)
       setSubmitError(null)
       setBrewingMessageIndex(0)
     }
@@ -444,6 +449,41 @@ export default function BusinessOnboardingModal({
                    Keeps trial signup low-friction. BRN + country verification gates paid activation
                    via CountryDeclarationBanner in billing settings. */}
 
+                {/* PDPA Consent Checkbox */}
+                <div className="space-y-2">
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="pdpaConsent"
+                      checked={consentChecked}
+                      onCheckedChange={(checked) => {
+                        setConsentChecked(checked === true)
+                        if (checked) setConsentError(false)
+                      }}
+                      className="mt-0.5"
+                    />
+                    <label
+                      htmlFor="pdpaConsent"
+                      className="text-sm text-foreground leading-snug cursor-pointer select-none"
+                    >
+                      I agree to the{' '}
+                      <a
+                        href="https://hellogroot.com/privacy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        Privacy Policy
+                      </a>{' '}
+                      and consent to processing of my personal data as described
+                    </label>
+                  </div>
+                  {consentError && (
+                    <p className="text-destructive text-sm">
+                      You must accept the Privacy Policy to continue
+                    </p>
+                  )}
+                </div>
+
                 {/* Spacer to push navigation to bottom */}
                 <div className="flex-1" />
 
@@ -451,7 +491,26 @@ export default function BusinessOnboardingModal({
                 <div className="flex justify-end pt-4">
                   <Button
                     variant="primary"
-                    onClick={goToNextStep}
+                    onClick={() => {
+                      if (!consentChecked) {
+                        setConsentError(true)
+                        return
+                      }
+                      setConsentError(false)
+                      // Fire-and-forget consent record — non-blocking
+                      fetch('/api/v1/consent/record', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          policyType: 'privacy_policy',
+                          policyVersion: process.env.NEXT_PUBLIC_CURRENT_POLICY_VERSION || '2026-03-03',
+                          source: 'onboarding',
+                        }),
+                      }).catch(() => {
+                        // Swallow errors — consent overlay is the backup
+                      })
+                      goToNextStep()
+                    }}
                     disabled={!wizardData.businessName?.trim()}
                   >
                     Continue
