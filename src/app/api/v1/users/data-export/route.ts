@@ -11,12 +11,18 @@ import { NextResponse } from 'next/server'
 import { ConvexHttpClient } from 'convex/browser'
 import { api } from '@/convex/_generated/api'
 
-function getConvexClient(): ConvexHttpClient {
+async function getAuthenticatedConvexClient() {
   const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL
   if (!convexUrl) {
     throw new Error('NEXT_PUBLIC_CONVEX_URL is not configured')
   }
-  return new ConvexHttpClient(convexUrl)
+  const convex = new ConvexHttpClient(convexUrl)
+  const clerkAuth = await auth()
+  const token = await clerkAuth.getToken({ template: 'convex' })
+  if (token) {
+    convex.setAuth(token)
+  }
+  return convex
 }
 
 export async function GET() {
@@ -30,7 +36,7 @@ export async function GET() {
       )
     }
 
-    const convex = getConvexClient()
+    const convex = await getAuthenticatedConvexClient()
 
     // Get user profile
     const user = await convex.query(api.functions.users.getByClerkId, {
