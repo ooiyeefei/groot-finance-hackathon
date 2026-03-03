@@ -1,7 +1,10 @@
 /**
  * SES Email Verification Utility
  *
- * Sends branded Groot verification emails via SES custom templates.
+ * Sends verification emails via SES. Uses branded custom template when
+ * SES production access is available, falls back to default VerifyEmailIdentity
+ * in sandbox mode.
+ *
  * Used by:
  * - Manual "Verify Email" button in business settings
  * - Auto-verification after team invitation acceptance
@@ -9,8 +12,8 @@
 
 import {
   SESClient,
+  VerifyEmailIdentityCommand,
   SendCustomVerificationEmailCommand,
-  CreateCustomVerificationEmailTemplateCommand,
   GetIdentityVerificationAttributesCommand,
 } from '@aws-sdk/client-ses'
 import { fromWebToken } from '@aws-sdk/credential-providers'
@@ -20,48 +23,9 @@ import type { AwsCredentialIdentityProvider } from '@smithy/types'
 
 const AWS_REGION = process.env.AWS_REGION || 'us-west-2'
 const AWS_ROLE_ARN = process.env.AWS_ROLE_ARN
-const APP_URL = process.env.APP_URL || 'https://finance.hellogroot.com'
 
+// Template name — must be pre-created via CLI (SES sandbox can't create templates programmatically)
 const TEMPLATE_NAME = 'GrootEmailVerification'
-const FROM_EMAIL = 'noreply@notifications.hellogroot.com'
-
-// ===== BRANDED EMAIL TEMPLATE =====
-
-const VERIFICATION_EMAIL_HTML = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 20px;">
-<tr><td align="center">
-<table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-  <tr><td style="padding:32px 32px 24px;text-align:center;">
-    <div style="display:inline-block;background-color:#2563eb;color:#ffffff;font-size:20px;font-weight:700;padding:8px 16px;border-radius:8px;">G</div>
-    <h1 style="margin:16px 0 0;font-size:20px;font-weight:600;color:#18181b;">Groot Finance</h1>
-  </td></tr>
-  <tr><td style="padding:0 32px 32px;">
-    <h2 style="margin:0 0 8px;font-size:18px;font-weight:600;color:#18181b;">Verify your email</h2>
-    <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#52525b;">
-      Click the link below to verify your email address for e-invoice email forwarding.
-      This enables reliable delivery of e-invoice documents to your inbox.
-    </p>
-    <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="background-color:#2563eb;border-radius:8px;padding:12px 32px;">
-      <span style="color:#ffffff;font-size:14px;font-weight:600;">{{VerificationUrl}}</span>
-    </td></tr></table>
-    <p style="margin:24px 0 0;font-size:12px;line-height:1.5;color:#a1a1aa;">
-      If you didn't request this verification, you can safely ignore this email.
-      This link will expire in 24 hours.
-    </p>
-  </td></tr>
-  <tr><td style="padding:16px 32px;border-top:1px solid #e4e4e7;text-align:center;">
-    <p style="margin:0;font-size:12px;color:#a1a1aa;">
-      &copy; Groot Finance &mdash; Financial co-pilot for Southeast Asian SMEs
-    </p>
-  </td></tr>
-</table>
-</td></tr>
-</table>
-</body>
-</html>`
 
 // ===== SES CLIENT =====
 
@@ -89,47 +53,40 @@ function getSESClient(): SESClient {
   return new SESClient(config)
 }
 
-// ===== TEMPLATE MANAGEMENT =====
+// ===== PUBLIC API =====
 
-let templateEnsured = false
+/**
+ * Send a verification email via SES.
+ * Tries branded custom template first (requires SES production access),
+ * falls back to default VerifyEmailIdentity (works in sandbox).
+ */
+export async function sendBrandedVerificationEmail(email: string): Promise<void> {
+  const ses = getSESClient()
 
-async function ensureVerificationTemplate(ses: SESClient): Promise<void> {
-  if (templateEnsured) return
+  // Try branded template first (requires SES production access)
   try {
-    await ses.send(new CreateCustomVerificationEmailTemplateCommand({
+    await ses.send(new SendCustomVerificationEmailCommand({
+      EmailAddress: email,
       TemplateName: TEMPLATE_NAME,
-      FromEmailAddress: FROM_EMAIL,
-      TemplateSubject: 'Verify your email — Groot Finance',
-      TemplateContent: VERIFICATION_EMAIL_HTML,
-      SuccessRedirectionURL: `${APP_URL}/en/business-settings?email_verified=success`,
-      FailureRedirectionURL: `${APP_URL}/en/business-settings?email_verified=failed`,
     }))
-    console.log('[SES Verification] Created custom verification template')
+    console.log(`[SES Verification] Sent branded verification to ${email}`)
+    return
   } catch (error: unknown) {
     const err = error as { name?: string }
-    if (err.name === 'CustomVerificationEmailTemplateAlreadyExistsException') {
-      // no-op
+    // Fall back to default if production access not granted or template missing
+    if (
+      err.name === 'ProductionAccessNotGranted' ||
+      err.name === 'CustomVerificationEmailTemplateDoesNotExistException'
+    ) {
+      console.log(`[SES Verification] Branded template unavailable (${err.name}), using default`)
     } else {
       throw error
     }
   }
-  templateEnsured = true
-}
 
-// ===== PUBLIC API =====
-
-/**
- * Send a branded Groot verification email via SES custom template.
- * Idempotent — safe to call even if a verification is already pending.
- */
-export async function sendBrandedVerificationEmail(email: string): Promise<void> {
-  const ses = getSESClient()
-  await ensureVerificationTemplate(ses)
-  await ses.send(new SendCustomVerificationEmailCommand({
-    EmailAddress: email,
-    TemplateName: TEMPLATE_NAME,
-  }))
-  console.log(`[SES Verification] Sent branded verification to ${email}`)
+  // Fallback: default AWS verification email (works in sandbox)
+  await ses.send(new VerifyEmailIdentityCommand({ EmailAddress: email }))
+  console.log(`[SES Verification] Sent default verification to ${email}`)
 }
 
 /**
