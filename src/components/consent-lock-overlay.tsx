@@ -65,7 +65,7 @@ export function ConsentLockOverlay() {
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div
         className="fixed inset-0"
         style={{
@@ -75,7 +75,7 @@ export function ConsentLockOverlay() {
         }}
       />
 
-      <div className="relative z-40 w-full max-w-md rounded-lg border border-border bg-card p-8 text-center shadow-2xl">
+      <div className="relative z-[60] w-full max-w-md rounded-lg border border-border bg-card p-8 text-center shadow-2xl">
         <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
           <Shield className="h-8 w-8 text-primary" />
         </div>
