@@ -285,7 +285,7 @@ export default function BusinessOnboardingModal({
       />
 
       {/* Modal Content */}
-      <div className={cn("relative w-full min-h-[85vh] max-h-[96vh] overflow-hidden m-4 flex flex-col", mode === 'page' ? 'max-w-3xl' : 'max-w-[699px]')}>
+      <div className={cn("relative w-full min-h-[85vh] max-h-[96vh] overflow-hidden m-4 flex flex-col", mode === 'page' ? 'max-w-3xl' : 'max-w-[468px]')}>
         <Card className="bg-card border-border shadow-2xl flex flex-col h-full">
           {/* Header with close button */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
@@ -450,7 +450,7 @@ export default function BusinessOnboardingModal({
                    via CountryDeclarationBanner in billing settings. */}
 
                 {/* PDPA Consent Checkbox */}
-                <div className="space-y-2 max-w-[66%]">
+                <div className="space-y-2">
                   <div className="flex items-start gap-3">
                     <Checkbox
                       id="pdpaConsent"
