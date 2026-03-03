@@ -1,17 +1,19 @@
 'use client'
 
 import { useState } from 'react'
+import { useUser } from '@clerk/nextjs'
 import { useConsent } from '@/domains/compliance/hooks/use-consent'
 import { Shield } from 'lucide-react'
 
 const CURRENT_POLICY_VERSION = process.env.NEXT_PUBLIC_CURRENT_POLICY_VERSION || '2026-03-03'
 
 export function ConsentBanner() {
+  const { isSignedIn } = useUser()
   const { hasConsent, isLoading } = useConsent()
   const [isAccepting, setIsAccepting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  if (isLoading || hasConsent) return null
+  if (!isSignedIn || isLoading || hasConsent) return null
 
   async function handleAccept() {
     setIsAccepting(true)
