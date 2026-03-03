@@ -232,7 +232,7 @@ crons.daily(
 crons.daily(
   "cleanup-expired-conversations",
   { hourUTC: 3, minuteUTC: 30 },
-  internal.functions.conversations.deleteExpired
+  internal.functions.retentionJobs.cleanupExpiredConversations
 );
 
 /**
@@ -260,6 +260,19 @@ crons.daily(
   "cleanup-old-export-history",
   { hourUTC: 4, minuteUTC: 30 },
   internal.functions.exportHistory.deleteExpired
+);
+
+/**
+ * User Hard-Delete (PDPA retention)
+ *
+ * Runs daily at 5:00 AM UTC to permanently delete users whose
+ * soft-delete retention (90 days) has expired.
+ * Deletes from: Clerk (identity), Qdrant (Mem0 memories), Convex (records).
+ */
+crons.daily(
+  "hard-delete-expired-users",
+  { hourUTC: 5, minuteUTC: 0 },
+  internal.functions.retentionJobs.hardDeleteExpiredUsers
 );
 
 export default crons;

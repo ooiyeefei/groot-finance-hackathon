@@ -9,7 +9,12 @@
  */
 
 import { v } from "convex/values";
-import { query, mutation, internalMutation } from "../_generated/server";
+import {
+  query,
+  mutation,
+  internalMutation,
+  internalQuery,
+} from "../_generated/server";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 
 // ============================================
@@ -906,6 +911,86 @@ export const deleteUser = internalMutation({
 
     // Delete user
     await ctx.db.delete(user._id);
+  },
+});
+
+// ============================================
+// INTERNAL ACTIONS (PDPA data retention cleanup)
+// ============================================
+
+/**
+ * Find soft-deleted users whose retention period has expired
+ * Returns Clerk user IDs for hard deletion
+ */
+export const findExpiredSoftDeletedUsers = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const RETENTION_DAYS = 90; // Active + 90 days after deactivation
+    const cutoff = Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+    // Find users that were soft-deleted (clerkUserId cleared, email anonymized)
+    const allUsers = await ctx.db.query("users").collect();
+
+    const expired = allUsers.filter(
+      (u) =>
+        !u.clerkUserId &&
+        u.email?.startsWith("deleted_") &&
+        u.updatedAt &&
+        u.updatedAt < cutoff
+    );
+
+    // Extract the original Clerk IDs from anonymized emails
+    // Format: deleted_{clerkUserId}@deleted.local
+    return expired.map((u) => ({
+      convexId: u._id,
+      clerkUserId: u.email?.replace("deleted_", "").replace("@deleted.local", "") || "",
+    }));
+  },
+});
+
+/**
+ * Hard-delete a user and all related data from Convex (PDPA compliance)
+ *
+ * Called by the hardDeleteExpiredUsers action after external cleanup.
+ * Deletes: user record, memberships, conversations, messages
+ */
+export const hardDeleteUserRecords = internalMutation({
+  args: { convexUserId: v.string() },
+  handler: async (ctx, args) => {
+    const userId = args.convexUserId as unknown as import("../_generated/dataModel").Id<"users">;
+    const user = await ctx.db.get(userId);
+    if (!user) return { deleted: false };
+
+    // Delete all memberships
+    const memberships = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
+    for (const m of memberships) {
+      await ctx.db.delete(m._id);
+    }
+
+    // Delete all conversations and messages
+    const conversations = await ctx.db
+      .query("conversations")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
+    for (const conv of conversations) {
+      const messages = await ctx.db
+        .query("messages")
+        .withIndex("by_conversationId", (q) =>
+          q.eq("conversationId", conv._id)
+        )
+        .collect();
+      for (const msg of messages) {
+        await ctx.db.delete(msg._id);
+      }
+      await ctx.db.delete(conv._id);
+    }
+
+    // Delete user record
+    await ctx.db.delete(userId);
+    return { deleted: true };
   },
 });
 

@@ -9,7 +9,12 @@
  */
 
 import { v } from "convex/values";
-import { query, mutation, internalMutation } from "../_generated/server";
+import {
+  query,
+  mutation,
+  internalMutation,
+  internalQuery,
+} from "../_generated/server";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 
 // Message roles
@@ -666,20 +671,17 @@ const CHAT_RETENTION_DAYS = 730; // 2 years
 const CHAT_CLEANUP_BATCH_SIZE = 500;
 
 /**
- * Delete expired conversations and their messages (PDPA compliance)
+ * Delete expired conversation records from Convex (PDPA compliance)
  *
- * Called daily by cron at 3:30 AM UTC.
- * Deletes conversations where lastMessageAt (or _creationTime for empty
- * conversations) is older than 2 years (730 days).
- * All associated messages are cascade-deleted first.
+ * DB-only mutation — called by cleanupExpired action.
+ * Returns affected userIds so the action can clean up Mem0 memories.
  */
-export const deleteExpired = internalMutation({
+export const deleteExpiredRecords = internalMutation({
   args: {},
   handler: async (ctx) => {
     const cutoff =
       Date.now() - CHAT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
-    // Query conversations — use all and filter since we need the fallback logic
     const conversations = await ctx.db
       .query("conversations")
       .collect();
@@ -689,15 +691,14 @@ export const deleteExpired = internalMutation({
       return age < cutoff;
     });
 
-    // Limit to batch size to avoid mutation timeout
     const batch = expired.slice(0, CHAT_CLEANUP_BATCH_SIZE);
 
     let deleted = 0;
     let messagesDeleted = 0;
+    const affectedUserIds = new Set<string>();
 
     for (const conv of batch) {
       try {
-        // Delete all messages belonging to this conversation first
         const messages = await ctx.db
           .query("messages")
           .withIndex("by_conversationId", (q) =>
@@ -710,9 +711,16 @@ export const deleteExpired = internalMutation({
           messagesDeleted++;
         }
 
-        // Delete the conversation
         await ctx.db.delete(conv._id);
         deleted++;
+
+        // Track affected users for Mem0 cleanup
+        if (conv.userId) {
+          const user = await ctx.db.get(conv.userId);
+          if (user?.clerkUserId) {
+            affectedUserIds.add(user.clerkUserId);
+          }
+        }
       } catch (error) {
         console.error(
           `[Retention Cleanup] Failed to delete conversation ${conv._id}:`,
@@ -732,6 +740,34 @@ export const deleteExpired = internalMutation({
       })
     );
 
-    return { deleted, messagesDeleted };
+    return {
+      deleted,
+      messagesDeleted,
+      affectedUserIds: [...affectedUserIds],
+    };
   },
 });
+
+/**
+ * Check if a user has any remaining conversations
+ */
+export const hasRemainingConversations = internalQuery({
+  args: { clerkUserId: v.string() },
+  handler: async (ctx, args) => {
+    // Find the Convex user by Clerk ID
+    const users = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("clerkUserId"), args.clerkUserId))
+      .take(1);
+
+    if (users.length === 0) return false;
+
+    const remaining = await ctx.db
+      .query("conversations")
+      .withIndex("by_userId", (q) => q.eq("userId", users[0]._id))
+      .take(1);
+
+    return remaining.length > 0;
+  },
+});
+
