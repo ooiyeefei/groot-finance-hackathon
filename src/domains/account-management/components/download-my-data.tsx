@@ -9,7 +9,7 @@
 import { useState } from 'react'
 import { useQuery } from 'convex/react'
 import { api } from '@/convex/_generated/api'
-import { Download, Loader2, FileArchive, AlertCircle } from 'lucide-react'
+import { Download, Loader2, AlertCircle } from 'lucide-react'
 import { generateFlatExport } from '@/domains/exports/lib/export-engine'
 
 // Field definitions for each module's CSV export (simplified Generic format)
@@ -146,44 +146,40 @@ export default function DownloadMyData() {
   }, 0) || 0
 
   return (
-    <div className="border border-border rounded-lg p-4 bg-muted/30">
-      <div className="flex items-start gap-3">
-        <FileArchive className="w-5 h-5 text-muted-foreground mt-0.5 flex-shrink-0" />
-        <div className="flex-1">
-          <h4 className="text-sm font-medium text-foreground">Download My Data</h4>
-          <p className="text-xs text-muted-foreground mt-1">
-            Export all your personal data as a ZIP file containing CSV spreadsheets.
-            {myData && totalRecords > 0 && (
-              <span className="ml-1">
-                ({totalRecords} records across {myData.businesses.length} business{myData.businesses.length !== 1 ? 'es' : ''})
-              </span>
-            )}
-          </p>
-          {error && (
-            <div className="flex items-center gap-1.5 mt-2 text-xs text-destructive">
-              <AlertCircle className="w-3.5 h-3.5" />
-              {error}
-            </div>
-          )}
+    <div>
+      {myData && totalRecords > 0 && (
+        <p className="text-sm text-muted-foreground mb-3">
+          {totalRecords} records across {myData.businesses.length} business{myData.businesses.length !== 1 ? 'es' : ''} — includes profile, expense claims, invoices, leave requests, and accounting entries.
+        </p>
+      )}
+      {myData && totalRecords === 0 && (
+        <p className="text-sm text-muted-foreground mb-3">
+          Your profile data will be exported. No business records found.
+        </p>
+      )}
+      {error && (
+        <div className="flex items-center gap-1.5 mb-3 text-sm text-destructive">
+          <AlertCircle className="w-4 h-4" />
+          {error}
         </div>
-        <button
-          onClick={handleDownload}
-          disabled={isExporting || !hasData}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {isExporting ? (
-            <>
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              Exporting...
-            </>
-          ) : (
-            <>
-              <Download className="w-3.5 h-3.5" />
-              Download
-            </>
-          )}
-        </button>
-      </div>
+      )}
+      <button
+        onClick={handleDownload}
+        disabled={isExporting || !hasData}
+        className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      >
+        {isExporting ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Generating export...
+          </>
+        ) : (
+          <>
+            <Download className="w-4 h-4" />
+            Download My Data
+          </>
+        )}
+      </button>
     </div>
   )
 }
