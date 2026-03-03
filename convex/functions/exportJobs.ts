@@ -973,24 +973,27 @@ async function enrichInvoiceRecords(
 
       if (isAP) {
         // AP invoice (from invoices table) — normalize from extractedData
+        // OCR stores fields in snake_case (vendor_name, total_amount, etc.)
         const data = record.extractedData || {};
-        const lineItems = (data.lineItems || []).map(
+        const summary = data.document_summary || {};
+        const lineItems = (data.line_items || data.lineItems || []).map(
           (item: any, idx: number) => ({
             lineOrder: idx + 1,
-            description: item.description || item.itemDescription || "",
+            description: item.description || item.itemDescription || item.item_description || "",
             quantity: item.quantity || 1,
-            unitPrice: item.unitPrice || 0,
-            totalAmount: item.totalAmount || item.amount || 0,
+            unitPrice: item.unitPrice || item.unit_price || 0,
+            totalAmount: item.totalAmount || item.total_amount || item.amount || 0,
             currency: item.currency || data.currency || "",
-            taxRate: item.taxRate || 0,
-            taxAmount: item.taxAmount || 0,
-            itemCode: item.itemCode || "",
-            unitMeasurement: item.unitMeasurement || "",
+            taxRate: item.taxRate || item.tax_rate || 0,
+            taxAmount: item.taxAmount || item.tax_amount || 0,
+            itemCode: item.itemCode || item.item_code || "",
+            unitMeasurement: item.unitMeasurement || item.unit_measurement || "",
           })
         );
 
-        // Try to get vendor info
-        let entityName = data.vendorName || data.supplierName || "";
+        // Try to get vendor info (snake_case from OCR, camelCase fallback for legacy)
+        let entityName = data.vendor_name || data.vendorName
+          || summary.vendor_name?.value || data.supplierName || data.supplier_name || "";
         let entityCode = "";
         if (!entityName) {
           // Check if there's an accounting entry with vendor
@@ -1004,19 +1007,26 @@ async function enrichInvoiceRecords(
           }
         }
 
+        const invoiceNumber = data.document_number || data.invoice_number || data.invoiceNumber
+          || summary.document_number?.value || "";
+        const invoiceDate = data.transaction_date || data.invoice_date || data.invoiceDate
+          || summary.transaction_date?.value || "";
+        const totalAmount = data.total_amount || data.totalAmount || 0;
+        const totalTax = data.total_tax || data.totalTax || data.tax_amount || data.taxAmount || 0;
+
         return {
           invoiceType: "AP",
-          invoiceNumber: data.invoiceNumber || "",
-          invoiceDate: data.invoiceDate || "",
-          dueDate: data.dueDate || "",
+          invoiceNumber,
+          invoiceDate,
+          dueDate: data.due_date || data.dueDate || "",
           entityName,
           entityCode,
           description: data.description || "",
-          subtotal: data.subtotal || data.totalAmount || 0,
-          totalTax: data.totalTax || data.taxAmount || 0,
-          totalAmount: data.totalAmount || 0,
+          subtotal: data.subtotal || data.sub_total || totalAmount,
+          totalTax,
+          totalAmount,
           currency: data.currency || "",
-          exchangeRate: data.exchangeRate || 1,
+          exchangeRate: data.exchange_rate || data.exchangeRate || 1,
           status: record.status,
           lineItems,
         };
