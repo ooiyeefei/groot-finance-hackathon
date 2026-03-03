@@ -126,7 +126,9 @@ This SOP covers both roles with distinct notification procedures for each.
 | **CloudWatch Alarms — Certificate expiry** | Active | SNS → Email (`finanseal-cert-expiry-alerts`) | Digital signature certificate nearing expiration (30 days) |
 | **Sentry error tracking** | Active | Telegram bot, Discord webhook | Application errors, unhandled exceptions (error/fatal severity only). PII scrubbing active — sensitive data redacted from error reports. |
 | **Clerk authentication** | Active | Webhook → user sync | User creation, update, deletion events. Session management across `*.hellogroot.com`. |
-| **Clerk suspicious activity** | Not configured | — | Login anomalies, brute force detection (built-in capability, not yet enabled) |
+| **Clerk bot sign-up protection** | Active | CAPTCHA challenge (Smart/Cloudflare) | Bot signups, automated account creation |
+| **Clerk account lockout** | Active | Account locked after 9 failed attempts (13-hour lockout) | Brute force login attempts, credential stuffing |
+| **Clerk block disposable emails** | Active | Sign-up blocked | Temporary/disposable email address signups |
 | **AWS GuardDuty** | Not configured | — | Network-level threat detection, unauthorised API calls, malicious IP access |
 | **User reports** | Active | admin@hellogroot.com | User-reported security concerns, suspicious activity |
 | **CloudWatch Logs (all Lambdas)** | Active | CloudWatch console (30-day retention) | Application-level logging for document processor, digital signature, MCP server, e-invoice, email workflows |
@@ -138,7 +140,7 @@ This SOP covers both roles with distinct notification procedures for each.
 ### Known Gaps & Planned Improvements
 
 - **AWS GuardDuty**: Recommended for network-level threat detection. Enabling is a separate engineering task.
-- **Clerk suspicious activity monitoring**: Built-in capability available but not configured. Should be enabled.
+- **Clerk email subaddress blocking**: Intentionally left OFF — subaddresses (`+test1`, `+manager`) used for test accounts.
 - **Dedicated security email**: `security@hellogroot.com` or `dpo@hellogroot.com` should be created for external breach reports.
 - **CloudWatch log retention**: Currently 30 days. Consider extending to 90 days for compliance evidence.
 
