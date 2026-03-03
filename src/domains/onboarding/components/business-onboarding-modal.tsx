@@ -491,25 +491,30 @@ export default function BusinessOnboardingModal({
                 <div className="flex justify-end pt-4">
                   <Button
                     variant="primary"
-                    onClick={() => {
+                    onClick={async () => {
                       if (!consentChecked) {
                         setConsentError(true)
                         return
                       }
                       setConsentError(false)
-                      // Fire-and-forget consent record — non-blocking
-                      fetch('/api/v1/consent/record', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          policyType: 'privacy_policy',
-                          policyVersion: process.env.NEXT_PUBLIC_CURRENT_POLICY_VERSION || '2026-03-03',
-                          source: 'onboarding',
-                        }),
-                      }).catch(() => {
-                        // Swallow errors — consent overlay is the backup
-                      })
-                      goToNextStep()
+                      try {
+                        const res = await fetch('/api/v1/consent/record', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            policyType: 'privacy_policy',
+                            policyVersion: process.env.NEXT_PUBLIC_CURRENT_POLICY_VERSION || '2026-03-03',
+                            source: 'onboarding',
+                          }),
+                        })
+                        if (!res.ok) {
+                          setConsentError(true)
+                          return
+                        }
+                        goToNextStep()
+                      } catch {
+                        setConsentError(true)
+                      }
                     }}
                     disabled={!wizardData.businessName?.trim()}
                   >

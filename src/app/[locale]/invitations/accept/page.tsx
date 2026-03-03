@@ -82,9 +82,9 @@ function AcceptInvitationContent() {
     setNameError(null)
 
     try {
-      // Record consent before accepting invitation (if not already consented)
+      // Record consent before accepting invitation (MANDATORY — blocks acceptance if it fails)
       if (!hasConsent && consentChecked) {
-        await fetch('/api/v1/consent/record', {
+        const consentRes = await fetch('/api/v1/consent/record', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -93,6 +93,9 @@ function AcceptInvitationContent() {
             source: 'invitation',
           }),
         })
+        if (!consentRes.ok) {
+          throw new Error('Failed to record consent. Please try again.')
+        }
       }
 
       const response = await fetchWithRetry('/api/v1/account-management/invitations/accept', {
