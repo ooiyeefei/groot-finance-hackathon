@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import InvitationDialog, { InvitationFormData } from '@/domains/account-management/components/invitation-dialog'
+import ConfirmationDialog from '@/components/ui/confirmation-dialog'
 import { clearUserRoleCache, fetchUserRoleWithCache } from '@/lib/cache-utils'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { useToast } from '@/components/ui/toast'
@@ -49,6 +50,8 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
   const [teamLimitExceeded, setTeamLimitExceeded] = useState(false)
   const [teamLimitMessage, setTeamLimitMessage] = useState<string | undefined>()
   const [nameUpdating, setNameUpdating] = useState<Set<string>>(new Set())
+  const [memberToDelete, setMemberToDelete] = useState<{ id: string; name: string } | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const router = useRouter()
   const { addToast } = useToast()
   const { businessId } = useActiveBusiness()
@@ -143,10 +146,16 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
     }
   }
 
-  const handleRemoveMember = async (membershipId: string) => {
+  const handleRemoveMember = (membershipId: string, memberName: string) => {
+    setMemberToDelete({ id: membershipId, name: memberName })
+  }
+
+  const confirmRemoveMember = async () => {
+    if (!memberToDelete) return
     try {
+      setIsDeleting(true)
       setError(null)
-      await removeMember(membershipId)
+      await removeMember(memberToDelete.id)
       addToast({
         type: 'success',
         title: 'Success',
@@ -160,6 +169,9 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
         title: 'Error',
         description: err instanceof Error ? err.message : 'Failed to remove member'
       })
+    } finally {
+      setIsDeleting(false)
+      setMemberToDelete(null)
     }
   }
 
@@ -925,7 +937,13 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
                               <Button
                                 size="sm"
                                 variant="destructive"
-                                onClick={() => handleRemoveMember(member.id)}
+                                onClick={() => handleRemoveMember(
+                                  member.id,
+                                  member.clerk_user?.firstName && member.clerk_user?.lastName
+                                    ? `${member.clerk_user.firstName} ${member.clerk_user.lastName}`
+                                    : member.clerk_user?.firstName || member.full_name
+                                    || member.email?.split('@')[0] || 'this user'
+                                )}
                                 disabled={isUpdating}
                                 className="h-9 px-3"
                               >
@@ -1017,6 +1035,17 @@ export default function TeamsManagementClient({ userId }: TeamsManagementClientP
           </TabsContent>
         )}
       </Tabs>
+
+      <ConfirmationDialog
+        isOpen={memberToDelete !== null}
+        onClose={() => setMemberToDelete(null)}
+        onConfirm={confirmRemoveMember}
+        title="Remove Team Member"
+        message={`Are you sure you want to remove ${memberToDelete?.name ?? 'this user'} from your business? They will lose access to all business data.`}
+        confirmText="Remove"
+        confirmVariant="danger"
+        isLoading={isDeleting}
+      />
     </div>
   )
 }
