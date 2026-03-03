@@ -28,7 +28,7 @@ function isGracePeriodExpired(): boolean {
 }
 
 export function ConsentLockOverlay() {
-  const { hasConsent, isLoading } = useConsent()
+  const { hasConsent, wasRevoked, isLoading } = useConsent()
   const pathname = usePathname()
   const { signOut } = useClerk()
   const [isAccepting, setIsAccepting] = useState(false)
@@ -39,8 +39,9 @@ export function ConsentLockOverlay() {
   // Don't block if user has consented
   if (hasConsent) return null
 
-  // Don't block if grace period hasn't expired yet (banner handles it)
-  if (!isGracePeriodExpired()) return null
+  // If user actively revoked consent, block immediately (no grace period)
+  // If user never consented, only block after grace period expires
+  if (!wasRevoked && !isGracePeriodExpired()) return null
 
   // Don't block on whitelisted paths
   const isUnblockedPath = UNBLOCKED_PATHS.some((path) => pathname?.includes(path))
