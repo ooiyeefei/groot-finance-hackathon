@@ -876,6 +876,93 @@ async function getInvoiceRecords(
 /**
  * Normalize AP and AR invoices into a common export shape.
  */
+// ============================================
+// PDPA: DOWNLOAD MY DATA
+// ============================================
+
+/**
+ * Get all personal data for the authenticated user across all businesses.
+ * Used by "Download My Data" in profile settings (PDPA Right of Access).
+ * Forces user-scoped filtering regardless of role.
+ */
+export const getMyDataExport = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return null;
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      return null;
+    }
+
+    // Get profile data
+    const profile = {
+      email: user.email,
+      fullName: user.fullName || null,
+      homeCurrency: user.homeCurrency || null,
+      timezone: user.preferences?.timezone || null,
+      language: user.preferences?.language || null,
+      createdAt: user._creationTime
+        ? new Date(user._creationTime).toISOString()
+        : null,
+    };
+
+    // Get all active business memberships
+    const allMemberships = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId", (q: any) => q.eq("userId", user._id))
+      .collect();
+
+    const activeMemberships = allMemberships.filter(
+      (m: any) => m.status === "active"
+    );
+
+    // For each business, get records across all 4 modules (forced own-records scope)
+    const businesses = await Promise.all(
+      activeMemberships.map(async (membership: any) => {
+        const businessId = membership.businessId as Id<"businesses">;
+        const business = await ctx.db.get(businessId);
+        if (!business) return null;
+
+        const [expenses, leaves, accounting, invoices] = await Promise.all([
+          getExpenseRecords(ctx, businessId, user._id, "employee", {}),
+          getLeaveRecords(ctx, businessId, user._id, "employee", {}),
+          getAccountingRecords(ctx, businessId, user._id, "employee", {}),
+          getInvoiceRecords(ctx, businessId, user._id, "employee", {}),
+        ]);
+
+        const [enrichedExpenses, enrichedLeaves, enrichedAccounting, enrichedInvoices] =
+          await Promise.all([
+            enrichExpenseRecords(ctx, expenses),
+            enrichLeaveRecords(ctx, leaves),
+            enrichAccountingRecords(ctx, accounting),
+            enrichInvoiceRecords(ctx, invoices),
+          ]);
+
+        return {
+          businessId: businessId,
+          businessName: business.name || "Unnamed Business",
+          role: membership.role || "employee",
+          modules: {
+            expense_claims: enrichedExpenses,
+            invoices: enrichedInvoices,
+            leave_requests: enrichedLeaves,
+            accounting_entries: enrichedAccounting,
+          },
+        };
+      })
+    );
+
+    return {
+      profile,
+      businesses: businesses.filter(Boolean),
+    };
+  },
+});
+
 async function enrichInvoiceRecords(
   ctx: { db: any },
   records: any[]

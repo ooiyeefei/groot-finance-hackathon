@@ -16,6 +16,7 @@ const LeaveManagementSettings = lazy(() => import('@/domains/leave-management/co
 const BillingSettingsContent = lazy(() => import('@/domains/billing/components/billing-settings-content'))
 const StripeIntegrationCard = lazy(() => import('@/domains/account-management/components/stripe-integration-card'))
 const UserProfileSection = lazy(() => import('@/domains/account-management/components/user-profile-section'))
+const DownloadMyData = lazy(() => import('@/domains/account-management/components/download-my-data'))
 const TimesheetSettings = lazy(() => import('@/domains/timesheet-attendance/components/timesheet-settings'))
 const PrivacyDataSection = lazy(() => import('@/domains/account-management/components/privacy-data-section').then(m => ({ default: m.PrivacyDataSection })))
 
@@ -300,6 +301,16 @@ const TabbedBusinessSettings = memo(() => {
               </div>
             }>
               <UserProfileSection />
+            </Suspense>
+          </div>
+          <div className="bg-card rounded-lg border border-border p-6">
+            <h3 className="text-base font-semibold text-foreground mb-3">Data & Privacy</h3>
+            <Suspense fallback={
+              <div className="flex items-center justify-center p-4">
+                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+              </div>
+            }>
+              <DownloadMyData />
             </Suspense>
           </div>
         </TabsContent>
