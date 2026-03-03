@@ -510,7 +510,7 @@ export default function SalesInvoiceDetailPage() {
           />
 
           {/* LHDN e-Invoice section */}
-          <LhdnDetailSection invoice={invoice as any} />
+          <LhdnDetailSection />
 
           {/* Peppol InvoiceNow — Coming Soon */}
           <PeppolTransmissionPanel />

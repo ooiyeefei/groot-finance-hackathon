@@ -1,67 +1,37 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, lazy, Suspense } from 'react'
 import { useConsent, useConsentHistory } from '@/domains/compliance/hooks/use-consent'
-import { Download, History, ShieldOff, Shield, ExternalLink } from 'lucide-react'
+import { Download, History, ShieldOff, Shield, ExternalLink, Loader2 } from 'lucide-react'
+
+const DownloadMyData = lazy(() => import('@/domains/account-management/components/download-my-data'))
 
 const CURRENT_POLICY_VERSION = process.env.NEXT_PUBLIC_CURRENT_POLICY_VERSION || '2026-03-03'
 
 export function PrivacyDataSection() {
   return (
     <div className="space-y-6">
-      <DownloadMyDataCard />
+      <div className="rounded-lg border border-border bg-card p-6">
+        <div className="mb-4 flex items-center gap-3">
+          <Download className="h-5 w-5 text-muted-foreground" />
+          <div>
+            <h3 className="text-lg font-semibold text-foreground">Download My Data</h3>
+            <p className="text-sm text-muted-foreground">
+              Export all your personal and business data as a ZIP of CSV spreadsheets.
+            </p>
+          </div>
+        </div>
+        <Suspense fallback={
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading...
+          </div>
+        }>
+          <DownloadMyData />
+        </Suspense>
+      </div>
       <ConsentHistoryCard />
       <RevokeConsentCard />
-    </div>
-  )
-}
-
-function DownloadMyDataCard() {
-  const [isDownloading, setIsDownloading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function handleDownload() {
-    setIsDownloading(true)
-    setError(null)
-    try {
-      const res = await fetch('/api/v1/users/data-export')
-      if (!res.ok) throw new Error('Export failed')
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = res.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || 'groot-my-data.json'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    } catch {
-      setError('Failed to download. Please try again.')
-    } finally {
-      setIsDownloading(false)
-    }
-  }
-
-  return (
-    <div id="download-my-data" className="rounded-lg border border-border bg-card p-6">
-      <div className="mb-4 flex items-center gap-3">
-        <Download className="h-5 w-5 text-muted-foreground" />
-        <div>
-          <h3 className="text-lg font-semibold text-foreground">Download My Data</h3>
-          <p className="text-sm text-muted-foreground">
-            Export all personal data we hold about you in machine-readable JSON format.
-          </p>
-        </div>
-      </div>
-      {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
-      <button
-        onClick={handleDownload}
-        disabled={isDownloading}
-        className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-      >
-        <Download className="h-4 w-4" />
-        {isDownloading ? 'Generating...' : 'Download My Data'}
-      </button>
     </div>
   )
 }

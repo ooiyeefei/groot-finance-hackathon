@@ -17,6 +17,7 @@ export function useConsent() {
 
   return {
     hasConsent: result?.hasConsent ?? false,
+    wasRevoked: result?.wasRevoked ?? false,
     isLoading: result === undefined,
     record: result?.record,
     policyVersion: CURRENT_POLICY_VERSION,

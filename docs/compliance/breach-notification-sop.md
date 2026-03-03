@@ -88,10 +88,18 @@ This SOP covers both roles with distinct notification procedures for each.
 | **Communications** | Windrich (Co-Founder) | Ooi Yee Fei (Co-Founder / CTO) | Prepares regulatory notification submissions, drafts affected-user notifications, coordinates with external stakeholders (regulators, legal counsel, affected customers). |
 | **Legal** | Ooi Yee Fei (Co-Founder / CTO) — external counsel to be engaged for P1/P2 incidents when appointed | Windrich (Co-Founder) | Advises on legal obligations, reviews regulatory notifications before submission, advises on liability and disclosure strategy. External counsel should be appointed when resources allow. |
 
+### Contact Details
+
+| Name | Email | Phone |
+|------|-------|-------|
+| **Ooi Yee Fei** | yeefei@hellogroot.com | +6597370158 |
+| **Windrich** | windrich@hellogroot.com | +6597370158 |
+| **DPO Group** | dpo@hellogroot.com | — |
+
 ### Escalation Procedures
 
 **Escalation chain** (when primary is unavailable):
-1. Primary contact for the role (phone/Telegram)
+1. Primary contact for the role (email/phone/Telegram)
 2. Wait maximum **30 minutes** for response
 3. If no response → contact the Alternate
 4. If Alternate also unavailable → the Incident Commander designates any available team member to the role
@@ -118,7 +126,9 @@ This SOP covers both roles with distinct notification procedures for each.
 | **CloudWatch Alarms — Certificate expiry** | Active | SNS → Email (`finanseal-cert-expiry-alerts`) | Digital signature certificate nearing expiration (30 days) |
 | **Sentry error tracking** | Active | Telegram bot, Discord webhook | Application errors, unhandled exceptions (error/fatal severity only). PII scrubbing active — sensitive data redacted from error reports. |
 | **Clerk authentication** | Active | Webhook → user sync | User creation, update, deletion events. Session management across `*.hellogroot.com`. |
-| **Clerk suspicious activity** | Not configured | — | Login anomalies, brute force detection (built-in capability, not yet enabled) |
+| **Clerk bot sign-up protection** | Active | CAPTCHA challenge (Smart/Cloudflare) | Bot signups, automated account creation |
+| **Clerk account lockout** | Active | Account locked after 9 failed attempts (13-hour lockout) | Brute force login attempts, credential stuffing |
+| **Clerk block disposable emails** | Active | Sign-up blocked | Temporary/disposable email address signups |
 | **AWS GuardDuty** | Not configured | — | Network-level threat detection, unauthorised API calls, malicious IP access |
 | **User reports** | Active | admin@hellogroot.com | User-reported security concerns, suspicious activity |
 | **CloudWatch Logs (all Lambdas)** | Active | CloudWatch console (30-day retention) | Application-level logging for document processor, digital signature, MCP server, e-invoice, email workflows |
@@ -130,7 +140,7 @@ This SOP covers both roles with distinct notification procedures for each.
 ### Known Gaps & Planned Improvements
 
 - **AWS GuardDuty**: Recommended for network-level threat detection. Enabling is a separate engineering task.
-- **Clerk suspicious activity monitoring**: Built-in capability available but not configured. Should be enabled.
+- **Clerk email subaddress blocking**: Intentionally left OFF — subaddresses (`+test1`, `+manager`) used for test accounts.
 - **Dedicated security email**: `security@hellogroot.com` or `dpo@hellogroot.com` should be created for external breach reports.
 - **CloudWatch log retention**: Currently 30 days. Consider extending to 90 days for compliance evidence.
 

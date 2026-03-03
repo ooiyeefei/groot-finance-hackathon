@@ -1,17 +1,20 @@
 'use client'
 
 import { useState } from 'react'
+import { useUser } from '@clerk/nextjs'
 import { useConsent } from '@/domains/compliance/hooks/use-consent'
 import { Shield } from 'lucide-react'
 
 const CURRENT_POLICY_VERSION = process.env.NEXT_PUBLIC_CURRENT_POLICY_VERSION || '2026-03-03'
 
 export function ConsentBanner() {
-  const { hasConsent, isLoading } = useConsent()
+  const { isSignedIn } = useUser()
+  const { hasConsent, wasRevoked, isLoading } = useConsent()
   const [isAccepting, setIsAccepting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  if (isLoading || hasConsent) return null
+  // Hide banner if: not signed in, loading, already consented, or revoked (overlay handles revoked state)
+  if (!isSignedIn || isLoading || hasConsent || wasRevoked) return null
 
   async function handleAccept() {
     setIsAccepting(true)

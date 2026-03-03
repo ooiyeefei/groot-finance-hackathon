@@ -56,12 +56,17 @@ export const hasAcceptedCurrentPolicy = query({
       .order("desc")
       .first();
 
-    if (!record || record.revokedAt) {
-      return { hasConsent: false };
+    if (!record) {
+      return { hasConsent: false, wasRevoked: false };
+    }
+
+    if (record.revokedAt) {
+      return { hasConsent: false, wasRevoked: true };
     }
 
     return {
       hasConsent: true,
+      wasRevoked: false,
       record: {
         acceptedAt: record.acceptedAt,
         source: record.source,

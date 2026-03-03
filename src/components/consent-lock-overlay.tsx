@@ -28,7 +28,7 @@ function isGracePeriodExpired(): boolean {
 }
 
 export function ConsentLockOverlay() {
-  const { hasConsent, isLoading } = useConsent()
+  const { hasConsent, wasRevoked, isLoading } = useConsent()
   const pathname = usePathname()
   const { signOut } = useClerk()
   const [isAccepting, setIsAccepting] = useState(false)
@@ -39,8 +39,9 @@ export function ConsentLockOverlay() {
   // Don't block if user has consented
   if (hasConsent) return null
 
-  // Don't block if grace period hasn't expired yet (banner handles it)
-  if (!isGracePeriodExpired()) return null
+  // If user actively revoked consent, block immediately (no grace period)
+  // If user never consented, only block after grace period expires
+  if (!wasRevoked && !isGracePeriodExpired()) return null
 
   // Don't block on whitelisted paths
   const isUnblockedPath = UNBLOCKED_PATHS.some((path) => pathname?.includes(path))
@@ -64,7 +65,7 @@ export function ConsentLockOverlay() {
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div
         className="fixed inset-0"
         style={{
@@ -74,7 +75,7 @@ export function ConsentLockOverlay() {
         }}
       />
 
-      <div className="relative z-40 w-full max-w-md rounded-lg border border-border bg-card p-8 text-center shadow-2xl">
+      <div className="relative z-[60] w-full max-w-md rounded-lg border border-border bg-card p-8 text-center shadow-2xl">
         <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
           <Shield className="h-8 w-8 text-primary" />
         </div>
