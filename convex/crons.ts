@@ -217,4 +217,49 @@ crons.daily(
 // Handled by AWS EventBridge → Lambda (every 5 min). No Convex cron needed.
 // Lambda queries Convex for businesses with pending requests, polls LHDN directly.
 
+// ============================================
+// PDPA Data Retention Cleanup (001-pdpa-data-retention-cleanup)
+// ============================================
+
+/**
+ * Chat Conversation Cleanup
+ *
+ * Runs daily at 3:30 AM UTC to delete conversations and messages
+ * older than 2 years (730 days). Age measured from lastMessageAt
+ * (or _creationTime for empty conversations).
+ * Legal basis: PDPA data minimization principle (MY PDPA s.10, SG PDPA s.25).
+ */
+crons.daily(
+  "cleanup-expired-conversations",
+  { hourUTC: 3, minuteUTC: 30 },
+  internal.functions.conversations.deleteExpired
+);
+
+/**
+ * Audit Log Cleanup
+ *
+ * Runs daily at 4:00 AM UTC to delete audit events older than 3 years
+ * (1,095 days). No file cleanup needed.
+ * Retention period: policy-based (no specific statutory requirement).
+ */
+crons.daily(
+  "cleanup-old-audit-events",
+  { hourUTC: 4, minuteUTC: 0 },
+  internal.functions.audit.deleteExpired
+);
+
+/**
+ * Export History Cleanup
+ *
+ * Runs daily at 4:30 AM UTC to permanently delete export history
+ * records older than 1 year (365 days), including associated
+ * Convex storage files. Complements the existing 90-day archiver.
+ * Retention period: policy-based (no specific statutory requirement).
+ */
+crons.daily(
+  "cleanup-old-export-history",
+  { hourUTC: 4, minuteUTC: 30 },
+  internal.functions.exportHistory.deleteExpired
+);
+
 export default crons;

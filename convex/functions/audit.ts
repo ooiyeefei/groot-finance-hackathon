@@ -10,7 +10,7 @@
  */
 
 import { v } from "convex/values";
-import { query, mutation } from "../_generated/server";
+import { query, mutation, internalMutation } from "../_generated/server";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 
 // ============================================
@@ -288,5 +288,59 @@ export const logEvent = mutation({
     });
 
     return eventId;
+  },
+});
+
+// ============================================
+// INTERNAL MUTATIONS (PDPA data retention cleanup)
+// ============================================
+
+const AUDIT_RETENTION_DAYS = 1095; // 3 years
+const AUDIT_CLEANUP_BATCH_SIZE = 500;
+
+/**
+ * Delete expired audit event records (PDPA compliance)
+ *
+ * Called daily by cron at 4:00 AM UTC.
+ * Permanently deletes audit events older than 3 years (1,095 days).
+ * No file cleanup needed — audit events contain no file references.
+ */
+export const deleteExpired = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const cutoff =
+      Date.now() - AUDIT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+    const allEvents = await ctx.db.query("audit_events").collect();
+
+    const expired = allEvents.filter((e) => e._creationTime < cutoff);
+
+    const batch = expired.slice(0, AUDIT_CLEANUP_BATCH_SIZE);
+
+    let deleted = 0;
+
+    for (const event of batch) {
+      try {
+        await ctx.db.delete(event._id);
+        deleted++;
+      } catch (error) {
+        console.error(
+          `[Retention Cleanup] Failed to delete audit event ${event._id}:`,
+          error
+        );
+      }
+    }
+
+    console.log(
+      JSON.stringify({
+        type: "retention_cleanup",
+        table: "audit_events",
+        deleted,
+        remaining: expired.length - batch.length,
+        timestamp: new Date().toISOString(),
+      })
+    );
+
+    return { deleted };
   },
 });

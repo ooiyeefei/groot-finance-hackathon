@@ -221,6 +221,8 @@ formatBusinessDate('2025-10-31')  // "Oct 31, 2025" (no timezone shift)
 - TypeScript 5.9.3 (Next.js + Convex), Python 3.11 (Lambda) + Next.js 15.5.7, Convex 1.31.3, @browserbasehq/stagehand, pyzbar (Python), AWS SES (019-lhdn-einv-flow-2)
 - Convex (document database), AWS S3 (file storage), SES S3 (email storage) (019-lhdn-einv-flow-2)
 - Convex (new `export_code_mappings` table), Convex File Storage (export files) (001-master-accounting-export)
+- TypeScript 5.9.3, Node.js 20.x + Convex 1.31.3 (crons, internalMutation, storage API) (001-pdpa-data-retention-cleanup)
+- Convex document database (existing tables), Convex File Storage (export files) (001-pdpa-data-retention-cleanup)
 
 ## Recent Changes
 - 001-category-3-mcp: Added MCP Server with API key management

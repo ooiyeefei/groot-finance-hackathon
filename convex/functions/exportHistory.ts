@@ -433,3 +433,72 @@ export const deleteOldFailures = internalMutation({
     return { deletedCount };
   },
 });
+
+const EXPORT_RETENTION_DAYS = 365; // 1 year
+const EXPORT_CLEANUP_BATCH_SIZE = 500;
+
+/**
+ * Delete expired export history records (PDPA compliance)
+ *
+ * Called daily by cron at 4:30 AM UTC.
+ * Permanently deletes export records older than 1 year (365 days).
+ * Deletes associated Convex storage files before removing records.
+ * If file deletion fails, skips that record (retried next run per FR-009).
+ */
+export const deleteExpired = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const cutoff =
+      Date.now() - EXPORT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+    const allHistory = await ctx.db.query("export_history").collect();
+
+    const expired = allHistory.filter((h) => h._creationTime < cutoff);
+
+    const batch = expired.slice(0, EXPORT_CLEANUP_BATCH_SIZE);
+
+    let deleted = 0;
+    let filesDeleted = 0;
+
+    for (const export_ of batch) {
+      try {
+        // Delete associated file first (if exists)
+        if (export_.storageId) {
+          try {
+            await ctx.storage.delete(export_.storageId);
+            filesDeleted++;
+          } catch (fileError) {
+            // FR-009: If file deletion fails, skip this record entirely
+            console.error(
+              `[Retention Cleanup] Failed to delete file ${export_.storageId} for export ${export_._id}:`,
+              fileError
+            );
+            continue;
+          }
+        }
+
+        // Delete the record
+        await ctx.db.delete(export_._id);
+        deleted++;
+      } catch (error) {
+        console.error(
+          `[Retention Cleanup] Failed to delete export ${export_._id}:`,
+          error
+        );
+      }
+    }
+
+    console.log(
+      JSON.stringify({
+        type: "retention_cleanup",
+        table: "export_history",
+        deleted,
+        filesDeleted,
+        remaining: expired.length - batch.length,
+        timestamp: new Date().toISOString(),
+      })
+    );
+
+    return { deleted, filesDeleted };
+  },
+});

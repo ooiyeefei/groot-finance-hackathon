@@ -9,7 +9,7 @@
  */
 
 import { v } from "convex/values";
-import { query, mutation } from "../_generated/server";
+import { query, mutation, internalMutation } from "../_generated/server";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 
 // Message roles
@@ -655,5 +655,83 @@ export const recalculateMessageCounts = mutation({
       updatesNeeded: updates.length,
       updates: updates.slice(0, 30), // Show first 30
     };
+  },
+});
+
+// ============================================
+// INTERNAL MUTATIONS (PDPA data retention cleanup)
+// ============================================
+
+const CHAT_RETENTION_DAYS = 730; // 2 years
+const CHAT_CLEANUP_BATCH_SIZE = 500;
+
+/**
+ * Delete expired conversations and their messages (PDPA compliance)
+ *
+ * Called daily by cron at 3:30 AM UTC.
+ * Deletes conversations where lastMessageAt (or _creationTime for empty
+ * conversations) is older than 2 years (730 days).
+ * All associated messages are cascade-deleted first.
+ */
+export const deleteExpired = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const cutoff =
+      Date.now() - CHAT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+    // Query conversations — use all and filter since we need the fallback logic
+    const conversations = await ctx.db
+      .query("conversations")
+      .collect();
+
+    const expired = conversations.filter((conv) => {
+      const age = conv.lastMessageAt ?? conv._creationTime;
+      return age < cutoff;
+    });
+
+    // Limit to batch size to avoid mutation timeout
+    const batch = expired.slice(0, CHAT_CLEANUP_BATCH_SIZE);
+
+    let deleted = 0;
+    let messagesDeleted = 0;
+
+    for (const conv of batch) {
+      try {
+        // Delete all messages belonging to this conversation first
+        const messages = await ctx.db
+          .query("messages")
+          .withIndex("by_conversationId", (q) =>
+            q.eq("conversationId", conv._id)
+          )
+          .collect();
+
+        for (const msg of messages) {
+          await ctx.db.delete(msg._id);
+          messagesDeleted++;
+        }
+
+        // Delete the conversation
+        await ctx.db.delete(conv._id);
+        deleted++;
+      } catch (error) {
+        console.error(
+          `[Retention Cleanup] Failed to delete conversation ${conv._id}:`,
+          error
+        );
+      }
+    }
+
+    console.log(
+      JSON.stringify({
+        type: "retention_cleanup",
+        table: "conversations",
+        deleted,
+        messagesDeleted,
+        remaining: expired.length - batch.length,
+        timestamp: new Date().toISOString(),
+      })
+    );
+
+    return { deleted, messagesDeleted };
   },
 });
