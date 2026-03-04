@@ -442,7 +442,7 @@ async function forwardToUser(
   // Use SES if the user's email is verified (free, builds sending reputation)
   if (useSes) {
     const boundary = `----=_Part_${Date.now()}`;
-    const forwardedEmail = [
+    const parts = [
       `From: Groot Finance <${FORWARD_FROM}>`,
       `To: ${userEmail}`,
       `Subject: ${emailSubject}`,
@@ -454,21 +454,30 @@ async function forwardToUser(
       ``,
       emailBody,
       ``,
-      `--${boundary}`,
-      `Content-Type: message/rfc822`,
-      `Content-Disposition: attachment; filename="original-email.eml"`,
-      ``,
-      rawEmailBytes.toString("utf-8"),
-      ``,
-      `--${boundary}--`,
-    ].join("\r\n");
+    ];
+
+    // Attach the PDF (not the raw .eml which exposes internal system email/headers)
+    if (pdfAttachment) {
+      parts.push(
+        `--${boundary}`,
+        `Content-Type: application/pdf`,
+        `Content-Transfer-Encoding: base64`,
+        `Content-Disposition: attachment; filename="${pdfAttachment.filename}"`,
+        ``,
+        pdfAttachment.content.toString("base64"),
+        ``,
+      );
+    }
+
+    parts.push(`--${boundary}--`);
+    const forwardedEmail = parts.join("\r\n");
 
     await ses.send(new SendRawEmailCommand({
       RawMessage: { Data: Buffer.from(forwardedEmail) },
       Source: FORWARD_FROM,
       Destinations: [userEmail],
     }));
-    console.log(`[Email] Forwarded via SES to ${userEmail}`);
+    console.log(`[Email] Forwarded via SES to ${userEmail}${pdfAttachment ? " (with PDF)" : ""}`);
     return;
   }
 
