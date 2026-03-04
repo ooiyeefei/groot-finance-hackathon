@@ -153,11 +153,7 @@ export function UpgradePrompt({
             >
               Maybe Later
             </Button>
-            {isNativePlatform() ? (
-              <p className="text-sm text-muted-foreground text-center px-2">
-                To upgrade, visit <span className="font-medium text-foreground">finance.hellogroot.com</span> in your browser.
-              </p>
-            ) : (
+            {!isNativePlatform() && (
               <Button
                 variant="default"
                 onClick={handleUpgrade}

@@ -516,11 +516,7 @@ export default function BillingSettingsContent() {
                     </Button>
                   )}
 
-                  {isNativePlatform() ? (
-                    <p className="text-xs text-muted-foreground text-center mt-4">
-                      To manage your subscription, visit <span className="font-medium text-foreground">finance.hellogroot.com</span> in your browser.
-                    </p>
-                  ) : (
+                  {!isNativePlatform() && (
                     <Button
                       variant={data.subscription.status === 'trialing' || !data.subscription.stripeCustomerId ? 'default' : 'ghost'}
                       className="w-full mt-2"

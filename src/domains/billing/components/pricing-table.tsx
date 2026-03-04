@@ -318,11 +318,7 @@ export function PricingTable({
                     <Button variant="outline" className="w-full" disabled>
                       Current Plan
                     </Button>
-                  ) : (
-                    <p className="text-xs text-muted-foreground text-center w-full py-2">
-                      Visit <span className="font-medium text-foreground">finance.hellogroot.com</span> to subscribe
-                    </p>
-                  )
+                  ) : null
                 ) : isCurrent ? (
                   <Button variant="outline" className="w-full" disabled>
                     Current Plan
