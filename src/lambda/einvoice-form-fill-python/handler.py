@@ -1845,6 +1845,12 @@ def handler(event: dict, context=None) -> dict:
                     convex_mutation("functions/system:saveMerchantFormConfig", {"merchantName": merchant, "formConfig": fc})
                     return {"success": True, "durationMs": dur}
                 print("[Form Fill] Tier 1 failed — falling back to Tier 2")
+                # Tier 3: Learn from Tier 1 failure
+                try:
+                    shot = base64.b64encode(page.screenshot(type="png")).decode()
+                    troubleshoot(shot, "Tier 1 validation failed after submit", merchant)
+                except Exception:
+                    pass
 
         # Phase 2: Solve reCAPTCHA BEFORE CUA (CapSolver API, ~5-12s)
         # This prevents CUA from wasting turns clicking CAPTCHA images
@@ -1959,6 +1965,14 @@ def handler(event: dict, context=None) -> dict:
                     verified_success = submitted
         except Exception as ve:
             print(f"[Verify] Failed: {ve}")
+
+        # ── Tier 3: Troubleshoot on verified failure (self-evolving) ──
+        if not verified_success and merchant:
+            try:
+                shot = base64.b64encode(page.screenshot(type="png")).decode()
+                troubleshoot(shot, f"Verification failed: {evidence[:300]}", merchant)
+            except Exception:
+                pass
 
         browser.close()
         dur = int((time.time() - start) * 1000)
