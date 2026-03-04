@@ -46,7 +46,7 @@ export default function SupportPage() {
     <div className="min-h-screen bg-white flex flex-col">
       {/* Header */}
       <header className="border-b border-[#E5E7EB] px-6 py-4">
-        <div className="max-w-xl mx-auto flex items-center justify-between">
+        <div className="max-w-md mx-auto flex items-center justify-between">
           <a href="/" className="flex items-center gap-2">
             <Image
               src="/groot-wordmark.png"
@@ -68,7 +68,7 @@ export default function SupportPage() {
 
       {/* Main content */}
       <main className="flex-1 px-6 py-12">
-        <div className="max-w-xl mx-auto">
+        <div className="max-w-md mx-auto">
           {isSubmitted ? (
             /* Success state */
             <div className="text-center py-16">
