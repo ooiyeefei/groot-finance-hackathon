@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Sparkles, ChevronRight, Zap, Infinity, AlertTriangle } from 'lucide-react'
+import { isNativePlatform } from '@/lib/capacitor/platform'
 
 export function SubscriptionCard() {
   const router = useRouter()
@@ -76,7 +77,7 @@ export function SubscriptionCard() {
                 </Badge>
               </div>
               <p className="text-sm text-muted-foreground">
-                {isTrialing ? 'Free trial • Upgrade anytime' : `${plan.currency} ${plan.price}/month`}
+                {isTrialing ? (isNativePlatform() ? 'Free trial' : 'Free trial • Upgrade anytime') : (isNativePlatform() ? plan.displayName : `${plan.currency} ${plan.price}/month`)}
               </p>
             </div>
           </div>
@@ -113,13 +114,13 @@ export function SubscriptionCard() {
           {isAtLimit && (
             <div className="flex items-center gap-2 mt-2 text-xs text-red-600 dark:text-red-400">
               <AlertTriangle className="w-3 h-3" />
-              <span>Limit reached - upgrade to continue scanning</span>
+              <span>{isNativePlatform() ? 'Scan limit reached' : 'Limit reached - upgrade to continue scanning'}</span>
             </div>
           )}
         </div>
 
-        {/* Upgrade CTA for trial users */}
-        {isTrialing && (
+        {/* Upgrade CTA for trial users (hidden on native iOS per Apple IAP guidelines) */}
+        {isTrialing && !isNativePlatform() && (
           <Button className="w-full mt-4" variant="default" size="sm" onClick={() => router.push('/en/pricing')}>
               <Zap className="w-4 h-4 mr-2" />
               View Plans

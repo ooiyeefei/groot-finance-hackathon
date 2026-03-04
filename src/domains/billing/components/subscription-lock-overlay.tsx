@@ -19,6 +19,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Lock, Zap, Shield, LogOut } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { isNativePlatform } from '@/lib/capacitor/platform'
 
 // Pages that should NOT be blocked (user needs to reach these to upgrade)
 const UNBLOCKED_PATHS = [
@@ -103,16 +104,18 @@ export function SubscriptionLockOverlay() {
 
           {/* CTA buttons */}
           <div className="space-y-3">
-            <Link href="/en/pricing" className="block">
-              <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" size="lg">
-                <Zap className="w-5 h-5 mr-2" />
-                Choose a Plan
-              </Button>
-            </Link>
+            {!isNativePlatform() && (
+              <Link href="/en/pricing" className="block">
+                <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" size="lg">
+                  <Zap className="w-5 h-5 mr-2" />
+                  Choose a Plan
+                </Button>
+              </Link>
+            )}
 
             <div className="flex items-center gap-2 justify-center text-sm text-muted-foreground">
               <Shield className="w-4 h-4" />
-              <span>Your data is preserved. Pick up right where you left off.</span>
+              <span>{isNativePlatform() ? 'Your data is preserved. Please visit finance.hellogroot.com to manage your subscription.' : 'Your data is preserved. Pick up right where you left off.'}</span>
             </div>
 
             <button

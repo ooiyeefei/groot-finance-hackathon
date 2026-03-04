@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle, CheckCircle, FileText, Infinity, Zap } from 'lucide-react'
 import Link from 'next/link'
+import { isNativePlatform } from '@/lib/capacitor/platform'
 
 interface UsageDashboardProps {
   showUpgradeButton?: boolean
@@ -174,7 +175,7 @@ export function UsageDashboard({ showUpgradeButton = true, compact = false }: Us
         )}
 
         {/* Upgrade Prompt */}
-        {showUpgradeButton && !isUnlimited && ocrPercentage >= 80 && (
+        {showUpgradeButton && !isUnlimited && ocrPercentage >= 80 && !isNativePlatform() && (
           <div className="mt-4 p-3 rounded-lg bg-primary/5 border border-primary/20">
             <div className="flex items-start gap-3">
               <Zap className="w-5 h-5 text-primary mt-0.5" />
