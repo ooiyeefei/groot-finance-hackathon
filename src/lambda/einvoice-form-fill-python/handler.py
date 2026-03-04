@@ -842,12 +842,40 @@ def poll_otp_email(email_ref: str, timeout: int = 60) -> Optional[str]:
 
 # ── Tier 1: Fast path with saved formConfig ────────────────
 
+def _infer_buyer_key(selector: str, label: str) -> str:
+    """Infer buyerDetailKey from CSS selector name or label when formConfig doesn't have one.
+    This fixes stale defaultValues saved by extract_form_config."""
+    hint = (selector + " " + label).lower()
+    if "email" in hint and "confirm" not in hint:
+        return "email"
+    if "fullname" in hint or "full_name" in hint or ("name" in hint and "company" not in hint and "business" not in hint):
+        return "userName"
+    if "companyname" in hint or "company_name" in hint or "company" in hint and "address" not in hint:
+        return "name"
+    if "idnumber" in hint or "brn" in hint or "registration" in hint and "old" not in hint:
+        return "brn"
+    if "tin" in hint or "tax" in hint:
+        return "tin"
+    if "address" in hint and "line" not in hint:
+        return "address"
+    if "phone" in hint or "mobile" in hint or "tel" in hint:
+        return "phone"
+    return ""
+
+
 def run_tier1(page: Page, config: dict, buyer: dict) -> bool:
     """Fill form using saved CSS selectors. Returns True only if enough fields filled + submitted."""
     fields = config.get("fields", [])
     filled = 0
     for f in fields:
-        val = buyer.get(f.get("buyerDetailKey", ""), "") or f.get("defaultValue", "")
+        # Prefer explicit buyerDetailKey; if missing, infer from selector/label
+        key = f.get("buyerDetailKey", "")
+        if not key:
+            key = _infer_buyer_key(f.get("selector", ""), f.get("label", ""))
+        val = buyer.get(key, "") if key else ""
+        # Fall back to defaultValue only if buyer key doesn't resolve
+        if not val:
+            val = f.get("defaultValue", "")
         if not val:
             continue
         try:
@@ -1609,7 +1637,7 @@ def handler(event: dict, context=None) -> dict:
         buyer = {
             "name": bd["name"], "userName": bd.get("userName", bd["name"]),
             "tin": bd["tin"], "brn": bd["brn"], "email": bd["email"],
-            "phone": (bd.get("phone") or "+60132201176").replace("+", "").replace("-", "").removeprefix("60"),
+            "phone": "0" + (bd.get("phone") or "+60132201176").replace("+", "").replace("-", "").replace(" ", "").removeprefix("60"),
             "address": bd.get("addressLine1") or bd["address"].split(",")[0],
             "city": bd.get("city", "Puchong"), "state": state,
         }
