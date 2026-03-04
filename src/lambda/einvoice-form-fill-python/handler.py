@@ -1161,7 +1161,7 @@ def run_99speedmart_flow(page: Page, buyer: dict, email_ref: str) -> bool:
 
 # ── Tier 2: Gemini CUA exploration ─────────────────────────
 
-def run_tier2(page: Page, buyer: dict, receipt: dict, receipt_image_b64: str | None = None) -> int:
+def run_tier2(page: Page, buyer: dict, receipt: dict, receipt_image_b64: str | None = None, merchant_hints: str = "") -> int:
     """CUA fills the form visually. Returns action count."""
     # Recon: Gemini Flash scouts the full page
     recon = ""
@@ -1204,6 +1204,8 @@ RECEIPT DATA (use for receipt/bill/store fields):
 - Vendor/Store Name: {receipt.get("vendorName", "N/A")}
 
 {f"FORM FIELDS (from page analysis):\\n{recon}" if recon else ""}
+
+{f"MERCHANT-SPECIFIC INSTRUCTIONS (learned from previous submissions):\\n{merchant_hints}" if merchant_hints else ""}
 
 TASK:
 1. If the form asks for Store Code / Shop Number, use the Store Code from RECEIPT DATA.
@@ -1434,13 +1436,14 @@ def troubleshoot(screenshot_b64: str, error: str, merchant: str):
             suggested_default: str = PydanticField(default="", description="Default value")
 
         class FormDiagnosis(_dspy.Signature):
-            """Analyze a failed e-invoice form and diagnose the root cause."""
+            """Analyze a failed e-invoice form and diagnose the root cause. Provide actionable hints for future attempts."""
             error_message: str = _dspy.InputField(desc="Error that caused the form fill to fail")
             merchant_name: str = _dspy.InputField(desc="Merchant name")
             screenshot_description: str = _dspy.InputField(desc="Description of the screenshot")
             diagnosis: str = _dspy.OutputField(desc="What went wrong")
             unfilled_fields: list[UnfilledField] = _dspy.OutputField(desc="Fields needing fixes")
             fixable: bool = _dspy.OutputField(desc="Can this be fixed by filling fields?")
+            cua_hints: str = _dspy.OutputField(desc="Merchant-specific instructions for the CUA agent on next attempt. E.g. 'Click Company tab before filling fields', 'Phone field uses react-phone-input with +60 prefix — use 9-digit number without 0', 'Must click Validate button first to unlock fields'. Be specific and actionable.")
 
         # Configure DSPy
         lm = _dspy.LM("gemini/gemini-2.0-flash", api_key=GEMINI_KEY, max_tokens=2048, temperature=0.1)
@@ -1476,9 +1479,13 @@ def troubleshoot(screenshot_b64: str, error: str, merchant: str):
                     field["defaultValue"] = uf.suggested_default
                 fields.append(field)
 
+            config_update: dict[str, Any] = {"fields": fields, "lastFailureReason": result.diagnosis[:200]}
+            if result.cua_hints:
+                config_update["cuaHints"] = result.cua_hints[:500]
+                print(f"[Troubleshoot] Learned CUA hints: {result.cua_hints[:150]}")
             convex_mutation("functions/system:saveMerchantFormConfig", {
                 "merchantName": merchant,
-                "formConfig": {"fields": fields, "lastFailureReason": result.diagnosis[:200]},
+                "formConfig": config_update,
             })
             print(f"[Troubleshoot] Saved {len(fields)} fix suggestions")
 
@@ -1814,10 +1821,17 @@ def handler(event: dict, context=None) -> dict:
         prefill_all(page, buyer, receipt)
         prefill_custom_dropdowns(page, buyer)
 
-        # ── Tier 1: Check for saved formConfig ──
+        # ── Merchant config: load formConfig + cuaHints from merchant_einvoice_urls ──
+        merchant_hints = ""
+        fc = None
         if merchant:
             lookup = convex_query("functions/system:lookupMerchantEinvoiceUrl", {"vendorName": merchant, "country": "MY"})
             fc = (lookup or {}).get("formConfig")
+            merchant_hints = (fc or {}).get("cuaHints", "") or (lookup or {}).get("notes", "") or ""
+            if merchant_hints:
+                print(f"[Form Fill] Merchant hints loaded: {merchant_hints[:100]}...")
+
+            # ── Tier 1: saved formConfig with CSS selectors ──
             if fc and fc.get("fields") and (fc.get("successCount", 0) > 0):
                 print(f"[Form Fill] ⚡ Tier 1: {len(fc['fields'])} fields, {fc['successCount']} successes")
                 if run_tier1(page, fc, buyer):
@@ -1836,9 +1850,9 @@ def handler(event: dict, context=None) -> dict:
         # This prevents CUA from wasting turns clicking CAPTCHA images
         solve_recaptcha(page, url)
 
-        # ── Tier 2: CUA exploration (with browser-use Lambda fallback on 429) ──
+        # ── Tier 2: CUA exploration (with merchant-specific hints) ──
         try:
-            actions = run_tier2(page, buyer, receipt, receipt_image_b64)
+            actions = run_tier2(page, buyer, receipt, receipt_image_b64, merchant_hints=merchant_hints)
         except Exception as tier2_err:
             if "429" in str(tier2_err):
                 if BU_LAMBDA_ARN:
@@ -1907,13 +1921,16 @@ def handler(event: dict, context=None) -> dict:
                 except Exception:
                     pass
 
-        # ── Phase 2: Save formConfig on success ──
+        # ── Phase 2: Save formConfig on success (preserve merchant_hints) ──
         if state_ok and merchant:
             try:
-                fc = extract_form_config(page)
-                if fc and fc.get("fields"):
-                    convex_mutation("functions/system:saveMerchantFormConfig", {"merchantName": merchant, "formConfig": fc})
-                    print(f"[Form Fill] 📝 Saved formConfig: {len(fc['fields'])} fields")
+                new_fc = extract_form_config(page)
+                if new_fc and new_fc.get("fields"):
+                    # Preserve existing cuaHints — they're learned from troubleshooting
+                    if merchant_hints:
+                        new_fc["cuaHints"] = merchant_hints
+                    convex_mutation("functions/system:saveMerchantFormConfig", {"merchantName": merchant, "formConfig": new_fc})
+                    print(f"[Form Fill] 📝 Saved formConfig: {len(new_fc['fields'])} fields")
             except Exception as e:
                 print(f"[Form Fill] formConfig save failed: {e}")
 
