@@ -6,6 +6,7 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as ses from 'aws-cdk-lib/aws-ses';
 import * as sesActions from 'aws-cdk-lib/aws-ses-actions';
 import * as cr from 'aws-cdk-lib/custom-resources';
@@ -170,6 +171,13 @@ export class DocumentProcessingStack extends cdk.Stack {
         PLAYWRIGHT_BROWSERS_PATH: '/opt/pw-browsers',
       },
     });
+
+    // CapSolver API key (SSM SecureString) — read at runtime, not baked into env
+    const capsolverParam = ssm.StringParameter.fromSecureStringParameterAttributes(this, 'CapsolverKey', {
+      parameterName: '/finanseal/capsolver-api-key',
+    });
+    capsolverParam.grantRead(formFillFunction);
+    formFillFunction.addEnvironment('CAPSOLVER_SSM_PARAM', '/finanseal/capsolver-api-key');
 
     // Form fill Lambda needs S3 read (receipt images for CUA) + write (download-einvoice saves PDFs)
     bucket.grantReadWrite(formFillFunction);
