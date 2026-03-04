@@ -334,10 +334,17 @@ def prefill_all(page: Page, buyer: dict, receipt: dict):
     city = buyer["city"]
 
     # 1. Phone — tel inputs + text inputs with phone labels
+    # Detect react-phone-input: if tel input is inside a container with a flag/country code dropdown,
+    # use phoneShort (no leading 0) since the widget adds +60 prefix.
     for inp in page.locator('input[type="tel"]').all():
+        is_phone_widget = page.evaluate("""(el) => {
+            const container = el.closest('[class*="phone"], [class*="tel"], [class*="intl"]') || el.parentElement;
+            return !!(container && (container.querySelector('.flag, [class*="flag"], [class*="country"], .selected-flag, [class*="dial"]')));
+        }""", inp.element_handle())
+        phone_val = buyer.get("phoneShort", buyer["phone"]) if is_phone_widget else buyer["phone"]
         inp.click(click_count=3, timeout=3000)
-        page.keyboard.type(buyer["phone"], delay=20)
-        print(f"[Pre-fill] Phone (tel): {buyer['phone']}")
+        page.keyboard.type(phone_val, delay=20)
+        print(f"[Pre-fill] Phone (tel{'—widget' if is_phone_widget else ''}): {phone_val}")
         break
 
     phone_ids = page.evaluate("""() => {
@@ -1147,7 +1154,7 @@ def run_tier2(page: Page, buyer: dict, receipt: dict, receipt_image_b64: str | N
 BUYER DETAILS (use for buyer/customer fields):
 - Full Name: {buyer["userName"]}
 - Email: {buyer["email"]}
-- Phone: {buyer["phone"]}
+- Phone: {buyer["phoneRaw"]} (international) / {buyer["phoneLocal"]} (local with 0) / {buyer["phoneShort"]} (without 0, for fields with country code +60 prefix)
 - Company: {buyer["name"]}
 - BRN: {buyer["brn"]}  |  TIN: {buyer["tin"]}
 - Address: {buyer["address"]}, {buyer["city"]}, 47100, {buyer["state"]}, Malaysia
@@ -1257,7 +1264,7 @@ def run_tier2_flash(page: Page, buyer: dict, receipt: dict) -> int:
 BUYER DETAILS:
 - Full Name: {buyer["userName"]}
 - Email: {buyer["email"]}
-- Phone: {buyer["phone"]}
+- Phone: {buyer["phoneRaw"]} (international) / {buyer["phoneLocal"]} (local with 0) / {buyer["phoneShort"]} (without 0, for fields with country code +60 prefix)
 - Company: {buyer["name"]}
 - BRN: {buyer["brn"]}  |  TIN: {buyer["tin"]}
 - Address: {buyer["address"]}, {buyer["city"]}, 47100, {buyer["state"]}, Malaysia
@@ -1644,6 +1651,9 @@ def handler(event: dict, context=None) -> dict:
             "name": bd["name"], "userName": bd.get("userName", bd["name"]),
             "tin": bd["tin"], "brn": bd["brn"], "email": bd["email"],
             "phone": "0" + (bd.get("phone") or "+60132201176").replace("+", "").replace("-", "").replace(" ", "").removeprefix("60"),
+            "phoneRaw": (bd.get("phone") or "+60132201176").replace(" ", ""),  # +60132201176
+            "phoneLocal": "0" + (bd.get("phone") or "+60132201176").replace("+", "").replace("-", "").replace(" ", "").removeprefix("60"),  # 0132201176
+            "phoneShort": (bd.get("phone") or "+60132201176").replace("+", "").replace("-", "").replace(" ", "").removeprefix("60"),  # 132201176 (no leading 0, for react-phone-input with +60 prefix)
             "address": bd.get("addressLine1") or bd["address"].split(",")[0],
             "city": bd.get("city", "Puchong"), "state": state,
         }
