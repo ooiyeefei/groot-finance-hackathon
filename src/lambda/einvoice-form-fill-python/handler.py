@@ -1148,7 +1148,8 @@ TASK:
 13. For any field not covered above, check the RECEIPT IMAGE for the answer.
 14. Check consent checkbox → click Submit.
 15. Fix validation errors if any (only the specific field mentioned).
-16. For forms requiring OTP/TAC: Use the system email ({buyer["email"]}) for the email field. After filling all fields, click "Request OTP" or "Send OTP". The OTP will be handled automatically — just wait for the code to appear and then submit."""
+16. IMPORTANT — Do NOT interact with reCAPTCHA / "I'm not a robot" checkbox. The CAPTCHA is handled automatically by the system. Skip it completely and focus on form fields only.
+17. For forms requiring OTP/TAC: Use the system email ({buyer["email"]}) for the email field. After filling all fields, click "Request OTP" or "Send OTP". The OTP will be handled automatically — just wait for the code to appear and then submit."""
 
     shot = base64.b64encode(page.screenshot(type="png")).decode()
     # Build CUA context: receipt image (reference) + form screenshot (current page)
@@ -1751,6 +1752,10 @@ def handler(event: dict, context=None) -> dict:
         prefill_all(page, buyer, receipt)
         prefill_custom_dropdowns(page, buyer)
 
+        # Phase 2: Solve reCAPTCHA BEFORE CUA (CapSolver API, ~5-12s)
+        # This prevents CUA from wasting turns clicking CAPTCHA images
+        solve_recaptcha(page, url)
+
         # ── Tier 2: CUA exploration (with browser-use Lambda fallback on 429) ──
         try:
             actions = run_tier2(page, buyer, receipt, receipt_image_b64)
@@ -1808,20 +1813,19 @@ def handler(event: dict, context=None) -> dict:
         else:
             time.sleep(3)  # CUA already submitted
 
-        # ── Post-CUA: Solve reCAPTCHA if present (CapSolver API) ──
-        captcha_ok = solve_recaptcha(page, url)
-        if captcha_ok:
-            # If CAPTCHA was solved (or not present), try submitting again if form is still visible
+        # ── Post-CUA: Re-solve reCAPTCHA if CUA triggered a new challenge ──
+        # (CUA might have clicked "I'm not a robot" which resets the solved state)
+        if page.locator("iframe[src*='recaptcha']").count() > 0:
+            solve_recaptcha(page, url)
+            # Try submitting if form is still visible after CAPTCHA solve
             submit_btn = page.locator('button[type="submit"], button:has-text("Submit"), input[type="submit"]').first
             if submit_btn.count() > 0 and submit_btn.is_visible():
                 try:
                     submit_btn.click(timeout=5000)
-                    print("[Form Fill] Re-submitted after CAPTCHA solve")
+                    print("[Form Fill] Re-submitted after post-CUA CAPTCHA solve")
                     time.sleep(5)
                 except Exception:
-                    pass  # CUA may have already submitted
-        else:
-            print("[Form Fill] CAPTCHA not solved — form may fail")
+                    pass
 
         # ── Phase 2: Save formConfig on success ──
         if state_ok and merchant:
