@@ -9,12 +9,8 @@
  */
 
 import { v } from "convex/values";
-import {
-  query,
-  mutation,
-  internalMutation,
-  internalQuery,
-} from "../_generated/server";
+import { query, mutation, internalMutation, internalQuery, action } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 
 // ============================================
@@ -991,6 +987,436 @@ export const hardDeleteUserRecords = internalMutation({
     // Delete user record
     await ctx.db.delete(userId);
     return { deleted: true };
+  },
+});
+
+// ============================================
+// ACCOUNT DELETION (001-account-deletion)
+// ============================================
+
+/**
+ * Internal: Check if a user is eligible for account deletion
+ * Returns blocking conditions (sole owner businesses) and pending item counts
+ */
+export const checkDeletionEligibility = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) {
+      return {
+        canDelete: false,
+        blockedBusinesses: [] as Array<{ id: string; name: string; memberCount: number }>,
+        ownedBusinessIds: [] as string[],
+        hasActiveSubscription: false,
+        stripeSubscriptionIds: [] as string[],
+        pendingItemsCount: 0,
+      };
+    }
+
+    const memberships = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    const activeMemberships = memberships.filter((m) => m.status === "active");
+
+    const blockedBusinesses: Array<{ id: string; name: string; memberCount: number }> = [];
+    const ownedBusinessIds: string[] = [];
+    let hasActiveSubscription = false;
+    const stripeSubscriptionIds: string[] = [];
+
+    for (const membership of activeMemberships) {
+      if (membership.role === "owner") {
+        ownedBusinessIds.push(membership.businessId);
+
+        const business = await ctx.db.get(membership.businessId);
+
+        if (business?.stripeSubscriptionId && business.subscriptionStatus === "active") {
+          hasActiveSubscription = true;
+          stripeSubscriptionIds.push(business.stripeSubscriptionId);
+        }
+
+        // Get all active members of this business
+        const businessMembers = await ctx.db
+          .query("business_memberships")
+          .withIndex("by_businessId", (q) => q.eq("businessId", membership.businessId))
+          .collect();
+
+        const activeMembers = businessMembers.filter((m) => m.status === "active");
+        const otherOwners = activeMembers.filter((m) => m.role === "owner" && m.userId !== args.userId);
+        const otherMembers = activeMembers.filter((m) => m.userId !== args.userId);
+
+        // Sole owner with team members = blocked
+        if (otherMembers.length > 0 && otherOwners.length === 0) {
+          blockedBusinesses.push({
+            id: membership.businessId,
+            name: business?.name || "Unknown Business",
+            memberCount: activeMembers.length,
+          });
+        }
+      }
+    }
+
+    // Count pending expense claims (draft or submitted)
+    const expenseClaims = await ctx.db
+      .query("expense_claims")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .collect();
+    const pendingClaims = expenseClaims.filter(
+      (c) => c.status === "draft" || c.status === "submitted"
+    );
+
+    // Count pending leave requests
+    const leaveRequests = await ctx.db
+      .query("leave_requests")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .collect();
+    const pendingLeaves = leaveRequests.filter((r) => r.status === "submitted");
+
+    return {
+      canDelete: blockedBusinesses.length === 0,
+      blockedBusinesses,
+      ownedBusinessIds,
+      hasActiveSubscription,
+      stripeSubscriptionIds,
+      pendingItemsCount: pendingClaims.length + pendingLeaves.length,
+    };
+  },
+});
+
+/**
+ * Internal: Delete all user data and anonymize the user record
+ * Implements the full deletion sequence from data-model.md:
+ * 1. Withdraw pending expense claims + leave requests
+ * 2. Clear designatedApproverId references
+ * 3. Create departure notifications for business owners
+ * 4. Hard-delete personal data (conversations, messages, push tokens, notifications, digests)
+ * 5. Clear managerId references, delete leave balances
+ * 6. Delete business memberships
+ * 7. Delete empty owned businesses
+ * 8. Clear optional userId in feedback/actionCenterInsights
+ * 9. Anonymize user record
+ */
+export const deleteUserAndAllData = internalMutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Step 1: Withdraw pending expense claims + leave requests
+    const expenseClaims = await ctx.db
+      .query("expense_claims")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .collect();
+    for (const claim of expenseClaims) {
+      if (claim.status === "draft" || claim.status === "submitted") {
+        await ctx.db.patch(claim._id, { status: "cancelled", updatedAt: Date.now() });
+      }
+    }
+
+    const leaveRequests = await ctx.db
+      .query("leave_requests")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .collect();
+    for (const request of leaveRequests) {
+      if (request.status === "submitted") {
+        await ctx.db.patch(request._id, {
+          status: "cancelled",
+          cancelledAt: Date.now(),
+          cancelReason: "Account deleted",
+          updatedAt: Date.now(),
+        });
+      }
+    }
+
+    // Step 2: Clear designatedApproverId references
+    const claimsWithApprover = await ctx.db
+      .query("expense_claims")
+      .withIndex("by_designatedApproverId", (q) => q.eq("designatedApproverId", args.userId))
+      .collect();
+    for (const claim of claimsWithApprover) {
+      await ctx.db.patch(claim._id, { designatedApproverId: undefined, updatedAt: Date.now() });
+    }
+
+    const submissionsWithApprover = await ctx.db
+      .query("expense_submissions")
+      .withIndex("by_designatedApproverId", (q) => q.eq("designatedApproverId", args.userId))
+      .collect();
+    for (const sub of submissionsWithApprover) {
+      await ctx.db.patch(sub._id, { designatedApproverId: undefined, updatedAt: Date.now() });
+    }
+
+    // Step 3: Create departure notifications for business owners
+    const memberships = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    for (const membership of memberships) {
+      if (membership.status !== "active") continue;
+
+      const businessMembers = await ctx.db
+        .query("business_memberships")
+        .withIndex("by_businessId", (q) => q.eq("businessId", membership.businessId))
+        .collect();
+
+      const owners = businessMembers.filter(
+        (m) => m.role === "owner" && m.userId !== args.userId && m.status === "active"
+      );
+
+      for (const owner of owners) {
+        await ctx.db.insert("notifications", {
+          recipientUserId: owner.userId,
+          businessId: membership.businessId,
+          type: "approval",
+          severity: "info",
+          status: "unread",
+          title: "Team member departed",
+          body: `${user.fullName || user.email} has deleted their account and left the business.`,
+          createdAt: Date.now(),
+        });
+      }
+    }
+
+    // Step 4: Hard-delete personal data
+    // Conversations + cascade delete messages
+    const conversations = await ctx.db
+      .query("conversations")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .collect();
+    for (const convo of conversations) {
+      const messages = await ctx.db
+        .query("messages")
+        .withIndex("by_conversationId", (q) => q.eq("conversationId", convo._id))
+        .collect();
+      for (const msg of messages) {
+        await ctx.db.delete(msg._id);
+      }
+      await ctx.db.delete(convo._id);
+    }
+
+    // Push subscriptions
+    const pushSubs = await ctx.db
+      .query("push_subscriptions")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .collect();
+    for (const sub of pushSubs) {
+      await ctx.db.delete(sub._id);
+    }
+
+    // Notifications (partial index match on recipientUserId)
+    const notifications = await ctx.db
+      .query("notifications")
+      .withIndex("by_recipient_business_status", (q) => q.eq("recipientUserId", args.userId))
+      .collect();
+    for (const notif of notifications) {
+      await ctx.db.delete(notif._id);
+    }
+
+    // Notification digests
+    const digests = await ctx.db
+      .query("notification_digests")
+      .withIndex("by_userId_businessId", (q) => q.eq("userId", args.userId))
+      .collect();
+    for (const digest of digests) {
+      await ctx.db.delete(digest._id);
+    }
+
+    // Leave balances
+    const leaveBalances = await ctx.db
+      .query("leave_balances")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .collect();
+    for (const balance of leaveBalances) {
+      await ctx.db.delete(balance._id);
+    }
+
+    // Step 5: Clear managerId references in other memberships
+    for (const membership of memberships) {
+      const businessMembers = await ctx.db
+        .query("business_memberships")
+        .withIndex("by_businessId", (q) => q.eq("businessId", membership.businessId))
+        .collect();
+
+      for (const member of businessMembers) {
+        if (member.managerId === args.userId) {
+          await ctx.db.patch(member._id, { managerId: undefined, updatedAt: Date.now() });
+        }
+      }
+    }
+
+    // Step 6: Delete business memberships
+    for (const membership of memberships) {
+      await ctx.db.delete(membership._id);
+    }
+
+    // Step 7: Delete empty owned businesses
+    const ownedMemberships = memberships.filter((m) => m.role === "owner");
+    for (const owned of ownedMemberships) {
+      const remainingMembers = await ctx.db
+        .query("business_memberships")
+        .withIndex("by_businessId", (q) => q.eq("businessId", owned.businessId))
+        .collect();
+
+      const activeRemaining = remainingMembers.filter((m) => m.status === "active");
+
+      if (activeRemaining.length === 0) {
+        await ctx.db.delete(owned.businessId);
+      }
+    }
+
+    // Step 8: Clear optional userId in feedback and actionCenterInsights
+    const feedbackItems = await ctx.db
+      .query("feedback")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+    for (const fb of feedbackItems) {
+      await ctx.db.patch(fb._id, { userId: undefined });
+    }
+
+    // actionCenterInsights uses string userId (not v.id)
+    const insights = await ctx.db
+      .query("actionCenterInsights")
+      .withIndex("by_user_status", (q) => q.eq("userId", args.userId as string))
+      .collect();
+    for (const insight of insights) {
+      await ctx.db.patch(insight._id, { userId: "" });
+    }
+
+    // Step 9: Anonymize user record (preserve for foreign key integrity)
+    await ctx.db.patch(args.userId, {
+      clerkUserId: undefined as unknown as string,
+      email: `deleted_${user.clerkUserId || user._id}@deleted.local`,
+      fullName: "Deleted User",
+      preferences: undefined,
+      emailPreferences: undefined,
+      notificationPreferences: undefined,
+      department: undefined,
+      homeCurrency: undefined,
+      businessId: undefined,
+      updatedAt: Date.now(),
+    });
+
+    return { success: true };
+  },
+});
+
+/**
+ * Action: Check account deletion eligibility (callable from API routes)
+ */
+type DeletionCheckResult = {
+  canDelete: boolean;
+  blockedBusinesses: Array<{ id: string; name: string; memberCount: number }>;
+  ownedBusinessIds: string[];
+  hasActiveSubscription: boolean;
+  stripeSubscriptionIds: string[];
+  pendingItemsCount: number;
+};
+
+export const checkAccountDeletionStatus = action({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args): Promise<DeletionCheckResult> => {
+    return await ctx.runQuery(
+      internal.functions.users.checkDeletionEligibility,
+      { userId: args.userId }
+    );
+  },
+});
+
+/**
+ * Action: Delete user account (callable from API routes via ConvexHttpClient)
+ * Wraps checkDeletionEligibility + deleteUserAndAllData in a single call
+ */
+type DeleteAccountResult =
+  | { success: false; error: string; data: { blockedBusinesses: Array<{ id: string; name: string; memberCount: number }> } }
+  | { success: true; message: string; ownedBusinessIds: string[]; hasActiveSubscription: boolean };
+
+export const deleteUserAccount = action({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args): Promise<DeleteAccountResult> => {
+    // Check eligibility first
+    const eligibility = await ctx.runQuery(
+      internal.functions.users.checkDeletionEligibility,
+      { userId: args.userId }
+    );
+
+    if (!eligibility.canDelete) {
+      return {
+        success: false,
+        error: "Cannot delete account while you are the sole owner of businesses with other members",
+        data: { blockedBusinesses: eligibility.blockedBusinesses },
+      };
+    }
+
+    // Perform deletion
+    await ctx.runMutation(
+      internal.functions.users.deleteUserAndAllData,
+      { userId: args.userId }
+    );
+
+    return {
+      success: true,
+      message: "Account deleted successfully",
+      ownedBusinessIds: eligibility.ownedBusinessIds,
+      hasActiveSubscription: eligibility.hasActiveSubscription,
+    };
+  },
+});
+
+/**
+ * Create a deletion data export record for business owners to download
+ */
+export const createDeletionDataExport = mutation({
+  args: {
+    businessId: v.id("businesses"),
+    deletedUserEmail: v.string(),
+    deletedUserName: v.string(),
+    s3Key: v.string(),
+    downloadToken: v.string(),
+    expiresAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("deletion_data_exports", {
+      businessId: args.businessId,
+      deletedUserEmail: args.deletedUserEmail,
+      deletedUserName: args.deletedUserName,
+      s3Key: args.s3Key,
+      downloadToken: args.downloadToken,
+      createdAt: Date.now(),
+      expiresAt: args.expiresAt,
+      downloadedAt: undefined,
+    });
+  },
+});
+
+/**
+ * Get deletion data export by download token (public query for download endpoint)
+ */
+export const getDeletionDataExport = query({
+  args: { downloadToken: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("deletion_data_exports")
+      .withIndex("by_downloadToken", (q) => q.eq("downloadToken", args.downloadToken))
+      .first();
+  },
+});
+
+/**
+ * Mark a deletion data export as downloaded
+ */
+export const markDeletionExportDownloaded = mutation({
+  args: { downloadToken: v.string() },
+  handler: async (ctx, args) => {
+    const record = await ctx.db
+      .query("deletion_data_exports")
+      .withIndex("by_downloadToken", (q) => q.eq("downloadToken", args.downloadToken))
+      .first();
+    if (record) {
+      await ctx.db.patch(record._id, { downloadedAt: Date.now() });
+    }
   },
 });
 

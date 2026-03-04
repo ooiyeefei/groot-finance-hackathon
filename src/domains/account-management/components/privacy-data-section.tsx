@@ -3,6 +3,7 @@
 import { useState, lazy, Suspense } from 'react'
 import { useConsent, useConsentHistory } from '@/domains/compliance/hooks/use-consent'
 import { Download, History, ShieldOff, Shield, ExternalLink, Loader2 } from 'lucide-react'
+import DeleteAccountSection from '@/domains/account-management/components/delete-account-section'
 
 const DownloadMyData = lazy(() => import('@/domains/account-management/components/download-my-data'))
 
@@ -32,6 +33,11 @@ export function PrivacyDataSection() {
       </div>
       <ConsentHistoryCard />
       <RevokeConsentCard />
+
+      {/* Delete Account - Danger Zone */}
+      <div className="rounded-lg border border-destructive/30 bg-card p-6">
+        <DeleteAccountSection />
+      </div>
     </div>
   )
 }

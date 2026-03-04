@@ -230,6 +230,7 @@ formatBusinessDate('2025-10-31')  // "Oct 31, 2025" (no timezone shift)
 - TypeScript 5.9.3 / Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, Clerk 6.30.0, React 19.1.2, JSZip (new — for client-side ZIP generation) (001-pdpa-data-rights)
 - Markdown (documentation deliverable) + None (documentation only; references existing infrastructure) (001-pdpa-breach-notif-sop)
 - Git repository (`grootdev-ai/groot-finance`) (001-pdpa-breach-notif-sop)
+- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, Clerk 6.30.0, Stripe SDK 20.1.0, React 19.1.2 (001-account-deletion)
 
 ## Recent Changes
 - 001-category-3-mcp: Added MCP Server with API key management

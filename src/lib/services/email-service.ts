@@ -1356,6 +1356,232 @@ Sent from ${businessName} via Groot Finance
       }
     }
   }
+
+  // ============================================
+  // ACCOUNT DELETION NOTIFICATION
+  // ============================================
+
+  async sendAccountDeletionNotification(data: {
+    recipientEmail: string
+    recipientName: string
+    deletedUserName: string
+    deletedUserEmail: string
+    businessName: string
+    businessId: string
+    downloadUrl: string | null
+    expiryDays: number
+  }): Promise<{ success: boolean; error?: string; messageId?: string; provider?: 'ses' | 'resend' }> {
+    this.initialize()
+
+    const { recipientEmail, recipientName, deletedUserName, businessName, downloadUrl, expiryDays } = data
+    const subject = `Team member departed: ${deletedUserName} deleted their account — ${businessName}`
+
+    const htmlBody = this.generateAccountDeletionHTML(data)
+    const textBody = this.generateAccountDeletionText(data)
+
+    try {
+      const rawMessage = this.buildRawEmail({
+        from: this.config!.fromEmail,
+        to: recipientEmail,
+        subject,
+        htmlBody,
+        textBody
+      })
+
+      const command = new SendRawEmailCommand({
+        RawMessage: { Data: Buffer.from(rawMessage) },
+        ConfigurationSetName: this.config!.configurationSet
+      })
+
+      const response = await this.ses!.send(command)
+
+      if (response.MessageId) {
+        console.log(`[EmailService] Account deletion notification sent via SES to ${recipientEmail}, MessageId: ${response.MessageId}`)
+        return { success: true, messageId: response.MessageId, provider: 'ses' }
+      }
+    } catch (sesError) {
+      console.error('[EmailService] SES failed for account deletion notification:', sesError)
+
+      if (this.isSandboxError(sesError) && this.resend) {
+        const resendResult = await this.sendViaResend({
+          to: recipientEmail,
+          subject,
+          htmlBody,
+          textBody
+        })
+        if (resendResult.success) {
+          return { ...resendResult, provider: 'resend' }
+        }
+      }
+    }
+
+    return { success: false, error: 'Failed to send account deletion notification' }
+  }
+
+  private generateAccountDeletionHTML(data: {
+    recipientName: string
+    deletedUserName: string
+    deletedUserEmail: string
+    businessName: string
+    businessId: string
+    downloadUrl: string | null
+    expiryDays: number
+  }): string {
+    const { recipientName, deletedUserName, deletedUserEmail, businessName, businessId, downloadUrl, expiryDays } = data
+
+    const downloadSection = downloadUrl ? `
+        <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 20px; margin: 20px 0;">
+          <h3 style="color: #0369a1; margin: 0 0 8px 0; font-size: 16px;">Data Archive Available</h3>
+          <p style="margin: 0 0 16px 0; font-size: 14px; color: #333;">
+            A copy of ${deletedUserName}'s data has been archived for your records.
+            This download link <strong>expires in ${expiryDays} days</strong>.
+          </p>
+          <div style="text-align: center;">
+            <a href="${downloadUrl}" class="cta-button" style="background: #0369a1 !important;">Download Data Archive</a>
+          </div>
+          <p style="margin: 12px 0 0 0; font-size: 12px; color: #6b7280; text-align: center;">
+            Link expires ${expiryDays} days from the deletion date. After expiry, contact support to request the data.
+          </p>
+        </div>` : ''
+
+    return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Team Member Departed — ${businessName}</title>
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          line-height: 1.6;
+          color: #333;
+          max-width: 600px;
+          margin: 0 auto;
+          padding: 20px;
+        }
+        .header {
+          background: linear-gradient(135deg, #f97316, #ea580c);
+          color: white;
+          padding: 30px;
+          text-align: center;
+          border-radius: 8px 8px 0 0;
+        }
+        .content {
+          background: #ffffff;
+          padding: 30px;
+          border: 1px solid #e5e7eb;
+          border-top: none;
+        }
+        .cta-button {
+          display: inline-block;
+          background: #3b82f6 !important;
+          color: #ffffff !important;
+          padding: 12px 24px;
+          text-decoration: none;
+          border-radius: 6px;
+          font-weight: 600;
+          margin: 10px 0;
+          border: none;
+        }
+        .footer {
+          background: #f9fafb;
+          padding: 20px;
+          text-align: center;
+          font-size: 14px;
+          color: #6b7280;
+          border-radius: 0 0 8px 8px;
+          border: 1px solid #e5e7eb;
+          border-top: none;
+        }
+        .info-box {
+          background: #fef3c7;
+          border: 1px solid #fde68a;
+          border-radius: 8px;
+          padding: 16px;
+          margin: 16px 0;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1 style="margin: 0;">Team Member Departed</h1>
+        <p style="margin: 8px 0 0 0; opacity: 0.9;">${businessName}</p>
+      </div>
+
+      <div class="content">
+        <p>Hi ${recipientName},</p>
+
+        <p><strong>${deletedUserName}</strong> (${deletedUserEmail}) has deleted their account and left <strong>${businessName}</strong>.</p>
+
+        <div class="info-box">
+          <p style="margin: 0; font-size: 14px;"><strong>What happened:</strong></p>
+          <ul style="margin: 8px 0 0 0; padding-left: 20px; font-size: 14px;">
+            <li>Their personal data has been removed</li>
+            <li>Financial records now show "Deleted User"</li>
+            <li>Pending expense claims and leave requests were cancelled</li>
+          </ul>
+        </div>
+
+        ${downloadSection}
+
+        <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-top: 20px;">
+          <p style="margin: 0 0 8px 0; font-size: 14px;"><strong>Need help?</strong></p>
+          <p style="margin: 0; font-size: 13px; color: #6b7280;">
+            If you need assistance or have questions about this departure, contact our support team
+            and reference your Business ID: <code style="background: #e5e7eb; padding: 2px 6px; border-radius: 4px; font-size: 12px;">${businessId}</code>
+          </p>
+          <div style="margin-top: 12px;">
+            <a href="https://finance.hellogroot.com/en/support" style="color: #3b82f6; font-size: 13px;">Contact Support</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <p>This is an automated notification from Groot Finance.</p>
+        <p style="font-size: 12px;">You received this because you are an owner of ${businessName}.</p>
+      </div>
+    </body>
+    </html>`
+  }
+
+  private generateAccountDeletionText(data: {
+    recipientName: string
+    deletedUserName: string
+    deletedUserEmail: string
+    businessName: string
+    businessId: string
+    downloadUrl: string | null
+    expiryDays: number
+  }): string {
+    const { recipientName, deletedUserName, deletedUserEmail, businessName, businessId, downloadUrl, expiryDays } = data
+
+    let text = `Hi ${recipientName},
+
+${deletedUserName} (${deletedUserEmail}) has deleted their account and left ${businessName}.
+
+What happened:
+- Their personal data has been removed
+- Financial records now show "Deleted User"
+- Pending expense claims and leave requests were cancelled
+`
+
+    if (downloadUrl) {
+      text += `
+Data Archive Available:
+A copy of ${deletedUserName}'s data has been archived. This link expires in ${expiryDays} days.
+Download: ${downloadUrl}
+`
+    }
+
+    text += `
+Need help? Contact support and reference Business ID: ${businessId}
+Support: https://finance.hellogroot.com/en/support
+
+— Groot Finance`
+
+    return text
+  }
 }
 
 // Export singleton instance

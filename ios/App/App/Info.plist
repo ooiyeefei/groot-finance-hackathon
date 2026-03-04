@@ -37,6 +37,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Groot Finance needs camera access to capture receipt photos for expense claims.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Groot Finance needs photo library access to select receipt images for expense claims.</string>
 	<key>NSUserNotificationUsageDescription</key>
 	<string>Groot Finance sends push notifications for expense claim approvals and important updates.</string>
 	<key>UILaunchStoryboardName</key>

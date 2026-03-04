@@ -36,6 +36,7 @@ export const S3_PREFIXES = {
   invoices: 'invoices',
   expense_claims: 'expense_claims',
   business_profiles: 'business-profiles',
+  account_deletions: 'account-deletions',
 } as const
 
 export type S3Prefix = keyof typeof S3_PREFIXES

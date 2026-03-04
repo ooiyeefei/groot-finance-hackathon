@@ -2175,4 +2175,21 @@ export default defineSchema({
     .index("by_userId_policyType", ["userId", "policyType"])
     .index("by_userId_policyType_policyVersion", ["userId", "policyType", "policyVersion"])
     .index("by_businessId", ["businessId"]),
+
+  // ============================================
+  // ACCOUNT DELETION DATA EXPORTS
+  // ============================================
+
+  deletion_data_exports: defineTable({
+    businessId: v.id("businesses"),
+    deletedUserEmail: v.string(),
+    deletedUserName: v.string(),
+    s3Key: v.string(),
+    downloadToken: v.string(),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    downloadedAt: v.optional(v.number()),
+  })
+    .index("by_downloadToken", ["downloadToken"])
+    .index("by_businessId", ["businessId"]),
 });
