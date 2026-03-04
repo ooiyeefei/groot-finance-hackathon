@@ -21,6 +21,16 @@ import { action, internalAction, internalMutation, internalQuery } from "../_gen
 import { internal } from "../_generated/api";
 
 // ============================================
+// DETECTION CONSTANTS
+// ============================================
+
+/** Dedup window: skip creating insight if same type exists within this period */
+const DEDUP_WINDOW_MS = 90 * 24 * 60 * 60 * 1000; // 90 days (3 months)
+
+/** Dedup window for deadline-specific alerts (shorter — re-alert as deadlines approach) */
+const DEADLINE_DEDUP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+// ============================================
 // INTERNAL QUERIES (for use in actions)
 // ============================================
 
@@ -295,7 +305,7 @@ async function runAnomalyDetection(
     .withIndex("by_category", (q: any) => q.eq("category", "anomaly"))
     .collect();
 
-  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const dedupCutoff = Date.now() - DEDUP_WINDOW_MS;
 
   // Check each category for anomalies
   for (const [category, amounts] of Object.entries(byCategory)) {
@@ -327,7 +337,7 @@ async function runAnomalyDetection(
         (i: any) =>
           i.metadata?.transactionId === txnIdStr &&
           i.businessId === businessId.toString() &&
-          i.detectedAt > sevenDaysAgo
+          i.detectedAt > dedupCutoff
       );
 
       if (isDuplicate) continue;
@@ -396,7 +406,7 @@ async function runCategorizationDetection(
   const isDuplicate = existingInsights.some(
     (i: any) =>
       i.businessId === businessId.toString() &&
-      i.detectedAt > Date.now() - 7 * 24 * 60 * 60 * 1000 // Within last 7 days
+      i.detectedAt > Date.now() - DEDUP_WINDOW_MS
   );
 
   if (isDuplicate) return 0;
@@ -416,7 +426,7 @@ async function runCategorizationDetection(
       affectedEntities: uncategorized.slice(0, 10).map((e: any) => e._id.toString()),
       recommendedAction: `Review and categorize your uncategorized transactions for better financial tracking.`,
       detectedAt: Date.now(),
-      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, // Expires in 7 days
+      // No expiresAt — insight persists until user dismisses or actions it
       metadata: {
         uncategorizedCount: uncategorized.length,
         percentageAffected: uncategorizedPct,
@@ -480,7 +490,7 @@ async function runCashFlowDetection(
     (i: any) =>
       i.businessId === businessId.toString() &&
       i.metadata?.insightType === "expense_exceeding_income" &&
-      i.detectedAt > Date.now() - 7 * 24 * 60 * 60 * 1000 // Within last 7 days
+      i.detectedAt > Date.now() - DEDUP_WINDOW_MS
   );
 
   if (isDuplicate) return 0;
@@ -504,7 +514,7 @@ async function runCashFlowDetection(
         ? `Record your income transactions or review if all expenses are legitimate.`
         : `Review your recent expenses and consider cost-cutting measures or increasing revenue.`,
       detectedAt: Date.now(),
-      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      // No expiresAt — persists until user acts
       metadata: {
         totalIncome,
         totalExpenses,
@@ -615,7 +625,7 @@ async function runVendorConcentration(
           i.metadata?.vendorId === vendorId &&
           i.metadata?.category === category &&
           i.metadata?.insightType === "vendor_concentration" &&
-          i.detectedAt > Date.now() - 7 * 24 * 60 * 60 * 1000
+          i.detectedAt > Date.now() - DEDUP_WINDOW_MS
       );
 
       if (isDuplicate) continue;
@@ -634,7 +644,7 @@ async function runVendorConcentration(
           affectedEntities: [vendorId],
           recommendedAction: `Review your ${category} vendors and consider adding alternative suppliers.`,
           detectedAt: Date.now(),
-          expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
+          // No expiresAt — persists until user acts
           metadata: {
             vendorId,
             vendorName: vendorData.name,
@@ -718,7 +728,7 @@ async function runVendorSpendingChanges(
       (i: any) =>
         i.metadata?.vendorId === vendorId &&
         i.metadata?.insightType === "vendor_spending_change" &&
-        i.detectedAt > Date.now() - 7 * 24 * 60 * 60 * 1000
+        i.detectedAt > Date.now() - DEDUP_WINDOW_MS
     );
 
     if (isDuplicate) continue;
@@ -740,7 +750,7 @@ async function runVendorSpendingChanges(
           ? `Review recent transactions with ${data.name}.`
           : `Investigate why spending with ${data.name} has dropped.`,
         detectedAt: Date.now(),
-        expiresAt: Date.now() + 14 * 24 * 60 * 60 * 1000,
+        // No expiresAt — persists until user acts
         metadata: {
           vendorId,
           vendorName: data.name,
@@ -856,7 +866,7 @@ async function runVendorRiskAnalysis(
       (i: any) =>
         i.metadata?.vendorId === vendor._id.toString() &&
         i.metadata?.insightType === "vendor_risk" &&
-        i.detectedAt > Date.now() - 14 * 24 * 60 * 60 * 1000
+        i.detectedAt > Date.now() - DEDUP_WINDOW_MS
     );
 
     if (isDuplicate) continue;
@@ -875,7 +885,7 @@ async function runVendorRiskAnalysis(
         affectedEntities: [vendor._id.toString()],
         recommendedAction: `Review and update vendor information for ${vendor.name}.`,
         detectedAt: Date.now(),
-        expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
+        // No expiresAt — persists until user acts
         metadata: {
           vendorId: vendor._id.toString(),
           vendorName: vendor.name,
@@ -961,7 +971,7 @@ async function runDeadlineProximityAlerts(
       (i: any) =>
         i.metadata?.transactionId === entry._id.toString() &&
         i.metadata?.insightType === "payment_due" &&
-        i.detectedAt > Date.now() - 3 * 24 * 60 * 60 * 1000
+        i.detectedAt > Date.now() - DEADLINE_DEDUP_WINDOW_MS
     );
 
     if (isDuplicate) continue;
@@ -1063,7 +1073,7 @@ async function runCashBalanceAlerts(
     (i: any) =>
       i.metadata?.insightType === "low_runway" &&
       i.businessId === businessId.toString() &&
-      i.detectedAt > Date.now() - 7 * 24 * 60 * 60 * 1000
+      i.detectedAt > Date.now() - DEDUP_WINDOW_MS
   );
 
   if (isDuplicate) return 0;
@@ -1087,7 +1097,7 @@ async function runCashBalanceAlerts(
           ? `Critical: Review expenses and prioritize collections immediately.`
           : `Review cash flow and consider reducing non-essential expenses.`,
       detectedAt: Date.now(),
-      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      // No expiresAt — persists until user acts
       metadata: {
         runwayDays,
         monthlyBurnRate,
@@ -1160,7 +1170,7 @@ async function runDuplicateTransactionAlerts(
       (i: any) =>
         i.metadata?.duplicateGroupIds === txnIds &&
         i.status !== "actioned" &&
-        i.detectedAt > Date.now() - 14 * 24 * 60 * 60 * 1000
+        i.detectedAt > Date.now() - DEDUP_WINDOW_MS
     );
 
     if (isDuplicate) continue;
@@ -1179,7 +1189,7 @@ async function runDuplicateTransactionAlerts(
         affectedEntities: txns.map((t: any) => t._id.toString()),
         recommendedAction: `Review these transactions to confirm they are not duplicates.`,
         detectedAt: Date.now(),
-        expiresAt: Date.now() + 14 * 24 * 60 * 60 * 1000,
+        // No expiresAt — persists until user acts
         metadata: {
           duplicateGroupIds: txnIds,
           amount,
@@ -1253,12 +1263,12 @@ async function runStalePayableDetection(
     .withIndex("by_category", (q: any) => q.eq("category", "deadline"))
     .collect();
 
-  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const dedupCutoff = Date.now() - DEDUP_WINDOW_MS;
   const isDuplicate = existingInsights.some(
     (i: any) =>
       i.businessId === businessId.toString() &&
       i.metadata?.insightType === "stale_payables" &&
-      i.detectedAt > sevenDaysAgo
+      i.detectedAt > dedupCutoff
   );
 
   if (isDuplicate) return 0;
@@ -1286,7 +1296,7 @@ async function runStalePayableDetection(
       affectedEntities: staleEntries.map((e: any) => e._id.toString()),
       recommendedAction: `Set due dates on these payables and schedule payments. Bills without due dates are easy to forget.`,
       detectedAt: Date.now(),
-      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      // No expiresAt — persists until user acts
       metadata: {
         insightType: "stale_payables",
         count: staleEntries.length,
@@ -1366,12 +1376,12 @@ export const analyzeNewTransaction = internalMutation({
       .collect();
 
     const txnIdStr = args.transactionId.toString();
-    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const dedupCutoff = Date.now() - DEDUP_WINDOW_MS;
     const isDuplicate = existingInsights.some(
       (i: any) =>
         i.metadata?.transactionId === txnIdStr &&
         i.businessId === args.businessId.toString() &&
-        i.detectedAt > sevenDaysAgo
+        i.detectedAt > dedupCutoff
     );
 
     if (isDuplicate) return 0;
@@ -1458,13 +1468,13 @@ export const analyzeNewTransaction = internalMutation({
               .withIndex("by_category", (q: any) => q.eq("category", "optimization"))
               .collect();
 
-            const sevenDaysAgoMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+            const dedupCutoffMs = Date.now() - DEDUP_WINDOW_MS;
             const surgeDuplicate = existingOptInsights.some(
               (i: any) =>
                 i.metadata?.vendorKey === vendorKey &&
                 i.metadata?.insightType === "vendor_pricing_surge" &&
                 i.businessId === args.businessId.toString() &&
-                i.detectedAt > sevenDaysAgoMs
+                i.detectedAt > dedupCutoffMs
             );
 
             if (!surgeDuplicate) {
@@ -1483,7 +1493,7 @@ export const analyzeNewTransaction = internalMutation({
                   affectedEntities: [txnIdStr],
                   recommendedAction: `Review this charge and verify pricing with ${displayName}. Compare against previous invoices.`,
                   detectedAt: Date.now(),
-                  expiresAt: Date.now() + 14 * 24 * 60 * 60 * 1000,
+                  // No expiresAt — persists until user acts
                   metadata: {
                     vendorKey,
                     vendorName: displayName,

@@ -1409,7 +1409,7 @@ export const markOverduePayables = internalMutation({
       .withIndex("by_category", (q: any) => q.eq("category", "deadline"))
       .collect();
 
-    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const dedupCutoff = Date.now() - 90 * 24 * 60 * 60 * 1000; // 3 months
 
     for (const [businessId, entries] of entriesByBusiness) {
       // Dedup: skip if we already created a batch overdue payable insight for this business within 24h
@@ -1417,7 +1417,7 @@ export const markOverduePayables = internalMutation({
         (i) =>
           i.businessId === businessId &&
           i.metadata?.insightType === "overdue_payables_batch" &&
-          i.detectedAt > oneDayAgo
+          i.detectedAt > dedupCutoff
       );
 
       if (isDuplicate) continue;
@@ -1460,7 +1460,7 @@ export const markOverduePayables = internalMutation({
             ? "Urgent: Contact vendors immediately to avoid penalties or service disruption."
             : "Review overdue payables and prioritize payments.",
           detectedAt: Date.now(),
-          expiresAt: Date.now() + 3 * 24 * 60 * 60 * 1000, // Refresh every 3 days via cron
+          // No expiresAt — persists until user acts
           metadata: {
             insightType: "overdue_payables_batch",
             count: entries.length,

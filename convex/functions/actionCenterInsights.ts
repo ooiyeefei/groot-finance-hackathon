@@ -342,12 +342,12 @@ export const internalCreate = internalMutation({
       )
       .collect();
 
-    const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000; // 3-month dedup
     const duplicateExists = recentInsights.some(
       (i) =>
         i.category === args.category &&
         i.title === args.title &&
-        i.detectedAt > twentyFourHoursAgo
+        i.detectedAt > ninetyDaysAgo
     );
 
     if (duplicateExists) {

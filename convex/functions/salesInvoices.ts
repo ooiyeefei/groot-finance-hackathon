@@ -1116,7 +1116,7 @@ export const markOverdue = internalMutation({
       .withIndex("by_category", (q: any) => q.eq("category", "deadline"))
       .collect();
 
-    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const dedupCutoff = Date.now() - 90 * 24 * 60 * 60 * 1000; // 3 months
 
     for (const [businessId, invoices] of byBusiness) {
       // Dedup: skip if we created an overdue AR insight for this business within 24h
@@ -1124,9 +1124,9 @@ export const markOverdue = internalMutation({
         (i) =>
           i.businessId === businessId &&
           i.metadata?.insightType === "overdue_receivables_batch" &&
-          i.detectedAt > oneDayAgo
+          i.detectedAt > dedupCutoff
       );
-      if (isDuplicate) continue;
+      if (isDuplicate) continue; // Skip — already surfaced within 3 months
 
       const totalOutstanding = invoices.reduce(
         (sum, inv) => sum + (inv.balanceDue ?? inv.totalAmount),
@@ -1168,7 +1168,7 @@ export const markOverdue = internalMutation({
             ? "Urgent: Send final payment reminders and consider escalation for invoices 30+ days overdue."
             : "Send payment reminders to customers with overdue invoices.",
           detectedAt: Date.now(),
-          expiresAt: Date.now() + 3 * 24 * 60 * 60 * 1000, // Refresh every 3 days via cron
+          // No expiresAt — persists until user acts
           metadata: {
             insightType: "overdue_receivables_batch",
             count: invoices.length,
