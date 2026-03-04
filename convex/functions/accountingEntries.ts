@@ -656,6 +656,10 @@ export const create = mutation({
         transactionId: entryId,
         businessId: args.businessId,
       });
+      // Layer 2: Schedule LLM enrichment for any new insights (runs after detection)
+      await ctx.scheduler.runAfter(5000, internal.functions.actionCenterJobs.enrichRecentInsights, {
+        businessId: args.businessId.toString(),
+      });
     }
 
     return entryId;

@@ -19,6 +19,7 @@
 import { v } from "convex/values";
 import { action, internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
+import { callLLMJson } from "../lib/llm";
 
 // ============================================
 // DETECTION CONSTANTS
@@ -67,6 +68,134 @@ export const getBusinessMembers = internalQuery({
     );
 
     return activeMembers;
+  },
+});
+
+/**
+ * Get structured business summary for LLM prompts (Layer 2)
+ *
+ * Returns a compact overview of the business's financial state:
+ * income/expenses, top vendors, category breakdown, AR/AP status,
+ * and existing insights. Used by enrichInsight and runAIDiscovery.
+ */
+export const getBusinessSummary = internalQuery({
+  args: {
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+    // Business info
+    const business = await ctx.db.get(args.businessId);
+
+    // Accounting entries (last 90 days)
+    const entries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", args.businessId))
+      .collect();
+
+    const recent = entries.filter(
+      (e: any) => !e.deletedAt && e.transactionDate && e.transactionDate >= ninetyDaysAgo
+    );
+
+    let totalIncome = 0;
+    let totalExpenses = 0;
+    const vendorSpend: Record<string, { name: string; amount: number; count: number }> = {};
+    const categorySpend: Record<string, number> = {};
+    let pendingPayables = 0;
+    let overduePayables = 0;
+
+    for (const e of recent) {
+      const amount = Math.abs(e.homeCurrencyAmount || e.originalAmount || 0);
+      if (e.transactionType === "Income") {
+        totalIncome += amount;
+      } else {
+        totalExpenses += amount;
+        const cat = e.category || "uncategorized";
+        categorySpend[cat] = (categorySpend[cat] || 0) + amount;
+
+        const vendorKey = e.vendorName || "Unknown";
+        if (!vendorSpend[vendorKey]) vendorSpend[vendorKey] = { name: vendorKey, amount: 0, count: 0 };
+        vendorSpend[vendorKey].amount += amount;
+        vendorSpend[vendorKey].count++;
+      }
+      if (e.status === "pending" && (e.transactionType === "Expense" || e.transactionType === "Cost of Goods Sold")) {
+        pendingPayables += amount;
+      }
+      if (e.status === "overdue") {
+        overduePayables += amount;
+      }
+    }
+
+    // Top vendors by spend
+    const topVendors = Object.values(vendorSpend)
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5)
+      .map((v) => `${v.name}: ${v.amount.toLocaleString()} (${v.count} txns)`);
+
+    // Category breakdown
+    const categories = Object.entries(categorySpend)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5)
+      .map(([cat, amt]) => `${cat}: ${amt.toLocaleString()}`);
+
+    // Sales invoices status
+    const salesInvoices = await ctx.db
+      .query("sales_invoices")
+      .filter((q: any) =>
+        q.and(
+          q.eq(q.field("businessId"), args.businessId),
+          q.eq(q.field("deletedAt"), undefined)
+        )
+      )
+      .collect();
+
+    const arOutstanding = salesInvoices
+      .filter((i: any) => ["sent", "partially_paid", "overdue"].includes(i.status))
+      .reduce((sum: number, i: any) => sum + (i.balanceDue ?? i.totalAmount), 0);
+    const arOverdueCount = salesInvoices.filter((i: any) => i.status === "overdue").length;
+
+    // Expense claims
+    const expenseClaims = await ctx.db
+      .query("expense_claims")
+      .filter((q: any) =>
+        q.and(
+          q.eq(q.field("businessId"), args.businessId),
+          q.eq(q.field("deletedAt"), undefined)
+        )
+      )
+      .collect();
+
+    const recentClaims = expenseClaims.filter(
+      (c: any) => c.transactionDate && c.transactionDate >= ninetyDaysAgo
+    );
+
+    // Existing insights
+    const insights = await ctx.db
+      .query("actionCenterInsights")
+      .withIndex("by_business_priority", (q: any) => q.eq("businessId", args.businessId.toString()))
+      .collect();
+
+    const activeInsights = insights
+      .filter((i: any) => i.status === "new" || i.status === "reviewed")
+      .map((i: any) => i.title);
+
+    return {
+      businessName: business?.name || "Unknown",
+      country: (business as any)?.countryCode || "MY",
+      homeCurrency: business?.homeCurrency || "MYR",
+      totalIncome: Math.round(totalIncome),
+      totalExpenses: Math.round(totalExpenses),
+      transactionCount: recent.length,
+      topVendors,
+      categories,
+      arOutstanding: Math.round(arOutstanding),
+      arOverdueCount,
+      apPending: Math.round(pendingPayables),
+      apOverdue: Math.round(overduePayables),
+      claimCount: recentClaims.length,
+      existingInsightTitles: activeInsights,
+    };
   },
 });
 
@@ -200,7 +329,7 @@ export const runProactiveAnalysis = internalAction({
         continue;
       }
 
-      // Run detection algorithms
+      // Run detection algorithms (Layer 1)
       const insightsCreated = await ctx.runMutation(
         internal.functions.actionCenterJobs.runDetectionAlgorithms,
         {
@@ -210,6 +339,20 @@ export const runProactiveAnalysis = internalAction({
       );
 
       totalInsights += insightsCreated;
+
+      // Layer 2a: Schedule LLM enrichment for newly created insights
+      if (insightsCreated > 0) {
+        const recentInsights = await ctx.runQuery(
+          internal.functions.actionCenterJobs.getRecentUnenrichedInsights,
+          { businessId: business._id.toString() }
+        );
+
+        for (const insight of recentInsights) {
+          await ctx.scheduler.runAfter(0, internal.functions.actionCenterJobs.enrichInsight, {
+            insightId: insight._id,
+          });
+        }
+      }
     }
 
     const duration = Date.now() - startTime;
@@ -1519,6 +1662,452 @@ export const analyzeNewTransaction = internalMutation({
     }
 
     return insightsCreated;
+  },
+});
+
+// ============================================
+// LAYER 2a: LLM INSIGHT ENRICHMENT
+// ============================================
+
+/**
+ * Enrich an existing insight with LLM-generated contextual explanation.
+ *
+ * Called async after Layer 1 creates an insight. Patches the insight's
+ * description and recommendedAction in-place with richer, business-contextual text.
+ * Stores original template text in metadata.originalDescription.
+ */
+export const enrichInsight = internalAction({
+  args: {
+    insightId: v.id("actionCenterInsights"),
+  },
+  handler: async (ctx, args) => {
+    // 1. Read the insight
+    const insight = await ctx.runQuery(internal.functions.actionCenterJobs.getInsightForEnrichment, {
+      insightId: args.insightId,
+    });
+
+    if (!insight) {
+      console.log(`[Layer2] Insight ${args.insightId} not found, skipping enrichment`);
+      return;
+    }
+
+    // 2. Get business context
+    const businessId = insight.businessId;
+    // businessId is stored as string, need to resolve to Id
+    const summary = await ctx.runQuery(internal.functions.actionCenterJobs.getBusinessSummaryByStringId, {
+      businessIdStr: businessId,
+    });
+
+    if (!summary) {
+      console.log(`[Layer2] Business ${businessId} not found, skipping enrichment`);
+      return;
+    }
+
+    // 3. Build context about affected entities
+    let affectedDetails = "";
+    if (insight.affectedEntities?.length > 0) {
+      const details = await ctx.runQuery(internal.functions.actionCenterJobs.getTransactionDetails, {
+        transactionIds: insight.affectedEntities.slice(0, 5), // Limit to 5 for token efficiency
+      });
+      affectedDetails = details || "";
+    }
+
+    // 4. Call LLM
+    const systemPrompt = `You are a financial analyst for a Southeast Asian SME called "${summary.businessName}".
+Enrich this financial alert with business context and specific, actionable advice.
+Be concise (2-3 sentences per field). Use the business's home currency (${summary.homeCurrency}).
+Respond ONLY in valid JSON — no markdown, no explanation outside the JSON.`;
+
+    const userPrompt = `Alert: ${insight.title}
+Raw analysis: ${insight.description}
+Category: ${insight.category} | Priority: ${insight.priority}
+
+${affectedDetails ? `Affected transactions:\n${affectedDetails}\n` : ""}
+Business context (last 90 days):
+- Income: ${summary.totalIncome.toLocaleString()} ${summary.homeCurrency}
+- Expenses: ${summary.totalExpenses.toLocaleString()} ${summary.homeCurrency} (${summary.transactionCount} transactions)
+- Top vendors: ${summary.topVendors.join(", ") || "None"}
+- Categories: ${summary.categories.join(", ") || "None"}
+- AR outstanding: ${summary.arOutstanding.toLocaleString()} (${summary.arOverdueCount} overdue)
+- AP pending: ${summary.apPending.toLocaleString()} (${summary.apOverdue.toLocaleString()} overdue)
+
+Respond in this exact JSON format:
+{"description":"2-3 sentence explanation of WHY this matters for this specific business","recommendation":"Specific step-by-step action to take","connectedSignal":"One related pattern to watch (or null if none)"}`;
+
+    interface EnrichmentResult {
+      description?: string;
+      recommendation?: string;
+      connectedSignal?: string | null;
+    }
+
+    const result = await callLLMJson<EnrichmentResult>({
+      systemPrompt,
+      userPrompt,
+      maxTokens: 400,
+      temperature: 0.3,
+    });
+
+    if (!result || !result.description) {
+      console.log(`[Layer2] LLM returned no enrichment for insight ${args.insightId}`);
+      return;
+    }
+
+    // 5. Patch insight in-place
+    await ctx.runMutation(internal.functions.actionCenterJobs.patchInsightEnrichment, {
+      insightId: args.insightId,
+      enrichedDescription: result.description,
+      enrichedRecommendation: result.recommendation || insight.recommendedAction,
+      originalDescription: insight.description,
+      originalRecommendation: insight.recommendedAction,
+      connectedSignal: result.connectedSignal || undefined,
+    });
+
+    console.log(`[Layer2] Enriched insight ${args.insightId}: "${insight.title}"`);
+  },
+});
+
+/**
+ * Helper query: read insight for enrichment (used by enrichInsight action)
+ */
+export const getInsightForEnrichment = internalQuery({
+  args: { insightId: v.id("actionCenterInsights") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.insightId);
+  },
+});
+
+/**
+ * Helper query: get business summary by string ID (resolves string → Id)
+ */
+export const getBusinessSummaryByStringId = internalQuery({
+  args: { businessIdStr: v.string() },
+  handler: async (ctx, args) => {
+    // Try to resolve the string as a Convex ID
+    const businesses = await ctx.db.query("businesses").collect();
+    const business = businesses.find((b: any) => b._id.toString() === args.businessIdStr);
+    if (!business) return null;
+
+    // Delegate to getBusinessSummary logic (inline to avoid circular dependency)
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+    const entries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", business._id))
+      .collect();
+
+    const recent = entries.filter(
+      (e: any) => !e.deletedAt && e.transactionDate && e.transactionDate >= ninetyDaysAgo
+    );
+
+    let totalIncome = 0;
+    let totalExpenses = 0;
+    const vendorSpend: Record<string, { name: string; amount: number; count: number }> = {};
+    const categorySpend: Record<string, number> = {};
+    let pendingPayables = 0;
+    let overduePayables = 0;
+
+    for (const e of recent) {
+      const amount = Math.abs(e.homeCurrencyAmount || e.originalAmount || 0);
+      if (e.transactionType === "Income") totalIncome += amount;
+      else {
+        totalExpenses += amount;
+        const cat = e.category || "uncategorized";
+        categorySpend[cat] = (categorySpend[cat] || 0) + amount;
+        const vendorKey = e.vendorName || "Unknown";
+        if (!vendorSpend[vendorKey]) vendorSpend[vendorKey] = { name: vendorKey, amount: 0, count: 0 };
+        vendorSpend[vendorKey].amount += amount;
+        vendorSpend[vendorKey].count++;
+      }
+      if (e.status === "pending" && (e.transactionType === "Expense" || e.transactionType === "Cost of Goods Sold")) pendingPayables += amount;
+      if (e.status === "overdue") overduePayables += amount;
+    }
+
+    const topVendors = Object.values(vendorSpend).sort((a, b) => b.amount - a.amount).slice(0, 5).map((v) => `${v.name}: ${v.amount.toLocaleString()} (${v.count} txns)`);
+    const categories = Object.entries(categorySpend).sort(([, a], [, b]) => b - a).slice(0, 5).map(([cat, amt]) => `${cat}: ${amt.toLocaleString()}`);
+
+    const salesInvoices = await ctx.db.query("sales_invoices").filter((q: any) => q.and(q.eq(q.field("businessId"), business._id), q.eq(q.field("deletedAt"), undefined))).collect();
+    const arOutstanding = salesInvoices.filter((i: any) => ["sent", "partially_paid", "overdue"].includes(i.status)).reduce((sum: number, i: any) => sum + (i.balanceDue ?? i.totalAmount), 0);
+    const arOverdueCount = salesInvoices.filter((i: any) => i.status === "overdue").length;
+
+    const insights = await ctx.db.query("actionCenterInsights").withIndex("by_business_priority", (q: any) => q.eq("businessId", business._id.toString())).collect();
+    const existingInsightTitles = insights.filter((i: any) => i.status === "new" || i.status === "reviewed").map((i: any) => i.title);
+
+    return {
+      businessName: business.name || "Unknown",
+      country: business.countryCode || "MY",
+      homeCurrency: business.homeCurrency || "MYR",
+      totalIncome: Math.round(totalIncome),
+      totalExpenses: Math.round(totalExpenses),
+      transactionCount: recent.length,
+      topVendors,
+      categories,
+      arOutstanding: Math.round(arOutstanding),
+      arOverdueCount,
+      apPending: Math.round(pendingPayables),
+      apOverdue: Math.round(overduePayables),
+      existingInsightTitles,
+    };
+  },
+});
+
+/**
+ * Helper query: get transaction details for affected entities
+ */
+export const getTransactionDetails = internalQuery({
+  args: { transactionIds: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const details: string[] = [];
+    for (const idStr of args.transactionIds) {
+      try {
+        // Try as accounting entry first
+        const entries = await ctx.db.query("accounting_entries").collect();
+        const entry = entries.find((e: any) => e._id.toString() === idStr);
+        if (entry) {
+          details.push(
+            `- ${entry.transactionType}: ${entry.vendorName || "Unknown"}, ${Math.abs(entry.homeCurrencyAmount || entry.originalAmount || 0).toLocaleString()} ${entry.originalCurrency || ""}, ${entry.transactionDate || ""}, category: ${entry.category || "uncategorized"}, status: ${entry.status || "unknown"}`
+          );
+        }
+      } catch {
+        // Skip if can't resolve
+      }
+    }
+    return details.join("\n");
+  },
+});
+
+/**
+ * Helper mutation: patch insight with enriched content
+ */
+export const patchInsightEnrichment = internalMutation({
+  args: {
+    insightId: v.id("actionCenterInsights"),
+    enrichedDescription: v.string(),
+    enrichedRecommendation: v.string(),
+    originalDescription: v.string(),
+    originalRecommendation: v.string(),
+    connectedSignal: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const insight = await ctx.db.get(args.insightId);
+    if (!insight) return;
+
+    const existingMetadata = (insight.metadata as Record<string, unknown>) || {};
+
+    await ctx.db.patch(args.insightId, {
+      description: args.enrichedDescription,
+      recommendedAction: args.enrichedRecommendation,
+      metadata: {
+        ...existingMetadata,
+        originalDescription: args.originalDescription,
+        originalRecommendation: args.originalRecommendation,
+        connectedSignal: args.connectedSignal,
+        aiEnriched: true,
+      },
+    });
+  },
+});
+
+/**
+ * Enrich any recent unenriched insights for a business.
+ * Scheduled after real-time detection (analyzeNewTransaction) creates insights.
+ */
+export const enrichRecentInsights = internalAction({
+  args: {
+    businessId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const recentInsights = await ctx.runQuery(
+      internal.functions.actionCenterJobs.getRecentUnenrichedInsights,
+      { businessId: args.businessId }
+    );
+
+    for (const insight of recentInsights) {
+      await ctx.scheduler.runAfter(0, internal.functions.actionCenterJobs.enrichInsight, {
+        insightId: insight._id,
+      });
+    }
+
+    if (recentInsights.length > 0) {
+      console.log(`[Layer2] Scheduled enrichment for ${recentInsights.length} insights (business ${args.businessId})`);
+    }
+  },
+});
+
+// ============================================
+// LAYER 2b: AI NOVEL DISCOVERY
+// ============================================
+
+/**
+ * AI-powered novel discovery — finds patterns that hard-coded algorithms miss.
+ *
+ * Runs daily via cron. For each business:
+ * 1. Queries structured business summary
+ * 2. Calls LLM to find 0-3 novel patterns
+ * 3. Creates new insights for valid findings
+ */
+export const runAIDiscovery = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ businessesAnalyzed: number; insightsCreated: number; durationMs: number }> => {
+    console.log("[Layer2b] Starting AI discovery run");
+    const startTime = Date.now();
+
+    const businesses = await ctx.runQuery(internal.functions.actionCenterJobs.getActiveBusinesses);
+    let totalInsights = 0;
+
+    for (const business of businesses) {
+      // Get business summary
+      const summary = await ctx.runQuery(internal.functions.actionCenterJobs.getBusinessSummary, {
+        businessId: business._id,
+      });
+
+      if (!summary || summary.transactionCount < 5) {
+        continue; // Skip businesses with very little data
+      }
+
+      // Get members for insight creation
+      const members = await ctx.runQuery(internal.functions.actionCenterJobs.getBusinessMembers, {
+        businessId: business._id,
+      });
+
+      if (members.length === 0) continue;
+
+      const systemPrompt = `You are a financial analyst for Southeast Asian SMEs.
+Review this business's financial data and find 0-3 actionable insights that standard statistical rules would miss.
+Focus on BUSINESS-RELEVANT patterns — not trivial observations.
+Look for: spending trends, vendor risks, revenue concentration, seasonal patterns, compliance gaps, optimization opportunities.
+If nothing notable, respond with an empty array.
+Respond ONLY in valid JSON array — no markdown, no explanation outside the array.`;
+
+      const userPrompt = `Business: ${summary.businessName} (${summary.country})
+Home currency: ${summary.homeCurrency}
+
+Last 90 days:
+- Income: ${summary.totalIncome.toLocaleString()} from ${summary.transactionCount} transactions
+- Expenses: ${summary.totalExpenses.toLocaleString()}
+- Categories: ${summary.categories.join(", ") || "None"}
+- Top vendors: ${summary.topVendors.join(", ") || "None"}
+- AR outstanding: ${summary.arOutstanding.toLocaleString()} (${summary.arOverdueCount} overdue)
+- AP pending: ${summary.apPending.toLocaleString()} (${summary.apOverdue.toLocaleString()} overdue)
+- Expense claims: ${summary.claimCount} recent claims
+
+Already flagged (do NOT repeat these):
+${summary.existingInsightTitles.slice(0, 10).map((t: string) => `- ${t}`).join("\n") || "- None"}
+
+Respond with JSON array (0-3 items):
+[{"title":"Short title (max 80 chars)","description":"Why this matters (2-3 sentences)","category":"anomaly|optimization|compliance|cashflow","priority":"high|medium|low","recommendation":"Specific action to take"}]`;
+
+      interface DiscoveryInsight {
+        title?: string;
+        description?: string;
+        category?: string;
+        priority?: string;
+        recommendation?: string;
+      }
+
+      const discoveries = await callLLMJson<DiscoveryInsight[]>({
+        systemPrompt,
+        userPrompt,
+        maxTokens: 600,
+        temperature: 0.4,
+      });
+
+      if (!discoveries || !Array.isArray(discoveries) || discoveries.length === 0) {
+        continue;
+      }
+
+      // Create insights for valid discoveries
+      const validCategories = ["anomaly", "compliance", "deadline", "cashflow", "optimization", "categorization"];
+      const validPriorities = ["critical", "high", "medium", "low"];
+      const memberUserIds = members.map((m: any) => m.userId.toString());
+
+      for (const disc of discoveries.slice(0, 3)) {
+        if (!disc.title || !disc.description) continue;
+
+        const category = validCategories.includes(disc.category || "") ? disc.category! : "optimization";
+        const priority = validPriorities.includes(disc.priority || "") ? disc.priority! : "medium";
+
+        // Dedup: check if similar title already exists
+        const existingInsights = await ctx.runQuery(internal.functions.actionCenterJobs.checkInsightExists, {
+          businessId: business._id.toString(),
+          title: disc.title,
+        });
+
+        if (existingInsights) continue;
+
+        // Create for each member
+        for (const userId of memberUserIds) {
+          await ctx.runMutation(internal.functions.actionCenterInsights.internalCreate, {
+            userId,
+            businessId: business._id.toString(),
+            category: category as "anomaly" | "compliance" | "deadline" | "cashflow" | "optimization" | "categorization",
+            priority: priority as "critical" | "high" | "medium" | "low",
+            title: disc.title.slice(0, 100),
+            description: disc.description,
+            affectedEntities: [],
+            recommendedAction: disc.recommendation || "Review this pattern and take appropriate action.",
+            metadata: {
+              insightType: "ai_discovery",
+              aiGenerated: true,
+            },
+          });
+          totalInsights++;
+        }
+      }
+    }
+
+    const duration = Date.now() - startTime;
+    console.log(
+      `[Layer2b] AI discovery complete. Businesses: ${businesses.length}, ` +
+      `New insights: ${totalInsights}, Duration: ${duration}ms`
+    );
+
+    return { businessesAnalyzed: businesses.length, insightsCreated: totalInsights, durationMs: duration };
+  },
+});
+
+/**
+ * Helper query: get recently created insights that haven't been AI-enriched yet
+ */
+export const getRecentUnenrichedInsights = internalQuery({
+  args: { businessId: v.string() },
+  handler: async (ctx, args) => {
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+
+    const insights = await ctx.db
+      .query("actionCenterInsights")
+      .withIndex("by_business_priority", (q: any) => q.eq("businessId", args.businessId))
+      .collect();
+
+    // Return insights created in last 5 minutes that aren't enriched yet
+    return insights.filter(
+      (i) =>
+        i.detectedAt > fiveMinutesAgo &&
+        !(i.metadata as any)?.aiEnriched
+    );
+  },
+});
+
+/**
+ * Helper query: check if an insight with similar title exists for a business
+ */
+export const checkInsightExists = internalQuery({
+  args: {
+    businessId: v.string(),
+    title: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const insights = await ctx.db
+      .query("actionCenterInsights")
+      .withIndex("by_business_priority", (q: any) => q.eq("businessId", args.businessId))
+      .collect();
+
+    const dedupCutoff = Date.now() - DEDUP_WINDOW_MS;
+    return insights.some(
+      (i) =>
+        i.title === args.title &&
+        i.detectedAt > dedupCutoff &&
+        i.status !== "actioned"
+    );
   },
 });
 

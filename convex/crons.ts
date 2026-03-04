@@ -67,6 +67,21 @@ crons.daily(
 );
 
 /**
+ * Layer 2b: AI Novel Discovery
+ *
+ * Runs daily at 7:00 AM UTC (3 PM MYT) to discover patterns
+ * that hard-coded algorithms miss. Uses LLM to analyze each
+ * business's financial data holistically and surface novel insights.
+ *
+ * Cost: ~$0.003/business/day (Qwen3-8B on Modal serverless)
+ */
+crons.daily(
+  "ai-discovery",
+  { hourUTC: 7, minuteUTC: 0 },
+  internal.functions.actionCenterJobs.runAIDiscovery
+);
+
+/**
  * MCP Proposals Cleanup
  *
  * Runs every 5 minutes to clean up expired MCP proposals.
