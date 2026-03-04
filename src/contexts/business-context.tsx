@@ -142,6 +142,11 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
   // Track if we've already started initial loading to prevent duplicate API calls
   const [hasStartedInitialLoad, setHasStartedInitialLoad] = useState(false)
 
+  // RACE CONDITION GUARD: Track whether we've retried after getting empty memberships.
+  // During login transitions, the first API response may return empty because Clerk auth
+  // hasn't fully propagated to Convex. We retry once before concluding user needs onboarding.
+  const hasRetriedEmptyMembershipsRef = useRef(false)
+
   // ============================================================================
   // Data Fetching Functions
   // ============================================================================
@@ -409,6 +414,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
       setProfile(null)
       setHasCompletedInitialLoad(false)
       setHasStartedInitialLoad(false)
+      hasRetriedEmptyMembershipsRef.current = false
     }
 
     prevUserIdRef.current = currentUserId
@@ -544,9 +550,27 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
           log.error(' Auto-switch error:', error)
         })
       }
-    } else if (!hasMemberships && hasNoActiveContext && !membershipsError) {
+    } else if (!hasMemberships && hasNoActiveContext && !membershipsError && !contextError) {
       // Case 2: User has NO memberships and NO context (could be stale JWT or truly new user)
-      log.debug(' ⚠️ No memberships detected, but checking conditions first...', {
+
+      // RACE CONDITION GUARD: During login transitions (sign-out → sign-in as a different user),
+      // the first API response may return empty memberships because Clerk auth hasn't fully
+      // propagated to Convex yet. Retry once with a brief delay before concluding user needs
+      // onboarding. This prevents employees/managers from being wrongly redirected to onboarding.
+      if (!hasRetriedEmptyMembershipsRef.current) {
+        hasRetriedEmptyMembershipsRef.current = true
+        log.debug(' 🔄 No memberships detected — retrying once to rule out auth propagation delay...', {
+          membershipsLength: memberships?.length,
+          activeContextValue: activeContext
+        })
+        setTimeout(() => {
+          refreshMemberships()
+          refreshContext()
+        }, 1500)
+        return
+      }
+
+      log.debug(' ⚠️ No memberships detected (confirmed after retry), checking redirect conditions...', {
         hasMemberships,
         hasNoActiveContext,
         membershipsError,
@@ -554,7 +578,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
         activeContextValue: activeContext
       })
 
-      // FIXED: Direct redirect to onboarding without dangerous reload logic
+      // Direct redirect to onboarding without dangerous reload logic
       const currentPath = window.location.pathname
       const isOnOnboardingPage = currentPath.includes('/onboarding/')
       const isOnDashboardPage = currentPath === '/en' || currentPath === '/' ||
@@ -587,7 +611,7 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
         }
       }
     }
-  }, [memberships, activeContext, isLoadingMemberships, isLoadingContext, isSwitching, isAuthLoaded, isSignedIn, membershipsError, switchActiveBusiness, hasCompletedInitialLoad])
+  }, [memberships, activeContext, isLoadingMemberships, isLoadingContext, isSwitching, isAuthLoaded, isSignedIn, membershipsError, contextError, switchActiveBusiness, refreshMemberships, refreshContext, hasCompletedInitialLoad])
 
   // REF-BASED BUSINESS SWITCH TRACKING
   // Using a ref to track previous business ID avoids race conditions that occur
