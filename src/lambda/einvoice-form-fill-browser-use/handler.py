@@ -105,13 +105,19 @@ async def fill_form(url: str, buyer: dict, receipt: dict) -> dict:
         downloads_path="/tmp/bu-downloads",
     )
 
-    task = f"""Navigate to {url} and fill the e-invoice form.
-Some fields may be PRE-FILLED — do NOT change pre-filled fields.
+    task = f"""Navigate to {url} and fill the e-invoice buyer details form for a MALAYSIAN B2B transaction.
+This is an LHDN e-invoice request — the buyer is always a COMPANY, never an individual.
+Some fields may be PRE-FILLED — do NOT change pre-filled fields. Only fill empty or incorrect fields.
+
+CONTEXT:
+- Always select "Company" / "Syarikat" / "Business" if there is an Individual/Company choice. NEVER select "Individual".
+- ID Type should be "BRN" (Business Registration Number) or "TIN", not NRIC/Passport.
+- Country is always Malaysia.
 
 BUYER DETAILS (for buyer/customer fields):
 - Full Name: {buyer["userName"]}
 - Email: {buyer["email"]}
-- Phone: {buyer["phone"]}
+- Phone: {buyer.get("phoneRaw", buyer["phone"])} (international) / {buyer.get("phoneLocal", buyer["phone"])} (local) / {buyer.get("phoneShort", buyer["phone"])} (for fields with +60 prefix)
 - Company Name: {buyer["name"]}
 - BRN: {buyer["brn"]}  |  TIN: {buyer["tin"]}
 - Address: {buyer["address"]}, {buyer["city"]}, 47100, {buyer["state"]}, Malaysia
