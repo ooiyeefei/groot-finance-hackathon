@@ -67,7 +67,7 @@ export default function SupportPage() {
       </header>
 
       {/* Main content */}
-      <main className="flex-1 px-6 py-12">
+      <div className="flex-1 px-6 py-12">
         <div className="max-w-md mx-auto">
           {isSubmitted ? (
             /* Success state */
@@ -215,7 +215,7 @@ export default function SupportPage() {
             </>
           )}
         </div>
-      </main>
+      </div>
 
       {/* Footer */}
       <footer className="border-t border-[#E5E7EB] px-6 py-4">
