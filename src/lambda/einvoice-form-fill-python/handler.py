@@ -333,6 +333,35 @@ def prefill_all(page: Page, buyer: dict, receipt: dict):
     state = buyer["state"]
     city = buyer["city"]
 
+    # 0. Select "Company" if Individual/Company toggle exists (B2B — always Company)
+    # Must run FIRST because toggling reveals company-specific fields (Company Name, BRN, etc.)
+    try:
+        # Radio buttons or toggle (text-based: "Company", "Syarikat")
+        for label_text in ["Company", "Syarikat", "Business"]:
+            radio = page.locator(f'label:has-text("{label_text}") input[type="radio"], input[type="radio"][value*="company" i], input[type="radio"][value*="Company"]').first
+            if radio.count() > 0 and not radio.is_checked():
+                radio.click(timeout=3000)
+                print(f"[Pre-fill] Selected '{label_text}' radio")
+                time.sleep(1)  # Wait for company fields to appear
+                break
+        # Also try clickable div/button toggles (e.g. FamilyMart "Claim as" toggle)
+        for toggle_text in ["Company", "Syarikat", "Business"]:
+            toggle = page.locator(f'button:has-text("{toggle_text}"), [role="tab"]:has-text("{toggle_text}"), [class*="toggle"]:has-text("{toggle_text}"), [class*="tab"]:has-text("{toggle_text}")').first
+            if toggle.count() > 0 and toggle.is_visible():
+                # Only click if not already active/selected
+                is_active = toggle.evaluate("""el => {
+                    return el.classList.contains('active') || el.classList.contains('selected')
+                        || el.getAttribute('aria-selected') === 'true' || el.getAttribute('data-state') === 'active'
+                        || el.closest('[class*="active"]') !== null;
+                }""")
+                if not is_active:
+                    toggle.click(timeout=3000)
+                    print(f"[Pre-fill] Clicked '{toggle_text}' toggle")
+                    time.sleep(1)
+                break
+    except Exception as e:
+        print(f"[Pre-fill] Company toggle: {e}")
+
     # 1. Phone — tel inputs + text inputs with phone labels
     # Detect react-phone-input: if tel input is inside a container with a flag/country code dropdown,
     # use phoneShort (no leading 0) since the widget adds +60 prefix.
@@ -1149,7 +1178,14 @@ def run_tier2(page: Page, buyer: dict, receipt: dict, receipt_image_b64: str | N
         print(f"[Recon] Failed: {e}")
 
     # Build CUA instruction
-    instruction = f"""You are filling a merchant e-invoice form. Many fields are ALREADY PRE-FILLED.
+    instruction = f"""You are filling a merchant e-invoice buyer details form for a MALAYSIAN B2B (business-to-business) transaction.
+This is an LHDN (Lembaga Hasil Dalam Negeri) e-invoice request — the buyer is always a COMPANY, never an individual.
+Many fields are ALREADY PRE-FILLED. Only fill empty or incorrect fields.
+
+CONTEXT:
+- Always select "Company" / "Syarikat" / "Business" if there is an Individual/Company choice. NEVER select "Individual" / "Peribadi".
+- ID Type should be "BRN" (Business Registration Number) or "TIN" (Tax Identification Number), not NRIC/Passport.
+- Country is always Malaysia.
 
 BUYER DETAILS (use for buyer/customer fields):
 - Full Name: {buyer["userName"]}
