@@ -1761,6 +1761,13 @@ def handler(event: dict, context=None) -> dict:
         except Exception as e:
             print(f"[Form Fill] OTP detection check failed (non-fatal): {e}")
 
+        # ── Pre-fill with Playwright (runs BEFORE Tier 1 so phone/dropdowns are ready) ──
+        # Phase 0: Handle validate-gated forms (BRN+TIN → Validate → fields unlock)
+        handle_validate_gate(page, buyer)
+        # Phase 1: Fill all text inputs, selects, phone, custom dropdowns
+        prefill_all(page, buyer, receipt)
+        prefill_custom_dropdowns(page, buyer)
+
         # ── Tier 1: Check for saved formConfig ──
         if merchant:
             lookup = convex_query("functions/system:lookupMerchantEinvoiceUrl", {"vendorName": merchant, "country": "MY"})
@@ -1778,13 +1785,6 @@ def handler(event: dict, context=None) -> dict:
                     convex_mutation("functions/system:saveMerchantFormConfig", {"merchantName": merchant, "formConfig": fc})
                     return {"success": True, "durationMs": dur}
                 print("[Form Fill] Tier 1 failed — falling back to Tier 2")
-
-        # ── Pre-fill with Playwright ──
-        # Phase 0: Handle validate-gated forms (BRN+TIN → Validate → fields unlock)
-        handle_validate_gate(page, buyer)
-        # Phase 1: Fill all text inputs, selects, phone
-        prefill_all(page, buyer, receipt)
-        prefill_custom_dropdowns(page, buyer)
 
         # Phase 2: Solve reCAPTCHA BEFORE CUA (CapSolver API, ~5-12s)
         # This prevents CUA from wasting turns clicking CAPTCHA images
