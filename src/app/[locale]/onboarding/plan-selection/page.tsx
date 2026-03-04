@@ -205,28 +205,32 @@ function PlanSelectionContent() {
               />
             </div>
 
-            {/* Divider */}
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                <div className="w-full border-t border-border" />
+            {/* Divider (hidden on native iOS per Apple IAP guidelines) */}
+            {!isNativePlatform() && (
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                  <div className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-4 bg-background text-muted-foreground">
+                    Or choose a paid plan
+                  </span>
+                </div>
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-background text-muted-foreground">
-                  Or choose a paid plan
-                </span>
-              </div>
-            </div>
+            )}
           </>
         )}
 
-        {/* Pricing Table - Standalone mode for onboarding */}
-        <PricingTable
-          standalone
-          showLimits
-          showCurrentPlan={false}
-          onCheckout={handleCheckout}
-          className="max-w-6xl mx-auto"
-        />
+        {/* Pricing Table - Standalone mode for onboarding (hidden on native iOS per Apple IAP guidelines) */}
+        {!isNativePlatform() && (
+          <PricingTable
+            standalone
+            showLimits
+            showCurrentPlan={false}
+            onCheckout={handleCheckout}
+            className="max-w-6xl mx-auto"
+          />
+        )}
 
         {/* Footer Note */}
         <div className="text-center pt-4 space-y-3">

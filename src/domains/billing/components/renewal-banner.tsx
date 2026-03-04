@@ -20,6 +20,7 @@ import { X, AlertTriangle, Clock, CreditCard, Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useSubscription, RenewalInfo } from '../hooks/use-subscription'
 import { cn } from '@/lib/utils'
+import { isNativePlatform } from '@/lib/capacitor/platform'
 
 interface RenewalBannerProps {
   className?: string
@@ -146,11 +147,13 @@ function PaymentFailedBanner({ className, onDismiss, isDismissed }: BannerProps)
         <p className="text-sm text-muted-foreground mt-1">
           We couldn&apos;t process your last payment. Please update your payment method to avoid service interruption.
         </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button size="sm" variant="destructive" asChild>
-            <a href="/settings/billing">Update Payment Method</a>
-          </Button>
-        </div>
+        {!isNativePlatform() && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button size="sm" variant="destructive" asChild>
+              <a href="/settings/billing">Update Payment Method</a>
+            </Button>
+          </div>
+        )}
       </div>
       {onDismiss && (
         <Button variant="ghost" size="sm" onClick={onDismiss} className="flex-shrink-0">
@@ -174,11 +177,13 @@ function SubscriptionExpiredBanner({ className, planName }: BannerProps & { plan
         <p className="text-sm text-muted-foreground mt-1">
           Your {planName} subscription has expired. Renew now to restore full access to your account.
         </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button size="sm" variant="destructive" asChild>
-            <a href="/settings/billing">Renew Subscription</a>
-          </Button>
-        </div>
+        {!isNativePlatform() && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button size="sm" variant="destructive" asChild>
+              <a href="/settings/billing">Renew Subscription</a>
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -206,11 +211,13 @@ function CancelationPendingBanner({ className, periodEnd, onDismiss, isDismissed
         <p className="text-sm text-muted-foreground mt-1">
           Your subscription is set to cancel on {formattedDate}. You&apos;ll retain access until then.
         </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" asChild>
-            <a href="/settings/billing">Manage Subscription</a>
-          </Button>
-        </div>
+        {!isNativePlatform() && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" asChild>
+              <a href="/settings/billing">Manage Subscription</a>
+            </Button>
+          </div>
+        )}
       </div>
       {onDismiss && (
         <Button variant="ghost" size="sm" onClick={onDismiss} className="flex-shrink-0">
@@ -296,11 +303,13 @@ function RenewalReminderBanner({ renewal, planName, className, onDismiss }: Rene
             Please ensure your payment method is up to date to avoid interruption.
           </p>
         )}
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" asChild>
-            <a href="/settings/billing">Manage Subscription</a>
-          </Button>
-        </div>
+        {!isNativePlatform() && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" asChild>
+              <a href="/settings/billing">Manage Subscription</a>
+            </Button>
+          </div>
+        )}
       </div>
       {onDismiss && (
         <Button variant="ghost" size="sm" onClick={onDismiss} className="flex-shrink-0">

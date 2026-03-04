@@ -82,10 +82,12 @@ export function SubscriptionCard() {
             </div>
           </div>
 
-          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground" onClick={() => router.push('/en/business-settings?tab=billing')}>
+          {!isNativePlatform() && (
+            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground" onClick={() => router.push('/en/business-settings?tab=billing')}>
               Manage
               <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
+          )}
         </div>
 
         {/* Usage Summary */}
