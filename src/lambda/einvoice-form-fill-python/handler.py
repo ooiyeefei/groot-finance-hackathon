@@ -845,20 +845,26 @@ def poll_otp_email(email_ref: str, timeout: int = 60) -> Optional[str]:
 def _infer_buyer_key(selector: str, label: str) -> str:
     """Infer buyerDetailKey from CSS selector name or label when formConfig doesn't have one.
     This fixes stale defaultValues saved by extract_form_config."""
-    hint = (selector + " " + label).lower()
+    # Extract the field name from CSS selector (e.g. input[name="idNumber"] → "idnumber")
+    import re as _re
+    field_name_match = _re.search(r'name=.([^"\'\]]+)', selector)
+    field_name = field_name_match.group(1).lower() if field_name_match else ""
+    hint = (field_name + " " + label).lower()
+
+    # Order matters: more specific patterns first to avoid false positives
+    if "idnumber" in hint or ("brn" in hint and "old" not in hint) or "registrationnumber" in hint:
+        return "brn"
+    if "tin" in hint or "taxidentif" in hint:
+        return "tin"
     if "email" in hint and "confirm" not in hint:
         return "email"
-    if "fullname" in hint or "full_name" in hint or ("name" in hint and "company" not in hint and "business" not in hint):
-        return "userName"
-    if "companyname" in hint or "company_name" in hint or "company" in hint and "address" not in hint:
+    if "companyname" in hint or "company_name" in hint:
         return "name"
-    if "idnumber" in hint or "brn" in hint or "registration" in hint and "old" not in hint:
-        return "brn"
-    if "tin" in hint or "tax" in hint:
-        return "tin"
-    if "address" in hint and "line" not in hint:
+    if "fullname" in hint or "full_name" in hint:
+        return "userName"
+    if "companyaddress" in hint or ("address" in hint and "line" not in hint):
         return "address"
-    if "phone" in hint or "mobile" in hint or "tel" in hint:
+    if "phone" in hint or "mobile" in hint:
         return "phone"
     return ""
 
