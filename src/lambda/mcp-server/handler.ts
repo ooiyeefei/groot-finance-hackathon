@@ -30,6 +30,7 @@ import { cancelProposal } from './tools/cancel-proposal.js';
 import { analyzeTeamSpending } from './tools/analyze-team-spending.js';
 import {
   authenticateApiKey,
+  authenticateInternalService,
   updateApiKeyUsage,
   hasPermission,
   type AuthContext,
@@ -143,11 +144,17 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
   // Authenticate API key (required for all methods except initialize)
   const authHeader = event.headers?.Authorization || event.headers?.authorization;
+  const internalKeyHeader = event.headers?.['X-Internal-Key'] || event.headers?.['x-internal-key'];
+  const internalBusinessId = request.params?._businessId as string | undefined;
   let authContext: AuthContext | undefined;
 
   // Initialize doesn't require auth (discovery phase)
   if (request.method !== 'initialize') {
-    const authResult = await authenticateApiKey(authHeader);
+    // Try internal service auth first (Layer 2 service-to-service calls)
+    // Then fall back to standard API key auth
+    const authResult = internalKeyHeader
+      ? authenticateInternalService(internalKeyHeader, internalBusinessId)
+      : await authenticateApiKey(authHeader);
 
     if (!authResult.authenticated) {
       const duration = Date.now() - startTime;

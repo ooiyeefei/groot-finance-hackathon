@@ -20,6 +20,7 @@ import { v } from "convex/values";
 import { action, internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { callLLMJson } from "../lib/llm";
+import { callMCPToolsBatch } from "../lib/mcpClient";
 
 // ============================================
 // DETECTION CONSTANTS
@@ -1691,45 +1692,55 @@ export const enrichInsight = internalAction({
       return;
     }
 
-    // 2. Get business context
+    // 2. Get structured analysis from MCP tools (single source of truth)
     const businessId = insight.businessId;
-    // businessId is stored as string, need to resolve to Id
+
+    const mcpResults = await callMCPToolsBatch(businessId, [
+      { toolName: "detect_anomalies", args: { date_range_days: 90, sensitivity: "medium" } },
+      { toolName: "analyze_vendor_risk", args: {} },
+    ]);
+
+    // Also get basic business context for the LLM prompt
     const summary = await ctx.runQuery(internal.functions.actionCenterJobs.getBusinessSummaryByStringId, {
       businessIdStr: businessId,
     });
 
-    if (!summary) {
-      console.log(`[Layer2] Business ${businessId} not found, skipping enrichment`);
-      return;
-    }
+    // Build MCP analysis context for the LLM
+    const anomalyData = mcpResults["detect_anomalies"] as any;
+    const vendorData = mcpResults["analyze_vendor_risk"] as any;
 
-    // 3. Build context about affected entities
-    let affectedDetails = "";
-    if (insight.affectedEntities?.length > 0) {
-      const details = await ctx.runQuery(internal.functions.actionCenterJobs.getTransactionDetails, {
-        transactionIds: insight.affectedEntities.slice(0, 5), // Limit to 5 for token efficiency
-      });
-      affectedDetails = details || "";
-    }
+    const mcpContext = [
+      anomalyData?.anomalies?.length > 0
+        ? `Anomaly analysis: ${anomalyData.anomalies.length} anomalies detected (${anomalyData.summary?.sensitivity_used || "medium"} sensitivity)`
+        : "Anomaly analysis: No anomalies detected",
+      vendorData?.vendor_profiles?.length > 0
+        ? `Vendor risk: ${vendorData.vendor_profiles.filter((v: any) => v.risk_score > 50).length} high-risk vendors, ${vendorData.concentration_risks?.length || 0} concentration risks`
+        : "Vendor risk: No significant vendor risks",
+    ].join("\n");
 
-    // 4. Call LLM
-    const systemPrompt = `You are a financial analyst for a Southeast Asian SME called "${summary.businessName}".
+    const businessName = summary?.businessName || "Unknown";
+    const homeCurrency = summary?.homeCurrency || "MYR";
+
+    // 3. Call LLM with structured MCP data (not raw DB queries)
+    const systemPrompt = `You are a financial analyst for a Southeast Asian SME called "${businessName}".
 Enrich this financial alert with business context and specific, actionable advice.
-Be concise (2-3 sentences per field). Use the business's home currency (${summary.homeCurrency}).
+Be concise (2-3 sentences per field). Use the business's home currency (${homeCurrency}).
 Respond ONLY in valid JSON — no markdown, no explanation outside the JSON.`;
 
     const userPrompt = `Alert: ${insight.title}
 Raw analysis: ${insight.description}
 Category: ${insight.category} | Priority: ${insight.priority}
 
-${affectedDetails ? `Affected transactions:\n${affectedDetails}\n` : ""}
-Business context (last 90 days):
-- Income: ${summary.totalIncome.toLocaleString()} ${summary.homeCurrency}
-- Expenses: ${summary.totalExpenses.toLocaleString()} ${summary.homeCurrency} (${summary.transactionCount} transactions)
+MCP Intelligence (server-side analysis):
+${mcpContext}
+
+${summary ? `Business context (last 90 days):
+- Income: ${summary.totalIncome.toLocaleString()} ${homeCurrency}
+- Expenses: ${summary.totalExpenses.toLocaleString()} ${homeCurrency} (${summary.transactionCount} transactions)
 - Top vendors: ${summary.topVendors.join(", ") || "None"}
 - Categories: ${summary.categories.join(", ") || "None"}
 - AR outstanding: ${summary.arOutstanding.toLocaleString()} (${summary.arOverdueCount} overdue)
-- AP pending: ${summary.apPending.toLocaleString()} (${summary.apOverdue.toLocaleString()} overdue)
+- AP pending: ${summary.apPending.toLocaleString()} (${(summary.apOverdue || 0).toLocaleString()} overdue)` : ""}
 
 Respond in this exact JSON format:
 {"description":"2-3 sentence explanation of WHY this matters for this specific business","recommendation":"Specific step-by-step action to take","connectedSignal":"One related pattern to watch (or null if none)"}`;
@@ -1955,14 +1966,7 @@ export const runAIDiscovery = internalAction({
     let totalInsights = 0;
 
     for (const business of businesses) {
-      // Get business summary
-      const summary = await ctx.runQuery(internal.functions.actionCenterJobs.getBusinessSummary, {
-        businessId: business._id,
-      });
-
-      if (!summary || summary.transactionCount < 5) {
-        continue; // Skip businesses with very little data
-      }
+      const businessIdStr = business._id.toString();
 
       // Get members for insight creation
       const members = await ctx.runQuery(internal.functions.actionCenterJobs.getBusinessMembers, {
@@ -1971,23 +1975,70 @@ export const runAIDiscovery = internalAction({
 
       if (members.length === 0) continue;
 
+      // Call MCP tools for structured intelligence (single source of truth)
+      const mcpResults = await callMCPToolsBatch(businessIdStr, [
+        { toolName: "detect_anomalies", args: { date_range_days: 90, sensitivity: "medium" } },
+        { toolName: "forecast_cash_flow", args: { horizon_days: 30, scenario: "moderate" } },
+        { toolName: "analyze_vendor_risk", args: {} },
+      ]);
+
+      // Also get basic summary for context
+      const summary = await ctx.runQuery(internal.functions.actionCenterJobs.getBusinessSummary, {
+        businessId: business._id,
+      });
+
+      if (!summary || summary.transactionCount < 5) continue;
+
+      // Format MCP results for LLM consumption
+      const anomalyData = mcpResults["detect_anomalies"] as any;
+      const forecastData = mcpResults["forecast_cash_flow"] as any;
+      const vendorData = mcpResults["analyze_vendor_risk"] as any;
+
+      const mcpIntelligence = [
+        // Anomalies
+        anomalyData?.anomalies?.length > 0
+          ? `ANOMALIES (${anomalyData.anomalies.length} found):\n${anomalyData.anomalies.slice(0, 5).map((a: any) =>
+              `  - ${a.description}: ${a.amount} ${a.currency}, z-score ${a.z_score?.toFixed(1)}, severity: ${a.severity}`
+            ).join("\n")}`
+          : "ANOMALIES: None detected",
+        // Cash flow forecast
+        forecastData?.alerts?.length > 0
+          ? `CASH FLOW ALERTS:\n${forecastData.alerts.map((a: any) =>
+              `  - ${a.type}: ${a.message}`
+            ).join("\n")}`
+          : "CASH FLOW: Healthy — no alerts",
+        // Vendor risks
+        vendorData?.concentration_risks?.length > 0
+          ? `VENDOR RISKS:\n${vendorData.concentration_risks.map((r: any) =>
+              `  - ${r.vendor_name}: ${r.percentage?.toFixed(0)}% of ${r.category} spend`
+            ).join("\n")}`
+          : "VENDOR RISKS: No concentration risks",
+        vendorData?.spending_changes?.length > 0
+          ? `SPENDING CHANGES:\n${vendorData.spending_changes.slice(0, 3).map((c: any) =>
+              `  - ${c.vendor_name}: ${c.direction} ${Math.abs(c.change_percentage)?.toFixed(0)}%`
+            ).join("\n")}`
+          : "",
+      ].filter(Boolean).join("\n\n");
+
       const systemPrompt = `You are a financial analyst for Southeast Asian SMEs.
-Review this business's financial data and find 0-3 actionable insights that standard statistical rules would miss.
-Focus on BUSINESS-RELEVANT patterns — not trivial observations.
-Look for: spending trends, vendor risks, revenue concentration, seasonal patterns, compliance gaps, optimization opportunities.
-If nothing notable, respond with an empty array.
+Review this business's MCP intelligence report and find 0-3 actionable insights that the standard detection rules missed.
+Focus on CROSS-DOMAIN patterns — connections between anomalies, cash flow, and vendor risks that individual tools can't see.
+If nothing notable beyond what's already flagged, respond with an empty array.
 Respond ONLY in valid JSON array — no markdown, no explanation outside the array.`;
 
       const userPrompt = `Business: ${summary.businessName} (${summary.country})
 Home currency: ${summary.homeCurrency}
 
-Last 90 days:
+=== MCP INTELLIGENCE REPORT ===
+${mcpIntelligence}
+
+=== BUSINESS SUMMARY (90 days) ===
 - Income: ${summary.totalIncome.toLocaleString()} from ${summary.transactionCount} transactions
 - Expenses: ${summary.totalExpenses.toLocaleString()}
 - Categories: ${summary.categories.join(", ") || "None"}
 - Top vendors: ${summary.topVendors.join(", ") || "None"}
 - AR outstanding: ${summary.arOutstanding.toLocaleString()} (${summary.arOverdueCount} overdue)
-- AP pending: ${summary.apPending.toLocaleString()} (${summary.apOverdue.toLocaleString()} overdue)
+- AP pending: ${summary.apPending.toLocaleString()} (${(summary.apOverdue || 0).toLocaleString()} overdue)
 - Expense claims: ${summary.claimCount} recent claims
 
 Already flagged (do NOT repeat these):

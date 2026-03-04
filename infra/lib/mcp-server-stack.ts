@@ -4,6 +4,7 @@ import { NodejsFunction, OutputFormat } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { Construct } from 'constructs';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -51,6 +52,11 @@ export class MCPServerStack extends cdk.Stack {
     const lambdaEnvVars: Record<string, string> = {
       // Convex production URL
       NEXT_PUBLIC_CONVEX_URL: props?.convexUrl || process.env.NEXT_PUBLIC_CONVEX_URL || 'https://kindhearted-lynx-129.convex.cloud',
+      // Internal service key for Layer 2 service-to-service calls (Convex → MCP)
+      // Allows Convex actions to call MCP tools without per-business API keys
+      // Note: Key stored as SecureString in SSM. Set directly on Lambda via CLI since
+      // CDK valueFromLookup doesn't support SecureString. See: aws lambda update-function-configuration
+      // SSM path: /finanseal/mcp/internal-service-key
       // Sentry error tracking
       SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN || '',
       SENTRY_ENVIRONMENT: 'production',

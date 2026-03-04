@@ -93,6 +93,15 @@ npx cdk deploy --profile groot-finanseal --region us-west-2
 - **New IAM permissions**: If a feature requires new permissions on the Vercel OIDC role (e.g., invoking a new Lambda, accessing a new S3 bucket), do NOT modify the role directly. Instead, report back to the user with the exact policy statement needed so they can update the role manually.
 - **Lambda execution role**: Use least-privilege — scope IAM actions to specific resource ARNs and add conditions where possible (e.g., `cloudwatch:namespace` condition for `PutMetricData`).
 
+**MCP as Single Intelligence Engine (CRITICAL)**:
+- **MCP is the single source of truth** for all financial intelligence (anomaly detection, cash flow forecasting, vendor risk analysis). Do NOT duplicate MCP tool logic in Convex queries or other services.
+- **Layer 1 (hard-coded detection)** in Convex crons is for triggering — it runs fast, cheap statistical checks. But when Layer 2 (LLM enrichment/discovery) needs structured analysis, it MUST call MCP tools — not re-query the DB with separate logic.
+- **Internal service-to-service calls** (Convex → MCP Lambda): Use the internal service key (`MCP_INTERNAL_SERVICE_KEY` stored in SSM + Convex env). Pass `X-Internal-Key` header and `_businessId` in params. No per-business API key needed.
+- **App → AWS Lambda direct calls** (Next.js API routes, Vercel serverless → Lambda): Use IAM auth via the Vercel OIDC role (`FinanSEAL-Vercel-S3-Role`). Never hardcode credentials or use API keys when IAM-native access is available.
+- **Convex → AWS services**: Convex actions cannot use AWS SDK/IAM natively. Use shared secrets stored in Convex env vars (set via `npx convex env set --prod`). For Lambda invocation, call via API Gateway HTTP endpoint with internal service key.
+- **Any new analysis capability** (e.g., tax compliance checks, fraud detection) should be added as an MCP tool first, then consumed by both the chat agent and the Action Center cron pipeline.
+- **MCP client helper**: `convex/lib/mcp-client.ts` — reusable `callMCPTool()` and `callMCPToolsBatch()` for Convex actions calling MCP.
+
 **Cost optimization — free tier first**:
 - Always prefer AWS free tier and cost-optimized options when architecting solutions, balanced with performance requirements.
 - Examples: SSM Parameter Store SecureString (free) over Secrets Manager ($0.40/secret/month), CloudWatch Logs with retention limits, ARM_64 Lambda architecture (cheaper than x86_64).

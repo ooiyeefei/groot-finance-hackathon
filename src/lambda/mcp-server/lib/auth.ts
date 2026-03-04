@@ -214,6 +214,66 @@ export async function updateApiKeyUsage(apiKeyId: string): Promise<void> {
 }
 
 /**
+ * Authenticate an internal service-to-service call.
+ *
+ * Used by Layer 2 (Convex actions) to call MCP tools without per-business API keys.
+ * Validates a shared secret (MCP_INTERNAL_SERVICE_KEY env var) and accepts
+ * businessId from the request body instead of from an API key.
+ *
+ * Returns an AuthResult with wildcard permissions (all tools allowed, no rate limit).
+ */
+export function authenticateInternalService(
+  internalKeyHeader: string | undefined,
+  businessId: string | undefined
+): AuthResult {
+  const serviceKey = process.env.MCP_INTERNAL_SERVICE_KEY;
+
+  if (!serviceKey) {
+    return {
+      authenticated: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Internal service key not configured',
+      },
+    };
+  }
+
+  if (!internalKeyHeader || internalKeyHeader !== serviceKey) {
+    return {
+      authenticated: false,
+      error: {
+        code: 'UNAUTHORIZED',
+        message: 'Invalid internal service key',
+      },
+    };
+  }
+
+  if (!businessId) {
+    return {
+      authenticated: false,
+      error: {
+        code: 'INVALID_PARAMS',
+        message: 'businessId is required for internal service calls',
+      },
+    };
+  }
+
+  logger.auth('success', 'internal-service', { businessId });
+
+  return {
+    authenticated: true,
+    context: {
+      apiKeyId: 'internal-service',
+      businessId,
+      businessName: 'Internal Service',
+      permissions: ['*'], // All tools allowed
+      rateLimitPerMinute: 9999, // No practical rate limit
+      keyPrefix: 'internal',
+    },
+  };
+}
+
+/**
  * Check if user has permission for a specific tool
  */
 export function hasPermission(context: AuthContext, toolName: string): boolean {
