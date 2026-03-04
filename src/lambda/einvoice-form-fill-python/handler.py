@@ -242,6 +242,92 @@ def gemini_flash(prompt: str, image_b64: str) -> str:
 
 # ── Playwright helpers ──────────────────────────────────────
 
+def handle_validate_gate(page: Page, buyer: dict) -> bool:
+    """Detect and handle two-phase forms with a Validate/Verify button that gates field access.
+    Some merchant forms (e.g. invoice2e.my) require BRN + TIN validation before enabling the rest.
+    Returns True if a validate gate was found and handled."""
+    try:
+        # Detect: look for a Validate/Verify button AND mostly disabled fields
+        validate_btn = page.locator('button:has-text("Validate"), button:has-text("Verify"), button:has-text("Check")').first
+        if validate_btn.count() == 0 or not validate_btn.is_visible():
+            return False
+
+        disabled_count = page.evaluate("""() => {
+            return document.querySelectorAll('input[disabled], select[disabled], textarea[disabled], [role="combobox"][aria-disabled="true"]').length;
+        }""")
+        if disabled_count < 3:
+            return False  # Not a gated form
+
+        print(f"[Validate Gate] Detected: {disabled_count} disabled fields + Validate button")
+
+        # Fill BRN field (the only enabled text field with "business registration" or "brn" label)
+        brn_filled = page.evaluate("""(brn) => {
+            const inputs = document.querySelectorAll('input[type="text"]:not([disabled]), input:not([type]):not([disabled])');
+            for (const el of inputs) {
+                const label = (el.closest('label')?.textContent || document.querySelector('label[for="'+el.id+'"]')?.textContent || el.placeholder || el.name || '').toLowerCase();
+                if (label.includes('business registration') || label.includes('brn') || label.includes('registration no')) {
+                    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+                    if (setter) { setter.call(el, brn); el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); }
+                    return true;
+                }
+            }
+            return false;
+        }""", buyer["brn"])
+        if brn_filled:
+            print(f"[Validate Gate] Filled BRN: {buyer['brn']}")
+
+        # Fill TIN field
+        tin_filled = page.evaluate("""(tin) => {
+            const inputs = document.querySelectorAll('input[type="text"]:not([disabled]), input:not([type]):not([disabled])');
+            for (const el of inputs) {
+                const label = (el.closest('label')?.textContent || document.querySelector('label[for="'+el.id+'"]')?.textContent || el.placeholder || el.name || '').toLowerCase();
+                if (label.includes('tax identification') || label.includes('tin') || label.includes('tax id')) {
+                    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+                    if (setter) { setter.call(el, tin); el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); }
+                    return true;
+                }
+            }
+            return false;
+        }""", buyer["tin"])
+        if tin_filled:
+            print(f"[Validate Gate] Filled TIN: {buyer['tin']}")
+
+        # Click Validate
+        validate_btn.click(timeout=5000)
+        print("[Validate Gate] Clicked Validate, waiting for fields to unlock...")
+
+        # Wait for fields to become enabled (poll for up to 10s)
+        for attempt in range(20):
+            time.sleep(0.5)
+            still_disabled = page.evaluate("""() => {
+                const email = document.querySelector('input[type="email"]:not([disabled]), input[placeholder*="@"]:not([disabled])');
+                const name = Array.from(document.querySelectorAll('input:not([disabled])')).find(
+                    el => (el.closest('label')?.textContent || '').toLowerCase().includes('name')
+                );
+                return !email && !name;  // True if still gated
+            }""")
+            if not still_disabled:
+                new_disabled = page.evaluate("() => document.querySelectorAll('input[disabled]').length")
+                print(f"[Validate Gate] Fields unlocked after {(attempt + 1) * 0.5}s ({new_disabled} still disabled)")
+                time.sleep(1)  # Let React settle
+                return True
+
+        # Check for error messages (TIN not found, etc.)
+        error_msg = page.evaluate("""() => {
+            const err = document.querySelector('.error, [class*="error"], [class*="alert"], p[style*="color: red"], p[style*="color:red"]');
+            return err ? err.textContent?.trim() : null;
+        }""")
+        if error_msg:
+            print(f"[Validate Gate] Validation error: {error_msg}")
+        else:
+            print("[Validate Gate] Fields did not unlock after 10s")
+        return True  # We handled the gate, even if validation failed
+
+    except Exception as e:
+        print(f"[Validate Gate] Error: {e}")
+        return False
+
+
 def prefill_all(page: Page, buyer: dict, receipt: dict):
     """Pre-fill phone, native selects, and text inputs via label matching."""
     state = buyer["state"]
@@ -310,29 +396,33 @@ def prefill_all(page: Page, buyer: dict, receipt: dict):
 
     # 3. Bulk text inputs via label matching
     # Keys that must overwrite even if field already has a value (e.g. form defaults like abc@example.com)
-    force_overwrite_keys = {"email", "e-invoice email", "einvoice email", "email address", "your company email"}
+    force_overwrite_keys = {"email", "e-invoice email", "einvoice email", "email address", "your company email", "confirm email"}
     label_map = {
         "company name": buyer["name"], "business name": buyer["name"],
+        "personal / company name": buyer["name"], "personal/company name": buyer["name"],
         "tax identification": buyer["tin"], "tin": buyer["tin"],
         "business registration": buyer["brn"], "new business": buyer["brn"],
         "e-invoice email": buyer["email"], "einvoice email": buyer["email"],
         "email address": buyer["email"], "your company email": buyer["email"],
-        "email": buyer["email"],
+        "email": buyer["email"], "confirm email": buyer["email"],
         "full name": buyer["userName"], "first name": buyer["userName"].split()[0],
         "last name": " ".join(buyer["userName"].split()[1:]) or "",
         "company address": buyer["address"], "address": buyer["address"],
+        "address line 1": buyer["address"],
         "city": city, "postcode": "47100", "postal": "47100",
         "state": state, "country": "Malaysia",
+        "invoice no": receipt.get("referenceNumber", ""),
         "order number": receipt.get("referenceNumber", ""),
         "receipt number": receipt.get("referenceNumber", ""),
         "payment date": receipt.get("date", ""),
+        "invoice amount": str(receipt.get("totalAmount", "")),
     }
     force_keys_json = json.dumps(list(force_overwrite_keys))
     count = page.evaluate("""([mapping, forceKeys]) => {
         const forceSet = new Set(forceKeys);
         let n = 0;
-        document.querySelectorAll('input[type="text"], input[type="email"], input:not([type]), textarea').forEach(el => {
-            if (el.type === 'hidden' || !el.offsetParent) return;
+        document.querySelectorAll('input[type="text"], input[type="email"], input[type="number"], input:not([type]), textarea').forEach(el => {
+            if (el.type === 'hidden' || !el.offsetParent || el.disabled) return;
             const label = (el.closest('label')?.textContent || document.querySelector('label[for="'+el.id+'"]')?.textContent || el.placeholder || el.name || '').toLowerCase();
             for (const [key, value] of Object.entries(mapping)) {
                 if (value && label.includes(key)) {
@@ -1655,6 +1745,9 @@ def handler(event: dict, context=None) -> dict:
                 print("[Form Fill] Tier 1 failed — falling back to Tier 2")
 
         # ── Pre-fill with Playwright ──
+        # Phase 0: Handle validate-gated forms (BRN+TIN → Validate → fields unlock)
+        handle_validate_gate(page, buyer)
+        # Phase 1: Fill all text inputs, selects, phone
         prefill_all(page, buyer, receipt)
         prefill_custom_dropdowns(page, buyer)
 
