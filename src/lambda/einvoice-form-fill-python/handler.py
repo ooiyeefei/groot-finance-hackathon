@@ -65,6 +65,142 @@ def convex_query(path: str, args: dict) -> Any:
         return None
 
 
+# ── CAPTCHA Solver (CapSolver) ──────────────────────────────
+
+_capsolver_key_cache: str | None = None
+
+def _get_capsolver_key() -> str:
+    """Read CapSolver API key from SSM (cached for Lambda warm starts)."""
+    global _capsolver_key_cache
+    if _capsolver_key_cache:
+        return _capsolver_key_cache
+    param_name = os.environ.get("CAPSOLVER_SSM_PARAM", "")
+    if not param_name:
+        return ""
+    try:
+        import boto3
+        ssm_client = boto3.client("ssm")
+        resp = ssm_client.get_parameter(Name=param_name, WithDecryption=True)
+        _capsolver_key_cache = resp["Parameter"]["Value"]
+        return _capsolver_key_cache
+    except Exception as e:
+        print(f"[CAPTCHA] SSM read failed: {e}")
+        return ""
+
+
+def solve_recaptcha(page: Page, url: str) -> bool:
+    """Detect reCAPTCHA v2 on page and solve via CapSolver API. Returns True if solved or no CAPTCHA."""
+    try:
+        has_captcha = page.locator("iframe[src*='recaptcha'], .g-recaptcha, #g-recaptcha").first.count() > 0
+        if not has_captcha:
+            return True  # No CAPTCHA — continue normally
+
+        print("[CAPTCHA] reCAPTCHA detected on page")
+
+        api_key = _get_capsolver_key()
+        if not api_key:
+            print("[CAPTCHA] No CapSolver API key — cannot solve")
+            return False
+
+        # Extract site key from the page
+        site_key = page.evaluate("""() => {
+            const el = document.querySelector('.g-recaptcha, [data-sitekey]');
+            if (el) return el.getAttribute('data-sitekey');
+            const iframe = document.querySelector('iframe[src*="recaptcha"]');
+            if (iframe) {
+                const match = iframe.src.match(/[?&]k=([^&]+)/);
+                return match ? match[1] : null;
+            }
+            return null;
+        }""")
+
+        if not site_key:
+            print("[CAPTCHA] Could not extract reCAPTCHA site key")
+            return False
+
+        print(f"[CAPTCHA] Site key: {site_key[:20]}..., solving via CapSolver")
+
+        # Step 1: Create task
+        create_resp = _http_post("https://api.capsolver.com/createTask", {
+            "clientKey": api_key,
+            "task": {
+                "type": "ReCaptchaV2TaskProxyLess",
+                "websiteURL": url,
+                "websiteKey": site_key,
+            }
+        }, timeout=15)
+
+        if create_resp.get("errorId", 0) != 0:
+            print(f"[CAPTCHA] CapSolver createTask error: {create_resp.get('errorDescription', 'unknown')}")
+            return False
+
+        task_id = create_resp.get("taskId")
+        if not task_id:
+            print(f"[CAPTCHA] No taskId returned: {create_resp}")
+            return False
+
+        print(f"[CAPTCHA] Task created: {task_id}, polling for solution...")
+
+        # Step 2: Poll for result (max ~30s, CapSolver usually < 10s)
+        for attempt in range(15):
+            time.sleep(2)
+            result = _http_post("https://api.capsolver.com/getTaskResult", {
+                "clientKey": api_key,
+                "taskId": task_id,
+            }, timeout=10)
+
+            status = result.get("status")
+            if status == "ready":
+                token = result.get("solution", {}).get("gRecaptchaResponse", "")
+                if not token:
+                    print("[CAPTCHA] Solution ready but no token")
+                    return False
+
+                # Step 3: Inject token — use .value (not innerHTML) for the hidden textarea
+                page.evaluate("""(token) => {
+                    // reCAPTCHA stores the response in a hidden textarea
+                    const el = document.getElementById('g-recaptcha-response');
+                    if (el) { el.value = token; }
+                    document.querySelectorAll('textarea[name="g-recaptcha-response"]').forEach(t => {
+                        t.value = token;
+                    });
+                    // Trigger the site's registered callback (standard reCAPTCHA API)
+                    if (typeof ___grecaptcha_cfg !== 'undefined') {
+                        const clients = ___grecaptcha_cfg.clients || {};
+                        for (const cid of Object.keys(clients)) {
+                            const client = clients[cid];
+                            for (const key of Object.keys(client)) {
+                                const val = client[key];
+                                if (val && typeof val === 'object') {
+                                    for (const k2 of Object.keys(val)) {
+                                        if (val[k2] && typeof val[k2].callback === 'function') {
+                                            val[k2].callback(token);
+                                            return;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }""", token)
+
+                print(f"[CAPTCHA] Solved in {(attempt + 1) * 2}s, token injected")
+                time.sleep(1)  # Let page react to token
+                return True
+
+            elif status == "failed":
+                print(f"[CAPTCHA] CapSolver task failed: {result.get('errorDescription', 'unknown')}")
+                return False
+
+        print("[CAPTCHA] CapSolver timeout after 30s")
+        return False
+
+    except Exception as e:
+        print(f"[CAPTCHA] Error: {e}")
+        traceback.print_exc()
+        return False
+
+
 # ── Gemini API ──────────────────────────────────────────────
 
 def gemini_cua(contents: list[dict]) -> dict:
@@ -1578,6 +1714,21 @@ def handler(event: dict, context=None) -> dict:
                 time.sleep(5)
         else:
             time.sleep(3)  # CUA already submitted
+
+        # ── Post-CUA: Solve reCAPTCHA if present (CapSolver API) ──
+        captcha_ok = solve_recaptcha(page, url)
+        if captcha_ok:
+            # If CAPTCHA was solved (or not present), try submitting again if form is still visible
+            submit_btn = page.locator('button[type="submit"], button:has-text("Submit"), input[type="submit"]').first
+            if submit_btn.count() > 0 and submit_btn.is_visible():
+                try:
+                    submit_btn.click(timeout=5000)
+                    print("[Form Fill] Re-submitted after CAPTCHA solve")
+                    time.sleep(5)
+                except Exception:
+                    pass  # CUA may have already submitted
+        else:
+            print("[Form Fill] CAPTCHA not solved — form may fail")
 
         # ── Phase 2: Save formConfig on success ──
         if state_ok and merchant:
