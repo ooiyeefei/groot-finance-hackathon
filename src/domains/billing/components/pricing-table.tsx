@@ -23,6 +23,7 @@ import { useCatalog, type CatalogPlan } from '../hooks/use-catalog'
 import { cn } from '@/lib/utils'
 import { ComingSoonBadge } from '@/components/ui/coming-soon-badge'
 import { localizeEInvoiceLabel } from '@/lib/utils/e-invoice-label'
+import { isNativePlatform } from '@/lib/capacitor/platform'
 
 /**
  * Launch list prices (marketing decoration only — not charged in Stripe).
@@ -312,7 +313,17 @@ export function PricingTable({
               </CardContent>
 
               <CardFooter>
-                {isCurrent ? (
+                {isNativePlatform() ? (
+                  isCurrent ? (
+                    <Button variant="outline" className="w-full" disabled>
+                      Current Plan
+                    </Button>
+                  ) : (
+                    <p className="text-xs text-muted-foreground text-center w-full py-2">
+                      Visit <span className="font-medium text-foreground">finance.hellogroot.com</span> to subscribe
+                    </p>
+                  )
+                ) : isCurrent ? (
                   <Button variant="outline" className="w-full" disabled>
                     Current Plan
                   </Button>

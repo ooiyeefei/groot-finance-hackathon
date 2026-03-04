@@ -30,6 +30,7 @@ import { useQuery, useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 // Registration validation removed from this component — verification handled by /api/v1/billing/verify-registration
 import { COUNTRY_TO_CURRENCY } from '@/lib/stripe/catalog'
+import { isNativePlatform } from '@/lib/capacitor/platform'
 
 /**
  * Confetti particle component for celebration effect
@@ -504,7 +505,7 @@ export default function BillingSettingsContent() {
                     </div>
                   )}
 
-                  {data.subscription.stripeCustomerId && (
+                  {!isNativePlatform() && data.subscription.stripeCustomerId && (
                     <Button
                       variant="outline"
                       className="w-full mt-4"
@@ -515,15 +516,21 @@ export default function BillingSettingsContent() {
                     </Button>
                   )}
 
-                  <Button
-                    variant={data.subscription.status === 'trialing' || !data.subscription.stripeCustomerId ? 'default' : 'ghost'}
-                    className="w-full mt-2"
-                    onClick={() => (window.location.href = '/en/pricing')}
-                  >
-                    {data.subscription.status === 'trialing' || !data.subscription.stripeCustomerId
-                      ? 'Upgrade Your Plan'
-                      : 'Compare Plans'}
-                  </Button>
+                  {isNativePlatform() ? (
+                    <p className="text-xs text-muted-foreground text-center mt-4">
+                      To manage your subscription, visit <span className="font-medium text-foreground">finance.hellogroot.com</span> in your browser.
+                    </p>
+                  ) : (
+                    <Button
+                      variant={data.subscription.status === 'trialing' || !data.subscription.stripeCustomerId ? 'default' : 'ghost'}
+                      className="w-full mt-2"
+                      onClick={() => (window.location.href = '/en/pricing')}
+                    >
+                      {data.subscription.status === 'trialing' || !data.subscription.stripeCustomerId
+                        ? 'Upgrade Your Plan'
+                        : 'Compare Plans'}
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
 

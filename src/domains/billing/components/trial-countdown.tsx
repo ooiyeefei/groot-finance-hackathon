@@ -20,6 +20,7 @@ import {
   calculateTrialDaysUsed,
   calculateTrialProgress,
 } from '../hooks/use-subscription'
+import { isNativePlatform } from '@/lib/capacitor/platform'
 
 interface TrialCountdownProps {
   trial: TrialInfo
@@ -190,7 +191,7 @@ export function TrialCountdown({
         </p>
       )}
 
-      {showUpgradeButton && (
+      {showUpgradeButton && !isNativePlatform() && (
         <Button size="sm" className="w-full" variant={isExpired || isUrgent ? 'default' : 'outline'} onClick={() => router.push('/en/pricing')}>
             <Zap className="w-4 h-4 mr-2" />
             {isExpired ? 'Upgrade Now' : 'View Plans'}

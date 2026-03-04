@@ -19,11 +19,17 @@ import { Button } from '@/components/ui/button'
 import { X, Zap, FileText, TrendingUp, Shield, Clock } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { isNativePlatform } from '@/lib/capacitor/platform'
 
 export function UpgradeBanner() {
   const router = useRouter()
   const { data, isLoading } = useSubscription()
   const [isDismissed, setIsDismissed] = useState(false)
+  const [isNative, setIsNative] = useState(false)
+
+  useEffect(() => {
+    setIsNative(isNativePlatform())
+  }, [])
 
   // Check if banner was dismissed this session
   useEffect(() => {
@@ -41,8 +47,8 @@ export function UpgradeBanner() {
   // Don't show while loading
   if (isLoading) return null
 
-  // Don't show if dismissed or not trialing
-  if (isDismissed || !data || data.subscription.status !== 'trialing') return null
+  // Don't show if dismissed, not trialing, or running in native app (Apple IAP compliance)
+  if (isDismissed || !data || data.subscription.status !== 'trialing' || isNative) return null
 
   const features = [
     { icon: FileText, text: '100+ OCR scans/month' },

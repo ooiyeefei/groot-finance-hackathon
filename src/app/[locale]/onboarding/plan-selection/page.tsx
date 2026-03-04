@@ -31,6 +31,7 @@ import { TrialCTA } from '@/domains/onboarding/components/plan-selection/trial-c
 import { useToast } from '@/components/ui/toast'
 import { useBusinessMemberships, useBusinessContext } from '@/contexts/business-context'
 import { AlertTriangle, Loader2, LogOut, ChevronRight } from 'lucide-react'
+import { isNativePlatform } from '@/lib/capacitor/platform'
 
 // Inner component that uses useSearchParams (must be wrapped in Suspense)
 function PlanSelectionContent() {

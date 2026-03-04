@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { AlertTriangle, Zap, Check, X } from 'lucide-react'
 import { FALLBACK_PLANS, PlanKey } from '@/lib/stripe/plans'
+import { isNativePlatform } from '@/lib/capacitor/platform'
 
 interface UpgradePromptProps {
   isOpen: boolean
@@ -152,14 +153,20 @@ export function UpgradePrompt({
             >
               Maybe Later
             </Button>
-            <Button
-              variant="default"
-              onClick={handleUpgrade}
-              className="min-w-[100px] sm:min-w-[120px]"
-            >
-              <Zap className="w-4 h-4 mr-2" />
-              View Upgrade Options
-            </Button>
+            {isNativePlatform() ? (
+              <p className="text-sm text-muted-foreground text-center px-2">
+                To upgrade, visit <span className="font-medium text-foreground">finance.hellogroot.com</span> in your browser.
+              </p>
+            ) : (
+              <Button
+                variant="default"
+                onClick={handleUpgrade}
+                className="min-w-[100px] sm:min-w-[120px]"
+              >
+                <Zap className="w-4 h-4 mr-2" />
+                View Upgrade Options
+              </Button>
+            )}
           </div>
         </div>
       </div>
