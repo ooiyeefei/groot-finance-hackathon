@@ -565,6 +565,33 @@ export const deleteExpired = internalMutation({
 });
 
 /**
+ * Reset reviewed insights back to "new" for a business.
+ * Use when insights were accidentally marked as reviewed (e.g., during UAT testing).
+ *
+ * Run: npx convex run functions/actionCenterInsights:resetReviewedToNew '{"businessId":"..."}' --prod
+ */
+export const resetReviewedToNew = internalMutation({
+  args: { businessId: v.string() },
+  handler: async (ctx, args) => {
+    const insights = await ctx.db
+      .query("actionCenterInsights")
+      .withIndex("by_business_priority", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    const reviewed = insights.filter((i) => i.status === "reviewed");
+    let resetCount = 0;
+
+    for (const insight of reviewed) {
+      await ctx.db.patch(insight._id, { status: "new", reviewedAt: undefined });
+      resetCount++;
+    }
+
+    console.log(`[ActionCenterInsights] Reset ${resetCount} reviewed insights to new`);
+    return { resetCount };
+  },
+});
+
+/**
  * One-time cleanup: Deduplicate existing insights.
  *
  * Groups by (userId + category + metadata.transactionId) for anomaly insights,

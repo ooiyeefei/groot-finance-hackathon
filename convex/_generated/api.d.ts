@@ -74,6 +74,7 @@ import type * as functions_vendors from "../functions/vendors.js";
 import type * as functions_webhooks from "../functions/webhooks.js";
 import type * as functions_workSchedules from "../functions/workSchedules.js";
 import type * as lib_llm from "../lib/llm.js";
+import type * as lib_mcpClient from "../lib/mcpClient.js";
 import type * as lib_resolvers from "../lib/resolvers.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as migrations from "../migrations.js";
@@ -152,6 +153,7 @@ declare const fullApi: ApiFromModules<{
   "functions/webhooks": typeof functions_webhooks;
   "functions/workSchedules": typeof functions_workSchedules;
   "lib/llm": typeof lib_llm;
+  "lib/mcpClient": typeof lib_mcpClient;
   "lib/resolvers": typeof lib_resolvers;
   "lib/validators": typeof lib_validators;
   migrations: typeof migrations;
