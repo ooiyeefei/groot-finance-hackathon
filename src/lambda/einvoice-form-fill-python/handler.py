@@ -90,9 +90,21 @@ def _get_capsolver_key() -> str:
         return ""
 
 
-def solve_captcha(page: Page, url: str) -> bool:
+def solve_captcha(page: Page, url: str, max_retries: int = 2) -> bool:
     """Detect reCAPTCHA v2 or Cloudflare Turnstile on page and solve via CapSolver API.
-    Returns True if solved or no CAPTCHA present."""
+    Returns True if solved or no CAPTCHA present. Retries on transient failures."""
+    for retry in range(max_retries):
+        result = _solve_captcha_once(page, url)
+        if result:
+            return True
+        if retry < max_retries - 1:
+            print(f"[CAPTCHA] Retry {retry + 1}/{max_retries - 1} in 3s...")
+            time.sleep(3)
+    return False
+
+
+def _solve_captcha_once(page: Page, url: str) -> bool:
+    """Single attempt to detect and solve CAPTCHA."""
     try:
         # Detect CAPTCHA type — checks DOM elements, hidden inputs, scripts, AND network requests
         captcha_info = page.evaluate("""() => {
@@ -2095,8 +2107,12 @@ def handler(event: dict, context=None) -> dict:
         except Exception as e:
             print(f"[Form Fill] OTP detection check failed (non-fatal): {e}")
 
+        # ── Phase 0: Solve CAPTCHA early (some forms like McDonald's trigger reCAPTCHA on any interaction) ──
+        time.sleep(3)  # Wait for reCAPTCHA/Turnstile to fully load
+        solve_captcha(page, url)
+
         # ── Pre-fill with Playwright (runs BEFORE Tier 1 so phone/dropdowns are ready) ──
-        # Phase 0: Handle validate-gated forms (BRN+TIN → Validate → fields unlock)
+        # Phase 0b: Handle validate-gated forms (BRN+TIN → Validate → fields unlock)
         handle_validate_gate(page, buyer)
         # Phase 1: Fill all text inputs, selects, phone, custom dropdowns
         prefill_all(page, buyer, receipt)
