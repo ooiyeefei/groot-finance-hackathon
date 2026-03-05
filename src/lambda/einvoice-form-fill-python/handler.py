@@ -2052,11 +2052,10 @@ def handler(event: dict, context=None) -> dict:
         else:
             time.sleep(3)  # CUA already submitted
 
-        # ── Post-CUA: Re-solve reCAPTCHA if CUA triggered a new challenge ──
-        # (CUA might have clicked "I'm not a robot" which resets the solved state)
-        if page.locator("iframe[src*='recaptcha']").count() > 0:
-            solve_captcha(page, url)
-            # Try submitting if form is still visible after CAPTCHA solve
+        # ── Post-CUA: Solve any CAPTCHA (may have loaded lazily after scroll/CUA) ──
+        captcha_ok = solve_captcha(page, url)
+        if captcha_ok:
+            # Re-submit if CAPTCHA was solved and form is still visible
             submit_btn = page.locator('button[type="submit"], button:has-text("Submit"), input[type="submit"]').first
             if submit_btn.count() > 0 and submit_btn.is_visible():
                 try:
