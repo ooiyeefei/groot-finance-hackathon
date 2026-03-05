@@ -707,10 +707,13 @@ export default defineSchema({
       cuaInputTokens: v.optional(v.number()),
       cuaOutputTokens: v.optional(v.number()),
       cuaCalls: v.optional(v.number()),
+      cuaCostUsd: v.optional(v.number()),
       flashInputTokens: v.optional(v.number()),
       flashOutputTokens: v.optional(v.number()),
       flashCalls: v.optional(v.number()),
+      flashCostUsd: v.optional(v.number()),
       capsolverSolves: v.optional(v.number()),
+      capsolverCostUsd: v.optional(v.number()),
       totalCostUsd: v.optional(v.number()),
     })),
   })
