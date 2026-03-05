@@ -451,7 +451,7 @@ async function getMasterDataRecords(
     const vendorRecords = vendors
       .filter((v: any) => v.status !== "inactive" && v.name)
       .map((v: any) => ({
-        vendorName: v.supplierCode || generateCodeFromName(v.name, "V-"),
+        vendorName: v.supplierCode || generateCodeFromName(v.name, "CR-"),
         vendorFullName: v.name || "",
         vendorName2: "",
         registerNo: v.taxId || "",
@@ -508,7 +508,7 @@ async function getMasterDataRecords(
       seenMerchants.add(nameLower);
 
       merchantRecords.push({
-        vendorName: generateCodeFromName(name, "M-"),
+        vendorName: generateCodeFromName(name, "CR-"),
         vendorFullName: name,
         vendorName2: "",
         registerNo: "",
