@@ -298,7 +298,7 @@ def solve_captcha(page: Page, url: str) -> bool:
 # Pricing per million tokens (USD)
 _PRICING = {
     "gemini-2.5-computer-use": {"input": 1.25, "output": 10.00},
-    "gemini-2.0-flash":        {"input": 0.10, "output": 0.40},
+    "gemini-3.1-flash-lite-preview":  {"input": 0.25, "output": 1.50},
 }
 
 class CostTracker:
@@ -332,7 +332,7 @@ class CostTracker:
 
     @property
     def flash_cost(self) -> float:
-        p = _PRICING["gemini-2.0-flash"]
+        p = _PRICING["gemini-3.1-flash-lite-preview"]
         return (self.flash_input_tokens * p["input"] + self.flash_output_tokens * p["output"]) / 1_000_000
 
     @property
@@ -396,7 +396,7 @@ def gemini_cua(contents: list[dict]) -> dict:
 
 def gemini_flash(prompt: str, image_b64: str) -> str:
     """Call Gemini Flash for vision analysis (recon / troubleshooting)."""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key={GEMINI_KEY}"
     payload = {
         "contents": [{"role": "user", "parts": [
             {"text": prompt},
@@ -1665,7 +1665,7 @@ def troubleshoot(screenshot_b64: str, error: str, merchant: str):
             cua_hints: str = _dspy.OutputField(desc="Merchant-specific instructions for the CUA agent on next attempt. E.g. 'Click Company tab before filling fields', 'Phone field uses react-phone-input with +60 prefix — use 9-digit number without 0', 'Must click Validate button first to unlock fields'. Be specific and actionable.")
 
         # Configure DSPy
-        lm = _dspy.LM("gemini/gemini-2.0-flash", api_key=GEMINI_KEY, max_tokens=2048, temperature=0.1)
+        lm = _dspy.LM("gemini/gemini-3.1-flash-lite-preview", api_key=GEMINI_KEY, max_tokens=2048, temperature=0.1)
         _dspy.settings.configure(lm=lm, adapter=_dspy.JSONAdapter())
 
         # Gemini Flash describes the screenshot (DSPy doesn't handle images natively)
