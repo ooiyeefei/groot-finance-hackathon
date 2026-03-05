@@ -92,7 +92,7 @@ def solve_captcha(page: Page, url: str) -> bool:
     """Detect reCAPTCHA v2 or Cloudflare Turnstile on page and solve via CapSolver API.
     Returns True if solved or no CAPTCHA present."""
     try:
-        # Detect CAPTCHA type
+        # Detect CAPTCHA type — checks DOM elements, hidden inputs, scripts, AND network requests
         captcha_info = page.evaluate("""() => {
             // reCAPTCHA v2
             const recaptcha = document.querySelector('iframe[src*="recaptcha"], .g-recaptcha, #g-recaptcha');
@@ -105,26 +105,36 @@ def solve_captcha(page: Page, url: str) -> bool:
                 }
                 return { type: 'recaptcha', siteKey: key };
             }
-            // Cloudflare Turnstile
-            const turnstile = document.querySelector('iframe[src*="challenges.cloudflare"], .cf-turnstile, [data-sitekey*="0x4"]');
-            if (turnstile) {
+
+            // Cloudflare Turnstile — check multiple detection methods
+            // Method 1: DOM elements
+            const turnstileEl = document.querySelector('iframe[src*="challenges.cloudflare"], .cf-turnstile, [data-sitekey*="0x4"]');
+            // Method 2: Hidden input (Angular/React programmatic render)
+            const turnstileInput = document.querySelector('input[name="cf-turnstile-response"]');
+            // Method 3: Turnstile script loaded
+            const turnstileScript = document.querySelector('script[src*="turnstile"]');
+
+            if (turnstileEl || turnstileInput || turnstileScript) {
+                let key = null;
+                // Try data-sitekey attribute
                 const el = document.querySelector('.cf-turnstile, [data-sitekey*="0x4"]');
-                let key = el ? el.getAttribute('data-sitekey') : null;
+                if (el) key = el.getAttribute('data-sitekey');
+                // Try iframe src
                 if (!key) {
-                    // Extract from iframe src
                     const iframe = document.querySelector('iframe[src*="challenges.cloudflare"]');
                     if (iframe) { const m = iframe.src.match(/[?&]k=([^&]+)/); key = m ? m[1] : null; }
                 }
-                // Also check script tags for sitekey
+                // Try extracting from network requests (programmatic render — sitekey is in URL path)
                 if (!key) {
-                    const scripts = document.querySelectorAll('script[src*="turnstile"]');
-                    scripts.forEach(s => {
-                        const sibling = s.nextElementSibling;
-                        if (sibling && sibling.getAttribute('data-sitekey')) key = sibling.getAttribute('data-sitekey');
-                    });
+                    const entries = performance.getEntriesByType('resource');
+                    for (const e of entries) {
+                        const m = e.name.match(/turnstile.*?\/(0x4[A-Za-z0-9_-]+)/);
+                        if (m) { key = m[1]; break; }
+                    }
                 }
                 return { type: 'turnstile', siteKey: key };
             }
+
             // hCaptcha (future support)
             const hcaptcha = document.querySelector('iframe[src*="hcaptcha"], .h-captcha');
             if (hcaptcha) {
