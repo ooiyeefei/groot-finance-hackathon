@@ -88,46 +88,83 @@ def _get_capsolver_key() -> str:
         return ""
 
 
-def solve_recaptcha(page: Page, url: str) -> bool:
-    """Detect reCAPTCHA v2 on page and solve via CapSolver API. Returns True if solved or no CAPTCHA."""
+def solve_captcha(page: Page, url: str) -> bool:
+    """Detect reCAPTCHA v2 or Cloudflare Turnstile on page and solve via CapSolver API.
+    Returns True if solved or no CAPTCHA present."""
     try:
-        has_captcha = page.locator("iframe[src*='recaptcha'], .g-recaptcha, #g-recaptcha").first.count() > 0
-        if not has_captcha:
+        # Detect CAPTCHA type
+        captcha_info = page.evaluate("""() => {
+            // reCAPTCHA v2
+            const recaptcha = document.querySelector('iframe[src*="recaptcha"], .g-recaptcha, #g-recaptcha');
+            if (recaptcha) {
+                const el = document.querySelector('.g-recaptcha, [data-sitekey]');
+                let key = el ? el.getAttribute('data-sitekey') : null;
+                if (!key) {
+                    const iframe = document.querySelector('iframe[src*="recaptcha"]');
+                    if (iframe) { const m = iframe.src.match(/[?&]k=([^&]+)/); key = m ? m[1] : null; }
+                }
+                return { type: 'recaptcha', siteKey: key };
+            }
+            // Cloudflare Turnstile
+            const turnstile = document.querySelector('iframe[src*="challenges.cloudflare"], .cf-turnstile, [data-sitekey*="0x4"]');
+            if (turnstile) {
+                const el = document.querySelector('.cf-turnstile, [data-sitekey*="0x4"]');
+                let key = el ? el.getAttribute('data-sitekey') : null;
+                if (!key) {
+                    // Extract from iframe src
+                    const iframe = document.querySelector('iframe[src*="challenges.cloudflare"]');
+                    if (iframe) { const m = iframe.src.match(/[?&]k=([^&]+)/); key = m ? m[1] : null; }
+                }
+                // Also check script tags for sitekey
+                if (!key) {
+                    const scripts = document.querySelectorAll('script[src*="turnstile"]');
+                    scripts.forEach(s => {
+                        const sibling = s.nextElementSibling;
+                        if (sibling && sibling.getAttribute('data-sitekey')) key = sibling.getAttribute('data-sitekey');
+                    });
+                }
+                return { type: 'turnstile', siteKey: key };
+            }
+            // hCaptcha (future support)
+            const hcaptcha = document.querySelector('iframe[src*="hcaptcha"], .h-captcha');
+            if (hcaptcha) {
+                const el = document.querySelector('.h-captcha, [data-sitekey]');
+                return { type: 'hcaptcha', siteKey: el ? el.getAttribute('data-sitekey') : null };
+            }
+            return { type: null };
+        }""")
+
+        if not captcha_info or not captcha_info.get("type"):
             return True  # No CAPTCHA — continue normally
 
-        print("[CAPTCHA] reCAPTCHA detected on page")
+        captcha_type = captcha_info["type"]
+        site_key = captcha_info.get("siteKey")
+        print(f"[CAPTCHA] {captcha_type} detected, siteKey: {(site_key or 'unknown')[:25]}...")
 
         api_key = _get_capsolver_key()
         if not api_key:
             print("[CAPTCHA] No CapSolver API key — cannot solve")
             return False
 
-        # Extract site key from the page
-        site_key = page.evaluate("""() => {
-            const el = document.querySelector('.g-recaptcha, [data-sitekey]');
-            if (el) return el.getAttribute('data-sitekey');
-            const iframe = document.querySelector('iframe[src*="recaptcha"]');
-            if (iframe) {
-                const match = iframe.src.match(/[?&]k=([^&]+)/);
-                return match ? match[1] : null;
-            }
-            return null;
-        }""")
-
         if not site_key:
-            print("[CAPTCHA] Could not extract reCAPTCHA site key")
+            print(f"[CAPTCHA] Could not extract {captcha_type} site key")
             return False
 
-        print(f"[CAPTCHA] Site key: {site_key[:20]}..., solving via CapSolver")
+        # Map CAPTCHA type to CapSolver task type
+        task_config = {
+            "recaptcha": {"type": "ReCaptchaV2TaskProxyLess", "websiteURL": url, "websiteKey": site_key},
+            "turnstile": {"type": "AntiTurnstileTaskProxyLess", "websiteURL": url, "websiteKey": site_key},
+            "hcaptcha":  {"type": "HCaptchaTaskProxyLess", "websiteURL": url, "websiteKey": site_key},
+        }.get(captcha_type)
+
+        if not task_config:
+            print(f"[CAPTCHA] Unsupported type: {captcha_type}")
+            return False
 
         # Step 1: Create task
         create_resp = _http_post("https://api.capsolver.com/createTask", {
             "clientKey": api_key,
-            "task": {
-                "type": "ReCaptchaV2TaskProxyLess",
-                "websiteURL": url,
-                "websiteKey": site_key,
-            }
+            "task": task_config,
         }, timeout=15)
 
         if create_resp.get("errorId", 0) != 0:
@@ -139,9 +176,9 @@ def solve_recaptcha(page: Page, url: str) -> bool:
             print(f"[CAPTCHA] No taskId returned: {create_resp}")
             return False
 
-        print(f"[CAPTCHA] Task created: {task_id}, polling for solution...")
+        print(f"[CAPTCHA] Task created: {task_id}, polling...")
 
-        # Step 2: Poll for result (max ~30s, CapSolver usually < 10s)
+        # Step 2: Poll for result (max ~30s)
         for attempt in range(15):
             time.sleep(2)
             result = _http_post("https://api.capsolver.com/getTaskResult", {
@@ -151,42 +188,59 @@ def solve_recaptcha(page: Page, url: str) -> bool:
 
             status = result.get("status")
             if status == "ready":
-                token = result.get("solution", {}).get("gRecaptchaResponse", "")
+                solution = result.get("solution", {})
+                # Token key varies by type
+                token = solution.get("gRecaptchaResponse") or solution.get("token") or solution.get("text") or ""
                 if not token:
-                    print("[CAPTCHA] Solution ready but no token")
+                    print(f"[CAPTCHA] Solution ready but no token: {list(solution.keys())}")
                     return False
 
-                # Step 3: Inject token — use .value (not innerHTML) for the hidden textarea
-                page.evaluate("""(token) => {
-                    // reCAPTCHA stores the response in a hidden textarea
-                    const el = document.getElementById('g-recaptcha-response');
-                    if (el) { el.value = token; }
-                    document.querySelectorAll('textarea[name="g-recaptcha-response"]').forEach(t => {
-                        t.value = token;
-                    });
-                    // Trigger the site's registered callback (standard reCAPTCHA API)
-                    if (typeof ___grecaptcha_cfg !== 'undefined') {
-                        const clients = ___grecaptcha_cfg.clients || {};
-                        for (const cid of Object.keys(clients)) {
-                            const client = clients[cid];
-                            for (const key of Object.keys(client)) {
-                                const val = client[key];
-                                if (val && typeof val === 'object') {
-                                    for (const k2 of Object.keys(val)) {
-                                        if (val[k2] && typeof val[k2].callback === 'function') {
-                                            val[k2].callback(token);
-                                            return;
+                # Step 3: Inject token based on CAPTCHA type
+                if captcha_type == "recaptcha":
+                    page.evaluate("""(token) => {
+                        const el = document.getElementById('g-recaptcha-response');
+                        if (el) { el.value = token; }
+                        document.querySelectorAll('textarea[name="g-recaptcha-response"]').forEach(t => { t.value = token; });
+                        if (typeof ___grecaptcha_cfg !== 'undefined') {
+                            const clients = ___grecaptcha_cfg.clients || {};
+                            for (const cid of Object.keys(clients)) {
+                                const client = clients[cid];
+                                for (const key of Object.keys(client)) {
+                                    const val = client[key];
+                                    if (val && typeof val === 'object') {
+                                        for (const k2 of Object.keys(val)) {
+                                            if (val[k2] && typeof val[k2].callback === 'function') { val[k2].callback(token); return; }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
-                }""", token)
+                    }""", token)
+                elif captcha_type == "turnstile":
+                    page.evaluate("""(token) => {
+                        // Turnstile stores response in hidden input
+                        document.querySelectorAll('input[name="cf-turnstile-response"], [name="cf-turnstile-response"]').forEach(el => { el.value = token; });
+                        // Also try the Turnstile callback
+                        if (typeof turnstile !== 'undefined' && turnstile.getResponse) {
+                            // Widget already exists — inject via internal state
+                            const widgets = document.querySelectorAll('.cf-turnstile');
+                            widgets.forEach(w => {
+                                const input = w.querySelector('input[type="hidden"]');
+                                if (input) input.value = token;
+                            });
+                        }
+                        // Trigger any form-level callback
+                        const event = new Event('change', { bubbles: true });
+                        document.querySelectorAll('input[name="cf-turnstile-response"]').forEach(el => el.dispatchEvent(event));
+                    }""", token)
+                elif captcha_type == "hcaptcha":
+                    page.evaluate("""(token) => {
+                        document.querySelectorAll('textarea[name="h-captcha-response"], [name="g-recaptcha-response"]').forEach(el => { el.value = token; });
+                    }""", token)
 
                 cost_tracker.record_capsolver()
-                print(f"[CAPTCHA] Solved in {(attempt + 1) * 2}s, token injected")
-                time.sleep(1)  # Let page react to token
+                print(f"[CAPTCHA] {captcha_type} solved in {(attempt + 1) * 2}s, token injected")
+                time.sleep(1)
                 return True
 
             elif status == "failed":
@@ -246,7 +300,7 @@ class CostTracker:
 
     @property
     def capsolver_cost(self) -> float:
-        return self.capsolver_solves * 0.0008  # $0.80/1000 solves
+        return self.capsolver_solves * 0.0012  # ~$1.20/1000 solves (Turnstile=$1.20, reCAPTCHA=$0.80, avg=$1.00)
 
     @property
     def total_cost(self) -> float:
@@ -1939,7 +1993,7 @@ def handler(event: dict, context=None) -> dict:
 
         # Phase 2: Solve reCAPTCHA BEFORE CUA (CapSolver API, ~5-12s)
         # This prevents CUA from wasting turns clicking CAPTCHA images
-        solve_recaptcha(page, url)
+        solve_captcha(page, url)
 
         # ── Tier 2: CUA exploration (with merchant-specific hints) ──
         try:
@@ -2001,7 +2055,7 @@ def handler(event: dict, context=None) -> dict:
         # ── Post-CUA: Re-solve reCAPTCHA if CUA triggered a new challenge ──
         # (CUA might have clicked "I'm not a robot" which resets the solved state)
         if page.locator("iframe[src*='recaptcha']").count() > 0:
-            solve_recaptcha(page, url)
+            solve_captcha(page, url)
             # Try submitting if form is still visible after CAPTCHA solve
             submit_btn = page.locator('button[type="submit"], button:has-text("Submit"), input[type="submit"]').first
             if submit_btn.count() > 0 and submit_btn.is_visible():
