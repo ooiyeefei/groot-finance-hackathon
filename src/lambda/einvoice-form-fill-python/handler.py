@@ -2006,12 +2006,16 @@ def handler(event: dict, context=None) -> dict:
                 # Save hint so next run uses Browserbase from the start
                 if merchant:
                     new_hint = (merchant_hints + "\n" if merchant_hints else "") + "cloudflare_managed: Use Browserbase (Cloudflare managed challenge blocks headless Lambda)"
-                    convex_mutation("functions/system:saveMerchantFormConfig", {
-                        "merchantName": merchant,
-                        "formConfig": {"cuaHints": new_hint[:500]},
-                    })
+                    try:
+                        existing_fields = (fc or {}).get("fields", [])
+                        convex_mutation("functions/system:saveMerchantFormConfig", {
+                            "merchantName": merchant,
+                            "formConfig": {"fields": existing_fields, "cuaHints": new_hint[:500]},
+                        })
+                        print(f"[Form Fill] Saved Browserbase hint for {merchant}")
+                    except Exception as e:
+                        print(f"[Form Fill] Failed to save Browserbase hint: {e}")
                     merchant_hints = new_hint
-                    print(f"[Form Fill] Saved Browserbase hint for {merchant}")
 
         if status in (403, 401):
             raise RuntimeError(f"BOT_BLOCKED: Merchant returned {status} (Cloudflare/WAF)")
