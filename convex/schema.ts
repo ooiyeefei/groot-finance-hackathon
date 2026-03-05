@@ -696,6 +696,23 @@ export default defineSchema({
     durationMs: v.optional(v.number()),
     startedAt: v.number(),
     completedAt: v.optional(v.number()),
+
+    // ── Debugging fields (019-lhdn-einv-flow-2, added for observability) ──
+    merchantName: v.optional(v.string()),               // Vendor name from receipt
+    tierReached: v.optional(v.string()),                // "tier1" | "tier2" | "tier2b" | "tier3"
+    browserType: v.optional(v.string()),                // "local" | "browserbase"
+    cuaActions: v.optional(v.number()),                 // Number of CUA turns
+    verifyEvidence: v.optional(v.string()),             // What Flash saw after submit
+    cost: v.optional(v.object({                         // Actual token/cost breakdown
+      cuaInputTokens: v.optional(v.number()),
+      cuaOutputTokens: v.optional(v.number()),
+      cuaCalls: v.optional(v.number()),
+      flashInputTokens: v.optional(v.number()),
+      flashOutputTokens: v.optional(v.number()),
+      flashCalls: v.optional(v.number()),
+      capsolverSolves: v.optional(v.number()),
+      totalCostUsd: v.optional(v.number()),
+    })),
   })
     .index("by_expenseClaimId", ["expenseClaimId"])
     .index("by_businessId_status", ["businessId", "status"]),
