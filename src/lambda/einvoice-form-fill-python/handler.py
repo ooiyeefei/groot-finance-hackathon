@@ -227,48 +227,34 @@ def solve_captcha(page: Page, url: str) -> bool:
                         }
                     }""", token)
                 elif captcha_type == "turnstile":
-                    page.evaluate("""(token) => {
-                        // 1. Set ALL hidden inputs related to Turnstile
+                    cb_result = page.evaluate("""(token) => {
+                        let callbackInvoked = false;
+
+                        // 1. Use the intercepted callback (captured via addInitScript)
+                        if (window.__turnstileCallbacks && window.__turnstileCallbacks.length > 0) {
+                            for (const cb of window.__turnstileCallbacks) {
+                                try { cb(token); callbackInvoked = true; } catch(e) {}
+                            }
+                        }
+
+                        // 2. Set hidden input with native setter (Angular/React change detection)
                         document.querySelectorAll('input[name="cf-turnstile-response"]').forEach(el => {
-                            // Use native setter to trigger Angular/React change detection
                             const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
                             if (setter) setter.call(el, token);
                             else el.value = token;
                             el.dispatchEvent(new Event('input', { bubbles: true }));
                             el.dispatchEvent(new Event('change', { bubbles: true }));
                         });
-                        // 2. Monkey-patch turnstile API
+
+                        // 3. Monkey-patch turnstile API for any subsequent getResponse() calls
                         if (typeof turnstile !== 'undefined') {
                             turnstile.getResponse = function() { return token; };
                             turnstile.isExpired = function() { return false; };
                         }
-                        // 3. Find the Turnstile widget's internal callback and invoke it
-                        // Turnstile stores callbacks in its _private state
-                        if (typeof turnstile !== 'undefined' && turnstile._private) {
-                            try {
-                                // Walk the private state to find callback functions
-                                const priv = turnstile._private;
-                                for (const key of Object.keys(priv)) {
-                                    const val = priv[key];
-                                    if (val && typeof val === 'object') {
-                                        // Look for widget entries with callbacks
-                                        for (const k2 of Object.keys(val)) {
-                                            if (typeof val[k2]?.callback === 'function') {
-                                                val[k2].callback(token);
-                                            }
-                                        }
-                                    }
-                                }
-                            } catch(e) {}
-                        }
-                        // 4. Also try: click the Turnstile checkbox to visually mark as solved
-                        // (Some forms check the visual state too)
-                        const checkbox = document.querySelector('input[type="checkbox"][name*="turnstile"], iframe[src*="challenges.cloudflare"]');
-                        if (checkbox && checkbox.tagName === 'INPUT' && !checkbox.checked) {
-                            checkbox.checked = true;
-                            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
-                        }
+
+                        return { callbackInvoked, callbackCount: (window.__turnstileCallbacks || []).length };
                     }""", token)
+                    print(f"[CAPTCHA] Turnstile callback: {cb_result}")
                 elif captcha_type == "hcaptcha":
                     page.evaluate("""(token) => {
                         document.querySelectorAll('textarea[name="h-captcha-response"], [name="g-recaptcha-response"]').forEach(el => { el.value = token; });
@@ -1932,6 +1918,33 @@ def handler(event: dict, context=None) -> dict:
             ],
         )
         page = browser.new_page(viewport={"width": SCREEN_W, "height": SCREEN_H})
+
+        # Intercept Turnstile render() to capture callback BEFORE page loads
+        # This is the only reliable way to get the callback for implicit/programmatic render
+        page.add_init_script("""() => {
+            window.__turnstileCallbacks = [];
+            // Intercept the Turnstile API when it loads
+            Object.defineProperty(window, 'turnstile', {
+                configurable: true,
+                set: function(ts) {
+                    if (ts && ts.render) {
+                        const origRender = ts.render;
+                        ts.render = function(element, options) {
+                            if (options && typeof options.callback === 'function') {
+                                window.__turnstileCallbacks.push(options.callback);
+                            }
+                            // Store the sitekey for detection
+                            if (options && options.sitekey) {
+                                window.__turnstileSiteKey = options.sitekey;
+                            }
+                            return origRender.apply(this, arguments);
+                        };
+                    }
+                    window.__turnstileOriginal = ts;
+                },
+                get: function() { return window.__turnstileOriginal; }
+            });
+        }""")
 
         # Navigate
         resp = page.goto(url, wait_until="domcontentloaded", timeout=45000)
