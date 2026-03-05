@@ -9,13 +9,31 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { ArrowRight, AlertCircle, Save } from "lucide-react";
+import { ArrowRight, AlertCircle, Save, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { useCodeMappings } from "../hooks/use-code-mappings";
+
+/**
+ * Generate a short, consistent code from a name (mirrors backend logic).
+ * Format: PREFIX + First 3 chars uppercase + "-" + 4-char hash
+ */
+function generateCodeFromName(name: string, prefix: string = "CR-"): string {
+  const alpha = name.replace(/[^a-zA-Z]/g, "").toUpperCase();
+  const short = alpha.substring(0, 3) || "UNK";
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
+  }
+  const hashStr = Math.abs(hash).toString(36).toUpperCase().substring(0, 4).padEnd(4, "0");
+  return `${prefix}${short}-${hashStr}`;
+}
+
+// Mapping types that can auto-generate codes from names
+const AUTO_CODE_TYPES = new Set(["creditor_code", "debtor_code"]);
 
 interface CodeMappingStepProps {
   businessId: string;
@@ -85,8 +103,16 @@ export function CodeMappingStep({
       const values = distinctValues[mappingType] ?? [];
       newMappings[mappingType] = {};
       for (const sourceValue of values) {
-        newMappings[mappingType][sourceValue] =
-          getTargetCode(mappingType, sourceValue);
+        const saved = getTargetCode(mappingType, sourceValue);
+        if (saved) {
+          newMappings[mappingType][sourceValue] = saved;
+        } else if (AUTO_CODE_TYPES.has(mappingType)) {
+          // Auto-fill creditor/debtor codes with generated CR-/D- codes
+          const prefix = mappingType === "debtor_code" ? "D-" : "CR-";
+          newMappings[mappingType][sourceValue] = generateCodeFromName(sourceValue, prefix);
+        } else {
+          newMappings[mappingType][sourceValue] = "";
+        }
       }
       newDefaults[mappingType] = getDefaultCode(mappingType);
     }
@@ -181,13 +207,37 @@ export function CodeMappingStep({
             key={mappingType}
             className="rounded-lg border border-border bg-card"
           >
-            <div className="border-b border-border px-4 py-3">
-              <h4 className="font-medium text-foreground">
-                {MAPPING_TYPE_LABELS[mappingType] ?? mappingType}
-              </h4>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {MAPPING_TYPE_DESCRIPTIONS[mappingType]}
-              </p>
+            <div className="border-b border-border px-4 py-3 flex items-center justify-between">
+              <div>
+                <h4 className="font-medium text-foreground">
+                  {MAPPING_TYPE_LABELS[mappingType] ?? mappingType}
+                </h4>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {MAPPING_TYPE_DESCRIPTIONS[mappingType]}
+                </p>
+              </div>
+              {AUTO_CODE_TYPES.has(mappingType) && values.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const prefix = mappingType === "debtor_code" ? "D-" : "CR-";
+                    const updated: Record<string, string> = {};
+                    for (const sv of values) {
+                      updated[sv] = generateCodeFromName(sv, prefix);
+                    }
+                    setFormMappings((prev) => ({
+                      ...prev,
+                      [mappingType]: { ...prev[mappingType], ...updated },
+                    }));
+                  }}
+                  disabled={disabled || isSaving}
+                  className="shrink-0"
+                >
+                  <Wand2 className="h-3.5 w-3.5 mr-1.5" />
+                  Auto-fill Groot codes
+                </Button>
+              )}
             </div>
 
             {/* Default fallback code */}
@@ -212,14 +262,23 @@ export function CodeMappingStep({
 
             {/* Individual mappings */}
             <div className="divide-y divide-border">
-              {values.map((sourceValue) => (
+              {values.map((sourceValue) => {
+                const grootCode = AUTO_CODE_TYPES.has(mappingType)
+                  ? generateCodeFromName(sourceValue, mappingType === "debtor_code" ? "D-" : "CR-")
+                  : null;
+                return (
                 <div
                   key={sourceValue}
                   className="px-4 py-2.5 flex items-center gap-3"
                 >
-                  <span className="text-sm text-foreground min-w-[180px] truncate">
+                  <span className="text-sm text-foreground min-w-[160px] truncate" title={sourceValue}>
                     {sourceValue}
                   </span>
+                  {grootCode && (
+                    <span className="text-xs text-muted-foreground font-mono min-w-[90px] shrink-0">
+                      {grootCode}
+                    </span>
+                  )}
                   <ArrowRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   <Input
                     className="max-w-[200px] h-8 text-sm"
@@ -236,7 +295,8 @@ export function CodeMappingStep({
                     disabled={disabled || isSaving}
                   />
                 </div>
-              ))}
+              );
+              })}
               {values.length === 0 && (
                 <div className="px-4 py-3 text-sm text-muted-foreground italic">
                   No values found in selected records for this mapping type. Set
