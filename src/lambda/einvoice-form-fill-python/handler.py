@@ -151,6 +151,19 @@ def solve_captcha(page: Page, url: str) -> bool:
         site_key = captcha_info.get("siteKey")
         print(f"[CAPTCHA] {captcha_type} detected, siteKey: {(site_key or 'unknown')[:25]}...")
 
+        # Turnstile managed challenge: check if widget actually rendered via JS API
+        # If no iframes and no .cf-turnstile elements, it's managed mode — CapSolver can't help
+        if captcha_type == "turnstile":
+            is_managed = page.evaluate("""() => {
+                const hasIframe = document.querySelectorAll('iframe[src*="challenges.cloudflare"]').length > 0;
+                const hasWidget = document.querySelectorAll('.cf-turnstile').length > 0;
+                const hasDataSitekey = document.querySelectorAll('[data-sitekey]').length > 0;
+                return !hasIframe && !hasWidget && !hasDataSitekey;
+            }""")
+            if is_managed:
+                print("[CAPTCHA] Turnstile managed challenge (no widget rendered) — skipping CapSolver, CUA will click")
+                return True  # Don't block — let CUA handle it
+
         api_key = _get_capsolver_key()
         if not api_key:
             print("[CAPTCHA] No CapSolver API key — cannot solve")
@@ -1385,7 +1398,9 @@ TASK:
 13. For any field not covered above, check the RECEIPT IMAGE for the answer.
 14. Check consent checkbox → click Submit.
 15. Fix validation errors if any (only the specific field mentioned).
-16. IMPORTANT — Do NOT interact with reCAPTCHA / "I'm not a robot" checkbox. The CAPTCHA is handled automatically by the system. Skip it completely and focus on form fields only.
+16. CAPTCHA handling:
+   - reCAPTCHA (Google — shows image puzzles like "select all buses"): Do NOT interact. It is handled automatically by the system. Skip completely.
+   - Cloudflare "Verify you are human" checkbox: DO click it and wait 3-5 seconds. It usually auto-verifies after clicking. If it shows "Verification failed", click it again.
 17. For forms requiring OTP/TAC: Use the system email ({buyer["email"]}) for the email field. After filling all fields, click "Request OTP" or "Send OTP". The OTP will be handled automatically — just wait for the code to appear and then submit."""
 
     shot = base64.b64encode(page.screenshot(type="png")).decode()

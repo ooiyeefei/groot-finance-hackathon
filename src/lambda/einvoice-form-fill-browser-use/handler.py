@@ -143,7 +143,9 @@ RULES:
 10. Click the Submit button when all fields are filled.
 11. If you see validation errors, fix the specific field and re-submit.
 12. When you see a success/thank-you message, you are done.
-13. Do NOT interact with reCAPTCHA / "I'm not a robot" checkbox. The CAPTCHA is handled automatically by the system. Skip it completely.
+13. CAPTCHA handling:
+   - reCAPTCHA (Google — image puzzles like "select all buses"): Do NOT interact. Handled automatically.
+   - Cloudflare "Verify you are human" checkbox: DO click it and wait 3-5 seconds. It usually auto-verifies.
 14. For forms requiring OTP/TAC: The system email ({buyer["email"]}) is used for receiving the OTP. After filling all fields, click "Request OTP". The OTP will be handled automatically — just wait."""
 
     agent = Agent(
