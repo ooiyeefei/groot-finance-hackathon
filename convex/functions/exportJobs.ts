@@ -401,6 +401,36 @@ async function getRecordsByModule(
 }
 
 /**
+ * Generate a short, consistent creditor/debtor code from a name.
+ * Format: First 3 chars uppercase + "-" + 4-char hash = max 8 chars.
+ * e.g., "McDonald's" → "MCD-A1B2", "Starbucks" → "STA-C3D4"
+ */
+function generateCodeFromName(name: string, prefix: string = ""): string {
+  // Clean name: remove special chars, take first 3 alpha chars
+  const alpha = name.replace(/[^a-zA-Z]/g, "").toUpperCase();
+  const short = alpha.substring(0, 3) || "UNK";
+
+  // Simple hash from full name for uniqueness
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
+  }
+  const hashStr = Math.abs(hash).toString(36).toUpperCase().substring(0, 4).padEnd(4, "0");
+
+  return `${prefix}${short}-${hashStr}`;
+}
+
+// Names to filter out from merchant export (OCR artifacts, placeholders)
+const EXCLUDED_MERCHANT_NAMES = new Set([
+  "processing...",
+  "processing",
+  "unknown",
+  "n/a",
+  "na",
+  "",
+]);
+
+/**
  * Fetch master data records for Master Accounting export.
  * Creditor/Supplier: Combines vendors table + unique merchants from expense claims.
  * Debtor/Customer: From customers table.
@@ -421,7 +451,7 @@ async function getMasterDataRecords(
     const vendorRecords = vendors
       .filter((v: any) => v.status !== "inactive" && v.name)
       .map((v: any) => ({
-        vendorName: v.supplierCode || v.name?.substring(0, 20) || "",
+        vendorName: v.supplierCode || generateCodeFromName(v.name, "V-"),
         vendorFullName: v.name || "",
         vendorName2: "",
         registerNo: v.taxId || "",
@@ -472,11 +502,13 @@ async function getMasterDataRecords(
       const name = claim.vendorName?.trim();
       if (!name) continue;
       const nameLower = name.toLowerCase();
+      // Skip placeholders, OCR artifacts, and already-seen names
+      if (EXCLUDED_MERCHANT_NAMES.has(nameLower)) continue;
       if (vendorNames.has(nameLower) || seenMerchants.has(nameLower)) continue;
       seenMerchants.add(nameLower);
 
       merchantRecords.push({
-        vendorName: name.substring(0, 20),
+        vendorName: generateCodeFromName(name, "M-"),
         vendorFullName: name,
         vendorName2: "",
         registerNo: "",
@@ -525,7 +557,7 @@ async function getMasterDataRecords(
       .filter((c: any) => c.status !== "inactive" && c.businessName)
       .map((c: any) => ({
         // Debtor/Customer field mapping
-        entityCode: c.customerCode || c.businessName?.substring(0, 20) || "",
+        entityCode: c.customerCode || generateCodeFromName(c.businessName || "", "D-"),
         entityName: c.businessName || "",
         entityName2: "",
         registerNo: c.taxId || c.brn || "",
