@@ -184,6 +184,7 @@ def solve_recaptcha(page: Page, url: str) -> bool:
                     }
                 }""", token)
 
+                cost_tracker.record_capsolver()
                 print(f"[CAPTCHA] Solved in {(attempt + 1) * 2}s, token injected")
                 time.sleep(1)  # Let page react to token
                 return True
@@ -201,6 +202,80 @@ def solve_recaptcha(page: Page, url: str) -> bool:
         return False
 
 
+# ── Cost Tracker ────────────────────────────────────────────
+
+# Pricing per million tokens (USD)
+_PRICING = {
+    "gemini-2.5-computer-use": {"input": 1.25, "output": 10.00},
+    "gemini-2.0-flash":        {"input": 0.10, "output": 0.40},
+}
+
+class CostTracker:
+    """Tracks Gemini API token usage and cost across a single Lambda invocation."""
+    def __init__(self):
+        self.cua_input_tokens = 0
+        self.cua_output_tokens = 0
+        self.cua_calls = 0
+        self.flash_input_tokens = 0
+        self.flash_output_tokens = 0
+        self.flash_calls = 0
+        self.capsolver_solves = 0
+
+    def record_cua(self, usage: dict):
+        self.cua_input_tokens += usage.get("promptTokenCount", 0)
+        self.cua_output_tokens += usage.get("candidatesTokenCount", 0)
+        self.cua_calls += 1
+
+    def record_flash(self, usage: dict):
+        self.flash_input_tokens += usage.get("promptTokenCount", 0)
+        self.flash_output_tokens += usage.get("candidatesTokenCount", 0)
+        self.flash_calls += 1
+
+    def record_capsolver(self):
+        self.capsolver_solves += 1
+
+    @property
+    def cua_cost(self) -> float:
+        p = _PRICING["gemini-2.5-computer-use"]
+        return (self.cua_input_tokens * p["input"] + self.cua_output_tokens * p["output"]) / 1_000_000
+
+    @property
+    def flash_cost(self) -> float:
+        p = _PRICING["gemini-2.0-flash"]
+        return (self.flash_input_tokens * p["input"] + self.flash_output_tokens * p["output"]) / 1_000_000
+
+    @property
+    def capsolver_cost(self) -> float:
+        return self.capsolver_solves * 0.0008  # $0.80/1000 solves
+
+    @property
+    def total_cost(self) -> float:
+        return self.cua_cost + self.flash_cost + self.capsolver_cost
+
+    def summary(self) -> str:
+        parts = []
+        if self.cua_calls:
+            parts.append(f"CUA: {self.cua_calls} calls, {self.cua_input_tokens}in/{self.cua_output_tokens}out tokens, ${self.cua_cost:.4f}")
+        if self.flash_calls:
+            parts.append(f"Flash: {self.flash_calls} calls, {self.flash_input_tokens}in/{self.flash_output_tokens}out tokens, ${self.flash_cost:.4f}")
+        if self.capsolver_solves:
+            parts.append(f"CapSolver: {self.capsolver_solves} solves, ${self.capsolver_cost:.4f}")
+        parts.append(f"TOTAL: ${self.total_cost:.4f}")
+        return " | ".join(parts)
+
+    def to_dict(self) -> dict:
+        return {
+            "cuaInputTokens": self.cua_input_tokens, "cuaOutputTokens": self.cua_output_tokens, "cuaCalls": self.cua_calls,
+            "flashInputTokens": self.flash_input_tokens, "flashOutputTokens": self.flash_output_tokens, "flashCalls": self.flash_calls,
+            "capsolverSolves": self.capsolver_solves,
+            "cuaCostUsd": round(self.cua_cost, 6), "flashCostUsd": round(self.flash_cost, 6),
+            "capsolverCostUsd": round(self.capsolver_cost, 6), "totalCostUsd": round(self.total_cost, 6),
+        }
+
+# Global tracker — reset per invocation
+cost_tracker = CostTracker()
+
+
 # ── Gemini API ──────────────────────────────────────────────
 
 def gemini_cua(contents: list[dict]) -> dict:
@@ -215,7 +290,11 @@ def gemini_cua(contents: list[dict]) -> dict:
         req = Request(url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
         try:
             with urlopen(req, timeout=60) as resp:
-                return json.loads(resp.read())
+                r = json.loads(resp.read())
+            usage = r.get("usageMetadata", {})
+            if usage:
+                cost_tracker.record_cua(usage)
+            return r
         except Exception as e:
             if attempt < 2 and ("503" in str(e) or "429" in str(e)):
                 print(f"[Form Fill] Gemini retry {attempt+1}: {e}")
@@ -237,6 +316,9 @@ def gemini_flash(prompt: str, image_b64: str) -> str:
     req = Request(url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
     with urlopen(req, timeout=30) as resp:
         r = json.loads(resp.read())
+    usage = r.get("usageMetadata", {})
+    if usage:
+        cost_tracker.record_flash(usage)
     return r.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
 
 
@@ -1670,6 +1752,8 @@ def handler(event: dict, context=None) -> dict:
         return download_einvoice(event)
 
     start = time.time()
+    global cost_tracker
+    cost_tracker = CostTracker()  # Reset per invocation
     browser: Optional[Browser] = None
     claim_id = event["expenseClaimId"]
     url = event["merchantFormUrl"]
@@ -1837,6 +1921,7 @@ def handler(event: dict, context=None) -> dict:
                 if run_tier1(page, fc, buyer):
                     dur = int((time.time() - start) * 1000)
                     print(f"[Form Fill] ⚡ Tier 1 done in {dur}ms")
+                    print(f"[Cost] {cost_tracker.summary()}")
                     browser.close()
                     convex_mutation("functions/system:reportEinvoiceFormFillResult", {
                         "expenseClaimId": claim_id, "emailRef": event["emailRef"],
@@ -1978,6 +2063,7 @@ def handler(event: dict, context=None) -> dict:
         dur = int((time.time() - start) * 1000)
         status_str = "success" if verified_success else "failed"
         print(f"[Form Fill] Done in {dur}ms, {actions} CUA actions, verified={status_str}, evidence={evidence[:80]}")
+        print(f"[Cost] {cost_tracker.summary()}")
 
         error_msg = None if verified_success else f"Verification: {evidence[:200]}"
         convex_mutation("functions/system:reportEinvoiceFormFillResult", {
@@ -1985,12 +2071,13 @@ def handler(event: dict, context=None) -> dict:
             "status": status_str, "durationMs": dur,
             **({"errorMessage": error_msg} if error_msg else {}),
         })
-        return {"success": verified_success, "verified": True, "evidence": evidence, "durationMs": dur}
+        return {"success": verified_success, "verified": True, "evidence": evidence, "durationMs": dur, "cost": cost_tracker.to_dict()}
 
     except Exception as e:
         dur = int((time.time() - start) * 1000)
         error = str(e)
         print(f"[Form Fill] FAILED in {dur}ms: {error}")
+        print(f"[Cost] {cost_tracker.summary()}")
         traceback.print_exc()
 
         # ── Tier 3: Troubleshoot on failure ──
@@ -2017,4 +2104,4 @@ def handler(event: dict, context=None) -> dict:
         except Exception:
             pass
 
-        return {"success": False, "error": error, "durationMs": dur}
+        return {"success": False, "error": error, "durationMs": dur, "cost": cost_tracker.to_dict()}
