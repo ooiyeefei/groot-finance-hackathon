@@ -88,17 +88,18 @@ export const preview = query({
       business._id,
       user._id,
       role,
-      args.filters
+      args.filters,
+      args.prebuiltId
     );
 
     const totalCount = allRecords.length;
     const previewRecords = allRecords.slice(0, previewLimit);
 
-    const enrichedRecords = await enrichByModule(
-      ctx,
-      args.module,
-      previewRecords
-    );
+    // Skip enrichment for master data templates (already enriched in getMasterDataRecords)
+    const isMasterData = args.prebuiltId && MASTER_DATA_TEMPLATES[args.prebuiltId];
+    const enrichedRecords = isMasterData
+      ? previewRecords
+      : await enrichByModule(ctx, args.module, previewRecords);
 
     return {
       records: enrichedRecords,
@@ -358,6 +359,12 @@ const FIELD_DEFS: Record<string, { id: string; label: string; type: string }[]> 
 // MODULE DISPATCHER
 // ============================================
 
+// Master data template IDs that need special data sourcing
+const MASTER_DATA_TEMPLATES: Record<string, string> = {
+  "master-accounting-creditor": "vendors",
+  "master-accounting-debtor": "customers",
+};
+
 async function getRecordsByModule(
   ctx: { db: any },
   module: string,
@@ -371,8 +378,14 @@ async function getRecordsByModule(
     employeeIds?: string[];
     invoiceType?: "AP" | "AR" | "All";
     transactionTypeFilter?: "expense_claim" | "invoice" | "all";
-  }
+  },
+  prebuiltId?: string
 ): Promise<any[]> {
+  // Master data templates query their own tables directly
+  if (prebuiltId && MASTER_DATA_TEMPLATES[prebuiltId]) {
+    return getMasterDataRecords(ctx, businessId, MASTER_DATA_TEMPLATES[prebuiltId]);
+  }
+
   switch (module) {
     case "expense":
       return getExpenseRecords(ctx, businessId, userId, role, filters);
@@ -385,6 +398,106 @@ async function getRecordsByModule(
     default:
       return [];
   }
+}
+
+/**
+ * Fetch master data records (vendors or customers) for Master Accounting export.
+ * Returns deduplicated, enriched records from the vendors or customers table.
+ */
+async function getMasterDataRecords(
+  ctx: { db: any },
+  businessId: Id<"businesses">,
+  tableName: string
+): Promise<any[]> {
+  if (tableName === "vendors") {
+    const vendors = await ctx.db
+      .query("vendors")
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
+      .collect();
+
+    // Filter active vendors and map to export format
+    return vendors
+      .filter((v: any) => v.status !== "inactive" && v.name)
+      .map((v: any) => ({
+        // Creditor/Supplier field mapping
+        vendorName: v.supplierCode || v.name?.substring(0, 20) || "",
+        vendorFullName: v.name || "",
+        vendorName2: "",
+        registerNo: v.taxId || "",
+        address1: v.address || "",
+        address2: "",
+        address3: "",
+        address4: "",
+        city: "",
+        postalCode: "",
+        state: "",
+        countryCode: "",
+        contactPerson: v.contactPerson || "",
+        phone1: v.phone || "",
+        phone2: "",
+        fax1: "",
+        fax2: "",
+        email1: v.email || "",
+        email2: "",
+        homePage: v.website || "",
+        businessNature: v.category || "",
+        suspended: "N",
+        controlAccountCode: "",
+        areaCode: "",
+        categoryCode: "",
+        groupCode: "",
+        termCode: "",
+        staffCode: "",
+        currencyCode: v.defaultCurrency || "MYR",
+        tin: "",
+        idType: "Business Reg. No",
+        // Original record for reference
+        _original: v,
+      }));
+  }
+
+  if (tableName === "customers") {
+    const customers = await ctx.db
+      .query("customers")
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
+      .collect();
+
+    return customers
+      .filter((c: any) => c.status !== "inactive" && c.businessName)
+      .map((c: any) => ({
+        // Debtor/Customer field mapping
+        entityCode: c.customerCode || c.businessName?.substring(0, 20) || "",
+        entityName: c.businessName || "",
+        entityName2: "",
+        registerNo: c.taxId || c.brn || "",
+        address1: c.addressLine1 || c.address || "",
+        address2: c.addressLine2 || "",
+        address3: c.addressLine3 || "",
+        address4: "",
+        city: c.city || "",
+        postalCode: c.postalCode || "",
+        state: c.stateCode || "",
+        countryCode: c.countryCode || "",
+        contactPerson: c.contactPerson || "",
+        contactPersonPosition: "",
+        phone1: c.phone || "",
+        phone2: "",
+        fax1: "",
+        fax2: "",
+        email1: c.email || "",
+        email2: "",
+        homePage: "",
+        businessNature: "",
+        suspended: "N",
+        controlAccountCode: "",
+        currencyCode: "MYR",
+        tin: c.tin || "",
+        idType: "Business Reg. No",
+        _original: c,
+      }));
+  }
+
+  return [];
 }
 
 async function enrichByModule(
