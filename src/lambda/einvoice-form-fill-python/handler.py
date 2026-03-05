@@ -447,6 +447,8 @@ def launch_browserbase(pw) -> tuple:
     browser = pw.chromium.connect_over_cdp(session.connect_url)
     context = browser.contexts[0]
     page = context.pages[0]
+    # Set viewport to match CUA's coordinate system (critical for coordinate-based actions)
+    page.set_viewport_size({"width": SCREEN_W, "height": SCREEN_H})
     return browser, page, session.id
 
 
