@@ -97,9 +97,16 @@ export const preview = query({
 
     // Skip enrichment for master data templates (already enriched in getMasterDataRecords)
     const isMasterData = args.prebuiltId && MASTER_DATA_TEMPLATES[args.prebuiltId];
-    const enrichedRecords = isMasterData
+    let enrichedRecords = isMasterData
       ? previewRecords
       : await enrichByModule(ctx, args.module, previewRecords);
+
+    // Apply saved code mappings for Master Accounting templates
+    if (args.prebuiltId?.startsWith("master-accounting-") && !isMasterData) {
+      enrichedRecords = await applyCodeMappings(
+        ctx, business._id, enrichedRecords, args.module
+      );
+    }
 
     return {
       records: enrichedRecords,
@@ -611,6 +618,69 @@ async function enrichByModule(
 }
 
 // ============================================
+// CODE MAPPING APPLICATION
+// ============================================
+
+/**
+ * Apply saved code mappings to export records.
+ * Replaces vendorName with mapped creditor code, expenseCategory with account code, etc.
+ */
+async function applyCodeMappings(
+  ctx: { db: any },
+  businessId: Id<"businesses">,
+  records: any[],
+  module: string
+): Promise<any[]> {
+  // Fetch all saved mappings for master-accounting
+  const allMappings = await ctx.db
+    .query("export_code_mappings")
+    .withIndex("by_business_system", (q: any) =>
+      q.eq("businessId", businessId).eq("targetSystem", "master-accounting")
+    )
+    .collect();
+
+  // Build lookup maps: { mappingType: { sourceValue: targetCode } }
+  const lookups: Record<string, Record<string, string>> = {};
+  const defaults: Record<string, string> = {};
+  for (const m of allMappings) {
+    if (!lookups[m.mappingType]) lookups[m.mappingType] = {};
+    if (m.isDefault && m.sourceValue === "__DEFAULT__") {
+      defaults[m.mappingType] = m.targetCode;
+    } else {
+      lookups[m.mappingType][m.sourceValue] = m.targetCode;
+    }
+  }
+
+  const getCode = (type: string, sourceValue: string): string => {
+    return lookups[type]?.[sourceValue] || defaults[type] || sourceValue;
+  };
+
+  return records.map((record: any) => {
+    const mapped = { ...record };
+
+    // Map creditor code (vendor name → CR- code)
+    if (module === "expense" && mapped.vendorName) {
+      mapped.vendorName = getCode("creditor_code", mapped.vendorName);
+    }
+
+    // Map debtor code (customer name → debtor code)
+    if (module === "invoice" && mapped.entityCode) {
+      mapped.entityCode = getCode("debtor_code", mapped.entityName || mapped.entityCode);
+    }
+
+    // Map line item account codes (category → account code)
+    if (Array.isArray(mapped.lineItems)) {
+      mapped.lineItems = mapped.lineItems.map((item: any) => ({
+        ...item,
+        itemCode: getCode("account_code", item.itemCode || record.expenseCategory || ""),
+      }));
+    }
+
+    return mapped;
+  });
+}
+
+// ============================================
 // ROLE-BASED FILTERING HELPER
 // ============================================
 
@@ -702,8 +772,51 @@ async function enrichExpenseRecords(
           ? await ctx.db.get(record.approvedBy)
           : null;
 
+      // Fetch line items via accountingEntryId → line_items table
+      let lineItems: any[] = [];
+      if (record.accountingEntryId) {
+        const items = await ctx.db
+          .query("line_items")
+          .withIndex("by_accountingEntryId", (q: any) =>
+            q.eq("accountingEntryId", record.accountingEntryId)
+          )
+          .collect();
+        lineItems = items
+          .filter((item: any) => !item.deletedAt)
+          .sort((a: any, b: any) => (a.lineOrder ?? 0) - (b.lineOrder ?? 0))
+          .map((item: any) => ({
+            description: item.itemDescription || "",
+            quantity: item.quantity || 1,
+            unitPrice: item.unitPrice || 0,
+            totalAmount: item.totalAmount || 0,
+            currency: item.currency || "",
+            taxAmount: item.taxAmount || 0,
+            taxRate: item.taxRate || 0,
+            itemCode: item.itemCode || record.expenseCategory || "",
+            taxCode: item.taxRate && item.taxRate > 0 ? "TX" : "",
+            unitMeasurement: item.unitMeasurement || "",
+          }));
+      }
+
+      // If no line items found, synthesize one from the claim header
+      if (lineItems.length === 0) {
+        lineItems = [{
+          description: record.description || record.businessPurpose || "",
+          quantity: 1,
+          unitPrice: record.totalAmount || 0,
+          totalAmount: record.totalAmount || 0,
+          currency: record.currency || "MYR",
+          taxAmount: 0,
+          taxRate: 0,
+          itemCode: record.expenseCategory || "",
+          taxCode: "",
+          unitMeasurement: "",
+        }];
+      }
+
       return {
         ...record,
+        lineItems,
         employee: user
           ? {
               name: user.fullName || user.email,
