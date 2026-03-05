@@ -154,7 +154,7 @@ infra/lib/
 | `einvoice_received_documents` | Stores LHDN received documents with match status |
 | `einvoice_request_logs` | Audit log for e-invoice requests (form fill attempts) |
 | `expense_claims` (fields) | `einvoiceRequestStatus`, `einvoiceAttached`, `lhdnReceivedDocumentUuid`, `lhdnReceivedStatus`, etc. |
-| `merchant_einvoice_urls` | Merchant-specific config: URL, formConfig (CSS selectors), cuaHints (learned instructions), matchPatterns |
+| `merchant_einvoice` | Merchant-specific config: URL, formConfig (CSS selectors), cuaHints (learned instructions), matchPatterns |
 
 ## CUA Form Fill Architecture (Self-Evolving Agent)
 
@@ -204,7 +204,7 @@ Merchant sends e-invoice email
 ### Self-Evolving Loop
 
 ```
-merchant_einvoice_urls.formConfig:
+merchant_einvoice.formConfig:
   fields: [...CSS selectors...]     ← Tier 1 (fast path)
   cuaHints: "Click Company tab..."  ← Learned from Tier 3
   successCount: N                   ← Tier 1 confidence
