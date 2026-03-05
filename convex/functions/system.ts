@@ -1181,6 +1181,22 @@ export const reportEinvoiceFormFillResult = mutation({
     errorMessage: v.optional(v.string()),
     browserbaseSessionId: v.optional(v.string()),
     durationMs: v.optional(v.number()),
+    // Debugging fields
+    merchantName: v.optional(v.string()),
+    tierReached: v.optional(v.string()),
+    browserType: v.optional(v.string()),
+    cuaActions: v.optional(v.number()),
+    verifyEvidence: v.optional(v.string()),
+    cost: v.optional(v.object({
+      cuaInputTokens: v.optional(v.number()),
+      cuaOutputTokens: v.optional(v.number()),
+      cuaCalls: v.optional(v.number()),
+      flashInputTokens: v.optional(v.number()),
+      flashOutputTokens: v.optional(v.number()),
+      flashCalls: v.optional(v.number()),
+      capsolverSolves: v.optional(v.number()),
+      totalCostUsd: v.optional(v.number()),
+    })),
   },
   handler: async (ctx, args) => {
     console.log(`[System] E-invoice form fill: claim=${args.expenseClaimId} status=${args.status}`);
@@ -1235,6 +1251,12 @@ export const reportEinvoiceFormFillResult = mutation({
       if (args.errorMessage) logUpdate.errorMessage = args.errorMessage;
       if (args.browserbaseSessionId) logUpdate.browserbaseSessionId = args.browserbaseSessionId;
       if (args.durationMs) logUpdate.durationMs = args.durationMs;
+      if (args.merchantName) logUpdate.merchantName = args.merchantName;
+      if (args.tierReached) logUpdate.tierReached = args.tierReached;
+      if (args.browserType) logUpdate.browserType = args.browserType;
+      if (args.cuaActions !== undefined) logUpdate.cuaActions = args.cuaActions;
+      if (args.verifyEvidence) logUpdate.verifyEvidence = args.verifyEvidence;
+      if (args.cost) logUpdate.cost = args.cost;
       await ctx.db.patch(requestLog._id, logUpdate);
     }
 

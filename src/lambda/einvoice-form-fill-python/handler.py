@@ -367,6 +367,28 @@ class CostTracker:
 cost_tracker = CostTracker()
 
 
+# Per-invocation state for debug reporting
+_run_state: dict = {}
+
+def _debug_fields() -> dict:
+    """Build debug fields dict for Convex reportEinvoiceFormFillResult."""
+    fields: dict = {}
+    if _run_state.get("merchant"):
+        fields["merchantName"] = _run_state["merchant"]
+    if _run_state.get("tier"):
+        fields["tierReached"] = _run_state["tier"]
+    if _run_state.get("browser_type"):
+        fields["browserType"] = _run_state["browser_type"]
+    if _run_state.get("cua_actions") is not None:
+        fields["cuaActions"] = _run_state["cua_actions"]
+    if _run_state.get("evidence"):
+        fields["verifyEvidence"] = _run_state["evidence"][:500]
+    cost_data = cost_tracker.to_dict()
+    if cost_data.get("totalCostUsd", 0) > 0:
+        fields["cost"] = cost_data
+    return fields
+
+
 # ── Gemini API ──────────────────────────────────────────────
 
 def gemini_cua(contents: list[dict]) -> dict:
@@ -1889,12 +1911,14 @@ def handler(event: dict, context=None) -> dict:
         return download_einvoice(event)
 
     start = time.time()
-    global cost_tracker
-    cost_tracker = CostTracker()  # Reset per invocation
+    global cost_tracker, _run_state
+    cost_tracker = CostTracker()
+    _run_state = {"tier": "prefill", "browser_type": "local", "cua_actions": 0}
     browser: Optional[Browser] = None
     claim_id = event["expenseClaimId"]
     url = event["merchantFormUrl"]
     merchant = event.get("extractedData", {}).get("vendorName", "")
+    _run_state["merchant"] = merchant
 
     print(f"[Form Fill] Start: claim={claim_id}, url={url[:80]}")
 
@@ -1983,6 +2007,7 @@ def handler(event: dict, context=None) -> dict:
 
         if use_bb:
             print("[Browser] Using Browserbase (merchant requires it)")
+            _run_state["browser_type"] = "browserbase"
             browser, page, bb_session_id = launch_browserbase(pw)
         else:
             browser, page, _ = launch_local(pw)
@@ -1997,6 +2022,7 @@ def handler(event: dict, context=None) -> dict:
             time.sleep(3)  # Let Turnstile script load
             if detect_managed_turnstile(page) and BB_API_KEY:
                 print("[Browser] Managed Turnstile detected — switching to Browserbase")
+                _run_state["browser_type"] = "browserbase"
                 browser.close()
                 browser, page, bb_session_id = launch_browserbase(pw)
                 resp = page.goto(url, wait_until="domcontentloaded", timeout=45000)
@@ -2076,6 +2102,7 @@ def handler(event: dict, context=None) -> dict:
 
         # ── Tier 1: Check for saved formConfig (merchant config already fetched above) ──
         if merchant and fc and fc.get("fields") and (fc.get("successCount", 0) > 0):
+            _run_state["tier"] = "tier1"
             print(f"[Form Fill] ⚡ Tier 1: {len(fc['fields'])} fields, {fc['successCount']} successes")
             if run_tier1(page, fc, buyer):
                 dur = int((time.time() - start) * 1000)
@@ -2085,6 +2112,7 @@ def handler(event: dict, context=None) -> dict:
                 convex_mutation("functions/system:reportEinvoiceFormFillResult", {
                     "expenseClaimId": claim_id, "emailRef": event["emailRef"],
                     "status": "success", "durationMs": dur,
+                    **_debug_fields(),
                 })
                 convex_mutation("functions/system:saveMerchantFormConfig", {"merchantName": merchant, "formConfig": fc})
                 return {"success": True, "durationMs": dur}
@@ -2100,6 +2128,7 @@ def handler(event: dict, context=None) -> dict:
         solve_captcha(page, url)
 
         # ── Tier 2: CUA exploration (with merchant-specific hints) ──
+        _run_state["tier"] = "tier2"
         try:
             actions = run_tier2(page, buyer, receipt, receipt_image_b64, merchant_hints=merchant_hints)
         except Exception as tier2_err:
@@ -2223,10 +2252,13 @@ def handler(event: dict, context=None) -> dict:
         print(f"[Cost] {cost_tracker.summary()}")
 
         error_msg = None if verified_success else f"Verification: {evidence[:200]}"
+        _run_state["evidence"] = evidence
+        _run_state["cua_actions"] = actions
         convex_mutation("functions/system:reportEinvoiceFormFillResult", {
             "expenseClaimId": claim_id, "emailRef": event["emailRef"],
             "status": status_str, "durationMs": dur,
             **({"errorMessage": error_msg} if error_msg else {}),
+            **_debug_fields(),
         })
         return {"success": verified_success, "verified": True, "evidence": evidence, "durationMs": dur, "cost": cost_tracker.to_dict()}
 
@@ -2257,6 +2289,7 @@ def handler(event: dict, context=None) -> dict:
             convex_mutation("functions/system:reportEinvoiceFormFillResult", {
                 "expenseClaimId": claim_id, "emailRef": event["emailRef"],
                 "status": "failed", "errorMessage": error, "durationMs": dur,
+                **_debug_fields(),
             })
         except Exception:
             pass
