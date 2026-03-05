@@ -629,7 +629,7 @@ export default defineSchema({
   // Detection chain: QR scan → OCR URL → this table → Google search agent
   // ============================================
 
-  merchant_einvoice_urls: defineTable({
+  merchant_einvoice: defineTable({
     merchantName: v.string(),                          // Display name: "FamilyMart"
     matchPatterns: v.array(v.string()),                // Lowercase substrings to match vendor_name: ["familymart", "family mart"]
     einvoiceUrl: v.string(),                           // E-invoice form URL
@@ -674,6 +674,9 @@ export default defineSchema({
   })
     .index("by_country", ["country", "isActive"])
     .index("by_merchantName", ["merchantName"]),
+
+  // DEPRECATED: old table name, kept for migration only — remove after migration complete
+  merchant_einvoice_urls: defineTable(v.any()),
 
   // ============================================
   // E-INVOICE REQUEST LOGS (019-lhdn-einv-flow-2)

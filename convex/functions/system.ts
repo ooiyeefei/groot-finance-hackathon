@@ -12,7 +12,7 @@
  */
 
 import { v } from "convex/values";
-import { mutation, query } from "../_generated/server";
+import { internalMutation, mutation, query } from "../_generated/server";
 import { resolveById } from "../lib/resolvers";
 import { internal } from "../_generated/api";
 import { Id } from "../_generated/dataModel";
@@ -1777,7 +1777,7 @@ export const lookupMerchantEinvoiceUrl = query({
 
     // Get all active merchants for this country
     const merchants = await ctx.db
-      .query("merchant_einvoice_urls")
+      .query("merchant_einvoice")
       .withIndex("by_country", (q) => q.eq("country", country).eq("isActive", true))
       .collect();
 
@@ -1803,6 +1803,31 @@ export const lookupMerchantEinvoiceUrl = query({
  * Upsert a merchant e-invoice URL entry.
  * Used by: admin UI, browser agent (after Google search discovery), seed script.
  */
+// One-time migration: merchant_einvoice_urls → merchant_einvoice
+export const migrateMerchantTable = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const oldRows = await ctx.db.query("merchant_einvoice_urls" as any).collect();
+    let migrated = 0;
+    for (const row of oldRows) {
+      const { _id, _creationTime, ...data } = row;
+      // Check if already exists in new table
+      const existing = await ctx.db
+        .query("merchant_einvoice")
+        .withIndex("by_merchantName", (q: any) => q.eq("merchantName", data.merchantName))
+        .first();
+      if (!existing) {
+        await ctx.db.insert("merchant_einvoice", data as any);
+        migrated++;
+      }
+      // Delete from old table
+      await ctx.db.delete(_id);
+    }
+    console.log(`[Migration] Migrated ${migrated} merchants, deleted ${oldRows.length} old rows`);
+    return { migrated, deleted: oldRows.length };
+  },
+});
+
 export const upsertMerchantEinvoiceUrl = mutation({
   args: {
     merchantName: v.string(),
@@ -1818,7 +1843,7 @@ export const upsertMerchantEinvoiceUrl = mutation({
 
     // Check if merchant already exists by name
     const existing = await ctx.db
-      .query("merchant_einvoice_urls")
+      .query("merchant_einvoice")
       .withIndex("by_merchantName", (q) => q.eq("merchantName", args.merchantName))
       .first();
 
@@ -1834,7 +1859,7 @@ export const upsertMerchantEinvoiceUrl = mutation({
       return { id: existing._id, action: "updated" };
     }
 
-    const id = await ctx.db.insert("merchant_einvoice_urls", {
+    const id = await ctx.db.insert("merchant_einvoice", {
       merchantName: args.merchantName,
       matchPatterns: args.matchPatterns,
       einvoiceUrl: args.einvoiceUrl,
@@ -1874,7 +1899,7 @@ export const saveMerchantFormConfig = mutation({
   },
   handler: async (ctx, args) => {
     const merchant = await ctx.db
-      .query("merchant_einvoice_urls")
+      .query("merchant_einvoice")
       .withIndex("by_merchantName", (q) => q.eq("merchantName", args.merchantName))
       .first();
 

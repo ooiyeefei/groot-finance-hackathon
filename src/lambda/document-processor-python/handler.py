@@ -135,7 +135,7 @@ def _lookup_merchant_einvoice_url(vendor_name: str) -> Optional[str]:
         return None
     vn = vendor_name.lower().strip()
 
-    # Try Convex lookup (system-wide merchant_einvoice_urls table)
+    # Try Convex lookup (system-wide merchant_einvoice table)
     try:
         convex_url = os.environ.get("NEXT_PUBLIC_CONVEX_URL", "")
         if convex_url:
