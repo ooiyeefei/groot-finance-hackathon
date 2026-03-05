@@ -756,6 +756,19 @@ async function getExpenseRecords(
   // Filter out soft-deleted
   claims = claims.filter((c: any) => !c.deletedAt);
 
+  // Filter out claims with no vendor name and no reference number (invalid for accounting export)
+  claims = claims.filter((c: any) => c.vendorName?.trim() || c.referenceNumber?.trim());
+
+  // Deduplicate by referenceNumber (keep first occurrence)
+  const seen = new Set<string>();
+  claims = claims.filter((c: any) => {
+    const key = c.referenceNumber?.trim();
+    if (!key) return true; // Keep claims without reference (they'll be filtered by vendor check above)
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
   return claims.slice(0, MAX_EXPORT_RECORDS);
 }
 
