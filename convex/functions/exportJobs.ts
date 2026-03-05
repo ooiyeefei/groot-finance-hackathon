@@ -401,8 +401,10 @@ async function getRecordsByModule(
 }
 
 /**
- * Fetch master data records (vendors or customers) for Master Accounting export.
- * Returns deduplicated, enriched records from the vendors or customers table.
+ * Fetch master data records for Master Accounting export.
+ * Creditor/Supplier: Combines vendors table + unique merchants from expense claims.
+ * Debtor/Customer: From customers table.
+ * Returns deduplicated, enriched records.
  */
 async function getMasterDataRecords(
   ctx: { db: any },
@@ -410,16 +412,15 @@ async function getMasterDataRecords(
   tableName: string
 ): Promise<any[]> {
   if (tableName === "vendors") {
+    // 1. Get structured vendors from vendors table
     const vendors = await ctx.db
       .query("vendors")
       .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
       .collect();
 
-    // Filter active vendors and map to export format
-    return vendors
+    const vendorRecords = vendors
       .filter((v: any) => v.status !== "inactive" && v.name)
       .map((v: any) => ({
-        // Creditor/Supplier field mapping
         vendorName: v.supplierCode || v.name?.substring(0, 20) || "",
         vendorFullName: v.name || "",
         vendorName2: "",
@@ -451,9 +452,67 @@ async function getMasterDataRecords(
         currencyCode: v.defaultCurrency || "MYR",
         tin: "",
         idType: "Business Reg. No",
-        // Original record for reference
-        _original: v,
+        _source: "vendor",
       }));
+
+    // 2. Get unique merchants from expense claims (not in vendors table)
+    const claims = await ctx.db
+      .query("expense_claims")
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
+      .collect();
+
+    // Collect unique merchant names not already in vendors
+    const vendorNames = new Set(
+      vendors.map((v: any) => (v.name || "").toLowerCase())
+    );
+    const seenMerchants = new Set<string>();
+    const merchantRecords: any[] = [];
+
+    for (const claim of claims) {
+      const name = claim.vendorName?.trim();
+      if (!name) continue;
+      const nameLower = name.toLowerCase();
+      if (vendorNames.has(nameLower) || seenMerchants.has(nameLower)) continue;
+      seenMerchants.add(nameLower);
+
+      merchantRecords.push({
+        vendorName: name.substring(0, 20),
+        vendorFullName: name,
+        vendorName2: "",
+        registerNo: "",
+        address1: "",
+        address2: "",
+        address3: "",
+        address4: "",
+        city: "",
+        postalCode: "",
+        state: "",
+        countryCode: "",
+        contactPerson: "",
+        phone1: "",
+        phone2: "",
+        fax1: "",
+        fax2: "",
+        email1: "",
+        email2: "",
+        homePage: "",
+        businessNature: "",
+        suspended: "N",
+        controlAccountCode: "",
+        areaCode: "",
+        categoryCode: "",
+        groupCode: "",
+        termCode: "",
+        staffCode: "",
+        currencyCode: "MYR",
+        tin: "",
+        idType: "Business Reg. No",
+        _source: "merchant",
+      });
+    }
+
+    // 3. Combine: vendors first, then merchants
+    return [...vendorRecords, ...merchantRecords];
   }
 
   if (tableName === "customers") {
