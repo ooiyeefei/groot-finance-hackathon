@@ -164,6 +164,17 @@ formatBusinessDate('2025-10-31')  // "Oct 31, 2025" (no timezone shift)
 - Temperature: 0.3, Timeout: 60s+
 - Tool calling: OpenAI-compatible function calling format
 
+### Gemini Model Selection (MANDATORY)
+- **CUA (Computer Use Agent)**: `gemini-2.5-computer-use-preview-10-2025` — only model available for browser automation
+- **All other Gemini calls** (recon, verify, troubleshoot, DSPy, browser-use Tier 2B): **Always use `gemini-3.1-flash-lite-preview`** — best price/performance for vision tasks ($0.25/$1.50 per M tokens)
+- **Never use `gemini-2.0-flash`** for new code — it's deprecated in our codebase in favor of 3.1 Flash-Lite
+
+### Documentation Update Rule (MANDATORY)
+After making changes to any system (e-invoice, expense claims, chat, etc.), **always update the relevant CLAUDE.md docs** to reflect the latest architecture, flow, and decisions. Docs must stay in sync with code. Key docs:
+- `src/domains/expense-claims/einvoice/CLAUDE.md` — E-invoice form fill architecture
+- `src/domains/expense-claims/CLAUDE.md` — Expense claims module
+- `CLAUDE.md` (root) — Project-wide rules and context
+
 ## Quick References
 
 | Resource | Location |

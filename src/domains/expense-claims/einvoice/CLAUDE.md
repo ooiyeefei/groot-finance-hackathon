@@ -154,3 +154,73 @@ infra/lib/
 | `einvoice_received_documents` | Stores LHDN received documents with match status |
 | `einvoice_request_logs` | Audit log for e-invoice requests (form fill attempts) |
 | `expense_claims` (fields) | `einvoiceRequestStatus`, `einvoiceAttached`, `lhdnReceivedDocumentUuid`, `lhdnReceivedStatus`, etc. |
+| `merchant_einvoice_urls` | Merchant-specific config: URL, formConfig (CSS selectors), cuaHints (learned instructions), matchPatterns |
+
+## CUA Form Fill Architecture (Self-Evolving Agent)
+
+### Models Used
+- **Gemini 2.5 Computer Use Preview**: CUA visual form filling (Tier 2). $1.25/$10 per M tokens.
+- **Gemini 3.1 Flash-Lite Preview**: Recon, troubleshoot, verify, DSPy diagnosis. $0.25/$1.50 per M tokens. **Always use this for non-CUA Gemini calls.**
+- **CapSolver API**: reCAPTCHA v2 ($0.80/1k) + Cloudflare Turnstile ($1.20/1k).
+
+### Two Lambdas
+
+| Lambda | File | Purpose | Model |
+|--------|------|---------|-------|
+| `finanseal-einvoice-form-fill` | `src/lambda/einvoice-form-fill-python/handler.py` | Main 3-tier form fill + troubleshooter | CUA + Flash-Lite |
+| `finanseal-einvoice-form-fill-bu` | `src/lambda/einvoice-form-fill-browser-use/handler.py` | Tier 2B fallback (CUA 429 rate limit) | Flash-Lite via browser-use |
+
+Lambda 2 exists because `browser-use` library uses asyncio internally, which conflicts with the main Lambda's `sync_playwright` + `nest_asyncio`.
+
+### Browser Selection
+- **Local Playwright Chromium** (default): Fast, free, works for 80% of merchants.
+- **Browserbase** (fallback): Residential IP + real fingerprint. Required for Cloudflare managed challenge merchants (auto-detected and saved in cuaHints).
+
+### End-to-End Flow
+
+```
+User clicks "Request E-Invoice"
+  → Next.js API validates claim + composes buyerDetails
+  → Invokes Lambda 1 (async)
+
+Lambda 1:
+  1. SETUP: Build buyer/receipt, fetch merchant config (cuaHints)
+  2. BROWSER: Browserbase if cuaHints says so, else local Chromium
+     → Runtime: detect managed Turnstile → switch to Browserbase
+  3. PRE-FILL: Company toggle → Validate gate → Phone → Text → Dropdowns
+  4. CAPTCHA: reCAPTCHA/Turnstile/hCaptcha → CapSolver API
+  5. TIER 1: Saved formConfig (CSS selectors, ~5s)
+  6. TIER 2: Gemini CUA visual fill (~120s, $0.10-0.50)
+     → 429? → invoke Lambda 2 (Tier 2B)
+  7. VERIFY: Flash-Lite checks screenshot for success/error
+  8. TIER 3: On failure → DSPy troubleshoot → learn cuaHints
+  9. COST LOG: Actual tokens + CapSolver + Browserbase
+
+Merchant sends e-invoice email
+  → SES receives at einvoice+{ref}@einv.hellogroot.com
+  → Lambda 3 (email processor): match → download PDF → forward to user
+```
+
+### Self-Evolving Loop
+
+```
+merchant_einvoice_urls.formConfig:
+  fields: [...CSS selectors...]     ← Tier 1 (fast path)
+  cuaHints: "Click Company tab..."  ← Learned from Tier 3
+  successCount: N                   ← Tier 1 confidence
+  lastFailureReason: "..."          ← Tier 3 diagnosis
+
+Each failure → troubleshoot → new cuaHints → next run smarter
+Each success → save formConfig → next run uses Tier 1 (fast)
+```
+
+### Merchant-Specific Patterns
+
+| Merchant | Type | Notes |
+|----------|------|-------|
+| FamilyMart | Dynamic URL (QR) | react-phone-input (+60 prefix), Company toggle, Tier 1 learned |
+| Jaya Grocer | Static (invoice2e.my) | Validate gate (BRN+TIN→unlock), reCAPTCHA v2, CapSolver |
+| 99 Speed Mart | Dedicated flow | DevExtreme widgets, OTP via SES email |
+| TK Bakery (Zeoniq) | Zeoniq platform | Cloudflare managed → Browserbase required |
+| 7-Eleven | Account-gated | Login + OTP, per-business buyer profiles, WAF blocks automation |
+| MR. D.I.Y. | Static | Standard form, Tier 1 learned |

@@ -48,7 +48,7 @@ def convex_mutation(path: str, args: dict):
 
 def gemini_flash_verify(screenshot_b64: str) -> dict:
     """Ask Gemini Flash to verify if the form was submitted successfully."""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key={GEMINI_KEY}"
     prompt = """Analyze this screenshot of a web form page AFTER a submit attempt. Classify:
 
 - submitted=true ONLY if you see a clear success message (thank you, confirmation, receipt number, green checkmark, or redirected to a different/blank page)
@@ -86,7 +86,7 @@ async def fill_form(url: str, buyer: dict, receipt: dict) -> dict:
     """Use browser-use agent to fill the form. Returns {success, evidence, confidence}."""
     from browser_use import Agent, BrowserProfile, ChatGoogle
 
-    llm = ChatGoogle(model="gemini-2.0-flash")
+    llm = ChatGoogle(model="gemini-3.1-flash-lite-preview")
 
     browser_profile = BrowserProfile(
         headless=True,
@@ -270,7 +270,7 @@ def handler(event: dict, context=None) -> dict:
                 resp = s3.get_object(Bucket="finanseal-bucket", Key=s3_key)
                 img_b64 = _b64.b64encode(resp["Body"].read()).decode()
                 # Use raw Gemini Flash to extract store code
-                extract_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_KEY}"
+                extract_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key={GEMINI_KEY}"
                 payload = {
                     "contents": [{"role": "user", "parts": [
                         {"text": "Extract the Store Code / Shop Number / Branch Code from this receipt. Return ONLY the code (e.g. KK9219), nothing else. If not found, return N/A."},
