@@ -178,6 +178,8 @@ export class DocumentProcessingStack extends cdk.Stack {
     });
     capsolverParam.grantRead(formFillFunction);
     formFillFunction.addEnvironment('CAPSOLVER_SSM_PARAM', '/finanseal/capsolver-api-key');
+    formFillFunction.addEnvironment('BROWSERBASE_API_KEY', process.env.BROWSERBASE_API_KEY || '');
+    formFillFunction.addEnvironment('BROWSERBASE_PROJECT_ID', process.env.BROWSERBASE_PROJECT_ID || '');
 
     // Form fill Lambda needs S3 read (receipt images for CUA) + write (download-einvoice saves PDFs)
     bucket.grantReadWrite(formFillFunction);

@@ -33,6 +33,8 @@ MAX_TURNS = 50
 CONVEX_URL = os.environ.get("NEXT_PUBLIC_CONVEX_URL", "")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 BU_LAMBDA_ARN = os.environ.get("EINVOICE_FORM_FILL_BU_LAMBDA_ARN", "")
+BB_API_KEY = os.environ.get("BROWSERBASE_API_KEY", "")
+BB_PROJECT_ID = os.environ.get("BROWSERBASE_PROJECT_ID", "")
 
 STATE_CODES = {
     "JHR": "Johor", "KDH": "Kedah", "KTN": "Kelantan", "MLK": "Melaka",
@@ -409,6 +411,50 @@ def gemini_flash(prompt: str, image_b64: str) -> str:
     if usage:
         cost_tracker.record_flash(usage)
     return r.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+
+
+# ── Browser launch helpers ──────────────────────────────────
+
+def launch_browserbase(pw) -> tuple:
+    """Launch a cloud browser via Browserbase (residential IP, real fingerprint).
+    Returns (browser, page, session_id). Used for Cloudflare-managed merchants."""
+    from browserbase import Browserbase
+    bb = Browserbase(api_key=BB_API_KEY)
+    session = bb.sessions.create(project_id=BB_PROJECT_ID)
+    print(f"[Browser] Browserbase session: {session.id}")
+    browser = pw.chromium.connect_over_cdp(session.connect_url)
+    context = browser.contexts[0]
+    page = context.pages[0]
+    return browser, page, session.id
+
+
+def launch_local(pw) -> tuple:
+    """Launch local headless Chromium (Lambda Docker). Returns (browser, page, None)."""
+    browser = pw.chromium.launch(
+        headless=True,
+        args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage",
+              "--disable-gpu", "--headless=new", "--single-process"],
+    )
+    page = browser.new_page(viewport={"width": SCREEN_W, "height": SCREEN_H})
+    return browser, page, None
+
+
+def needs_browserbase(merchant_hints: str) -> bool:
+    """Check if merchant requires Browserbase (Cloudflare managed challenge, WAF blocking, etc.)."""
+    if not BB_API_KEY or not BB_PROJECT_ID:
+        return False
+    hints_lower = (merchant_hints or "").lower()
+    return any(k in hints_lower for k in ["browserbase", "cloudflare_managed", "cloudflare managed", "waf block"])
+
+
+def detect_managed_turnstile(page) -> bool:
+    """Detect Cloudflare managed challenge (Turnstile loaded but no widget rendered)."""
+    return page.evaluate("""() => {
+        const hasScript = !!document.querySelector('script[src*="turnstile"]');
+        const hasInput = !!document.querySelector('input[name="cf-turnstile-response"]');
+        const hasWidget = document.querySelectorAll('.cf-turnstile, [data-sitekey], iframe[src*="challenges.cloudflare"]').length > 0;
+        return (hasScript || hasInput) && !hasWidget;
+    }""")
 
 
 # ── Playwright helpers ──────────────────────────────────────
@@ -1887,6 +1933,17 @@ def handler(event: dict, context=None) -> dict:
         print(f"[Form Fill] Buyer: {buyer['userName']}, {buyer['email']}, {state}")
         print(f"[Form Fill] Receipt: ref={receipt['referenceNumber']}, amt={receipt['totalAmount']}, date={receipt['transactionDate']}, vendor={receipt['vendorName']}")
 
+        # Pre-fetch merchant config (needed for Browserbase decision before browser launch)
+        merchant_hints = ""
+        fc = None
+        lookup = None
+        if merchant:
+            lookup = convex_query("functions/system:lookupMerchantEinvoiceUrl", {"vendorName": merchant, "country": "MY"})
+            fc = (lookup or {}).get("formConfig")
+            merchant_hints = (fc or {}).get("cuaHints", "") or (lookup or {}).get("notes", "") or ""
+            if merchant_hints:
+                print(f"[Form Fill] Merchant hints: {merchant_hints[:100]}...")
+
         # Download receipt image from S3 for CUA vision (to read Store Code, etc.)
         receipt_image_b64 = None
         receipt_image_path = event.get("receiptImagePath")
@@ -1919,52 +1976,42 @@ def handler(event: dict, context=None) -> dict:
             except Exception as e:
                 print(f"[Form Fill] Receipt image download failed: key={receipt_image_path}, error={e}")
 
-        # Launch browser (Lambda needs --no-sandbox + --disable-dev-shm-usage)
+        # Launch browser — Browserbase for Cloudflare-managed merchants, local for everything else
         pw = sync_playwright().start()
-        browser = pw.chromium.launch(
-            headless=True,
-            args=[
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--headless=new",
-                "--single-process",
-            ],
-        )
-        page = browser.new_page(viewport={"width": SCREEN_W, "height": SCREEN_H})
+        use_bb = needs_browserbase(merchant_hints)
+        bb_session_id = None
 
-        # Intercept Turnstile render() to capture callback BEFORE page loads
-        # This is the only reliable way to get the callback for implicit/programmatic render
-        page.add_init_script("""() => {
-            window.__turnstileCallbacks = [];
-            // Intercept the Turnstile API when it loads
-            Object.defineProperty(window, 'turnstile', {
-                configurable: true,
-                set: function(ts) {
-                    if (ts && ts.render) {
-                        const origRender = ts.render;
-                        ts.render = function(element, options) {
-                            if (options && typeof options.callback === 'function') {
-                                window.__turnstileCallbacks.push(options.callback);
-                            }
-                            // Store the sitekey for detection
-                            if (options && options.sitekey) {
-                                window.__turnstileSiteKey = options.sitekey;
-                            }
-                            return origRender.apply(this, arguments);
-                        };
-                    }
-                    window.__turnstileOriginal = ts;
-                },
-                get: function() { return window.__turnstileOriginal; }
-            });
-        }""")
+        if use_bb:
+            print("[Browser] Using Browserbase (merchant requires it)")
+            browser, page, bb_session_id = launch_browserbase(pw)
+        else:
+            browser, page, _ = launch_local(pw)
 
         # Navigate
         resp = page.goto(url, wait_until="domcontentloaded", timeout=45000)
         status = resp.status if resp else 0
         print(f"[Form Fill] Navigated: {page.url}, status={status}")
+
+        # Runtime detection: if managed Turnstile found and we're on local browser → switch to Browserbase
+        if not use_bb and status == 200:
+            time.sleep(3)  # Let Turnstile script load
+            if detect_managed_turnstile(page) and BB_API_KEY:
+                print("[Browser] Managed Turnstile detected — switching to Browserbase")
+                browser.close()
+                browser, page, bb_session_id = launch_browserbase(pw)
+                resp = page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                status = resp.status if resp else 0
+                print(f"[Form Fill] Re-navigated via Browserbase: {page.url}, status={status}")
+                use_bb = True
+                # Save hint so next run uses Browserbase from the start
+                if merchant:
+                    new_hint = (merchant_hints + "\n" if merchant_hints else "") + "cloudflare_managed: Use Browserbase (Cloudflare managed challenge blocks headless Lambda)"
+                    convex_mutation("functions/system:saveMerchantFormConfig", {
+                        "merchantName": merchant,
+                        "formConfig": {"cuaHints": new_hint[:500]},
+                    })
+                    merchant_hints = new_hint
+                    print(f"[Form Fill] Saved Browserbase hint for {merchant}")
 
         if status in (403, 401):
             raise RuntimeError(f"BOT_BLOCKED: Merchant returned {status} (Cloudflare/WAF)")
@@ -2023,37 +2070,26 @@ def handler(event: dict, context=None) -> dict:
         prefill_all(page, buyer, receipt)
         prefill_custom_dropdowns(page, buyer)
 
-        # ── Merchant config: load formConfig + cuaHints from merchant_einvoice_urls ──
-        merchant_hints = ""
-        fc = None
-        if merchant:
-            lookup = convex_query("functions/system:lookupMerchantEinvoiceUrl", {"vendorName": merchant, "country": "MY"})
-            fc = (lookup or {}).get("formConfig")
-            merchant_hints = (fc or {}).get("cuaHints", "") or (lookup or {}).get("notes", "") or ""
-            if merchant_hints:
-                print(f"[Form Fill] Merchant hints loaded: {merchant_hints[:100]}...")
-
-            # ── Tier 1: saved formConfig with CSS selectors ──
-            if fc and fc.get("fields") and (fc.get("successCount", 0) > 0):
-                print(f"[Form Fill] ⚡ Tier 1: {len(fc['fields'])} fields, {fc['successCount']} successes")
-                if run_tier1(page, fc, buyer):
-                    dur = int((time.time() - start) * 1000)
-                    print(f"[Form Fill] ⚡ Tier 1 done in {dur}ms")
-                    print(f"[Cost] {cost_tracker.summary()}")
-                    browser.close()
-                    convex_mutation("functions/system:reportEinvoiceFormFillResult", {
-                        "expenseClaimId": claim_id, "emailRef": event["emailRef"],
-                        "status": "success", "durationMs": dur,
-                    })
-                    convex_mutation("functions/system:saveMerchantFormConfig", {"merchantName": merchant, "formConfig": fc})
-                    return {"success": True, "durationMs": dur}
-                print("[Form Fill] Tier 1 failed — falling back to Tier 2")
-                # Tier 3: Learn from Tier 1 failure
-                try:
-                    shot = base64.b64encode(page.screenshot(type="png")).decode()
-                    troubleshoot(shot, "Tier 1 validation failed after submit", merchant)
-                except Exception:
-                    pass
+        # ── Tier 1: Check for saved formConfig (merchant config already fetched above) ──
+        if merchant and fc and fc.get("fields") and (fc.get("successCount", 0) > 0):
+            print(f"[Form Fill] ⚡ Tier 1: {len(fc['fields'])} fields, {fc['successCount']} successes")
+            if run_tier1(page, fc, buyer):
+                dur = int((time.time() - start) * 1000)
+                print(f"[Form Fill] ⚡ Tier 1 done in {dur}ms")
+                print(f"[Cost] {cost_tracker.summary()}")
+                browser.close()
+                convex_mutation("functions/system:reportEinvoiceFormFillResult", {
+                    "expenseClaimId": claim_id, "emailRef": event["emailRef"],
+                    "status": "success", "durationMs": dur,
+                })
+                convex_mutation("functions/system:saveMerchantFormConfig", {"merchantName": merchant, "formConfig": fc})
+                return {"success": True, "durationMs": dur}
+            print("[Form Fill] Tier 1 failed — falling back to Tier 2")
+            try:
+                shot = base64.b64encode(page.screenshot(type="png")).decode()
+                troubleshoot(shot, "Tier 1 validation failed after submit", merchant)
+            except Exception:
+                pass
 
         # Phase 2: Solve reCAPTCHA BEFORE CUA (CapSolver API, ~5-12s)
         # This prevents CUA from wasting turns clicking CAPTCHA images
