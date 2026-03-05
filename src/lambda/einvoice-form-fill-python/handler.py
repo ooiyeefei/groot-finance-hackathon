@@ -228,29 +228,46 @@ def solve_captcha(page: Page, url: str) -> bool:
                     }""", token)
                 elif captcha_type == "turnstile":
                     page.evaluate("""(token) => {
-                        // 1. Set the hidden input value
+                        // 1. Set ALL hidden inputs related to Turnstile
                         document.querySelectorAll('input[name="cf-turnstile-response"]').forEach(el => {
-                            el.value = token;
+                            // Use native setter to trigger Angular/React change detection
+                            const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+                            if (setter) setter.call(el, token);
+                            else el.value = token;
                             el.dispatchEvent(new Event('input', { bubbles: true }));
                             el.dispatchEvent(new Event('change', { bubbles: true }));
                         });
-                        // 2. Monkey-patch turnstile.getResponse() to return our token
-                        // (Angular/React apps call this to validate — DOM-only injection doesn't work)
+                        // 2. Monkey-patch turnstile API
                         if (typeof turnstile !== 'undefined') {
-                            const origGetResponse = turnstile.getResponse;
-                            turnstile.getResponse = function(widgetId) { return token; };
-                            // Also patch isExpired to return false
-                            turnstile.isExpired = function(widgetId) { return false; };
+                            turnstile.getResponse = function() { return token; };
+                            turnstile.isExpired = function() { return false; };
                         }
-                        // 3. Find and set any hidden inputs inside Turnstile widget containers
-                        document.querySelectorAll('.cf-turnstile, [data-sitekey]').forEach(w => {
-                            const input = w.querySelector('input[type="hidden"]');
-                            if (input) { input.value = token; input.dispatchEvent(new Event('change', { bubbles: true })); }
-                        });
-                        // 4. Try triggering the Turnstile success callback if registered
-                        try {
-                            if (window._turnstileCb) window._turnstileCb(token);
-                        } catch(e) {}
+                        // 3. Find the Turnstile widget's internal callback and invoke it
+                        // Turnstile stores callbacks in its _private state
+                        if (typeof turnstile !== 'undefined' && turnstile._private) {
+                            try {
+                                // Walk the private state to find callback functions
+                                const priv = turnstile._private;
+                                for (const key of Object.keys(priv)) {
+                                    const val = priv[key];
+                                    if (val && typeof val === 'object') {
+                                        // Look for widget entries with callbacks
+                                        for (const k2 of Object.keys(val)) {
+                                            if (typeof val[k2]?.callback === 'function') {
+                                                val[k2].callback(token);
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch(e) {}
+                        }
+                        // 4. Also try: click the Turnstile checkbox to visually mark as solved
+                        // (Some forms check the visual state too)
+                        const checkbox = document.querySelector('input[type="checkbox"][name*="turnstile"], iframe[src*="challenges.cloudflare"]');
+                        if (checkbox && checkbox.tagName === 'INPUT' && !checkbox.checked) {
+                            checkbox.checked = true;
+                            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
                     }""", token)
                 elif captcha_type == "hcaptcha":
                     page.evaluate("""(token) => {
