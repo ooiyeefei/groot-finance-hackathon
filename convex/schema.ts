@@ -1749,6 +1749,7 @@ export default defineSchema({
     tin: v.optional(v.string()),
     brn: v.optional(v.string()),
     sstRegistration: v.optional(v.string()),
+    idType: v.optional(v.string()), // BRN, NRIC, PASSPORT, ARMY — LHDN e-invoice requirement
 
     // 016-e-invoice-schema-change: Peppol
     peppolParticipantId: v.optional(v.string()),
@@ -1761,6 +1762,17 @@ export default defineSchema({
     stateCode: v.optional(v.string()),
     postalCode: v.optional(v.string()),
     countryCode: v.optional(v.string()),
+
+    // Extended customer particulars
+    contactPersonPosition: v.optional(v.string()),
+    phone2: v.optional(v.string()),
+    fax: v.optional(v.string()),
+    email2: v.optional(v.string()),
+    website: v.optional(v.string()),
+    businessNature: v.optional(v.string()),
+    paymentTerms: v.optional(v.string()), // NET30, NET60, COD, etc.
+    creditLimit: v.optional(v.number()),
+    currencyCode: v.optional(v.string()), // Default currency for this customer
 
     // 001-lhdn-einvoice-submission: LHDN exempt customer flag
     isLhdnExempt: v.optional(v.boolean()),

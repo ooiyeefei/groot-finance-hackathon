@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { useDebtorList } from '../hooks/use-debtor-management'
+import DebtorDetail from './debtor-detail'
 
 interface AgingBuckets {
   current: number
@@ -52,6 +53,7 @@ export default function DebtorList() {
   const [overdueOnly, setOverdueOnly] = useState(false)
   const [sortBy, setSortBy] = useState<'outstanding' | 'daysOverdue' | 'customerName'>('outstanding')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [selectedDebtorId, setSelectedDebtorId] = useState<string | null>(null)
 
   const { debtors, summary, isLoading } = useDebtorList({
     overdueOnly,
@@ -61,7 +63,17 @@ export default function DebtorList() {
 
   const handleDebtorClick = (customerId?: string) => {
     if (!customerId) return
-    router.push(`/${locale}/invoices/debtors/${customerId}`)
+    setSelectedDebtorId(customerId)
+  }
+
+  // Render debtor detail inline within the tab
+  if (selectedDebtorId) {
+    return (
+      <DebtorDetail
+        customerId={selectedDebtorId}
+        onBack={() => setSelectedDebtorId(null)}
+      />
+    )
   }
 
   const toggleSortOrder = () => {
