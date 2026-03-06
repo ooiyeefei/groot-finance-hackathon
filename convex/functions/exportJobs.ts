@@ -1384,13 +1384,22 @@ async function enrichInvoiceRecords(
           unitMeasurement: item.unitMeasurement || "",
         }));
 
+        // Look up customer record for customerCode (preferred for debtor code mapping)
+        let entityCode = record.customerSnapshot?.taxId || "";
+        if (record.customerId) {
+          const customer = await ctx.db.get(record.customerId);
+          if (customer && !customer.deletedAt) {
+            entityCode = customer.customerCode || customer.businessName || entityCode;
+          }
+        }
+
         return {
           invoiceType: "AR",
           invoiceNumber: record.invoiceNumber || "",
           invoiceDate: record.invoiceDate || "",
           dueDate: record.dueDate || "",
           entityName: record.customerSnapshot?.businessName || "",
-          entityCode: record.customerSnapshot?.taxId || "",
+          entityCode,
           description: "",
           subtotal: record.subtotal || 0,
           totalTax: record.totalTax || 0,
