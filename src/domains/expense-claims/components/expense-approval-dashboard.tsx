@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge'
 const ExpenseAnalytics = lazy(() => import('./expense-analytics'))
 const LeaveApprovalsContent = lazy(() => import('@/domains/leave-management/components/leave-approvals-content'))
 const TimesheetApprovalsContent = lazy(() => import('@/domains/timesheet-attendance/components/timesheet-approvals-content'))
+const PaymentProcessingTab = lazy(() => import('./payment-processing-tab'))
 
 interface EnhancedApprovalDashboardProps {
   userId: string
@@ -255,7 +256,9 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
 
         {dashboardData?.role?.finance_admin && (
           <TabsContent value="reimbursements" className="space-y-4">
-            <ReimbursementQueueContent data={dashboardData} onRefreshNeeded={fetchDashboardData} />
+            <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+              <PaymentProcessingTab />
+            </Suspense>
           </TabsContent>
         )}
 

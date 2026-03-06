@@ -469,12 +469,10 @@ export const checkDuplicates = query({
     currency: v.string(),
   },
   handler: async (ctx, args) => {
-    // Get recent claims for this business (last 30 days optimization)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split("T")[0];
-
-    // Query claims using the business index
+    // Fetch candidates that could be duplicates:
+    // - Same transaction date (required for Tier 2/3: vendor+date+amount match)
+    // - Same reference number (required for Tier 1: exact receipt number match)
+    // No arbitrary time window — duplicates are duplicates regardless of submission timing.
     const claims = await ctx.db
       .query("expense_claims")
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
@@ -484,8 +482,12 @@ export const checkDuplicates = query({
           q.neq(q.field("status"), "rejected"),
           q.neq(q.field("status"), "failed"),
           q.or(
-            q.gte(q.field("transactionDate"), thirtyDaysAgoStr),
-            q.eq(q.field("transactionDate"), undefined)
+            // Same transaction date — needed for vendor+date+amount matching
+            q.eq(q.field("transactionDate"), args.transactionDate),
+            // Same reference number — needed for exact receipt number matching
+            ...(args.referenceNumber
+              ? [q.eq(q.field("referenceNumber"), args.referenceNumber)]
+              : [])
           )
         )
       )
@@ -3327,5 +3329,249 @@ export const cancelLhdnSubmission = mutation({
     });
 
     return { documentUuid: claim.lhdnDocumentUuid };
+  },
+});
+
+// ============================================
+// BATCH PAYMENT PROCESSING (001-batch-payment)
+// ============================================
+
+/**
+ * Get approved claims grouped by submission for the Payment Processing tab.
+ * Returns submissions with their approved claims, plus ungrouped claims (no submission).
+ */
+export const getPendingPaymentClaims = query({
+  args: {
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { submissions: [], ungroupedClaims: [] };
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) return { submissions: [], ungroupedClaims: [] };
+
+    // Check finance_admin or owner role
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      return { submissions: [], ungroupedClaims: [] };
+    }
+    if (!["owner", "finance_admin"].includes(membership.role)) {
+      return { submissions: [], ungroupedClaims: [] };
+    }
+
+    // Get all approved claims for this business
+    const allClaims = await ctx.db
+      .query("expense_claims")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    const approvedClaims = allClaims.filter(
+      (c) => c.status === "approved" && !c.deletedAt
+    );
+
+    // Resolve user names for all claims
+    const userIds = [...new Set(approvedClaims.map((c) => c.userId))];
+    const users = await Promise.all(userIds.map((id) => ctx.db.get(id)));
+    const userMap: Record<string, string> = {};
+    for (const u of users) {
+      if (u) userMap[u._id] = u.fullName || u.email || "Unknown";
+    }
+
+    // Group by submissionId
+    const submissionMap: Record<string, typeof approvedClaims> = {};
+    const ungrouped: typeof approvedClaims = [];
+
+    for (const claim of approvedClaims) {
+      if (claim.submissionId) {
+        const key = claim.submissionId;
+        if (!submissionMap[key]) submissionMap[key] = [];
+        submissionMap[key].push(claim);
+      } else {
+        ungrouped.push(claim);
+      }
+    }
+
+    // Fetch submission details
+    const submissionIds = Object.keys(submissionMap);
+    const submissions = await Promise.all(
+      submissionIds.map(async (id) => {
+        const sub = await ctx.db.get(id as Id<"expense_submissions">);
+        const claims = submissionMap[id];
+        return {
+          _id: id,
+          title: sub?.title || "Untitled Submission",
+          employeeName: sub?.userId ? userMap[sub.userId] || "Unknown" : "Unknown",
+          employeeId: sub?.userId || "",
+          submittedAt: sub?.submittedAt,
+          status: sub?.status,
+          claims: claims.map((c) => ({
+            _id: c._id,
+            description: c.description || "",
+            vendorName: c.vendorName || "",
+            expenseCategory: c.expenseCategory || "",
+            totalAmount: c.totalAmount || 0,
+            currency: c.currency || c.homeCurrency || "MYR",
+            referenceNumber: c.referenceNumber || "",
+            submittedAt: c.submittedAt,
+            employeeName: userMap[c.userId] || "Unknown",
+          })),
+        };
+      })
+    );
+
+    const ungroupedMapped = ungrouped.map((c) => ({
+      _id: c._id,
+      description: c.description || "",
+      vendorName: c.vendorName || "",
+      expenseCategory: c.expenseCategory || "",
+      totalAmount: c.totalAmount || 0,
+      currency: c.currency || c.homeCurrency || "MYR",
+      referenceNumber: c.referenceNumber || "",
+      submittedAt: c.submittedAt,
+      employeeName: userMap[c.userId] || "Unknown",
+    }));
+
+    return { submissions, ungroupedClaims: ungroupedMapped };
+  },
+});
+
+/**
+ * Batch mark expense claims as reimbursed (paid).
+ * Updates both expense_claims and linked accounting_entries atomically.
+ */
+export const batchMarkAsPaid = mutation({
+  args: {
+    businessId: v.id("businesses"),
+    claimIds: v.array(v.id("expense_claims")),
+    paymentMethod: v.optional(v.string()),
+    paymentReference: v.optional(v.string()),
+    paymentDate: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireFinanceAdminForClaims(ctx, args.businessId);
+
+    const now = Date.now();
+    let processedCount = 0;
+    let skippedCount = 0;
+    const currencyTotals: Record<string, number> = {};
+
+    for (const claimId of args.claimIds) {
+      const claim = await ctx.db.get(claimId);
+      if (!claim || claim.businessId !== args.businessId || claim.deletedAt) {
+        skippedCount++;
+        continue;
+      }
+      // Skip already reimbursed
+      if (claim.status === "reimbursed") {
+        skippedCount++;
+        continue;
+      }
+      // Only process approved claims
+      if (claim.status !== "approved") {
+        skippedCount++;
+        continue;
+      }
+
+      // Update expense claim
+      await ctx.db.patch(claimId, {
+        status: "reimbursed",
+        paidAt: now,
+        paidBy: user._id,
+        paymentMethod: args.paymentMethod,
+        paymentReference: args.paymentReference,
+        updatedAt: now,
+      });
+
+      // Update linked accounting entry if exists
+      if (claim.accountingEntryId) {
+        const entry = await ctx.db.get(claim.accountingEntryId);
+        if (entry && !entry.deletedAt) {
+          await ctx.db.patch(claim.accountingEntryId, {
+            status: "paid",
+            paymentDate: args.paymentDate || new Date().toISOString().split("T")[0],
+            paymentMethod: args.paymentMethod,
+            updatedAt: now,
+          });
+        }
+      }
+
+      // Track totals per currency
+      const currency = claim.currency || claim.homeCurrency || "MYR";
+      const amount = claim.totalAmount || 0;
+      currencyTotals[currency] = (currencyTotals[currency] || 0) + amount;
+
+      processedCount++;
+    }
+
+    // Auto-update parent submissions if all claims are now reimbursed
+    const submissionIds = new Set<string>();
+    for (const claimId of args.claimIds) {
+      const claim = await ctx.db.get(claimId);
+      if (claim?.submissionId) submissionIds.add(claim.submissionId);
+    }
+
+    for (const subId of submissionIds) {
+      const subClaims = await ctx.db
+        .query("expense_claims")
+        .withIndex("by_submissionId", (q) => q.eq("submissionId", subId as Id<"expense_submissions">))
+        .collect();
+
+      const allDone = subClaims
+        .filter((c) => !c.deletedAt)
+        .every((c) => c.status === "reimbursed" || c.status === "rejected");
+
+      if (allDone) {
+        await ctx.db.patch(subId as Id<"expense_submissions">, {
+          status: "reimbursed",
+          reimbursedAt: now,
+          updatedAt: now,
+        });
+      }
+    }
+
+    return { processedCount, skippedCount, currencyTotals };
+  },
+});
+
+/**
+ * Send back an individual expense claim for correction.
+ * Returns the claim to draft status for the employee to fix.
+ * On resubmission, it routes directly to finance admin (bypasses manager re-approval).
+ */
+export const sendBackClaim = mutation({
+  args: {
+    businessId: v.id("businesses"),
+    claimId: v.id("expense_claims"),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireFinanceAdminForClaims(ctx, args.businessId);
+
+    const claim = await ctx.db.get(args.claimId);
+    if (!claim || claim.businessId !== args.businessId || claim.deletedAt) {
+      throw new Error("Claim not found");
+    }
+    if (claim.status !== "approved") {
+      throw new Error("Can only send back approved claims");
+    }
+
+    const now = Date.now();
+
+    await ctx.db.patch(args.claimId, {
+      status: "draft",
+      sentBackBy: user._id,
+      sentBackReason: args.reason,
+      sentBackAt: now,
+      updatedAt: now,
+    });
+
+    return { success: true };
   },
 });
