@@ -102,14 +102,23 @@ export function CodeMappingStep({
     for (const mappingType of codeMappingTypes) {
       const values = distinctValues[mappingType] ?? [];
       newMappings[mappingType] = {};
+      // Get code hints from backend (actual customerCode/supplierCode from database)
+      const hintsKey = `_${mappingType}_hints`;
+      const codeHints = (distinctValues as any)?.[hintsKey] as Record<string, string> | undefined;
+
       for (const sourceValue of values) {
         const saved = getTargetCode(mappingType, sourceValue);
         if (saved) {
           newMappings[mappingType][sourceValue] = saved;
         } else if (AUTO_CODE_TYPES.has(mappingType)) {
-          // Auto-fill creditor/debtor codes with generated CR-/D- codes
-          const prefix = mappingType === "debtor_code" ? "D-" : "CR-";
-          newMappings[mappingType][sourceValue] = generateCodeFromName(sourceValue, prefix);
+          // Use actual code from database if available, otherwise generate
+          const realCode = codeHints?.[sourceValue];
+          if (realCode) {
+            newMappings[mappingType][sourceValue] = realCode;
+          } else {
+            const prefix = mappingType === "debtor_code" ? "D-" : "CR-";
+            newMappings[mappingType][sourceValue] = generateCodeFromName(sourceValue, prefix);
+          }
         } else {
           newMappings[mappingType][sourceValue] = "";
         }
@@ -222,9 +231,11 @@ export function CodeMappingStep({
                   size="sm"
                   onClick={() => {
                     const prefix = mappingType === "debtor_code" ? "D-" : "CR-";
+                    const hintsKeyBtn = `_${mappingType}_hints`;
+                    const codeHintsBtn = (distinctValues as any)?.[hintsKeyBtn] as Record<string, string> | undefined;
                     const updated: Record<string, string> = {};
                     for (const sv of values) {
-                      updated[sv] = generateCodeFromName(sv, prefix);
+                      updated[sv] = codeHintsBtn?.[sv] || generateCodeFromName(sv, prefix);
                     }
                     setFormMappings((prev) => ({
                       ...prev,
@@ -263,8 +274,11 @@ export function CodeMappingStep({
             {/* Individual mappings */}
             <div className="divide-y divide-border">
               {values.map((sourceValue) => {
+                const hintsKey2 = `_${mappingType}_hints`;
+                const codeHints2 = (distinctValues as any)?.[hintsKey2] as Record<string, string> | undefined;
+                const realCode = codeHints2?.[sourceValue];
                 const grootCode = AUTO_CODE_TYPES.has(mappingType)
-                  ? generateCodeFromName(sourceValue, mappingType === "debtor_code" ? "D-" : "CR-")
+                  ? (realCode || generateCodeFromName(sourceValue, mappingType === "debtor_code" ? "D-" : "CR-"))
                   : null;
                 return (
                 <div

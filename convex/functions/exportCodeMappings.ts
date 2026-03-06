@@ -117,32 +117,61 @@ export const getDistinctMappableValues = query({
       }
 
       if (args.mappingTypes.includes("creditor_code")) {
-        const vendors = [
+        const vendorNames = [
           ...new Set(
             claims
               .map((c) => c.vendorName)
               .filter((v): v is string => !!v)
           ),
         ];
-        result.creditor_code = vendors.sort();
+        result.creditor_code = vendorNames.sort();
+
+        // Look up actual supplierCode from vendors table for each name
+        const allVendors = await ctx.db
+          .query("vendors")
+          .withIndex("by_businessId", (q) => q.eq("businessId", bizId))
+          .collect();
+
+        const codeHints: Record<string, string> = {};
+        for (const v of allVendors) {
+          if (v.name && v.supplierCode) {
+            codeHints[v.name] = v.supplierCode;
+          }
+        }
+        result._creditor_code_hints = codeHints as any;
       }
     }
 
     if (args.module === "invoice") {
       if (args.mappingTypes.includes("debtor_code")) {
+        // Get customer names from sales invoices
         const invoices = await ctx.db
           .query("sales_invoices")
           .withIndex("by_businessId", (q) => q.eq("businessId", bizId))
           .collect();
 
-        const customers = [
+        const customerNames = [
           ...new Set(
             invoices
               .map((i) => i.customerSnapshot?.businessName)
               .filter((n): n is string => !!n)
           ),
         ];
-        result.debtor_code = customers.sort();
+        result.debtor_code = customerNames.sort();
+
+        // Also look up actual customerCode from customers table for each name
+        const allCustomers = await ctx.db
+          .query("customers")
+          .withIndex("by_businessId", (q) => q.eq("businessId", bizId))
+          .collect();
+
+        const codeHints: Record<string, string> = {};
+        for (const c of allCustomers) {
+          if (c.businessName && c.customerCode) {
+            codeHints[c.businessName] = c.customerCode;
+          }
+        }
+        result._debtor_code_hints = codeHints as any;
       }
 
       if (args.mappingTypes.includes("account_code")) {
