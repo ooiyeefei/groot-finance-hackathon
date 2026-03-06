@@ -82,19 +82,13 @@ export const preview = query({
     const role = membership.role;
     const previewLimit = Math.min(args.limit ?? 10, 50);
 
-    // Force invoice type filter for Master Accounting templates
-    let effectiveFilters = args.filters ? { ...args.filters } : {};
-    if (args.prebuiltId === "master-accounting-sales-invoice") {
-      effectiveFilters = { ...effectiveFilters, invoiceType: "AR" as const };
-    }
-
     const allRecords = await getRecordsByModule(
       ctx,
       args.module,
       business._id,
       user._id,
       role,
-      effectiveFilters,
+      args.filters,
       args.prebuiltId
     );
 
@@ -670,11 +664,8 @@ async function applyCodeMappings(
     }
 
     // Map debtor code (customer name → debtor code)
-    if (module === "invoice") {
-      const debtorSource = mapped.entityName || mapped.entityCode || "";
-      if (debtorSource) {
-        mapped.entityCode = getCode("debtor_code", debtorSource);
-      }
+    if (module === "invoice" && mapped.entityCode) {
+      mapped.entityCode = getCode("debtor_code", mapped.entityName || mapped.entityCode);
     }
 
     // Map line item account codes (category → account code)
@@ -1384,22 +1375,13 @@ async function enrichInvoiceRecords(
           unitMeasurement: item.unitMeasurement || "",
         }));
 
-        // Look up customer record for customerCode (preferred for debtor code mapping)
-        let entityCode = record.customerSnapshot?.taxId || "";
-        if (record.customerId) {
-          const customer = await ctx.db.get(record.customerId);
-          if (customer && !customer.deletedAt) {
-            entityCode = customer.customerCode || customer.businessName || entityCode;
-          }
-        }
-
         return {
           invoiceType: "AR",
           invoiceNumber: record.invoiceNumber || "",
           invoiceDate: record.invoiceDate || "",
           dueDate: record.dueDate || "",
           entityName: record.customerSnapshot?.businessName || "",
-          entityCode,
+          entityCode: record.customerSnapshot?.taxId || "",
           description: "",
           subtotal: record.subtotal || 0,
           totalTax: record.totalTax || 0,
