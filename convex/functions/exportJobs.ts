@@ -82,13 +82,19 @@ export const preview = query({
     const role = membership.role;
     const previewLimit = Math.min(args.limit ?? 10, 50);
 
+    // Force AR-only filter for Sales Book-Invoice template
+    let effectiveFilters = args.filters ? { ...args.filters } : {};
+    if (args.prebuiltId === "master-accounting-sales-invoice") {
+      effectiveFilters = { ...effectiveFilters, invoiceType: "AR" as const };
+    }
+
     const allRecords = await getRecordsByModule(
       ctx,
       args.module,
       business._id,
       user._id,
       role,
-      args.filters,
+      effectiveFilters,
       args.prebuiltId
     );
 
@@ -664,8 +670,11 @@ async function applyCodeMappings(
     }
 
     // Map debtor code (customer name → debtor code)
-    if (module === "invoice" && mapped.entityCode) {
-      mapped.entityCode = getCode("debtor_code", mapped.entityName || mapped.entityCode);
+    if (module === "invoice") {
+      const debtorSource = mapped.entityName || mapped.entityCode || "";
+      if (debtorSource) {
+        mapped.entityCode = getCode("debtor_code", debtorSource);
+      }
     }
 
     // Map line item account codes (category → account code)
