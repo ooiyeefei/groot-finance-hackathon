@@ -147,12 +147,16 @@ function PaymentFailedBanner({ className, onDismiss, isDismissed }: BannerProps)
         <p className="text-sm text-muted-foreground mt-1">
           We couldn&apos;t process your last payment. Please update your payment method to avoid service interruption.
         </p>
-        {!isNativePlatform() && (
+        {!isNativePlatform() ? (
           <div className="mt-3 flex flex-wrap gap-2">
             <Button size="sm" variant="destructive" asChild>
               <a href="/settings/billing">Update Payment Method</a>
             </Button>
           </div>
+        ) : (
+          <p className="text-sm text-muted-foreground mt-2">
+            Visit <span className="font-medium text-foreground">hellogroot.com</span> in your browser to update payment.
+          </p>
         )}
       </div>
       {onDismiss && (
@@ -177,12 +181,16 @@ function SubscriptionExpiredBanner({ className, planName }: BannerProps & { plan
         <p className="text-sm text-muted-foreground mt-1">
           Your {planName} subscription has expired. Renew now to restore full access to your account.
         </p>
-        {!isNativePlatform() && (
+        {!isNativePlatform() ? (
           <div className="mt-3 flex flex-wrap gap-2">
             <Button size="sm" variant="destructive" asChild>
               <a href="/settings/billing">Renew Subscription</a>
             </Button>
           </div>
+        ) : (
+          <p className="text-sm text-muted-foreground mt-2">
+            Visit <span className="font-medium text-foreground">hellogroot.com</span> in your browser to renew.
+          </p>
         )}
       </div>
     </div>
@@ -211,12 +219,16 @@ function CancelationPendingBanner({ className, periodEnd, onDismiss, isDismissed
         <p className="text-sm text-muted-foreground mt-1">
           Your subscription is set to cancel on {formattedDate}. You&apos;ll retain access until then.
         </p>
-        {!isNativePlatform() && (
+        {!isNativePlatform() ? (
           <div className="mt-3 flex flex-wrap gap-2">
             <Button size="sm" variant="outline" asChild>
               <a href="/settings/billing">Manage Subscription</a>
             </Button>
           </div>
+        ) : (
+          <p className="text-sm text-muted-foreground mt-2">
+            Visit <span className="font-medium text-foreground">hellogroot.com</span> in your browser to manage subscription.
+          </p>
         )}
       </div>
       {onDismiss && (
@@ -303,12 +315,16 @@ function RenewalReminderBanner({ renewal, planName, className, onDismiss }: Rene
             Please ensure your payment method is up to date to avoid interruption.
           </p>
         )}
-        {!isNativePlatform() && (
+        {!isNativePlatform() ? (
           <div className="mt-3 flex flex-wrap gap-2">
             <Button size="sm" variant="outline" asChild>
               <a href="/settings/billing">Manage Subscription</a>
             </Button>
           </div>
+        ) : (
+          <p className="text-sm text-muted-foreground mt-2">
+            Visit <span className="font-medium text-foreground">hellogroot.com</span> in your browser to manage subscription.
+          </p>
         )}
       </div>
       {onDismiss && (

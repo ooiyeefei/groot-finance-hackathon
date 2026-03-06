@@ -222,7 +222,7 @@ function PlanSelectionContent() {
         )}
 
         {/* Pricing Table - Standalone mode for onboarding (hidden on native iOS per Apple IAP guidelines) */}
-        {!isNativePlatform() && (
+        {!isNativePlatform() ? (
           <PricingTable
             standalone
             showLimits
@@ -230,7 +230,15 @@ function PlanSelectionContent() {
             onCheckout={handleCheckout}
             className="max-w-6xl mx-auto"
           />
-        )}
+        ) : isTrialExpired ? (
+          <div className="max-w-md mx-auto text-center p-6 bg-card border border-border rounded-lg">
+            <p className="text-muted-foreground">
+              To view plans and subscribe, visit{' '}
+              <span className="font-medium text-foreground">hellogroot.com</span>
+              {' '}in your browser.
+            </p>
+          </div>
+        ) : null}
 
         {/* Footer Note */}
         <div className="text-center pt-4 space-y-3">
