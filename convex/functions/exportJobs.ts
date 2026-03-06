@@ -561,15 +561,15 @@ async function getMasterDataRecords(
   }
 
   if (tableName === "customers") {
+    // 1. Get structured customers from customers table
     const customers = await ctx.db
       .query("customers")
       .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
       .collect();
 
-    return customers
+    const customerRecords = customers
       .filter((c: any) => c.status !== "inactive" && c.businessName)
       .map((c: any) => ({
-        // Debtor/Customer field mapping
         entityCode: c.customerCode || generateCodeFromName(c.businessName || "", "D-"),
         entityName: c.businessName || "",
         entityName2: "",
@@ -597,8 +597,62 @@ async function getMasterDataRecords(
         currencyCode: "MYR",
         tin: c.tin || "",
         idType: "Business Reg. No",
-        _original: c,
+        _source: "customer",
       }));
+
+    // 2. Get unique customers from sales_invoices not in customers table
+    const invoices = await ctx.db
+      .query("sales_invoices")
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
+      .collect();
+
+    const customerNames = new Set(
+      customers.map((c: any) => (c.businessName || "").toLowerCase())
+    );
+    const seenInvoiceCustomers = new Set<string>();
+    const invoiceCustomerRecords: any[] = [];
+
+    for (const inv of invoices) {
+      const name = inv.customerSnapshot?.businessName?.trim();
+      if (!name) continue;
+      const nameLower = name.toLowerCase();
+      if (customerNames.has(nameLower) || seenInvoiceCustomers.has(nameLower)) continue;
+      seenInvoiceCustomers.add(nameLower);
+
+      const snap = inv.customerSnapshot || {};
+      invoiceCustomerRecords.push({
+        entityCode: generateCodeFromName(name, "D-"),
+        entityName: name,
+        entityName2: "",
+        registerNo: snap.taxId || snap.brn || "",
+        address1: snap.addressLine1 || snap.address || "",
+        address2: snap.addressLine2 || "",
+        address3: snap.addressLine3 || "",
+        address4: "",
+        city: snap.city || "",
+        postalCode: snap.postalCode || "",
+        state: snap.stateCode || "",
+        countryCode: snap.countryCode || "",
+        contactPerson: snap.contactPerson || "",
+        contactPersonPosition: "",
+        phone1: snap.phone || "",
+        phone2: "",
+        fax1: "",
+        fax2: "",
+        email1: snap.email || "",
+        email2: "",
+        homePage: "",
+        businessNature: "",
+        suspended: "N",
+        controlAccountCode: "",
+        currencyCode: "MYR",
+        tin: snap.tin || "",
+        idType: "Business Reg. No",
+        _source: "invoice_customer",
+      });
+    }
+
+    return [...customerRecords, ...invoiceCustomerRecords];
   }
 
   return [];
@@ -1203,9 +1257,14 @@ async function getInvoiceRecords(
       );
     }
 
-    // Mark as AR
+    // Mark as AR, filter out 0-amount invoices with no line items
     for (const r of arRecords) {
-      results.push({ ...r, _invoiceType: "AR" });
+      const hasContent = (r.totalAmount && r.totalAmount > 0) ||
+        (r.lineItems && r.lineItems.length > 0 &&
+         r.lineItems.some((li: any) => li.totalAmount > 0 || li.description));
+      if (hasContent) {
+        results.push({ ...r, _invoiceType: "AR" });
+      }
     }
   }
 
@@ -1371,18 +1430,28 @@ async function enrichInvoiceRecords(
         };
       } else {
         // AR invoice (from sales_invoices table) — already structured
-        const lineItems = (record.lineItems || []).map((item: any) => ({
-          lineOrder: item.lineOrder,
-          description: item.description || "",
-          quantity: item.quantity || 1,
-          unitPrice: item.unitPrice || 0,
-          totalAmount: item.totalAmount || 0,
-          currency: item.currency || record.currency || "",
-          taxRate: item.taxRate || 0,
-          taxAmount: item.taxAmount || 0,
-          itemCode: item.itemCode || "",
-          unitMeasurement: item.unitMeasurement || "",
-        }));
+        const lineItems = (record.lineItems || [])
+          .map((item: any) => ({
+            lineOrder: item.lineOrder,
+            description: (item.description || "").trim(),
+            quantity: item.quantity || 1,
+            unitPrice: item.unitPrice || 0,
+            totalAmount: item.totalAmount || 0,
+            currency: item.currency || record.currency || "",
+            taxRate: item.taxRate || 0,
+            taxAmount: item.taxAmount || 0,
+            itemCode: item.itemCode || "",
+            unitMeasurement: item.unitMeasurement || "",
+          }))
+          // Filter out empty line items (no description AND 0 amount)
+          .filter((item: any) => item.description || item.totalAmount > 0);
+
+        // Look up customerCode from customers table if available
+        let customerCode = "";
+        if (record.customerId) {
+          const customer = await ctx.db.get(record.customerId);
+          customerCode = customer?.customerCode || "";
+        }
 
         return {
           invoiceType: "AR",
@@ -1390,8 +1459,8 @@ async function enrichInvoiceRecords(
           invoiceDate: record.invoiceDate || "",
           dueDate: record.dueDate || "",
           entityName: record.customerSnapshot?.businessName || "",
-          entityCode: record.customerSnapshot?.taxId || "",
-          description: "",
+          entityCode: customerCode || record.customerSnapshot?.taxId || "",
+          description: (record.description || "").trim(),
           subtotal: record.subtotal || 0,
           totalTax: record.totalTax || 0,
           totalAmount: record.totalAmount || 0,
