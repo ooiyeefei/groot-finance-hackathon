@@ -18,6 +18,8 @@ interface InvoiceTemplateProps {
       taxId?: string
       tin?: string
       brn?: string
+      idType?: string
+      sstRegistration?: string
       addressLine1?: string
       addressLine2?: string
       addressLine3?: string
@@ -25,6 +27,16 @@ interface InvoiceTemplateProps {
       stateCode?: string
       postalCode?: string
       countryCode?: string
+    }
+    customerFieldsVisibility?: {
+      contactPerson?: boolean
+      email?: boolean
+      phone?: boolean
+      address?: boolean
+      tin?: boolean
+      brn?: boolean
+      sstRegistration?: boolean
+      idType?: boolean
     }
     lineItems: Array<{
       description: string
@@ -78,6 +90,12 @@ interface InvoiceTemplateProps {
 }
 
 export function ClassicInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplateProps) {
+  // Default: all fields visible (backward compatible)
+  const vis = {
+    contactPerson: true, email: true, phone: true, address: true,
+    tin: true, brn: true, sstRegistration: false, idType: false,
+    ...invoice.customerFieldsVisibility,
+  }
   const {
     invoiceNumber,
     invoiceDate,
@@ -181,27 +199,35 @@ export function ClassicInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplat
             Bill To
           </h3>
           <p className="font-semibold text-foreground">{customerSnapshot.businessName}</p>
-          {customerSnapshot.contactPerson && (
+          {vis.contactPerson && customerSnapshot.contactPerson && (
             <p className="text-sm text-muted-foreground">{customerSnapshot.contactPerson}</p>
           )}
-          {hasStructuredAddress(customerSnapshot) ? (
-            <p className="text-sm text-muted-foreground mt-1 whitespace-pre-line">
-              {formatAddress(customerSnapshot)}
-            </p>
-          ) : customerSnapshot.address ? (
-            <p className="text-sm text-muted-foreground mt-1">{customerSnapshot.address}</p>
-          ) : null}
-          <p className="text-sm text-muted-foreground mt-1">{customerSnapshot.email}</p>
-          {customerSnapshot.phone && (
+          {vis.address && (
+            hasStructuredAddress(customerSnapshot) ? (
+              <p className="text-sm text-muted-foreground mt-1 whitespace-pre-line">
+                {formatAddress(customerSnapshot)}
+              </p>
+            ) : customerSnapshot.address ? (
+              <p className="text-sm text-muted-foreground mt-1">{customerSnapshot.address}</p>
+            ) : null
+          )}
+          {vis.email && <p className="text-sm text-muted-foreground mt-1">{customerSnapshot.email}</p>}
+          {vis.phone && customerSnapshot.phone && (
             <p className="text-sm text-muted-foreground">{customerSnapshot.phone}</p>
           )}
-          {customerSnapshot.tin ? (
+          {vis.idType && customerSnapshot.idType && (
+            <p className="text-sm text-muted-foreground">ID Type: {customerSnapshot.idType}</p>
+          )}
+          {vis.tin && (customerSnapshot.tin ? (
             <p className="text-sm text-muted-foreground">TIN: {customerSnapshot.tin}</p>
           ) : customerSnapshot.taxId ? (
             <p className="text-sm text-muted-foreground">Tax ID: {customerSnapshot.taxId}</p>
-          ) : null}
-          {customerSnapshot.brn && (
+          ) : null)}
+          {vis.brn && customerSnapshot.brn && (
             <p className="text-sm text-muted-foreground">BRN: {customerSnapshot.brn}</p>
+          )}
+          {vis.sstRegistration && customerSnapshot.sstRegistration && (
+            <p className="text-sm text-muted-foreground">SST: {customerSnapshot.sstRegistration}</p>
           )}
         </div>
       </div>

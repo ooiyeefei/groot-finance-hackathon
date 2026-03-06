@@ -18,6 +18,27 @@ interface InvoicePreviewProps {
       phone?: string
       address?: string
       taxId?: string
+      tin?: string
+      brn?: string
+      idType?: string
+      sstRegistration?: string
+      addressLine1?: string
+      addressLine2?: string
+      addressLine3?: string
+      city?: string
+      stateCode?: string
+      postalCode?: string
+      countryCode?: string
+    }
+    customerFieldsVisibility?: {
+      contactPerson?: boolean
+      email?: boolean
+      phone?: boolean
+      address?: boolean
+      tin?: boolean
+      brn?: boolean
+      sstRegistration?: boolean
+      idType?: boolean
     }
     lineItems: Array<{
       description: string

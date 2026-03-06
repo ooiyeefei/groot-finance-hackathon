@@ -220,6 +220,8 @@ export interface CustomerSnapshot {
   // 016-e-invoice-schema-change: LHDN buyer compliance fields
   tin?: string;
   brn?: string;
+  idType?: string;
+  sstRegistration?: string;
   addressLine1?: string;
   addressLine2?: string;
   addressLine3?: string;
@@ -239,6 +241,8 @@ export const customerSnapshotSchema = z.object({
   // 016-e-invoice-schema-change: LHDN buyer compliance fields
   tin: z.string().optional(),
   brn: z.string().optional(),
+  idType: z.string().optional(),
+  sstRegistration: z.string().optional(),
   addressLine1: z.string().optional(),
   addressLine2: z.string().optional(),
   addressLine3: z.string().optional(),
@@ -342,6 +346,7 @@ export interface Customer {
   tin?: string;
   brn?: string;
   sstRegistration?: string;
+  idType?: string;
   // 016-e-invoice-schema-change: Peppol
   peppolParticipantId?: string;
   // 016-e-invoice-schema-change: Structured address
@@ -352,6 +357,16 @@ export interface Customer {
   stateCode?: string;
   postalCode?: string;
   countryCode?: string;
+  // Extended customer particulars
+  contactPersonPosition?: string;
+  phone2?: string;
+  fax?: string;
+  email2?: string;
+  website?: string;
+  businessNature?: string;
+  paymentTerms?: string;
+  creditLimit?: number;
+  currencyCode?: string;
   deletedAt?: number;
   updatedAt?: number;
 }

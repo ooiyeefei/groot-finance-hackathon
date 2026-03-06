@@ -28,6 +28,20 @@ export interface PdfInvoiceData {
     phone?: string
     address?: string
     taxId?: string
+    tin?: string
+    brn?: string
+    idType?: string
+    sstRegistration?: string
+  }
+  customerFieldsVisibility?: {
+    contactPerson?: boolean
+    email?: boolean
+    phone?: boolean
+    address?: boolean
+    tin?: boolean
+    brn?: boolean
+    sstRegistration?: boolean
+    idType?: boolean
   }
   lineItems: Array<{
     description: string
@@ -189,6 +203,11 @@ const s = StyleSheet.create({
 // ─── Component ───────────────────────────────────────────
 export function InvoicePdfDocument({ invoice, businessInfo }: InvoicePdfDocumentProps) {
   const { customerSnapshot: cust, lineItems, currency } = invoice
+  const vis = {
+    contactPerson: true, email: true, phone: true, address: true,
+    tin: true, brn: true, sstRegistration: false, idType: false,
+    ...invoice.customerFieldsVisibility,
+  }
   const taxLabel = invoice.taxMode === 'inclusive' ? 'Tax (Inclusive)' : 'Tax'
   const hasDiscount = (invoice.totalDiscount ?? 0) > 0
   const hasAmountPaid = (invoice.amountPaid ?? 0) > 0
@@ -241,11 +260,14 @@ export function InvoicePdfDocument({ invoice, businessInfo }: InvoicePdfDocument
             <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', marginBottom: 2 }}>
               {cust.businessName}
             </Text>
-            {cust.contactPerson && <Text style={s.companyDetail}>{cust.contactPerson}</Text>}
-            {cust.address && <Text style={s.companyDetail}>{cust.address}</Text>}
-            {cust.email && <Text style={s.companyDetail}>{cust.email}</Text>}
-            {cust.phone && <Text style={s.companyDetail}>{cust.phone}</Text>}
-            {cust.taxId && <Text style={s.companyDetail}>Tax ID: {cust.taxId}</Text>}
+            {vis.contactPerson && cust.contactPerson && <Text style={s.companyDetail}>{cust.contactPerson}</Text>}
+            {vis.address && cust.address && <Text style={s.companyDetail}>{cust.address}</Text>}
+            {vis.email && cust.email && <Text style={s.companyDetail}>{cust.email}</Text>}
+            {vis.phone && cust.phone && <Text style={s.companyDetail}>{cust.phone}</Text>}
+            {vis.idType && cust.idType && <Text style={s.companyDetail}>ID Type: {cust.idType}</Text>}
+            {vis.tin && (cust.tin ? <Text style={s.companyDetail}>TIN: {cust.tin}</Text> : cust.taxId ? <Text style={s.companyDetail}>Tax ID: {cust.taxId}</Text> : null)}
+            {vis.brn && cust.brn && <Text style={s.companyDetail}>BRN: {cust.brn}</Text>}
+            {vis.sstRegistration && cust.sstRegistration && <Text style={s.companyDetail}>SST: {cust.sstRegistration}</Text>}
           </View>
 
           {/* Invoice Details */}

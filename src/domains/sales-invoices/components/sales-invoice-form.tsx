@@ -290,6 +290,7 @@ export function SalesInvoiceForm() {
     invoiceDate: form.invoiceDate,
     dueDate: form.dueDate,
     customerSnapshot: form.customerSnapshot,
+    customerFieldsVisibility: invoiceSettings?.customerFieldsVisibility as Record<string, boolean> | undefined,
     lineItems: form.lineItems,
     subtotal: form.totals.subtotal,
     totalDiscount: form.totals.totalDiscount,

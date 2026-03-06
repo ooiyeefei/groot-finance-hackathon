@@ -186,6 +186,17 @@ export default defineSchema({
       }))),
       // BCC sender on outgoing invoice emails
       bccOutgoingEmails: v.optional(v.boolean()),
+      // Customer fields visibility on invoice
+      customerFieldsVisibility: v.optional(v.object({
+        contactPerson: v.optional(v.boolean()),
+        email: v.optional(v.boolean()),
+        phone: v.optional(v.boolean()),
+        address: v.optional(v.boolean()),
+        tin: v.optional(v.boolean()),
+        brn: v.optional(v.boolean()),
+        sstRegistration: v.optional(v.boolean()),
+        idType: v.optional(v.boolean()),
+      })),
     })),
 
     // 019-country-pricing-lock: Country-based pricing lockdown

@@ -57,6 +57,39 @@ interface PaymentMethodState {
   qrCodeUrl?: string
 }
 
+interface CustomerFieldsVisibility {
+  contactPerson: boolean
+  email: boolean
+  phone: boolean
+  address: boolean
+  tin: boolean
+  brn: boolean
+  sstRegistration: boolean
+  idType: boolean
+}
+
+const DEFAULT_CUSTOMER_FIELDS_VISIBILITY: CustomerFieldsVisibility = {
+  contactPerson: true,
+  email: true,
+  phone: true,
+  address: true,
+  tin: true,
+  brn: true,
+  sstRegistration: false,
+  idType: false,
+}
+
+const CUSTOMER_FIELD_LABELS: Record<keyof CustomerFieldsVisibility, string> = {
+  contactPerson: 'Contact Person',
+  email: 'Email',
+  phone: 'Phone',
+  address: 'Address',
+  tin: 'TIN (Tax Identification No)',
+  brn: 'BRN (Business Registration No)',
+  sstRegistration: 'SST Registration No',
+  idType: 'ID Type',
+}
+
 interface InvoiceSettingsState {
   invoicePrefix: string
   nextNumber: number
@@ -68,6 +101,7 @@ interface InvoiceSettingsState {
   defaultTemplateId: InvoiceTemplate
   paymentMethods: PaymentMethodState[]
   bccOutgoingEmails: boolean
+  customerFieldsVisibility: CustomerFieldsVisibility
 }
 
 function buildInitialPaymentMethods(
@@ -117,6 +151,7 @@ export default function InvoiceSettingsForm() {
     defaultTemplateId: 'modern',
     paymentMethods: buildInitialPaymentMethods(),
     bccOutgoingEmails: true,
+    customerFieldsVisibility: { ...DEFAULT_CUSTOMER_FIELDS_VISIBILITY },
   })
 
   // Sync state when Convex data loads
@@ -124,6 +159,7 @@ export default function InvoiceSettingsForm() {
   useEffect(() => {
     if (invoiceDefaults && !hasInitialized.current) {
       hasInitialized.current = true
+      const savedVisibility = invoiceDefaults.customerFieldsVisibility as Partial<CustomerFieldsVisibility> | undefined
       setSettings({
         invoicePrefix: invoiceDefaults.invoiceNumberPrefix ?? 'INV',
         nextNumber: invoiceDefaults.nextInvoiceNumber ?? 1,
@@ -135,6 +171,10 @@ export default function InvoiceSettingsForm() {
         defaultTemplateId: (invoiceDefaults.selectedTemplate as InvoiceTemplate) ?? 'modern',
         paymentMethods: buildInitialPaymentMethods(invoiceDefaults.paymentMethods as PaymentMethodConfig[] | undefined),
         bccOutgoingEmails: invoiceDefaults.bccOutgoingEmails ?? true,
+        customerFieldsVisibility: {
+          ...DEFAULT_CUSTOMER_FIELDS_VISIBILITY,
+          ...savedVisibility,
+        },
       })
     }
   }, [invoiceDefaults])
@@ -234,6 +274,7 @@ export default function InvoiceSettingsForm() {
         acceptedPaymentMethods,
         bccOutgoingEmails: settings.bccOutgoingEmails,
         paymentMethods: paymentMethodsToSave,
+        customerFieldsVisibility: settings.customerFieldsVisibility,
       })
 
       setSaveSuccess(true)
@@ -489,6 +530,43 @@ export default function InvoiceSettingsForm() {
                   </p>
                 </div>
               </label>
+            </CardContent>
+          </Card>
+
+          {/* Customer Fields on Invoice */}
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="text-foreground text-base flex items-center gap-2">
+                <Eye className="w-4 h-4" />
+                Customer Fields on Invoice
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-muted-foreground text-xs">
+                Choose which customer details appear on generated invoices. Business name is always shown.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {(Object.keys(CUSTOMER_FIELD_LABELS) as Array<keyof CustomerFieldsVisibility>).map((field) => (
+                  <label
+                    key={field}
+                    className="flex items-center gap-2.5 p-2.5 rounded-md border border-border hover:bg-muted/50 cursor-pointer transition-colors"
+                  >
+                    <Checkbox
+                      checked={settings.customerFieldsVisibility[field]}
+                      onCheckedChange={(checked) =>
+                        setSettings((prev) => ({
+                          ...prev,
+                          customerFieldsVisibility: {
+                            ...prev.customerFieldsVisibility,
+                            [field]: !!checked,
+                          },
+                        }))
+                      }
+                    />
+                    <span className="text-sm text-foreground">{CUSTOMER_FIELD_LABELS[field]}</span>
+                  </label>
+                ))}
+              </div>
             </CardContent>
           </Card>
 

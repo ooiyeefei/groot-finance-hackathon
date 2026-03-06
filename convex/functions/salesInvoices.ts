@@ -1416,6 +1416,7 @@ export const getInvoiceDefaults = query({
       acceptedPaymentMethods: settings?.acceptedPaymentMethods ?? ["bank_transfer"],
       bccOutgoingEmails: settings?.bccOutgoingEmails ?? true,
       paymentMethods,
+      customerFieldsVisibility: settings?.customerFieldsVisibility ?? undefined,
     };
   },
 });
@@ -1443,6 +1444,16 @@ export const updateInvoiceDefaults = mutation({
       details: v.optional(v.string()),
       qrCodeStorageId: v.optional(v.string()),
     }))),
+    customerFieldsVisibility: v.optional(v.object({
+      contactPerson: v.optional(v.boolean()),
+      email: v.optional(v.boolean()),
+      phone: v.optional(v.boolean()),
+      address: v.optional(v.boolean()),
+      tin: v.optional(v.boolean()),
+      brn: v.optional(v.boolean()),
+      sstRegistration: v.optional(v.boolean()),
+      idType: v.optional(v.boolean()),
+    })),
   },
   handler: async (ctx, args) => {
     await requireFinanceAdmin(ctx, args.businessId);
@@ -1467,6 +1478,7 @@ export const updateInvoiceDefaults = mutation({
     if (args.acceptedPaymentMethods !== undefined) patch.acceptedPaymentMethods = args.acceptedPaymentMethods;
     if (args.bccOutgoingEmails !== undefined) patch.bccOutgoingEmails = args.bccOutgoingEmails;
     if (args.paymentMethods !== undefined) patch.paymentMethods = args.paymentMethods;
+    if (args.customerFieldsVisibility !== undefined) patch.customerFieldsVisibility = args.customerFieldsVisibility;
 
     await ctx.db.patch(args.businessId, {
       invoiceSettings: patch as never,

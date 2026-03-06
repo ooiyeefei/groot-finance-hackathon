@@ -96,6 +96,8 @@ export default function CustomerSelector({
         // 016-e-invoice-schema-change: LHDN buyer compliance fields
         tin: customer.tin,
         brn: customer.brn,
+        idType: customer.idType,
+        sstRegistration: customer.sstRegistration,
         addressLine1: customer.addressLine1,
         addressLine2: customer.addressLine2,
         addressLine3: customer.addressLine3,
