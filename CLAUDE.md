@@ -42,6 +42,13 @@ git config user.email "dev@hellogroot.com"
 2. Or cherry-pick: `git cherry-pick <commit>` then push directly to main
 3. If a PR merge already happened with wrong author: cherry-pick the feature commit onto main and `git push --force-with-lease`
 
+### Clerk Version Lock (CRITICAL)
+- **Locked at exact `6.30.0`** — `package.json` uses `"@clerk/nextjs": "6.30.0"` (no caret)
+- **DO NOT upgrade or add `^`** — v6.34.0+ breaks middleware `auth()` detection on public routes, causing infinite redirect loops between `/sign-in` and `/en/sign-in`
+- **Root cause**: Clerk 6.34.0 requires middleware to call `auth()` on ALL routes (including public) for page-level `auth()` to work. Our middleware skips `auth()` on public routes and returns `NextResponse.next()` early
+- **To upgrade**: See GitHub issue for migration plan — requires middleware changes + preview branch testing
+- **If `npm install` resolves to a newer version**: Check `package-lock.json` diff before committing — a caret `^` would let npm auto-upgrade
+
 ### Build-Fix Loop
 ```bash
 npm run build  # MUST pass before task completion
