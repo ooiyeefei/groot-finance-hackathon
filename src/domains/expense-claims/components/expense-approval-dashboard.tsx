@@ -30,6 +30,7 @@ interface UserRole {
   employee: boolean
   manager: boolean
   finance_admin: boolean
+  admin?: boolean // API may return 'admin' instead of 'finance_admin'
 }
 
 interface ManagementDashboardData {
@@ -110,12 +111,15 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
     return <div className="text-center text-muted-foreground p-8">Failed to load management dashboard data</div>
   }
 
+  // Normalize role: API may return 'admin' or 'finance_admin'
+  const isFinanceAdmin = !!(dashboardData.role?.finance_admin || dashboardData.role?.admin)
+
   return (
     <div className="space-y-section-gap">
 
       {/* Management Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className={`grid w-full h-auto p-1 gap-1 bg-muted border border-border relative z-10 ${dashboardData?.role?.finance_admin ? 'grid-cols-2 md:grid-cols-5' : 'grid-cols-2 md:grid-cols-4'}`}>
+        <TabsList className={`grid w-full h-auto p-1 gap-1 bg-muted border border-border relative z-10 ${isFinanceAdmin ? 'grid-cols-2 md:grid-cols-5' : 'grid-cols-2 md:grid-cols-4'}`}>
           <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Overview
           </TabsTrigger>
@@ -128,7 +132,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
           <TabsTrigger value="timesheets" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Timesheets
           </TabsTrigger>
-          {dashboardData?.role?.finance_admin && (
+          {isFinanceAdmin && (
             <TabsTrigger value="reimbursements" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               Reimburse
             </TabsTrigger>
@@ -254,7 +258,7 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
           </Suspense>
         </TabsContent>
 
-        {dashboardData?.role?.finance_admin && (
+        {isFinanceAdmin && (
           <TabsContent value="reimbursements" className="space-y-4">
             <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
               <PaymentProcessingTab />
@@ -284,13 +288,13 @@ function ManagementOverviewContent({ data, setActiveTab, pendingSubmissions, pen
           <CardHeader>
             <CardTitle className="text-foreground flex items-center gap-2">
               <BarChart3 className="w-5 h-5" />
-              {data?.role?.finance_admin ? 'Company Analytics' : 'Team Analytics'}
+              {(data?.role?.finance_admin || data?.role?.admin) ? 'Company Analytics' : 'Team Analytics'}
             </CardTitle>
             <CardDescription>Real-time expense insights</CardDescription>
           </CardHeader>
           <CardContent>
             <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
-              <ExpenseAnalytics scope={data?.role?.finance_admin ? "company" : "department"} />
+              <ExpenseAnalytics scope={(data?.role?.finance_admin || data?.role?.admin) ? "company" : "department"} />
             </Suspense>
           </CardContent>
         </Card>
