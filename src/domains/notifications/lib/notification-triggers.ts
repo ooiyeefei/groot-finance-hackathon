@@ -22,7 +22,7 @@ function buildExpenseClaimUrl(claimId: string): string {
  * Build a resource URL for an insight
  */
 function buildInsightUrl(): string {
-  return `/en/action-center`
+  return `/en`
 }
 
 /**

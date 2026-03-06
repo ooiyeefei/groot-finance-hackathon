@@ -126,17 +126,17 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
           <TabsTrigger value="approvals" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Expenses
           </TabsTrigger>
+          {isFinanceAdmin && (
+            <TabsTrigger value="reimbursements" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              Reimburse
+            </TabsTrigger>
+          )}
           <TabsTrigger value="leave-requests" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Leave
           </TabsTrigger>
           <TabsTrigger value="timesheets" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             Timesheets
           </TabsTrigger>
-          {isFinanceAdmin && (
-            <TabsTrigger value="reimbursements" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              Reimburse
-            </TabsTrigger>
-          )}
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
