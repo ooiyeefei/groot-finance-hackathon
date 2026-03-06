@@ -4,6 +4,7 @@ import { Suspense, lazy, memo, useCallback } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Building2, DollarSign, Users, Key, Loader2, Calendar, Sparkles, User, Plug, Clock, Shield } from 'lucide-react'
 import { usePermissions } from '@/contexts/business-context'
+import { isNativePlatform } from '@/lib/capacitor/platform'
 import { useUser } from '@clerk/nextjs'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -115,7 +116,7 @@ const TabbedBusinessSettings = memo(() => {
               <span className="sm:hidden">API</span>
             </TabsTrigger>
           )}
-          {isOwner && (
+          {isOwner && !isNativePlatform() && (
             <TabsTrigger
               value="billing"
               className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
@@ -248,8 +249,8 @@ const TabbedBusinessSettings = memo(() => {
           </TabsContent>
         )}
 
-        {/* Billing Tab Content - Owner Only */}
-        {isOwner && (
+        {/* Billing Tab Content - Owner Only (hidden on native iOS per Apple IAP guidelines) */}
+        {isOwner && !isNativePlatform() && (
           <TabsContent value="billing" className="space-y-4">
             <Suspense fallback={
               <div className="flex items-center justify-center p-8">

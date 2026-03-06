@@ -8,6 +8,7 @@ import { PricingTable } from '@/domains/billing/components/pricing-table'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
 import { COUNTRY_TO_CURRENCY } from '@/lib/stripe/catalog'
+import { NativePlatformRedirect } from '@/components/capacitor/native-platform-redirect'
 
 export const metadata = {
   title: 'Pricing - Groot Finance',
@@ -31,6 +32,8 @@ export default async function PricingPage() {
 
   return (
     <ClientProviders>
+      {/* Redirect native iOS users away from pricing per Apple IAP guidelines */}
+      <NativePlatformRedirect />
       <div className="flex h-screen bg-background">
         {/* Sidebar */}
         <Sidebar />

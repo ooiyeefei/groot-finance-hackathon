@@ -46,7 +46,7 @@ export function UpgradePrompt({
     return 'pro'
   }
 
-  if (!isOpen) return null
+  if (!isOpen || isNativePlatform()) return null
 
   const recommendedPlan = getRecommendedPlan()
   const recommendedPlanDetails = FALLBACK_PLANS[recommendedPlan]
