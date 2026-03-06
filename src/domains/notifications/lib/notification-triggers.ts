@@ -21,8 +21,11 @@ function buildExpenseClaimUrl(claimId: string): string {
 /**
  * Build a resource URL for an insight
  */
-function buildInsightUrl(): string {
-  return `/en`
+function buildInsightUrl(insightId?: string): string {
+  if (insightId) {
+    return `/en/action-center?insight=${insightId}`
+  }
+  return `/en/action-center`
 }
 
 /**
@@ -183,7 +186,7 @@ export function buildInsightNotification(params: {
     body: params.description,
     resourceType: "insight",
     resourceId: params.insightId,
-    resourceUrl: buildInsightUrl(),
+    resourceUrl: buildInsightUrl(params.insightId),
     sourceEvent: `insight_${params.insightId}`,
   }
 }

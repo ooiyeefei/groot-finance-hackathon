@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -25,9 +26,20 @@ interface ProactiveActionCenterProps {
 const CARDS_PER_ROW = 3;
 
 export function ProactiveActionCenter({ businessId, defaultExpanded = true }: ProactiveActionCenterProps) {
+  const searchParams = useSearchParams();
+  const highlightedInsightId = searchParams.get('insight');
+
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [activeTab, setActiveTab] = useState<'all' | 'critical' | 'reviewed'>('all');
   const [showAll, setShowAll] = useState(false);
+
+  // If deep-linked to an insight, ensure section is expanded and show all cards
+  useEffect(() => {
+    if (highlightedInsightId) {
+      setIsExpanded(true);
+      setShowAll(true);
+    }
+  }, [highlightedInsightId]);
 
   // Fetch ALL insights without filters - we'll filter client-side for consistency
   const {
@@ -191,6 +203,8 @@ export function ProactiveActionCenter({ businessId, defaultExpanded = true }: Pr
                       onDismiss={handleDismiss}
                       onAction={handleAction}
                       onReview={handleReview}
+                      isHighlighted={insight._id === highlightedInsightId}
+                      autoOpen={insight._id === highlightedInsightId}
                     />
                   ))}
                 </div>

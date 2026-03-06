@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +24,8 @@ interface InsightCardProps {
   onDismiss?: (id: string) => void;
   onAction?: (id: string) => void;
   onReview?: (id: string) => void;
+  isHighlighted?: boolean;
+  autoOpen?: boolean;
 }
 
 const priorityConfig = {
@@ -57,14 +60,23 @@ const categoryConfig = {
   categorization: { icon: CheckCircle, label: 'Categorization' }
 };
 
-export function InsightCard({ insight, onDismiss, onAction, onReview }: InsightCardProps) {
+export function InsightCard({ insight, onDismiss, onAction, onReview, isHighlighted, autoOpen }: InsightCardProps) {
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
   const priority = priorityConfig[insight.priority];
   const category = categoryConfig[insight.category];
   const CategoryIcon = category.icon;
 
+  // Auto-open detail modal when deep-linked
+  useEffect(() => {
+    if (autoOpen) {
+      setIsDetailOpen(true);
+      cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [autoOpen]);
+
   const handleCardClick = () => {
-    // No-op: card click should not auto-mark insights as reviewed.
-    // Users can explicitly use "Done" or "Mark all read" buttons.
+    setIsDetailOpen(true);
   };
 
   const handleAskAI = (e: React.MouseEvent) => {
@@ -97,8 +109,10 @@ Please:
   };
 
   return (
+    <>
     <Card
-      className={`p-3 hover:bg-accent/30 transition-colors ${priority.borderClass} flex flex-col h-full`}
+      ref={cardRef}
+      className={`p-3 hover:bg-accent/30 transition-colors cursor-pointer ${priority.borderClass} flex flex-col h-full ${isHighlighted ? 'ring-2 ring-primary ring-offset-2' : ''}`}
       onClick={handleCardClick}
     >
       {/* Header with icon and title */}
@@ -175,5 +189,101 @@ Please:
         )}
       </div>
     </Card>
+
+    {/* Detail Modal */}
+    {isDetailOpen && (
+      <div
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+        onClick={(e) => { if (e.target === e.currentTarget) setIsDetailOpen(false); }}
+      >
+        <div className="bg-card rounded-lg w-full max-w-lg border border-border m-4 shadow-lg">
+          {/* Modal Header */}
+          <div className={`flex items-start gap-3 p-5 border-b border-border ${priority.borderClass}`}>
+            <div className={`p-2 rounded-md bg-muted shrink-0 ${priority.iconClass}`}>
+              <CategoryIcon className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-foreground text-base leading-snug">
+                {insight.title}
+              </h3>
+              <div className="flex items-center gap-2 mt-1.5">
+                <Badge className={`text-[11px] px-2 py-0.5 ${priority.badgeClass}`}>
+                  {insight.priority}
+                </Badge>
+                <span className="text-xs text-muted-foreground">{category.label}</span>
+                {insight.status === 'new' && (
+                  <span className="w-2 h-2 rounded-full bg-primary" />
+                )}
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsDetailOpen(false)}
+              className="shrink-0 h-8 w-8 p-0"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Modal Body */}
+          <div className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
+            <div>
+              <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                {insight.description}
+              </p>
+            </div>
+
+            {insight.recommendedAction && (
+              <div className="bg-muted/50 rounded-md p-3">
+                <p className="text-xs font-medium text-muted-foreground mb-1">Recommended Action</p>
+                <p className="text-sm text-foreground">{insight.recommendedAction}</p>
+              </div>
+            )}
+
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+              <span>Detected: {new Date(insight.detectedAt).toLocaleDateString()}</span>
+              <span>Status: {insight.status}</span>
+            </div>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="flex items-center gap-2 p-4 border-t border-border">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleAskAI}
+              className="text-xs gap-1.5 flex-1"
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+              Ask AI
+            </Button>
+            {insight.status !== 'actioned' && onAction && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => { e.stopPropagation(); onAction(insight._id); setIsDetailOpen(false); }}
+                className="text-xs gap-1.5"
+              >
+                <Check className="h-3.5 w-3.5" />
+                Done
+              </Button>
+            )}
+            {insight.status !== 'dismissed' && onDismiss && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => { e.stopPropagation(); onDismiss(insight._id); setIsDetailOpen(false); }}
+                className="text-xs"
+              >
+                <X className="h-3.5 w-3.5" />
+                Dismiss
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
