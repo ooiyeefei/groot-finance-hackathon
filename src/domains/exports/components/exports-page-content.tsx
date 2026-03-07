@@ -12,6 +12,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -62,9 +63,23 @@ const MODULE_LABELS: Record<string, string> = {
 };
 
 export default function ExportsPageContent() {
-  const [activeTab, setActiveTab] = useState('reports');
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const { addToast } = useToast();
   const locale = useLocale();
+
+  // URL-based tab persistence: read from ?tab= query param
+  const validTabs = ['reports', 'export', 'templates', 'schedules', 'history'] as const;
+  type TabValue = typeof validTabs[number];
+  const tabFromUrl = searchParams.get('tab') as TabValue | null;
+  const activeTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : 'reports';
+
+  const handleTabChange = useCallback((value: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', value);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [searchParams, router, pathname]);
 
   // Get current business
   const { businessId: rawBusinessId, isLoading: businessLoading } = useActiveBusiness();
@@ -408,7 +423,7 @@ export default function ExportsPageContent() {
 
   return (
     <div className="space-y-6">
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className={`grid w-full h-auto p-1 gap-1 bg-muted border border-border ${canExport ? 'grid-cols-5 lg:w-[600px]' : 'grid-cols-1 lg:w-[150px]'}`}>
           <TabsTrigger value="reports" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
