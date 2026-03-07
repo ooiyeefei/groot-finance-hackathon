@@ -732,15 +732,21 @@ async function applyCodeMappings(
     }
 
     // Map line item account codes (category → account code)
+    // For Sales Book-Invoice, default to 5000 (Sales) if no mapping exists
+    const accountFallback = defaults["account_code"] || (module === "invoice" ? "5000" : "");
     if (Array.isArray(mapped.lineItems)) {
       mapped.lineItems = mapped.lineItems.map((item: any) => {
         const sourceCode = item.itemCode || record.expenseCategory || "";
-        let mappedCode = getCode("account_code", sourceCode);
-        // If the mapped code is the same as input (no mapping found) and it's not
-        // a valid account code format, use the default account code
-        if (mappedCode === sourceCode && defaults["account_code"]) {
-          mappedCode = defaults["account_code"];
+        let mappedCode = sourceCode;
+
+        // Try explicit mapping first
+        if (sourceCode && lookups["account_code"]?.[sourceCode]) {
+          mappedCode = lookups["account_code"][sourceCode];
+        } else if (accountFallback) {
+          // No explicit mapping found - use default/fallback
+          mappedCode = accountFallback;
         }
+
         return { ...item, itemCode: mappedCode };
       });
     }
