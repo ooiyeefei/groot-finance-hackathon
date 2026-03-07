@@ -157,6 +157,7 @@ export default function CatalogItemManager() {
       currency: string
       unitMeasurement?: string
       taxRate?: number
+      glCode?: string
     }) => {
       if (!businessId) return
       await createItem({
@@ -177,6 +178,7 @@ export default function CatalogItemManager() {
       currency: string
       unitMeasurement?: string
       taxRate?: number
+      glCode?: string
     }) => {
       if (formMode.kind !== 'edit') return
       await updateItem({
@@ -353,6 +355,9 @@ export default function CatalogItemManager() {
                     <th className="px-4 py-3 text-left text-sm font-medium text-foreground">
                       SKU
                     </th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-foreground">
+                      GL Code
+                    </th>
                     <th className="px-4 py-3 text-right text-sm font-medium text-foreground">
                       Price
                     </th>
@@ -377,7 +382,7 @@ export default function CatalogItemManager() {
                       if (isEditing) {
                         return (
                           <tr key={item._id}>
-                            <td colSpan={6} className="p-4">
+                            <td colSpan={7} className="p-4">
                               <CatalogItemForm mode="edit" initialData={item} onSubmit={handleUpdate} onCancel={() => setFormMode({ kind: 'closed' })} />
                             </td>
                           </tr>
@@ -399,6 +404,11 @@ export default function CatalogItemManager() {
                             </div>
                           </td>
                           <td className="px-4 py-3 text-sm text-muted-foreground">{item.sku || '--'}</td>
+                          <td className="px-4 py-3 text-sm">
+                            {item.glCode ? (
+                              <span className="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded border border-border">{item.glCode}</span>
+                            ) : '--'}
+                          </td>
                           <td className="px-4 py-3 text-sm text-foreground text-right">
                             {formatCurrency(item.unitPrice, item.currency)}
                             {item.billingInterval && item.billingInterval !== 'one_time' && (
@@ -448,7 +458,7 @@ export default function CatalogItemManager() {
                               </div>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-sm text-muted-foreground text-right" colSpan={4}>
+                          <td className="px-4 py-3 text-sm text-muted-foreground text-right" colSpan={5}>
                             {priceCount} price {priceCount === 1 ? 'variant' : 'variants'}
                           </td>
                         </tr>
@@ -461,7 +471,7 @@ export default function CatalogItemManager() {
                           if (isEditing) {
                             return (
                               <tr key={item._id}>
-                                <td colSpan={6} className="p-4">
+                                <td colSpan={7} className="p-4">
                                   <CatalogItemForm mode="edit" initialData={item} onSubmit={handleUpdate} onCancel={() => setFormMode({ kind: 'closed' })} />
                                 </td>
                               </tr>
@@ -481,6 +491,11 @@ export default function CatalogItemManager() {
                                 </div>
                               </td>
                               <td className="px-4 py-2.5 text-sm text-muted-foreground">{item.sku || '--'}</td>
+                              <td className="px-4 py-2.5 text-sm">
+                                {item.glCode ? (
+                                  <span className="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded border border-border">{item.glCode}</span>
+                                ) : '--'}
+                              </td>
                               <td className="px-4 py-2.5 text-sm text-foreground text-right font-medium">
                                 {formatCurrency(item.unitPrice, item.currency)}
                                 {item.billingInterval && item.billingInterval !== 'one_time' && (

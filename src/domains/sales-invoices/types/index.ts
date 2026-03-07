@@ -398,6 +398,7 @@ export interface CatalogItem {
   unitMeasurement?: string;
   taxRate?: number;
   category?: string;
+  glCode?: string;
   status: CatalogItemStatus;
   // Stripe sync fields
   source?: string; // "manual" | "stripe" — undefined treated as "manual"
@@ -419,6 +420,7 @@ export const catalogItemFormSchema = z.object({
   unitMeasurement: z.string().optional(),
   taxRate: z.number().min(0).max(1).optional(),
   category: z.string().optional(),
+  glCode: z.string().optional(),
 });
 
 // ============================================

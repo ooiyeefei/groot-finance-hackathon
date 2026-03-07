@@ -218,6 +218,21 @@ export const getDistinctMappableValues = query({
         if (result.account_code.length === 0) {
           result.account_code = ["(unmapped line items)"];
         }
+
+        // Look up glCode from catalog items for account code hints
+        const catalogItems = await ctx.db
+          .query("catalog_items")
+          .withIndex("by_businessId", (q) => q.eq("businessId", bizId))
+          .collect();
+        const glCodeHints: Record<string, string> = {};
+        for (const ci of catalogItems) {
+          if (ci.sku && ci.glCode && !ci.deletedAt) {
+            glCodeHints[ci.sku] = ci.glCode;
+          }
+        }
+        if (Object.keys(glCodeHints).length > 0) {
+          result._account_code_hints = glCodeHints as any;
+        }
       }
     }
 

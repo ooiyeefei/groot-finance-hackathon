@@ -1817,6 +1817,7 @@ export default defineSchema({
     unitMeasurement: v.optional(v.string()),
     taxRate: v.optional(v.number()),
     category: v.optional(v.string()),
+    glCode: v.optional(v.string()),
     status: catalogItemStatusValidator,
 
     // Stripe sync fields (014-stripe-catalog-sync)

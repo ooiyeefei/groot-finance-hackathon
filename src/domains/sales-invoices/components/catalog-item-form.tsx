@@ -27,6 +27,7 @@ interface CatalogItemFormData {
   currency: string
   unitMeasurement: string
   taxRate: string
+  glCode: string
 }
 
 interface CatalogItemFormProps {
@@ -41,6 +42,7 @@ interface CatalogItemFormProps {
     unitMeasurement?: string
     taxRate?: number
     category?: string
+    glCode?: string
   }) => Promise<void>
   onCancel: () => void
 }
@@ -75,6 +77,7 @@ function getInitialFormData(initialData?: Partial<CatalogItem>): CatalogItemForm
       initialData?.taxRate != null
         ? String(Math.round(initialData.taxRate * 10000) / 100)
         : '',
+    glCode: initialData?.glCode ?? '',
   }
 }
 
@@ -175,6 +178,7 @@ export default function CatalogItemForm({
           currency: formData.currency,
           unitMeasurement: formData.unitMeasurement.trim() || undefined,
           taxRate: taxRateDecimal,
+          glCode: formData.glCode.trim() || undefined,
         })
       } finally {
         setIsSubmitting(false)
@@ -236,6 +240,25 @@ export default function CatalogItemForm({
               value={formData.sku}
               onChange={(e) => handleChange('sku', e.target.value)}
             />
+          </div>
+
+          {/* SKU & GL Code (side by side) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="catalog-glcode" className="text-foreground">
+                GL Account Code
+              </Label>
+              <Input
+                id="catalog-glcode"
+                placeholder="e.g. 4100"
+                value={formData.glCode}
+                onChange={(e) => handleChange('glCode', e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Revenue account code for accounting export (IFRS 4xxx)
+              </p>
+            </div>
+            <div />
           </div>
 
           {/* Unit Price & Currency (side by side) */}

@@ -214,6 +214,7 @@ export const create = mutation({
     unitMeasurement: v.optional(v.string()),
     taxRate: v.optional(v.number()),
     category: v.optional(v.string()),
+    glCode: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await requireFinanceAdmin(ctx, args.businessId);
@@ -228,6 +229,7 @@ export const create = mutation({
       unitMeasurement: args.unitMeasurement,
       taxRate: args.taxRate,
       category: args.category,
+      glCode: args.glCode,
       status: "active",
       updatedAt: Date.now(),
     });
@@ -251,6 +253,7 @@ export const update = mutation({
     unitMeasurement: v.optional(v.string()),
     taxRate: v.optional(v.number()),
     category: v.optional(v.string()),
+    glCode: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await requireFinanceAdmin(ctx, args.businessId);
