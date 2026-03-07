@@ -110,15 +110,13 @@ export function CodeMappingStep({
         const saved = getTargetCode(mappingType, sourceValue);
         if (saved) {
           newMappings[mappingType][sourceValue] = saved;
+        } else if (codeHints?.[sourceValue]) {
+          // Use code hint from database (glCode for account_code, customerCode/supplierCode for debtor/creditor)
+          newMappings[mappingType][sourceValue] = codeHints[sourceValue];
         } else if (AUTO_CODE_TYPES.has(mappingType)) {
-          // Use actual code from database if available, otherwise generate
-          const realCode = codeHints?.[sourceValue];
-          if (realCode) {
-            newMappings[mappingType][sourceValue] = realCode;
-          } else {
-            const prefix = mappingType === "debtor_code" ? "D-" : "CR-";
-            newMappings[mappingType][sourceValue] = generateCodeFromName(sourceValue, prefix);
-          }
+          // Generate code from name for creditor/debtor only
+          const prefix = mappingType === "debtor_code" ? "D-" : "CR-";
+          newMappings[mappingType][sourceValue] = generateCodeFromName(sourceValue, prefix);
         } else {
           newMappings[mappingType][sourceValue] = "";
         }
@@ -277,9 +275,11 @@ export function CodeMappingStep({
                 const hintsKey2 = `_${mappingType}_hints`;
                 const codeHints2 = (distinctValues as any)?.[hintsKey2] as Record<string, string> | undefined;
                 const realCode = codeHints2?.[sourceValue];
-                const grootCode = AUTO_CODE_TYPES.has(mappingType)
-                  ? (realCode || generateCodeFromName(sourceValue, mappingType === "debtor_code" ? "D-" : "CR-"))
-                  : null;
+                const grootCode = realCode
+                  ? realCode
+                  : AUTO_CODE_TYPES.has(mappingType)
+                    ? generateCodeFromName(sourceValue, mappingType === "debtor_code" ? "D-" : "CR-")
+                    : null;
                 return (
                 <div
                   key={sourceValue}

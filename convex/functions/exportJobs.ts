@@ -376,6 +376,7 @@ const FIELD_DEFS: Record<string, { id: string; label: string; type: string }[]> 
 const MASTER_DATA_TEMPLATES: Record<string, string> = {
   "master-accounting-creditor": "vendors",
   "master-accounting-debtor": "customers",
+  "master-accounting-chart-of-account": "categories",
 };
 
 async function getRecordsByModule(
@@ -653,6 +654,45 @@ async function getMasterDataRecords(
     }
 
     return [...customerRecords, ...invoiceCustomerRecords];
+  }
+
+  if (tableName === "categories") {
+    // Chart of Account export: read expense + COGS categories with glCode
+    const business = await ctx.db.get(businessId);
+    if (!business) return [];
+
+    const expenseCats = (business.customExpenseCategories || []) as Array<{
+      id?: string; category_name?: string; glCode?: string; is_active?: boolean;
+    }>;
+    const cogsCats = (business.customCogsCategories || []) as Array<{
+      id?: string; category_name?: string; glCode?: string; is_active?: boolean;
+    }>;
+
+    const records: any[] = [];
+
+    // Expense categories → EXP account type
+    for (const cat of expenseCats) {
+      if (!cat.glCode || !cat.is_active) continue;
+      records.push({
+        glCode: cat.glCode,
+        categoryName: cat.category_name || "",
+        accountType: "EXP",
+        drCr: "DR",
+      });
+    }
+
+    // COGS categories → COS account type
+    for (const cat of cogsCats) {
+      if (!cat.glCode || !cat.is_active) continue;
+      records.push({
+        glCode: cat.glCode,
+        categoryName: cat.category_name || "",
+        accountType: "COS",
+        drCr: "DR",
+      });
+    }
+
+    return records;
   }
 
   return [];

@@ -114,6 +114,30 @@ export const getDistinctMappableValues = query({
           ),
         ];
         result.account_code = categories.sort();
+
+        // Look up glCode from business category config for account code hints
+        const business = await ctx.db.get(bizId);
+        const expenseCats = (business?.customExpenseCategories || []) as Array<{
+          id?: string; category_name?: string; glCode?: string;
+        }>;
+        const cogsCats = (business?.customCogsCategories || []) as Array<{
+          id?: string; category_name?: string; glCode?: string;
+        }>;
+        const allCats = [...expenseCats, ...cogsCats];
+        const glCodeHints: Record<string, string> = {};
+        for (const cat of allCats) {
+          // Match by category ID (which is the expenseCategory value on claims)
+          if (cat.id && cat.glCode) {
+            glCodeHints[cat.id] = cat.glCode;
+          }
+          // Also match by category_name for display
+          if (cat.category_name && cat.glCode) {
+            glCodeHints[cat.category_name] = cat.glCode;
+          }
+        }
+        if (Object.keys(glCodeHints).length > 0) {
+          result._account_code_hints = glCodeHints as any;
+        }
       }
 
       if (args.mappingTypes.includes("creditor_code")) {

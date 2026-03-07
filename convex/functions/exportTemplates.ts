@@ -41,6 +41,7 @@ const PREBUILT_TEMPLATE_IDS: Record<string, string[]> = {
     "autocount-journal",
     "generic-accounting",
     "master-accounting-journal",
+    "master-accounting-chart-of-account",
   ],
   invoice: [
     "sql-accounting-ap-pi",

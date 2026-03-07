@@ -943,9 +943,41 @@ const MASTER_ACCOUNTING_JOURNAL: PrebuiltTemplate = {
   ],
 };
 
-// NOTE: Chart of Account template removed — Groot Finance does not have
-// structured chart of accounts data (only free-text categories).
-// Needs a separate "Chart of Accounts Management" feature first.
+/**
+ * Master Accounting - Chart of Account (from category glCodes)
+ * Flat format, pipe-delimited, no column headers, .txt
+ * Exports expense categories as EXP and COGS categories as COS account types
+ */
+const MASTER_ACCOUNTING_CHART_OF_ACCOUNT: PrebuiltTemplate = {
+  id: "master-accounting-chart-of-account",
+  name: "Master Accounting (Chart of Account)",
+  description:
+    "Export expense/COGS categories as Chart of Account for Master Accounting import",
+  module: "accounting",
+  version: "1.0.0",
+  targetSystem: "master-accounting",
+  formatType: "flat",
+  delimiter: "|",
+  fileExtension: ".txt",
+  defaultDateFormat: "DD/MM/YYYY",
+  defaultDecimalPlaces: 2,
+  sectionHeader: "Chart of Account",
+  includeColumnHeaders: false,
+  requiresCodeMapping: false,
+  fieldMappings: [
+    { sourceField: "glCode", targetColumn: "AccountCode", order: 1 },
+    { sourceField: "categoryName", targetColumn: "Description", order: 2 },
+    { sourceField: "accountType", targetColumn: "AccountType", order: 3 },
+    { sourceField: '"NONE"', targetColumn: "SpecialType", order: 4 },
+    { sourceField: "drCr", targetColumn: "DRCR", order: 5 },
+    { sourceField: '""', targetColumn: "CostCentreCode", order: 6 },
+    { sourceField: '""', targetColumn: "DefaultGSTTypeSupply", order: 7 },
+    { sourceField: '""', targetColumn: "DefaultGSTTypePurchase", order: 8 },
+    { sourceField: '""', targetColumn: "MSICCode", order: 9 },
+    { sourceField: '"MYR"', targetColumn: "CurrencyCode", order: 10 },
+    { sourceField: '""', targetColumn: "CustomsTariffServiceType", order: 11 },
+  ],
+};
 
 /**
  * Master Accounting - Creditor/Supplier (Master Data)
@@ -1118,6 +1150,7 @@ export const ACCOUNTING_TEMPLATES: PrebuiltTemplate[] = [
   AUTOCOUNT_JOURNAL,
   GENERIC_ACCOUNTING,
   MASTER_ACCOUNTING_JOURNAL,
+  MASTER_ACCOUNTING_CHART_OF_ACCOUNT,
 ];
 
 export const INVOICE_TEMPLATES: PrebuiltTemplate[] = [
