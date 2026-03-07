@@ -2711,9 +2711,18 @@ const EXPENSE_GL_DEFAULTS: Array<{ keywords: string[]; glCode: string }> = [
 ];
 
 const COGS_GL_DEFAULTS: Array<{ keywords: string[]; glCode: string }> = [
-  { keywords: ["subcontract", "freelance", "outsource"], glCode: "5300" },
-  { keywords: ["material", "raw material", "project material"], glCode: "5100" },
-  { keywords: ["software", "license", "saas"], glCode: "5100" },
+  { keywords: ["subcontract", "freelance", "outsource", "labour", "labor"], glCode: "5300" },
+  { keywords: ["material", "raw material", "project material", "ingredient", "component", "parts"], glCode: "5100" },
+  { keywords: ["software", "license", "saas", "tool", "platform", "cloud"], glCode: "5100" },
+  { keywords: ["shipping", "freight", "logistics", "delivery", "import", "duties"], glCode: "5200" },
+  { keywords: ["packaging", "wrapping"], glCode: "5120" },
+  { keywords: ["warehouse", "storage"], glCode: "5300" },
+  { keywords: ["beverage", "drink"], glCode: "5110" },
+  { keywords: ["food", "kitchen", "bakery", "pastry", "condiment", "frozen"], glCode: "5100" },
+  { keywords: ["quality", "testing"], glCode: "5300" },
+  { keywords: ["merchandise", "inventory", "stock"], glCode: "5100" },
+  { keywords: ["research", "data service"], glCode: "5200" },
+  { keywords: ["client deliverable"], glCode: "5130" },
 ];
 const COGS_GL_FALLBACK = "5000"; // Cost of Goods Sold (general)
 
