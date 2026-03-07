@@ -40,6 +40,7 @@ export interface CategoryFormData {
   requires_manager_approval: boolean
   sort_order: number
   is_active: boolean
+  glCode: string
 }
 
 interface CategoryFormModalProps {
@@ -71,7 +72,8 @@ export default function CategoryFormModal({
     policy_limit: 0,
     requires_manager_approval: true,
     sort_order: 99,
-    is_active: true
+    is_active: true,
+    glCode: ''
   })
 
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
@@ -92,7 +94,8 @@ export default function CategoryFormModal({
           policy_limit: editingCategory.policy_limit || 0,
           requires_manager_approval: true,
           sort_order: editingCategory.sort_order,
-          is_active: editingCategory.is_active ?? true
+          is_active: editingCategory.is_active ?? true,
+          glCode: (editingCategory as any).glCode || ''
         })
       } else {
         // Reset to default values for new category
@@ -259,6 +262,20 @@ export default function CategoryFormModal({
                     rows={2}
                     disabled={isLoading}
                   />
+                </div>
+
+                <div>
+                  <Label htmlFor="glCode">GL Account Code</Label>
+                  <Input
+                    id="glCode"
+                    value={formData.glCode}
+                    onChange={(e) => setFormData(prev => ({ ...prev, glCode: e.target.value.replace(/[^a-zA-Z0-9-]/g, '') }))}
+                    placeholder="e.g., 9120, 6010"
+                    className="mt-1 max-w-[200px]"
+                    maxLength={20}
+                    disabled={isLoading}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Chart of Account code for accounting software export</p>
                 </div>
               </div>
 

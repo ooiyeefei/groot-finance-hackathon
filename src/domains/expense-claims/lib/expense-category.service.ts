@@ -25,6 +25,7 @@ export interface CustomExpenseCategory {
   policy_limit?: number
   requires_manager_approval?: boolean
   sort_order?: number
+  glCode?: string
 }
 
 export interface EnabledCategory {
@@ -155,7 +156,8 @@ export async function createCategory(body: CustomExpenseCategory) {
     vendor_patterns: body.vendor_patterns,
     requires_receipt: body.requires_receipt,
     requires_manager_approval: body.requires_manager_approval ?? true,
-    sort_order: body.sort_order
+    sort_order: body.sort_order,
+    glCode: body.glCode,
   })
 
   return newCategory
@@ -203,7 +205,8 @@ export async function updateCategory(body: CustomExpenseCategory & { id: string 
     requires_receipt: body.requires_receipt,
     requires_manager_approval: body.requires_manager_approval,
     sort_order: body.sort_order,
-    is_active: body.is_active
+    is_active: body.is_active,
+    glCode: body.glCode,
   })
 
   return updatedCategory

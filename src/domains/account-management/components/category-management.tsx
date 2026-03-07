@@ -32,6 +32,7 @@ interface ExpenseCategory {
   requires_manager_approval: boolean
   sort_order: number
   is_default: boolean
+  glCode?: string
 }
 
 
@@ -308,7 +309,12 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
                     <div className="space-y-3 flex-1">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <h4 className="text-foreground font-medium">{category.category_name}</h4>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-foreground font-medium">{category.category_name}</h4>
+                            {category.glCode && (
+                              <span className="text-xs font-mono bg-muted-foreground/10 text-muted-foreground px-1.5 py-0.5 rounded">GL: {category.glCode}</span>
+                            )}
+                          </div>
                           {category.description && (
                             <p className="text-muted-foreground text-sm mt-1">{category.description}</p>
                           )}
