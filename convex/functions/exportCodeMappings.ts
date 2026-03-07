@@ -175,7 +175,25 @@ export const getDistinctMappableValues = query({
       }
 
       if (args.mappingTypes.includes("account_code")) {
-        result.account_code = result.account_code ?? [];
+        // Collect distinct item codes/categories from sales invoice line items
+        const allInvoices = await ctx.db
+          .query("sales_invoices")
+          .withIndex("by_businessId", (q) => q.eq("businessId", bizId))
+          .collect();
+
+        const itemCodes = new Set<string>();
+        for (const inv of allInvoices) {
+          for (const item of (inv.lineItems || [])) {
+            const code = item.itemCode?.trim();
+            if (code) itemCodes.add(code);
+          }
+        }
+        // Always include a "(No item code)" entry so the section shows
+        // and user can set a default for unmapped items
+        result.account_code = [...itemCodes].sort();
+        if (result.account_code.length === 0) {
+          result.account_code = ["(unmapped line items)"];
+        }
       }
     }
 
