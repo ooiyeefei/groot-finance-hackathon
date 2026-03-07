@@ -166,7 +166,7 @@ export default function COGSCategoryFormModal({
 
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative transform overflow-hidden rounded-xl bg-card shadow-2xl text-left transition-all w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div className="relative transform overflow-hidden rounded-xl bg-card shadow-2xl text-left transition-all w-full max-w-[470px] max-h-[90vh] flex flex-col">
 
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-border flex-shrink-0">
