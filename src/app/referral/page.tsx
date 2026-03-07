@@ -16,7 +16,7 @@ const howItWorks = [
   {
     step: '01',
     title: 'Share',
-    description: 'Get your unique referral link and share it with business owners in your network.',
+    description: 'Get your unique referral code and share it with business owners in your network.',
   },
   {
     step: '02',
@@ -137,9 +137,9 @@ export default function ReferralProgramPage() {
             <div className="grid gap-6 md:grid-cols-3">
               {howItWorks.map((item) => (
                 <div key={item.step}>
-                  <span className="text-3xl font-bold text-[#4285F4]/20">{item.step}</span>
-                  <h3 className="mt-2 text-lg font-semibold text-[#111827]">{item.title}</h3>
-                  <p className="mt-2 text-[15px] leading-relaxed text-[#6B7280]">{item.description}</p>
+                  <span className="text-4xl font-bold text-[#4285F4]/20">{item.step}</span>
+                  <h3 className="mt-2 text-xl font-semibold text-[#111827]">{item.title}</h3>
+                  <p className="mt-2 text-base leading-relaxed text-[#6B7280]">{item.description}</p>
                 </div>
               ))}
             </div>
