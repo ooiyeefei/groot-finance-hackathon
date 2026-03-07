@@ -154,7 +154,7 @@ Existing Groot Finance customers can participate as referrers with zero addition
 
 ### Attribution & Eligibility
 
-- **New logo deals only** — the referred business must not already be a Groot customer or in active Groot sales pipeline
+- **New paying subscriptions** — the referred business must not already be an active paying Groot customer or in active Groot sales pipeline
 - **90-day attribution window** — from the date you register the lead or share your referral link. If the lead doesn't convert within 90 days, attribution expires
 - **First-touch attribution** — if multiple partners refer the same lead, the first registered partner gets credit
 - **No self-referrals** — you cannot refer your own business entity
@@ -163,7 +163,7 @@ Existing Groot Finance customers can participate as referrers with zero addition
 ### Payout Terms
 
 - **Referrer payouts:** Released after the customer completes **30 days** as a paying subscriber (past trial)
-- **Reseller close payouts:** Released after the customer completes **60 days** as a paying subscriber
+- **Reseller close payouts:** Released after the customer completes **30 days** as a paying subscriber
 - **Renewal share:** Paid quarterly in arrears (e.g., Q1 renewals paid in April)
 - **Clawback:** If a customer churns or requests a refund within 90 days, the close payout is clawed back (deducted from your next payout or invoiced)
 - **Monthly payout cycle** for bounties and close payouts; **quarterly settlement** for renewal share

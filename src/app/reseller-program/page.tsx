@@ -26,7 +26,7 @@ const howItWorks = [
   {
     step: '03',
     title: 'Get Paid',
-    description: 'Receive close payout after 60 days of active billing. Earn 5% renewal share from Year 2 onward.',
+    description: 'Receive close payout after 30 days of active billing. Earn 5% renewal share from Year 2 onward.',
   },
 ]
 
@@ -39,9 +39,9 @@ const foundingBenefits = [
 ]
 
 const programRules = [
-  'New logo deals only; 90-day attribution window',
+  'New paying subscriptions; 90-day attribution window',
   'Reseller deal registration required prior to sale',
-  'Payouts released after 60 days of active billing',
+  'Payouts released after 30 days of active billing',
   'Commission on net collected subscription revenue',
   'First-touch attribution logic applies',
   'Clawback if customer churns/refunds within 90 days',
@@ -58,7 +58,7 @@ const faqItems = [
   },
 {
     q: 'How are payouts and renewals handled?',
-    a: 'Close payouts are released after the customer completes 60 days as a paying subscriber. Renewal share (5%) is settled quarterly in arrears.',
+    a: 'Close payouts are released after the customer completes 30 days as a paying subscriber. Renewal share (5%) is settled quarterly in arrears.',
   },
   {
     q: 'Where are full terms and legal rules?',
@@ -105,7 +105,7 @@ export default function ResellerProgramPage() {
       </header>
 
       {/* Brochure shell - floating card effect */}
-      <div className="page-shell mx-auto w-full max-w-[763px] px-6 py-10 md:py-14">
+      <div className="page-shell mx-[5%] py-10 md:mx-[15%] md:py-14">
         <main className="brochure overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-lg shadow-black/5">
 
           {/* Hero - clean white with blue accents */}

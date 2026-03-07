@@ -38,7 +38,7 @@ const whyRefer = [
 ]
 
 const programRules = [
-  'New logo deals only; 90-day attribution window',
+  'New paying subscriptions; 90-day attribution window',
   'First-touch attribution logic applies',
   'Referrer payouts released after 30 days of active billing',
   'Clawback if customer churns/refunds within 90 days',
@@ -101,7 +101,7 @@ export default function ReferralProgramPage() {
       </header>
 
       {/* Brochure shell */}
-      <div className="page-shell mx-auto w-full max-w-[763px] px-6 py-10 md:py-14">
+      <div className="page-shell mx-[5%] py-10 md:mx-[15%] md:py-14">
         <main className="brochure overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-lg shadow-black/5">
 
           {/* Hero */}
