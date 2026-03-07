@@ -733,10 +733,16 @@ async function applyCodeMappings(
 
     // Map line item account codes (category → account code)
     if (Array.isArray(mapped.lineItems)) {
-      mapped.lineItems = mapped.lineItems.map((item: any) => ({
-        ...item,
-        itemCode: getCode("account_code", item.itemCode || record.expenseCategory || ""),
-      }));
+      mapped.lineItems = mapped.lineItems.map((item: any) => {
+        const sourceCode = item.itemCode || record.expenseCategory || "";
+        let mappedCode = getCode("account_code", sourceCode);
+        // If the mapped code is the same as input (no mapping found) and it's not
+        // a valid account code format, use the default account code
+        if (mappedCode === sourceCode && defaults["account_code"]) {
+          mappedCode = defaults["account_code"];
+        }
+        return { ...item, itemCode: mappedCode };
+      });
     }
 
     return mapped;
