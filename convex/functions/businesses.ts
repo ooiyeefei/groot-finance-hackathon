@@ -866,6 +866,7 @@ export const createCogsCategory = mutation({
     ai_keywords: v.optional(v.array(v.string())),
     vendor_patterns: v.optional(v.array(v.string())),
     sort_order: v.optional(v.number()),
+    glCode: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -906,6 +907,7 @@ export const createCogsCategory = mutation({
       ai_keywords?: string[];
       vendor_patterns?: string[];
       sort_order?: number;
+      glCode?: string;
       created_at: string;
       updated_at: string;
     }>) || [];
@@ -927,6 +929,7 @@ export const createCogsCategory = mutation({
       ai_keywords: args.ai_keywords || [],
       vendor_patterns: args.vendor_patterns || [],
       sort_order: args.sort_order || 99,
+      glCode: args.glCode,
       created_at: now,
       updated_at: now,
     };
@@ -959,6 +962,7 @@ export const updateCogsCategory = mutation({
     vendor_patterns: v.optional(v.array(v.string())),
     sort_order: v.optional(v.number()),
     is_active: v.optional(v.boolean()),
+    glCode: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -999,6 +1003,7 @@ export const updateCogsCategory = mutation({
       ai_keywords?: string[];
       vendor_patterns?: string[];
       sort_order?: number;
+      glCode?: string;
       created_at: string;
       updated_at: string;
     }>) || [];
@@ -1031,6 +1036,7 @@ export const updateCogsCategory = mutation({
       ...(args.vendor_patterns !== undefined && { vendor_patterns: args.vendor_patterns }),
       ...(args.sort_order !== undefined && { sort_order: args.sort_order }),
       ...(args.is_active !== undefined && { is_active: args.is_active }),
+      ...(args.glCode !== undefined && { glCode: args.glCode }),
       updated_at: new Date().toISOString(),
     };
 

@@ -18,6 +18,7 @@ export interface COGSCategory {
   ai_keywords: string[]
   vendor_patterns: string[]
   sort_order: number
+  glCode?: string
 }
 
 export interface COGSCategoryFormData {
@@ -28,6 +29,7 @@ export interface COGSCategoryFormData {
   vendor_patterns: string
   sort_order: number
   is_active: boolean
+  glCode: string
 }
 
 interface COGSCategoryFormModalProps {
@@ -54,7 +56,8 @@ export default function COGSCategoryFormModal({
     ai_keywords: '',
     vendor_patterns: '',
     sort_order: 99,
-    is_active: true
+    is_active: true,
+    glCode: ''
   })
 
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
@@ -70,7 +73,8 @@ export default function COGSCategoryFormModal({
           ai_keywords: editingCategory.ai_keywords.join(', '),
           vendor_patterns: editingCategory.vendor_patterns.join(', '),
           sort_order: editingCategory.sort_order,
-          is_active: editingCategory.is_active ?? true
+          is_active: editingCategory.is_active ?? true,
+          glCode: editingCategory.glCode || ''
         })
       } else {
         // Reset to default values for new category
@@ -81,7 +85,8 @@ export default function COGSCategoryFormModal({
           ai_keywords: '',
           vendor_patterns: '',
           sort_order: 99,
-          is_active: true
+          is_active: true,
+          glCode: ''
         })
       }
       setValidationErrors({})
@@ -229,6 +234,20 @@ export default function COGSCategoryFormModal({
                     rows={2}
                     disabled={isLoading}
                   />
+                </div>
+                <div>
+                  <Label htmlFor="glCode">GL Account Code</Label>
+                  <Input
+                    id="glCode"
+                    value={formData.glCode}
+                    onChange={(e) => setFormData(prev => ({ ...prev, glCode: e.target.value }))}
+                    placeholder="e.g., 5100"
+                    className="mt-1 max-w-[200px]"
+                    disabled={isLoading}
+                  />
+                  <p className="text-muted-foreground text-xs mt-1">
+                    Chart of Account code for accounting software export
+                  </p>
                 </div>
               </div>
 

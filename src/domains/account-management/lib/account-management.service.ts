@@ -830,6 +830,7 @@ export interface COGSCategory {
   ai_keywords?: string[]
   vendor_patterns?: string[]
   sort_order?: number
+  glCode?: string
   created_at?: string
   updated_at?: string
 }
@@ -841,6 +842,7 @@ export interface CreateCOGSCategoryRequest {
   ai_keywords?: string[]
   vendor_patterns?: string[]
   sort_order?: number
+  glCode?: string
 }
 
 export interface UpdateCOGSCategoryRequest {
@@ -852,6 +854,7 @@ export interface UpdateCOGSCategoryRequest {
   vendor_patterns?: string[]
   sort_order?: number
   is_active?: boolean
+  glCode?: string
 }
 
 // ============================================================================
@@ -949,7 +952,7 @@ export async function createCOGSCategory(
   businessId: string,
   request: CreateCOGSCategoryRequest
 ): Promise<COGSCategory> {
-  const { category_name, description, cost_type, ai_keywords, vendor_patterns, sort_order } = request
+  const { category_name, description, cost_type, ai_keywords, vendor_patterns, sort_order, glCode } = request
 
   // Validate required fields
   if (!category_name || !cost_type) {
@@ -974,7 +977,8 @@ export async function createCOGSCategory(
     cost_type,
     ai_keywords,
     vendor_patterns,
-    sort_order
+    sort_order,
+    glCode
   })
 
   console.log(`[COGS Service] Created category: ${category_name}`)
@@ -1001,7 +1005,7 @@ export async function updateCOGSCategory(
   businessId: string,
   request: UpdateCOGSCategoryRequest
 ): Promise<COGSCategory> {
-  const { id, category_name, description, cost_type, ai_keywords, vendor_patterns, sort_order, is_active } = request
+  const { id, category_name, description, cost_type, ai_keywords, vendor_patterns, sort_order, is_active, glCode } = request
 
   if (!id) {
     throw new Error('Category ID is required for updates')
@@ -1027,7 +1031,8 @@ export async function updateCOGSCategory(
     ai_keywords,
     vendor_patterns,
     sort_order,
-    is_active
+    is_active,
+    glCode
   })
 
   console.log(`[COGS Service] Updated category: ${id}`)
