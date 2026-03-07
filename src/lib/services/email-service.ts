@@ -765,6 +765,161 @@ Groot Finance Feedback System
   }
 
   /**
+   * Send partner application notification email to partnerships team
+   */
+  async sendPartnerApplicationNotification(data: {
+    recipientEmail: string
+    fullName: string
+    email: string
+    phone: string
+    companyName: string
+    companyWebsite?: string
+    partnerType: 'reseller' | 'referrer'
+    smeClients?: string
+    currentServices?: string
+    heardFrom?: string
+  }): Promise<{ success: boolean; error?: string; messageId?: string; provider?: 'ses' | 'resend' }> {
+    this.initialize()
+
+    const typeLabel = data.partnerType === 'reseller' ? 'Reseller (Sell-and-Close)' : 'Referrer (Lead-Only)'
+    const subject = `New Partner Application — ${typeLabel} — ${data.companyName}`
+
+    const htmlBody = this.generatePartnerApplicationHTML(data, typeLabel)
+    const textBody = this.generatePartnerApplicationText(data, typeLabel)
+
+    // Try SES first
+    try {
+      const rawMessage = this.buildRawEmail({
+        from: this.config!.fromEmail,
+        to: data.recipientEmail,
+        subject,
+        htmlBody,
+        textBody
+      })
+
+      const command = new SendRawEmailCommand({
+        RawMessage: { Data: Buffer.from(rawMessage) },
+        ConfigurationSetName: this.config!.configurationSet
+      })
+
+      const response = await this.ses!.send(command)
+
+      if (response.MessageId) {
+        console.log(`[EmailService] Partner application sent via SES to ${data.recipientEmail}, MessageId: ${response.MessageId}`)
+        return { success: true, messageId: response.MessageId, provider: 'ses' }
+      }
+    } catch (sesError) {
+      console.error('[EmailService] SES failed for partner application:', sesError)
+
+      if (this.isSandboxError(sesError) && this.resend) {
+        console.log('[EmailService] SES sandbox error, falling back to Resend for partner application...')
+        const resendResult = await this.sendViaResend({
+          to: data.recipientEmail,
+          subject,
+          htmlBody,
+          textBody
+        })
+        if (resendResult.success) {
+          return { ...resendResult, provider: 'resend' }
+        }
+        return { success: false, error: `SES sandbox error, Resend fallback also failed: ${resendResult.error}` }
+      }
+
+      return { success: false, error: sesError instanceof Error ? sesError.message : 'Unknown email error' }
+    }
+
+    return { success: false, error: 'SES did not return a MessageId' }
+  }
+
+  private generatePartnerApplicationHTML(data: {
+    fullName: string
+    email: string
+    phone: string
+    companyName: string
+    companyWebsite?: string
+    partnerType: 'reseller' | 'referrer'
+    smeClients?: string
+    currentServices?: string
+    heardFrom?: string
+  }, typeLabel: string): string {
+    const fields = [
+      { label: 'Full Name', value: data.fullName },
+      { label: 'Email', value: data.email },
+      { label: 'Phone / WhatsApp', value: data.phone },
+      { label: 'Company', value: data.companyName },
+      ...(data.companyWebsite ? [{ label: 'Website / SSM', value: data.companyWebsite }] : []),
+      { label: 'Partner Type', value: typeLabel },
+      ...(data.smeClients ? [{ label: 'SME Clients Served', value: data.smeClients }] : []),
+      ...(data.currentServices ? [{ label: 'Current Services', value: data.currentServices }] : []),
+      ...(data.heardFrom ? [{ label: 'How They Heard', value: data.heardFrom }] : []),
+    ]
+
+    const fieldsHTML = fields.map(f =>
+      `<tr><td style="padding:8px 12px;font-weight:600;color:#374151;white-space:nowrap;vertical-align:top;">${f.label}</td><td style="padding:8px 12px;color:#111827;">${f.value}</td></tr>`
+    ).join('')
+
+    const accentColor = data.partnerType === 'reseller' ? '#4285F4' : '#7C3AED'
+
+    return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>New Partner Application</title>
+    </head>
+    <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;background:#f9fafb;">
+      <div style="background:${accentColor};color:white;padding:24px 20px;border-radius:8px 8px 0 0;text-align:center;">
+        <h1 style="margin:0;font-size:20px;">New Partner Application</h1>
+        <p style="margin:8px 0 0;opacity:0.9;font-size:14px;">${typeLabel}</p>
+      </div>
+
+      <div style="background:#ffffff;padding:24px 20px;border:1px solid #e5e7eb;border-top:none;">
+        <table style="width:100%;border-collapse:collapse;font-size:14px;">
+          ${fieldsHTML}
+        </table>
+      </div>
+
+      <div style="background:#f9fafb;padding:16px 20px;text-align:center;font-size:13px;color:#6b7280;border-radius:0 0 8px 8px;border:1px solid #e5e7eb;border-top:none;">
+        <p style="margin:0;">Groot Finance Partner Program &middot; <a href="mailto:${data.email}" style="color:${accentColor};">Reply to applicant</a></p>
+      </div>
+    </body>
+    </html>
+    `
+  }
+
+  private generatePartnerApplicationText(data: {
+    fullName: string
+    email: string
+    phone: string
+    companyName: string
+    companyWebsite?: string
+    partnerType: 'reseller' | 'referrer'
+    smeClients?: string
+    currentServices?: string
+    heardFrom?: string
+  }, typeLabel: string): string {
+    const lines = [
+      `NEW PARTNER APPLICATION — ${typeLabel}`,
+      '',
+      `Full Name: ${data.fullName}`,
+      `Email: ${data.email}`,
+      `Phone/WhatsApp: ${data.phone}`,
+      `Company: ${data.companyName}`,
+      data.companyWebsite ? `Website/SSM: ${data.companyWebsite}` : '',
+      `Partner Type: ${typeLabel}`,
+      '',
+      data.smeClients ? `SME Clients Served: ${data.smeClients}` : '',
+      data.currentServices ? `Current Services: ${data.currentServices}` : '',
+      data.heardFrom ? `How They Heard: ${data.heardFrom}` : '',
+      '',
+      '---',
+      'Groot Finance Partner Program',
+    ].filter(Boolean).join('\n')
+    return lines
+  }
+
+  /**
    * Send leave request notification email (with Resend fallback)
    */
   async sendLeaveNotification(data: LeaveNotificationData): Promise<{ success: boolean; error?: string; messageId?: string; provider?: 'ses' | 'resend' }> {

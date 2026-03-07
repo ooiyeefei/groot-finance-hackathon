@@ -70,31 +70,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const typeLabel = partnerType === 'reseller' ? 'Reseller (Sell-and-Close)' : 'Referrer (Lead-Only)'
-
-    // Build a structured message for the feedback notification email
-    const lines = [
-      `PARTNER APPLICATION — ${typeLabel}`,
-      '',
-      `Full Name: ${fullName}`,
-      `Email: ${email}`,
-      `Phone/WhatsApp: ${phone}`,
-      `Company: ${companyName}`,
-      companyWebsite ? `Website/SSM: ${companyWebsite}` : '',
-      `Partner Type: ${typeLabel}`,
-      '',
-      smeClients ? `SME Clients Served: ${smeClients}` : '',
-      currentServices ? `Current Services: ${currentServices}` : '',
-      heardFrom ? `How They Heard: ${heardFrom}` : '',
-    ].filter(Boolean).join('\n')
-
     try {
-      await emailService.sendFeedbackNotification({
+      await emailService.sendPartnerApplicationNotification({
         recipientEmail: PARTNERS_EMAIL,
-        feedbackType: 'general',
-        feedbackMessage: lines,
-        submitterEmail: email,
-        isAnonymous: false,
+        fullName,
+        email,
+        phone,
+        companyName,
+        companyWebsite,
+        partnerType,
+        smeClients,
+        currentServices,
+        heardFrom,
       })
       console.log('[Partner Application API] Email sent to', PARTNERS_EMAIL, 'from', email)
     } catch (err) {
