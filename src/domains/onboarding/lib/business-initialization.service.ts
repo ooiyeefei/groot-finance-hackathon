@@ -134,31 +134,6 @@ async function generateBusinessCategories(
     const slugify = (name: string) => name.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
     const genId = (name: string) => `${slugify(name)}_${Math.random().toString(36).substring(2, 8)}`
 
-    // Default GL codes by category name (Malaysian SME COA standard)
-    const DEFAULT_GL_CODES: Record<string, string> = {
-      // Expense categories
-      'Travel': '9120',
-      'Office Supplies': '9040',
-      'Office Expenses': '9040',
-      'Entertainment & Meal': '9050',
-      'Client Entertainment': '9050',
-      'IT Expenses': '9050',
-      'Subscription & Licenses': '9050',
-      'Professional Development': '9050',
-      'Client Gifts': '9050',
-      'Other': '9050',
-      // COGS categories
-      'Subcontractors': '6010',
-      'Software Licenses': '6010',
-      'Project Materials': '6010',
-      'Raw Materials': '6000',
-      'Components': '6010',
-      'Machinery Parts': '6010',
-      'Packaging': '6010',
-      'Food Ingredients': '6000',
-      'Beverages': '6000',
-    };
-
     return {
       cogsCategories: cogsCategoryNames.map((name, index) => ({
         id: genId(name),
@@ -169,7 +144,6 @@ async function generateBusinessCategories(
         glCode: resolveGlCode(name, 'cogs', businessType),
         is_active: true,
         sort_order: index + 1,
-        glCode: DEFAULT_GL_CODES[name] || '6010',
       })),
       expenseCategories: expenseCategoryNames.map((name, index) => ({
         id: genId(name),
@@ -180,7 +154,6 @@ async function generateBusinessCategories(
         glCode: resolveGlCode(name, 'expense', businessType),
         is_active: true,
         sort_order: index + 1,
-        glCode: DEFAULT_GL_CODES[name] || '9050',
       }))
     };
   }
