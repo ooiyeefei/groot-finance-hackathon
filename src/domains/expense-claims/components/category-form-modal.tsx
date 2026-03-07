@@ -111,7 +111,8 @@ export default function CategoryFormModal({
           policy_limit: 0,
           requires_manager_approval: true,
           sort_order: 99,
-          is_active: true
+          is_active: true,
+          glCode: ''
         })
       }
       setValidationErrors({})
