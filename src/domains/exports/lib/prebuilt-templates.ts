@@ -1123,6 +1123,523 @@ const MASTER_ACCOUNTING_DEBTOR: PrebuiltTemplate = {
 };
 
 // ============================================
+// NEW MASTER ACCOUNTING TEMPLATES (GAP FILL)
+// ============================================
+
+/**
+ * Master Accounting - Purchases Book-Bill (AP Invoices → Creditor Bills)
+ * Hierarchical M/D-Item format, pipe-delimited, .txt
+ * Sources from incoming supplier invoices (invoices table, AP type)
+ */
+const MASTER_ACCOUNTING_PURCHASES_BILL_AP: PrebuiltTemplate = {
+  id: "master-accounting-purchases-bill-ap",
+  name: "Master Accounting (Purchases Book-Bill AP)",
+  description:
+    "Export incoming supplier invoices as Purchases Book-Bill for Master Accounting import",
+  module: "invoice",
+  version: "1.0.0",
+  targetSystem: "master-accounting",
+  formatType: "hierarchical",
+  delimiter: "|",
+  fileExtension: ".txt",
+  defaultDateFormat: "DD/MM/YYYY",
+  defaultDecimalPlaces: 2,
+  sectionHeader: "Purchases Book-Bill",
+  requiresCodeMapping: true,
+  codeMappingTypes: ["account_code", "creditor_code"],
+  fieldMappings: [],
+  masterFields: [
+    { sourceField: '"M"', targetColumn: "RecordType", order: 1 },
+    { sourceField: "invoiceNumber", targetColumn: "InvoiceCode", order: 2 },
+    {
+      sourceField: "invoiceDate",
+      targetColumn: "InvoiceDate",
+      order: 3,
+      dateFormat: "DD/MM/YYYY",
+    },
+    { sourceField: "entityCode", targetColumn: "CreditorCode", order: 4 },
+    { sourceField: "description", targetColumn: "Description", order: 5 },
+    { sourceField: "invoiceNumber", targetColumn: "ReferenceNo", order: 6 },
+    {
+      sourceField: "totalAmount",
+      targetColumn: "Amount",
+      order: 7,
+      decimalPlaces: 2,
+    },
+    {
+      sourceField: "exchangeRate",
+      targetColumn: "CurrencyRate",
+      order: 8,
+      decimalPlaces: 8,
+    },
+    { sourceField: '""', targetColumn: "TermCode", order: 9 },
+    { sourceField: '""', targetColumn: "StaffCode", order: 10 },
+    { sourceField: '""', targetColumn: "AreaCode", order: 11 },
+    { sourceField: '""', targetColumn: "DepartmentCode", order: 12 },
+    { sourceField: '""', targetColumn: "JobCode", order: 13 },
+    { sourceField: '"N"', targetColumn: "Cancelled", order: 14 },
+    { sourceField: '""', targetColumn: "CancelledRemark", order: 15 },
+  ],
+  detailFields: [
+    { sourceField: '"D-Item"', targetColumn: "RecordType", order: 1 },
+    {
+      sourceField: "lineItem.itemCode",
+      targetColumn: "AccountCode",
+      order: 2,
+    },
+    {
+      sourceField: "lineItem.description",
+      targetColumn: "Description",
+      order: 3,
+    },
+    { sourceField: '""', targetColumn: "DepartmentCode", order: 4 },
+    { sourceField: '""', targetColumn: "JobCode", order: 5 },
+    {
+      sourceField: "lineItem.totalAmount",
+      targetColumn: "AmountBeforeGST",
+      order: 6,
+      decimalPlaces: 2,
+    },
+    { sourceField: "lineItem.taxCode", targetColumn: "GSTTypeCode", order: 7 },
+    {
+      sourceField: "lineItem.taxRate",
+      targetColumn: "GSTPercent",
+      order: 8,
+      decimalPlaces: 2,
+    },
+    { sourceField: '"N"', targetColumn: "GSTInclusive", order: 9 },
+    {
+      sourceField: "lineItem.totalAmount",
+      targetColumn: "TaxableAmount",
+      order: 10,
+      decimalPlaces: 2,
+    },
+    {
+      sourceField: "lineItem.taxAmount",
+      targetColumn: "GSTAmount",
+      order: 11,
+      decimalPlaces: 2,
+    },
+  ],
+};
+
+/**
+ * Master Accounting - Cash Book-Receipt (Customer Payments Received)
+ * Hierarchical M/D-Item format, pipe-delimited, .txt
+ * Sources from paid sales invoices
+ */
+const MASTER_ACCOUNTING_CASHBOOK_RECEIPT: PrebuiltTemplate = {
+  id: "master-accounting-cashbook-receipt",
+  name: "Master Accounting (Cash Book-Receipt)",
+  description:
+    "Export customer payment receipts as Cash Book-Receipt for Master Accounting import",
+  module: "invoice",
+  version: "1.0.0",
+  targetSystem: "master-accounting",
+  formatType: "hierarchical",
+  delimiter: "|",
+  fileExtension: ".txt",
+  defaultDateFormat: "DD/MM/YYYY",
+  defaultDecimalPlaces: 2,
+  sectionHeader: "Cash Book-Receipt",
+  requiresCodeMapping: true,
+  codeMappingTypes: ["account_code", "bank_code"],
+  fieldMappings: [],
+  masterFields: [
+    { sourceField: '"M"', targetColumn: "RecordType", order: 1 },
+    { sourceField: "invoiceNumber", targetColumn: "ReceiptCode", order: 2 },
+    {
+      sourceField: "invoiceDate",
+      targetColumn: "ReceiptDate",
+      order: 3,
+      dateFormat: "DD/MM/YYYY",
+    },
+    { sourceField: '""', targetColumn: "ReceiptType", order: 4 },
+    { sourceField: '""', targetColumn: "BankCashACCode", order: 5 },
+    { sourceField: "entityName", targetColumn: "ReceivedFrom", order: 6 },
+    { sourceField: "description", targetColumn: "Description", order: 7 },
+    { sourceField: '""', targetColumn: "ChequeNo", order: 8 },
+    {
+      sourceField: "totalAmount",
+      targetColumn: "BankCashAmount",
+      order: 9,
+      decimalPlaces: 2,
+    },
+    { sourceField: '"1"', targetColumn: "BankCurrencyRate", order: 10 },
+    {
+      sourceField: "totalAmount",
+      targetColumn: "Amount",
+      order: 11,
+      decimalPlaces: 2,
+    },
+    { sourceField: '""', targetColumn: "StaffCode", order: 12 },
+    { sourceField: '""', targetColumn: "AreaCode", order: 13 },
+    { sourceField: '""', targetColumn: "Remark1", order: 14 },
+    { sourceField: '""', targetColumn: "Remark2", order: 15 },
+    { sourceField: '""', targetColumn: "Remark3", order: 16 },
+    { sourceField: '""', targetColumn: "Remark4", order: 17 },
+    { sourceField: '""', targetColumn: "Remark5", order: 18 },
+    { sourceField: '""', targetColumn: "Remark6", order: 19 },
+    { sourceField: '""', targetColumn: "Remark7", order: 20 },
+    { sourceField: '""', targetColumn: "Remark8", order: 21 },
+    { sourceField: '""', targetColumn: "DepartmentCode", order: 22 },
+    { sourceField: '""', targetColumn: "JobCode", order: 23 },
+    { sourceField: '"N"', targetColumn: "Cancelled", order: 24 },
+    { sourceField: '""', targetColumn: "CancelledRemark", order: 25 },
+  ],
+  detailFields: [
+    { sourceField: '"D-Item"', targetColumn: "RecordType", order: 1 },
+    {
+      sourceField: "lineItem.itemCode",
+      targetColumn: "AccountCode",
+      order: 2,
+    },
+    {
+      sourceField: "lineItem.description",
+      targetColumn: "Description1",
+      order: 3,
+    },
+    { sourceField: '""', targetColumn: "Description2", order: 4 },
+    { sourceField: '""', targetColumn: "RefNo1", order: 5 },
+    { sourceField: '""', targetColumn: "RefNo2", order: 6 },
+    { sourceField: '""', targetColumn: "StaffCode", order: 7 },
+    { sourceField: '""', targetColumn: "DepartmentCode", order: 8 },
+    { sourceField: '""', targetColumn: "JobCode", order: 9 },
+    {
+      sourceField: "lineItem.totalAmount",
+      targetColumn: "AmountBeforeGST",
+      order: 10,
+      decimalPlaces: 2,
+    },
+    {
+      sourceField: "lineItem.taxCode",
+      targetColumn: "GSTTypeCode",
+      order: 11,
+    },
+    {
+      sourceField: "lineItem.taxRate",
+      targetColumn: "GSTPercent",
+      order: 12,
+      decimalPlaces: 2,
+    },
+    { sourceField: '"N"', targetColumn: "GSTInclusive", order: 13 },
+    {
+      sourceField: "lineItem.totalAmount",
+      targetColumn: "TaxableAmount",
+      order: 14,
+      decimalPlaces: 2,
+    },
+    {
+      sourceField: "lineItem.taxAmount",
+      targetColumn: "GSTAmount",
+      order: 15,
+      decimalPlaces: 2,
+    },
+  ],
+};
+
+/**
+ * Master Accounting - Sales Book-Credit Note (Voided AR Invoices)
+ * Hierarchical M/D-Item format, pipe-delimited, .txt
+ * Sources from sales_invoices with status=void
+ */
+const MASTER_ACCOUNTING_SALES_CREDIT_NOTE: PrebuiltTemplate = {
+  id: "master-accounting-sales-credit-note",
+  name: "Master Accounting (Sales Book-Credit Note)",
+  description:
+    "Export voided sales invoices as Sales Book-Credit Note for Master Accounting import",
+  module: "invoice",
+  version: "1.0.0",
+  targetSystem: "master-accounting",
+  formatType: "hierarchical",
+  delimiter: "|",
+  fileExtension: ".txt",
+  defaultDateFormat: "DD/MM/YYYY",
+  defaultDecimalPlaces: 2,
+  sectionHeader: "Sales Book-Credit Note",
+  requiresCodeMapping: true,
+  codeMappingTypes: ["account_code", "debtor_code"],
+  fieldMappings: [],
+  masterFields: [
+    { sourceField: '"M"', targetColumn: "RecordType", order: 1 },
+    { sourceField: "invoiceNumber", targetColumn: "DebtorCNCode", order: 2 },
+    {
+      sourceField: "invoiceDate",
+      targetColumn: "DebtorCNDate",
+      order: 3,
+      dateFormat: "DD/MM/YYYY",
+    },
+    { sourceField: "entityCode", targetColumn: "DebtorCode", order: 4 },
+    { sourceField: "description", targetColumn: "Description", order: 5 },
+    { sourceField: '""', targetColumn: "ReferenceNo", order: 6 },
+    {
+      sourceField: "totalAmount",
+      targetColumn: "Amount",
+      order: 7,
+      decimalPlaces: 2,
+    },
+    {
+      sourceField: "exchangeRate",
+      targetColumn: "CurrencyRate",
+      order: 8,
+      decimalPlaces: 8,
+    },
+    { sourceField: '""', targetColumn: "StaffCode", order: 9 },
+    { sourceField: '""', targetColumn: "AreaCode", order: 10 },
+    { sourceField: '""', targetColumn: "DepartmentCode", order: 11 },
+    { sourceField: '""', targetColumn: "JobCode", order: 12 },
+    { sourceField: '"N"', targetColumn: "Cancelled", order: 13 },
+    { sourceField: '""', targetColumn: "CancelledRemark", order: 14 },
+  ],
+  detailFields: [
+    { sourceField: '"D-Item"', targetColumn: "RecordType", order: 1 },
+    {
+      sourceField: "lineItem.itemCode",
+      targetColumn: "AccountCode",
+      order: 2,
+    },
+    {
+      sourceField: "lineItem.description",
+      targetColumn: "Description",
+      order: 3,
+    },
+    { sourceField: '""', targetColumn: "DepartmentCode", order: 4 },
+    { sourceField: '""', targetColumn: "JobCode", order: 5 },
+    { sourceField: '"N"', targetColumn: "NonSalesItem", order: 6 },
+    {
+      sourceField: "lineItem.totalAmount",
+      targetColumn: "AmountBeforeGST",
+      order: 7,
+      decimalPlaces: 2,
+    },
+    { sourceField: "lineItem.taxCode", targetColumn: "GSTTypeCode", order: 8 },
+    {
+      sourceField: "lineItem.taxRate",
+      targetColumn: "GSTPercent",
+      order: 9,
+      decimalPlaces: 2,
+    },
+    { sourceField: '"N"', targetColumn: "GSTInclusive", order: 10 },
+    {
+      sourceField: "lineItem.totalAmount",
+      targetColumn: "TaxableAmount",
+      order: 11,
+      decimalPlaces: 2,
+    },
+    {
+      sourceField: "lineItem.taxAmount",
+      targetColumn: "GSTAmount",
+      order: 12,
+      decimalPlaces: 2,
+    },
+    { sourceField: '"Credit Note"', targetColumn: "Reason", order: 13 },
+  ],
+};
+
+/**
+ * Master Accounting - Purchases Book-Debit Note (Expense Claim Reversals)
+ * Hierarchical M/D-Item format, pipe-delimited, .txt
+ * Sources from rejected/reversed expense claims
+ */
+const MASTER_ACCOUNTING_PURCHASES_DEBIT_NOTE: PrebuiltTemplate = {
+  id: "master-accounting-purchases-debit-note",
+  name: "Master Accounting (Purchases Book-Debit Note)",
+  description:
+    "Export expense claim reversals as Purchases Book-Debit Note for Master Accounting import",
+  module: "expense",
+  version: "1.0.0",
+  targetSystem: "master-accounting",
+  formatType: "hierarchical",
+  delimiter: "|",
+  fileExtension: ".txt",
+  defaultDateFormat: "DD/MM/YYYY",
+  defaultDecimalPlaces: 2,
+  sectionHeader: "Purchases Book-Debit Note",
+  requiresCodeMapping: true,
+  codeMappingTypes: ["account_code", "creditor_code"],
+  fieldMappings: [],
+  masterFields: [
+    { sourceField: '"M"', targetColumn: "RecordType", order: 1 },
+    { sourceField: "referenceNumber", targetColumn: "CreditorDNCode", order: 2 },
+    {
+      sourceField: "transactionDate",
+      targetColumn: "CreditorDNDate",
+      order: 3,
+      dateFormat: "DD/MM/YYYY",
+    },
+    { sourceField: "vendorName", targetColumn: "CreditorCode", order: 4 },
+    { sourceField: "description", targetColumn: "Description", order: 5 },
+    { sourceField: "referenceNumber", targetColumn: "ReferenceNo", order: 6 },
+    {
+      sourceField: "totalAmount",
+      targetColumn: "Amount",
+      order: 7,
+      decimalPlaces: 2,
+    },
+    {
+      sourceField: "exchangeRate",
+      targetColumn: "CurrencyRate",
+      order: 8,
+      decimalPlaces: 8,
+    },
+    { sourceField: '""', targetColumn: "TermCode", order: 9 },
+    { sourceField: '""', targetColumn: "StaffCode", order: 10 },
+    { sourceField: '""', targetColumn: "AreaCode", order: 11 },
+    { sourceField: '""', targetColumn: "DepartmentCode", order: 12 },
+    { sourceField: '""', targetColumn: "JobCode", order: 13 },
+    { sourceField: '"N"', targetColumn: "Cancelled", order: 14 },
+    { sourceField: '""', targetColumn: "CancelledRemark", order: 15 },
+  ],
+  detailFields: [
+    { sourceField: '"D-Item"', targetColumn: "RecordType", order: 1 },
+    {
+      sourceField: "lineItem.itemCode",
+      targetColumn: "AccountCode",
+      order: 2,
+    },
+    {
+      sourceField: "lineItem.description",
+      targetColumn: "Description",
+      order: 3,
+    },
+    { sourceField: '""', targetColumn: "DepartmentCode", order: 4 },
+    { sourceField: '""', targetColumn: "JobCode", order: 5 },
+    {
+      sourceField: "lineItem.totalAmount",
+      targetColumn: "AmountBeforeGST",
+      order: 6,
+      decimalPlaces: 2,
+    },
+    { sourceField: "lineItem.taxCode", targetColumn: "GSTTypeCode", order: 7 },
+    {
+      sourceField: "lineItem.taxRate",
+      targetColumn: "GSTPercent",
+      order: 8,
+      decimalPlaces: 2,
+    },
+    { sourceField: '"N"', targetColumn: "GSTInclusive", order: 9 },
+    {
+      sourceField: "lineItem.totalAmount",
+      targetColumn: "TaxableAmount",
+      order: 10,
+      decimalPlaces: 2,
+    },
+    {
+      sourceField: "lineItem.taxAmount",
+      targetColumn: "GSTAmount",
+      order: 11,
+      decimalPlaces: 2,
+    },
+    { sourceField: '"Reversal"', targetColumn: "Reason", order: 12 },
+  ],
+};
+
+/**
+ * Master Accounting - Stock Item (Product Catalog → Master Data)
+ * Flat format, pipe-delimited, no column headers, .txt
+ * Item Code|Description|Item Type|Item Group|UoM|Tax Code|Purchase Tax Code|
+ * Base UOM Rate|Ref Cost|Ref Price|Reorder Qty|Reorder Level|Lead Time|Is Active|Stock Control
+ */
+const MASTER_ACCOUNTING_STOCK_ITEM: PrebuiltTemplate = {
+  id: "master-accounting-stock-item",
+  name: "Master Accounting (Stock Item)",
+  description:
+    "Export product catalog as Stock Item master data for Master Accounting import",
+  module: "invoice",
+  version: "1.0.0",
+  targetSystem: "master-accounting",
+  formatType: "flat",
+  delimiter: "|",
+  fileExtension: ".txt",
+  defaultDateFormat: "DD/MM/YYYY",
+  defaultDecimalPlaces: 2,
+  sectionHeader: "Stock Item",
+  includeColumnHeaders: false,
+  requiresCodeMapping: false,
+  fieldMappings: [
+    { sourceField: "itemCode", targetColumn: "ItemCode", order: 1 },
+    { sourceField: "description", targetColumn: "Description", order: 2 },
+    { sourceField: '"STOCKITEM"', targetColumn: "ItemType", order: 3 },
+    { sourceField: '""', targetColumn: "ItemGroup", order: 4 },
+    { sourceField: "unitMeasurement", targetColumn: "UoM", order: 5 },
+    { sourceField: "taxCode", targetColumn: "TaxCode", order: 6 },
+    { sourceField: '""', targetColumn: "PurchaseTaxCode", order: 7 },
+    { sourceField: '"1"', targetColumn: "BaseUOMRate", order: 8 },
+    {
+      sourceField: "refCost",
+      targetColumn: "RefCost",
+      order: 9,
+      decimalPlaces: 2,
+    },
+    {
+      sourceField: "refPrice",
+      targetColumn: "RefPrice",
+      order: 10,
+      decimalPlaces: 2,
+    },
+    { sourceField: '"0"', targetColumn: "ReorderQuantity", order: 11 },
+    { sourceField: '"0"', targetColumn: "ReorderLevel", order: 12 },
+    { sourceField: '"0"', targetColumn: "LeadTime", order: 13 },
+    { sourceField: '"Y"', targetColumn: "IsActive", order: 14 },
+    { sourceField: '"N"', targetColumn: "StockControl", order: 15 },
+  ],
+};
+
+/**
+ * Master Accounting - Category (Expense/COGS Category Names → Master Data)
+ * Flat format, pipe-delimited, no column headers, .txt
+ * Category Code|Description
+ */
+const MASTER_ACCOUNTING_CATEGORY: PrebuiltTemplate = {
+  id: "master-accounting-category",
+  name: "Master Accounting (Category)",
+  description:
+    "Export expense/COGS category names as Category master data for Master Accounting import",
+  module: "accounting",
+  version: "1.0.0",
+  targetSystem: "master-accounting",
+  formatType: "flat",
+  delimiter: "|",
+  fileExtension: ".txt",
+  defaultDateFormat: "DD/MM/YYYY",
+  defaultDecimalPlaces: 2,
+  sectionHeader: "Category",
+  includeColumnHeaders: false,
+  requiresCodeMapping: false,
+  fieldMappings: [
+    { sourceField: "categoryCode", targetColumn: "CategoryCode", order: 1 },
+    { sourceField: "description", targetColumn: "Description", order: 2 },
+  ],
+};
+
+/**
+ * Master Accounting - Cost Centre (Business Departments → Master Data)
+ * Flat format, pipe-delimited, no column headers, .txt
+ * Cost Centre Code|Description
+ */
+const MASTER_ACCOUNTING_COST_CENTRE: PrebuiltTemplate = {
+  id: "master-accounting-cost-centre",
+  name: "Master Accounting (Cost Centre)",
+  description:
+    "Export business departments as Cost Centre master data for Master Accounting import",
+  module: "accounting",
+  version: "1.0.0",
+  targetSystem: "master-accounting",
+  formatType: "flat",
+  delimiter: "|",
+  fileExtension: ".txt",
+  defaultDateFormat: "DD/MM/YYYY",
+  defaultDecimalPlaces: 2,
+  sectionHeader: "Cost Centre",
+  includeColumnHeaders: false,
+  requiresCodeMapping: false,
+  fieldMappings: [
+    { sourceField: "costCentreCode", targetColumn: "CostCentreCode", order: 1 },
+    { sourceField: "description", targetColumn: "Description", order: 2 },
+  ],
+};
+
+// ============================================
 // TEMPLATE COLLECTIONS
 // ============================================
 
@@ -1136,6 +1653,7 @@ export const EXPENSE_TEMPLATES: PrebuiltTemplate[] = [
   MASTER_ACCOUNTING_PURCHASES_BILL,
   MASTER_ACCOUNTING_CASHBOOK_PAYMENT,
   MASTER_ACCOUNTING_CREDITOR,
+  MASTER_ACCOUNTING_PURCHASES_DEBIT_NOTE,
 ];
 
 export const LEAVE_TEMPLATES: PrebuiltTemplate[] = [
@@ -1151,6 +1669,8 @@ export const ACCOUNTING_TEMPLATES: PrebuiltTemplate[] = [
   GENERIC_ACCOUNTING,
   MASTER_ACCOUNTING_JOURNAL,
   MASTER_ACCOUNTING_CHART_OF_ACCOUNT,
+  MASTER_ACCOUNTING_CATEGORY,
+  MASTER_ACCOUNTING_COST_CENTRE,
 ];
 
 export const INVOICE_TEMPLATES: PrebuiltTemplate[] = [
@@ -1160,6 +1680,10 @@ export const INVOICE_TEMPLATES: PrebuiltTemplate[] = [
   GENERIC_INVOICE,
   MASTER_ACCOUNTING_SALES_INVOICE,
   MASTER_ACCOUNTING_DEBTOR,
+  MASTER_ACCOUNTING_PURCHASES_BILL_AP,
+  MASTER_ACCOUNTING_CASHBOOK_RECEIPT,
+  MASTER_ACCOUNTING_SALES_CREDIT_NOTE,
+  MASTER_ACCOUNTING_STOCK_ITEM,
 ];
 
 export const PREBUILT_TEMPLATES: PrebuiltTemplate[] = [

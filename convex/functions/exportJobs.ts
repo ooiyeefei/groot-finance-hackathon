@@ -377,6 +377,17 @@ const MASTER_DATA_TEMPLATES: Record<string, string> = {
   "master-accounting-creditor": "vendors",
   "master-accounting-debtor": "customers",
   "master-accounting-chart-of-account": "categories",
+  "master-accounting-stock-item": "stock_items",
+  "master-accounting-category": "category_names",
+  "master-accounting-cost-centre": "cost_centres",
+};
+
+// Templates that need special filtering on existing module data
+const FILTERED_TEMPLATES: Record<string, { module: string; filter: string }> = {
+  "master-accounting-purchases-bill-ap": { module: "invoice", filter: "ap_only" },
+  "master-accounting-cashbook-receipt": { module: "invoice", filter: "ar_paid" },
+  "master-accounting-sales-credit-note": { module: "invoice", filter: "ar_voided" },
+  "master-accounting-purchases-debit-note": { module: "expense", filter: "rejected" },
 };
 
 async function getRecordsByModule(
@@ -398,6 +409,29 @@ async function getRecordsByModule(
   // Master data templates query their own tables directly
   if (prebuiltId && MASTER_DATA_TEMPLATES[prebuiltId]) {
     return getMasterDataRecords(ctx, businessId, MASTER_DATA_TEMPLATES[prebuiltId]);
+  }
+
+  // Filtered templates apply special filters on existing module data
+  if (prebuiltId && FILTERED_TEMPLATES[prebuiltId]) {
+    const { module: fModule, filter } = FILTERED_TEMPLATES[prebuiltId];
+    if (fModule === "invoice") {
+      const invoiceFilter = filter === "ap_only" ? "AP"
+        : filter === "ar_paid" ? "AR" : filter === "ar_voided" ? "AR" : "All";
+      const statusFilter = filter === "ar_paid" ? ["paid"]
+        : filter === "ar_voided" ? ["void"] : filters?.statusFilter;
+      return getInvoiceRecords(ctx, businessId, userId, role, {
+        ...filters,
+        invoiceType: invoiceFilter as "AP" | "AR" | "All",
+        statusFilter,
+      });
+    }
+    if (fModule === "expense") {
+      // Debit note = rejected/cancelled expense claims
+      return getExpenseRecords(ctx, businessId, userId, role, {
+        ...filters,
+        statusFilter: ["rejected", "cancelled"],
+      });
+    }
   }
 
   switch (module) {
@@ -712,6 +746,79 @@ async function getMasterDataRecords(
     return records;
   }
 
+  if (tableName === "stock_items") {
+    // Export product catalog items as Stock Item master data
+    const catalogItems = await ctx.db
+      .query("catalog_items")
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
+      .collect();
+
+    return catalogItems
+      .filter((item: any) => !item.deletedAt && item.sku)
+      .map((item: any) => ({
+        itemCode: item.sku || "",
+        description: item.name || "",
+        unitMeasurement: item.unitMeasurement || "pcs",
+        taxCode: item.taxRate && item.taxRate > 0 ? "SR" : "",
+        refCost: 0,
+        refPrice: item.unitPrice || 0,
+      }));
+  }
+
+  if (tableName === "category_names") {
+    // Export expense/COGS category names as Category master data
+    const business = await ctx.db.get(businessId);
+    if (!business) return [];
+
+    const expenseCats = (business.customExpenseCategories || []) as Array<{
+      id?: string; category_name?: string; is_active?: boolean;
+    }>;
+    const cogsCats = (business.customCogsCategories || []) as Array<{
+      id?: string; category_name?: string; is_active?: boolean;
+    }>;
+
+    const records: any[] = [];
+    const seen = new Set<string>();
+
+    for (const cat of [...expenseCats, ...cogsCats]) {
+      if (!cat.category_name || !cat.is_active) continue;
+      // Use sanitized category name as code (max 20 chars)
+      const code = cat.category_name.replace(/[^a-zA-Z0-9 ]/g, "").substring(0, 20).trim();
+      if (!code || seen.has(code)) continue;
+      seen.add(code);
+      records.push({
+        categoryCode: code,
+        description: cat.category_name,
+      });
+    }
+    return records;
+  }
+
+  if (tableName === "cost_centres") {
+    // Export departments from user profiles as Cost Centre master data
+    const memberships = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
+      .collect();
+
+    const activeMemberships = memberships.filter(
+      (m: any) => m.status === "active"
+    );
+
+    const departments = new Set<string>();
+    for (const m of activeMemberships) {
+      const user = await ctx.db.get(m.userId);
+      if (user?.department?.trim()) {
+        departments.add(user.department.trim());
+      }
+    }
+
+    return [...departments].sort().map((dept) => ({
+      costCentreCode: dept.replace(/[^a-zA-Z0-9 ]/g, "").substring(0, 20).trim(),
+      description: dept,
+    }));
+  }
+
   return [];
 }
 
@@ -778,6 +885,11 @@ async function applyCodeMappings(
     // Map creditor code (vendor name → CR- code)
     if (module === "expense" && mapped.vendorName) {
       mapped.vendorName = getCode("creditor_code", mapped.vendorName);
+    }
+
+    // Map creditor code for AP invoices (entity name → creditor code)
+    if (module === "invoice" && mapped.invoiceType === "AP" && mapped.entityName) {
+      mapped.entityCode = getCode("creditor_code", mapped.entityName);
     }
 
     // Map debtor code (customer name → debtor code)
