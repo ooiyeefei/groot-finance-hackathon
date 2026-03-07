@@ -102,17 +102,43 @@ export default function ReferralProgramPage() {
       <style>{`
         @page {
           size: A4;
-          margin: 12mm 10mm;
+          margin: 10mm;
         }
         @media print {
-          html, body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          html, body {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
           .no-print { display: none !important; }
-          .page-shell { background: white !important; padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
-          .brochure { box-shadow: none !important; border: none !important; border-radius: 0 !important; max-width: 100% !important; }
+          .page-shell {
+            background: white !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            max-width: 100% !important;
+            width: 100% !important;
+          }
+          .brochure {
+            box-shadow: none !important;
+            border: none !important;
+            border-radius: 0 !important;
+            max-width: 100% !important;
+            width: 100% !important;
+          }
           .print-card { break-inside: avoid; page-break-inside: avoid; }
+          details { border-color: #d1d5db !important; }
           details[open] summary ~ * { display: block !important; }
           .dark-card { background: linear-gradient(135deg, #1E293B, #111827) !important; -webkit-print-color-adjust: exact !important; }
-          section { padding-top: 1.5rem !important; padding-bottom: 1.5rem !important; }
+          section {
+            padding-left: 1.5rem !important;
+            padding-right: 1.5rem !important;
+            padding-top: 1rem !important;
+            padding-bottom: 1rem !important;
+          }
+          h1 { font-size: 1.75rem !important; }
+          h2 { font-size: 0.85rem !important; }
+          .accent-bar { height: 4px !important; }
         }
       `}</style>
 
@@ -123,24 +149,22 @@ export default function ReferralProgramPage() {
           {/* Hero */}
           <section className="print-card relative overflow-hidden">
             {/* Top accent bar */}
-            <div className="h-1.5 bg-gradient-to-r from-[#4285F4] via-[#5B9BFF] to-[#4285F4]" />
+            <div className="accent-bar h-1.5 bg-gradient-to-r from-[#4285F4] via-[#5B9BFF] to-[#4285F4]" />
 
-            <div className="px-8 pb-10 pt-6 md:px-12 md:pb-12">
+            <div className="px-5 pb-8 pt-5 sm:px-8 md:px-12 md:pb-12">
               {/* Nav buttons */}
-              <div className="mb-6 flex items-center justify-between no-print">
+              <div className="mb-6 flex flex-wrap items-center justify-between gap-3 no-print">
+                <span className="rounded-full bg-[#4285F4]/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-[#4285F4]">Referral Program</span>
                 <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-[#4285F4]/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-[#4285F4]">Referral Program</span>
-                </div>
-                <div className="flex items-center gap-3">
                   <Link
                     href="/reseller-program?t=groot2026"
-                    className="rounded-lg border border-[#E5E7EB] px-4 py-2 text-sm font-medium text-[#374151] transition-colors hover:bg-[#F3F4F6]"
+                    className="rounded-lg border border-[#E5E7EB] px-3 py-1.5 text-xs font-medium text-[#374151] transition-colors hover:bg-[#F3F4F6] sm:px-4 sm:py-2 sm:text-sm"
                   >
                     Reseller Program
                   </Link>
                   <button
                     onClick={() => document.getElementById('apply-form')?.scrollIntoView({ behavior: 'smooth' })}
-                    className="rounded-lg bg-[#4285F4] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#3367D6]"
+                    className="rounded-lg bg-[#4285F4] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#3367D6] sm:px-4 sm:py-2 sm:text-sm"
                   >
                     Join Referral
                   </button>
@@ -149,12 +173,12 @@ export default function ReferralProgramPage() {
 
               <div className="flex items-start justify-between gap-8">
                 <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-4">
-                    <h2 className="text-2xl font-bold text-[#111827] md:text-3xl">Groot Referral Program</h2>
+                  <div className="flex flex-wrap items-center gap-2 mb-4">
+                    <h2 className="text-xl font-bold text-[#111827] sm:text-2xl md:text-3xl">Groot Referral Program</h2>
                     <span className="rounded-md bg-[#F0FDF4] border border-[#BBF7D0] px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-[#16A34A]">v1.0</span>
                   </div>
 
-                  <h1 className="max-w-2xl text-3xl font-bold leading-snug text-[#111827] md:text-[2.5rem] md:leading-snug">
+                  <h1 className="max-w-2xl text-2xl font-bold leading-snug text-[#111827] sm:text-3xl md:text-[2.5rem] md:leading-snug">
                     Refer businesses. We close.{' '}
                     <span className="text-[#4285F4]">You earn</span>.
                   </h1>
@@ -174,7 +198,7 @@ export default function ReferralProgramPage() {
           </section>
 
           {/* How It Works - numbered cards */}
-          <section className="print-card border-t border-[#E5E7EB] bg-[#FAFBFC] px-8 py-10 md:px-12">
+          <section className="print-card border-t border-[#E5E7EB] bg-[#FAFBFC] px-5 py-8 sm:px-8 sm:py-10 md:px-12">
             <h2 className="mb-8 text-sm font-bold uppercase tracking-wider text-[#4285F4]">How It Works</h2>
             <div className="grid gap-5 md:grid-cols-3">
               {howItWorks.map((item) => (
@@ -190,7 +214,7 @@ export default function ReferralProgramPage() {
           </section>
 
           {/* Earnings Table + Upgrade Bonus */}
-          <section className="print-card border-t border-[#E5E7EB] px-8 py-10 md:px-12">
+          <section className="print-card border-t border-[#E5E7EB] px-5 py-8 sm:px-8 sm:py-10 md:px-12">
             <h2 className="mb-6 text-sm font-bold uppercase tracking-wider text-[#4285F4]">Referrer Rewards (Annual Deals Only)</h2>
 
             <div className="grid gap-6 md:grid-cols-[1fr,auto]">
@@ -224,7 +248,7 @@ export default function ReferralProgramPage() {
           </section>
 
           {/* Why Refer - Dark card */}
-          <section className="print-card border-t border-[#E5E7EB] px-8 py-10 md:px-12">
+          <section className="print-card border-t border-[#E5E7EB] px-5 py-8 sm:px-8 sm:py-10 md:px-12">
             <div className="dark-card overflow-hidden rounded-2xl bg-gradient-to-br from-[#1E293B] to-[#111827] p-8 md:p-10">
               <h2 className="mb-6 text-xl font-bold text-white md:text-2xl">Why refer with Groot?</h2>
               <div className="grid gap-4 md:grid-cols-2">
@@ -239,7 +263,7 @@ export default function ReferralProgramPage() {
           </section>
 
           {/* Existing Customers callout */}
-          <section className="print-card border-t border-[#E5E7EB] px-8 py-6 md:px-12">
+          <section className="print-card border-t border-[#E5E7EB] px-5 py-6 sm:px-8 md:px-12">
             <div className="flex items-start gap-4 rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-5">
               <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[#4285F4]/10">
                 <Gift className="h-4.5 w-4.5 text-[#4285F4]" />
@@ -254,7 +278,7 @@ export default function ReferralProgramPage() {
           </section>
 
           {/* Program Rules */}
-          <section className="print-card border-t border-[#E5E7EB] px-8 py-10 md:px-12">
+          <section className="print-card border-t border-[#E5E7EB] px-5 py-8 sm:px-8 sm:py-10 md:px-12">
             <h2 className="mb-5 text-sm font-bold uppercase tracking-wider text-[#4285F4]">Program Rules</h2>
             <div className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-6">
               <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
@@ -269,7 +293,7 @@ export default function ReferralProgramPage() {
           </section>
 
           {/* FAQ */}
-          <section className="print-card border-t border-[#E5E7EB] px-8 py-10 md:px-12">
+          <section className="print-card border-t border-[#E5E7EB] px-5 py-8 sm:px-8 sm:py-10 md:px-12">
             <h2 className="mb-5 text-lg font-bold text-[#111827]">Frequently Asked Questions</h2>
             <div className="space-y-3">
               {faqItems.map((item) => (
@@ -284,7 +308,7 @@ export default function ReferralProgramPage() {
           </section>
 
           {/* Application Form */}
-          <section id="apply-form" className="print-card border-t border-[#E5E7EB] px-8 py-10 md:px-12">
+          <section id="apply-form" className="print-card border-t border-[#E5E7EB] px-5 py-8 sm:px-8 sm:py-10 md:px-12">
             <div className="flex items-start gap-4">
               <div className="hidden md:flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-[#4285F4]">
                 <Sparkles className="h-6 w-6 text-white" />

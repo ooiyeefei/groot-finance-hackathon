@@ -115,19 +115,44 @@ export default function ResellerProgramPage() {
       <style>{`
         @page {
           size: A4;
-          margin: 12mm 10mm;
+          margin: 10mm;
         }
         @media print {
-          html, body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          html, body {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
           .no-print { display: none !important; }
-          .page-shell { background: white !important; padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
-          .brochure { box-shadow: none !important; border: none !important; border-radius: 0 !important; max-width: 100% !important; }
+          .page-shell {
+            background: white !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            max-width: 100% !important;
+            width: 100% !important;
+          }
+          .brochure {
+            box-shadow: none !important;
+            border: none !important;
+            border-radius: 0 !important;
+            max-width: 100% !important;
+            width: 100% !important;
+          }
           .print-card { break-inside: avoid; page-break-inside: avoid; }
           .print-break { break-before: page; page-break-before: always; }
           details { border-color: #d1d5db !important; }
           details[open] summary ~ * { display: block !important; }
           .founding-card { background: linear-gradient(135deg, #1E293B, #111827) !important; -webkit-print-color-adjust: exact !important; }
-          section { padding-top: 1.5rem !important; padding-bottom: 1.5rem !important; }
+          section {
+            padding-left: 1.5rem !important;
+            padding-right: 1.5rem !important;
+            padding-top: 1rem !important;
+            padding-bottom: 1rem !important;
+          }
+          h1 { font-size: 1.75rem !important; }
+          h2 { font-size: 0.85rem !important; }
+          .accent-bar { height: 4px !important; }
         }
       `}</style>
 
@@ -138,24 +163,22 @@ export default function ResellerProgramPage() {
           {/* Hero - gradient top bar + clean layout */}
           <section className="print-card relative overflow-hidden">
             {/* Top accent bar */}
-            <div className="h-1.5 bg-gradient-to-r from-[#4285F4] via-[#5B9BFF] to-[#4285F4]" />
+            <div className="accent-bar h-1.5 bg-gradient-to-r from-[#4285F4] via-[#5B9BFF] to-[#4285F4]" />
 
-            <div className="px-8 pb-10 pt-6 md:px-12 md:pb-12">
+            <div className="px-5 pb-8 pt-5 sm:px-8 md:px-12 md:pb-12">
               {/* Nav buttons */}
-              <div className="mb-6 flex items-center justify-between no-print">
+              <div className="mb-6 flex flex-wrap items-center justify-between gap-3 no-print">
+                <span className="rounded-full bg-[#4285F4]/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-[#4285F4]">Partner Program</span>
                 <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-[#4285F4]/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-[#4285F4]">Partner Program</span>
-                </div>
-                <div className="flex items-center gap-3">
                   <Link
                     href="/referral?t=groot2026"
-                    className="rounded-lg border border-[#E5E7EB] px-4 py-2 text-sm font-medium text-[#374151] transition-colors hover:bg-[#F3F4F6]"
+                    className="rounded-lg border border-[#E5E7EB] px-3 py-1.5 text-xs font-medium text-[#374151] transition-colors hover:bg-[#F3F4F6] sm:px-4 sm:py-2 sm:text-sm"
                   >
                     Referral Program
                   </Link>
                   <button
                     onClick={() => document.getElementById('apply-form')?.scrollIntoView({ behavior: 'smooth' })}
-                    className="rounded-lg bg-[#4285F4] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#3367D6]"
+                    className="rounded-lg bg-[#4285F4] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#3367D6] sm:px-4 sm:py-2 sm:text-sm"
                   >
                     Become a Partner
                   </button>
@@ -164,12 +187,12 @@ export default function ResellerProgramPage() {
 
               <div className="flex items-start justify-between gap-8">
                 <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-4">
-                    <h2 className="text-2xl font-bold text-[#111827] md:text-3xl">Groot Reseller Program</h2>
+                  <div className="flex flex-wrap items-center gap-2 mb-4">
+                    <h2 className="text-xl font-bold text-[#111827] sm:text-2xl md:text-3xl">Groot Reseller Program</h2>
                     <span className="rounded-md bg-[#F0FDF4] border border-[#BBF7D0] px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-[#16A34A]">v1.0</span>
                   </div>
 
-                  <h1 className="max-w-2xl text-3xl font-bold leading-snug text-[#111827] md:text-[2.5rem] md:leading-snug">
+                  <h1 className="max-w-2xl text-2xl font-bold leading-snug text-[#111827] sm:text-3xl md:text-[2.5rem] md:leading-snug">
                     Sell Groot Finance. Earn meaningful{' '}
                     <span className="text-[#4285F4]">recurring revenue</span>.
                   </h1>
@@ -189,7 +212,7 @@ export default function ResellerProgramPage() {
           </section>
 
           {/* How It Works - numbered cards */}
-          <section className="print-card border-t border-[#E5E7EB] bg-[#FAFBFC] px-8 py-10 md:px-12">
+          <section className="print-card border-t border-[#E5E7EB] bg-[#FAFBFC] px-5 py-8 sm:px-8 sm:py-10 md:px-12">
             <h2 className="mb-8 text-sm font-bold uppercase tracking-wider text-[#4285F4]">How It Works</h2>
             <div className="grid gap-5 md:grid-cols-3">
               {howItWorks.map((item) => (
@@ -205,7 +228,7 @@ export default function ResellerProgramPage() {
           </section>
 
           {/* Earnings Table + Upgrade Bonus - side by side on desktop */}
-          <section className="print-card border-t border-[#E5E7EB] px-8 py-10 md:px-12">
+          <section className="print-card border-t border-[#E5E7EB] px-5 py-8 sm:px-8 sm:py-10 md:px-12">
             <h2 className="mb-6 text-sm font-bold uppercase tracking-wider text-[#4285F4]">Reseller Earnings (Annual Deals Only)</h2>
 
             <div className="grid gap-6 md:grid-cols-[1fr,auto]">
@@ -246,7 +269,7 @@ export default function ResellerProgramPage() {
           </section>
 
           {/* Founding Partner Benefits - Dark card */}
-          <section className="print-card border-t border-[#E5E7EB] px-8 py-10 md:px-12">
+          <section className="print-card border-t border-[#E5E7EB] px-5 py-8 sm:px-8 sm:py-10 md:px-12">
             <div className="founding-card overflow-hidden rounded-2xl bg-gradient-to-br from-[#1E293B] to-[#111827] p-8 md:p-10">
               <div className="mb-6 flex items-center gap-3">
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#4285F4]">
@@ -275,7 +298,7 @@ export default function ResellerProgramPage() {
           </section>
 
           {/* Partner Resources - grid of resource cards */}
-          <section className="print-card print-break border-t border-[#E5E7EB] bg-[#FAFBFC] px-8 py-10 md:px-12">
+          <section className="print-card print-break border-t border-[#E5E7EB] bg-[#FAFBFC] px-5 py-8 sm:px-8 sm:py-10 md:px-12">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="text-sm font-bold uppercase tracking-wider text-[#4285F4]">Partner Resources</h2>
               <span className="rounded-full bg-[#4285F4]/10 px-3 py-1 text-xs font-semibold text-[#4285F4]">Provided upon approval</span>
@@ -299,7 +322,7 @@ export default function ResellerProgramPage() {
           </section>
 
           {/* Program Rules */}
-          <section className="print-card border-t border-[#E5E7EB] px-8 py-10 md:px-12">
+          <section className="print-card border-t border-[#E5E7EB] px-5 py-8 sm:px-8 sm:py-10 md:px-12">
             <h2 className="mb-5 text-sm font-bold uppercase tracking-wider text-[#4285F4]">Program Rules</h2>
             <div className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-6">
               <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
@@ -314,7 +337,7 @@ export default function ResellerProgramPage() {
           </section>
 
           {/* FAQ */}
-          <section className="print-card border-t border-[#E5E7EB] px-8 py-10 md:px-12">
+          <section className="print-card border-t border-[#E5E7EB] px-5 py-8 sm:px-8 sm:py-10 md:px-12">
             <h2 className="mb-5 text-lg font-bold text-[#111827]">Frequently Asked Questions</h2>
             <div className="space-y-3">
               {faqItems.map((item) => (
@@ -329,7 +352,7 @@ export default function ResellerProgramPage() {
           </section>
 
           {/* Application Form */}
-          <section id="apply-form" className="print-card border-t border-[#E5E7EB] px-8 py-10 md:px-12">
+          <section id="apply-form" className="print-card border-t border-[#E5E7EB] px-5 py-8 sm:px-8 sm:py-10 md:px-12">
             <div className="flex items-start gap-4">
               <div className="hidden md:flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-[#4285F4]">
                 <Sparkles className="h-6 w-6 text-white" />
