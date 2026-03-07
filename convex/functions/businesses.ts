@@ -1236,7 +1236,6 @@ export const createExpenseCategory = mutation({
     requires_receipt: v.optional(v.boolean()),
     requires_manager_approval: v.optional(v.boolean()),
     sort_order: v.optional(v.number()),
-    glCode: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -1299,7 +1298,6 @@ export const createExpenseCategory = mutation({
       requires_receipt: args.requires_receipt ?? false,
       requires_manager_approval: args.requires_manager_approval ?? true,
       sort_order: args.sort_order || 99,
-      glCode: args.glCode || "",
       created_at: now,
       updated_at: now,
     };
@@ -1332,7 +1330,6 @@ export const updateExpenseCategory = mutation({
     requires_manager_approval: v.optional(v.boolean()),
     sort_order: v.optional(v.number()),
     is_active: v.optional(v.boolean()),
-    glCode: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -1407,7 +1404,6 @@ export const updateExpenseCategory = mutation({
       ...(args.requires_manager_approval !== undefined && { requires_manager_approval: args.requires_manager_approval }),
       ...(args.sort_order !== undefined && { sort_order: args.sort_order }),
       ...(args.is_active !== undefined && { is_active: args.is_active }),
-      ...(args.glCode !== undefined && { glCode: args.glCode }),
       updated_at: new Date().toISOString(),
     };
 
@@ -2670,94 +2666,143 @@ export const setBusinessRegion = mutation({
 });
 
 // ============================================
-// ONE-TIME MIGRATION: Backfill glCode on categories
-// Run manually: npx convex run functions/businesses:backfillGlCodes
-// Safe to re-run: only adds glCode to categories that don't have one
+// GL CODE BACKFILL
 // ============================================
 
-const GL_CODE_DEFAULTS: Record<string, string> = {
-  // Expense categories
-  "Travel": "9120",
-  "Office Supplies": "9040",
-  "Office Expenses": "9040",
-  "Entertainment & Meal": "9050",
-  "Client Entertainment": "9050",
-  "IT Expenses": "9050",
-  "Subscription & Licenses": "9050",
-  "Professional Development": "9050",
-  "Client Gifts": "9050",
-  // COGS categories
-  "Subcontractors": "6010",
-  "Software Licenses": "6010",
-  "Project Materials": "6010",
-  "Raw Materials": "6000",
-  "Components": "6010",
-  "Machinery Parts": "6010",
-  "Packaging": "6010",
-  "Food Ingredients": "6000",
-  "Beverages": "6000",
-};
+/**
+ * Default GL code mapping following IFRS-aligned Chart of Account structure.
+ *
+ * Standard COA numbering (IFRS/IAS, adopted by MIA, ACCA, CPA):
+ *   1xxx = Assets, 2xxx = Liabilities, 3xxx = Equity, 4xxx = Revenue
+ *   5xxx = Cost of Goods Sold / Cost of Sales
+ *   6xxx = Operating Expenses
+ *   7xxx = Other Income/Expenses, 8xxx = Finance Costs, 9xxx = Tax
+ *
+ * This 5xxx/6xxx structure is the de facto standard across:
+ * Xero, QuickBooks, MYOB, SQL Accounting MY, AutoCount, Sage.
+ *
+ * Uses fuzzy matching: if the category name contains any keyword, it gets that GL code.
+ * Order matters — first match wins.
+ */
+const EXPENSE_GL_DEFAULTS: Array<{ keywords: string[]; glCode: string }> = [
+  { keywords: ["travel", "transport", "parking", "toll", "petrol", "mileage", "fuel"], glCode: "6400" },
+  { keywords: ["office", "stationery", "printing", "postage", "supplies"], glCode: "6300" },
+  { keywords: ["entertainment", "meal", "dining", "food", "client gift", "hospitality", "client entertainment"], glCode: "6500" },
+  { keywords: ["it ", "software", "tech", "computer", "hardware"], glCode: "6700" },
+  { keywords: ["subscription", "license", "saas"], glCode: "6700" },
+  { keywords: ["professional", "training", "development", "conference", "seminar"], glCode: "6800" },
+  { keywords: ["insurance"], glCode: "6200" },
+  { keywords: ["rental", "rent", "lease"], glCode: "6100" },
+  { keywords: ["utilities", "electricity", "water", "internet", "phone"], glCode: "6250" },
+  // Fallback for any unmatched expense category
+  { keywords: ["other", "miscellaneous", "general"], glCode: "6900" },
+];
 
+const COGS_GL_DEFAULTS: Array<{ keywords: string[]; glCode: string }> = [
+  { keywords: ["subcontract", "freelance", "outsource"], glCode: "5300" },
+  { keywords: ["material", "raw material", "project material"], glCode: "5100" },
+  { keywords: ["software", "license", "saas"], glCode: "5100" },
+];
+const COGS_GL_FALLBACK = "5000"; // Cost of Goods Sold (general)
+
+function matchGlCode(categoryName: string): string {
+  const lower = categoryName.toLowerCase();
+  for (const rule of EXPENSE_GL_DEFAULTS) {
+    if (rule.keywords.some((kw) => lower.includes(kw))) {
+      return rule.glCode;
+    }
+  }
+  return "6900"; // Ultimate fallback: Miscellaneous Expenses
+}
+
+function matchCogsGlCode(categoryName: string): string {
+  const lower = categoryName.toLowerCase();
+  for (const rule of COGS_GL_DEFAULTS) {
+    if (rule.keywords.some((kw) => lower.includes(kw))) {
+      return rule.glCode;
+    }
+  }
+  return COGS_GL_FALLBACK;
+}
+
+/**
+ * Backfill GL codes for all businesses using IFRS-aligned COA defaults.
+ * - dryRun: preview changes without writing
+ * - force: overwrite existing GL codes (use to fix wrong codes from previous backfill)
+ * Run from Convex dashboard Functions tab.
+ */
 export const backfillGlCodes = mutation({
   args: {
     dryRun: v.optional(v.boolean()),
+    force: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const isDryRun = args.dryRun ?? false;
+    const dryRun = args.dryRun ?? false;
+    const force = args.force ?? false;
     const businesses = await ctx.db.query("businesses").collect();
 
-    let totalBusinesses = 0;
-    let totalExpenseCatsUpdated = 0;
-    let totalCogsCatsUpdated = 0;
-    let skippedAlreadyHasGlCode = 0;
+    let totalUpdated = 0;
+    const results: Array<{ business: string; expenseUpdated: number; cogsUpdated: number }> = [];
 
     for (const business of businesses) {
-      let needsUpdate = false;
+      let expenseUpdated = 0;
+      let cogsUpdated = 0;
 
-      // Process expense categories
-      const expenseCats = (business.customExpenseCategories || []) as Array<any>;
-      const updatedExpense = expenseCats.map((cat: any) => {
-        if (cat.glCode) {
-          skippedAlreadyHasGlCode++;
-          return cat; // Already has glCode, don't overwrite
+      // Backfill expense categories
+      const expenseCategories = (business.customExpenseCategories as Array<Record<string, unknown>>) || [];
+      let expenseChanged = false;
+      for (const cat of expenseCategories) {
+        if (!cat.glCode || force) {
+          const newCode = matchGlCode(cat.category_name as string);
+          if (cat.glCode !== newCode) {
+            cat.glCode = newCode;
+            expenseChanged = true;
+            expenseUpdated++;
+          }
         }
-        const defaultCode = GL_CODE_DEFAULTS[cat.category_name] || "9050";
-        totalExpenseCatsUpdated++;
-        needsUpdate = true;
-        return { ...cat, glCode: defaultCode };
-      });
+      }
 
-      // Process COGS categories
-      const cogsCats = (business.customCogsCategories || []) as Array<any>;
-      const updatedCogs = cogsCats.map((cat: any) => {
-        if (cat.glCode) {
-          skippedAlreadyHasGlCode++;
-          return cat; // Already has glCode, don't overwrite
+      // Backfill COGS categories
+      const cogsCategories = (business.customCogsCategories as Array<Record<string, unknown>>) || [];
+      let cogsChanged = false;
+      for (const cat of cogsCategories) {
+        if (!cat.glCode || force) {
+          const newCode = matchCogsGlCode(cat.category_name as string);
+          if (cat.glCode !== newCode) {
+            cat.glCode = newCode;
+            cogsChanged = true;
+            cogsUpdated++;
+          }
         }
-        const defaultCode = GL_CODE_DEFAULTS[cat.category_name] || "6010";
-        totalCogsCatsUpdated++;
-        needsUpdate = true;
-        return { ...cat, glCode: defaultCode };
-      });
+      }
 
-      if (needsUpdate && !isDryRun) {
+      if ((expenseChanged || cogsChanged) && !dryRun) {
         await ctx.db.patch(business._id, {
-          customExpenseCategories: updatedExpense,
-          customCogsCategories: updatedCogs,
+          ...(expenseChanged && { customExpenseCategories: expenseCategories }),
+          ...(cogsChanged && { customCogsCategories: cogsCategories }),
+          updatedAt: Date.now(),
         });
-        totalBusinesses++;
-      } else if (needsUpdate) {
-        totalBusinesses++;
+      }
+
+      if (expenseUpdated > 0 || cogsUpdated > 0) {
+        totalUpdated++;
+        results.push({
+          business: business.name ?? business._id,
+          expenseUpdated,
+          cogsUpdated,
+        });
+        console.log(
+          `[backfillGlCodes] ${dryRun ? "(DRY RUN) " : ""}${business.name}: ` +
+          `${expenseUpdated} expense + ${cogsUpdated} COGS categories updated`
+        );
       }
     }
 
-    return {
-      dryRun: isDryRun,
-      totalBusinessesProcessed: businesses.length,
-      businessesUpdated: totalBusinesses,
-      expenseCategoriesBackfilled: totalExpenseCatsUpdated,
-      cogsCategoriesBackfilled: totalCogsCatsUpdated,
-      skippedAlreadyHasGlCode,
-    };
+    console.log(
+      `[backfillGlCodes] ${dryRun ? "(DRY RUN) " : ""}Done. ` +
+      `${totalUpdated}/${businesses.length} businesses updated.`
+    );
+
+    return { dryRun, totalBusinesses: businesses.length, businessesUpdated: totalUpdated, details: results };
   },
 });
