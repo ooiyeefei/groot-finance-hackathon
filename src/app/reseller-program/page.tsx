@@ -45,6 +45,7 @@ const programRules = [
   'Commission on net collected subscription revenue',
   'First-touch attribution logic applies',
   'Clawback if customer churns/refunds within 90 days',
+  'Downgrade within 90 days: payout adjusted to lower plan level',
 ]
 
 const faqItems = [

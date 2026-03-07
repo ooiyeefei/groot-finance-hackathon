@@ -42,6 +42,7 @@ const programRules = [
   'First-touch attribution logic applies',
   'Referrer payouts released after 30 days of active billing',
   'Clawback if customer churns/refunds within 90 days',
+  'Downgrade within 90 days: payout adjusted to lower plan level',
 ]
 
 const faqItems = [

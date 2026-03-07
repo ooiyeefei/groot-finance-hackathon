@@ -166,6 +166,7 @@ Existing Groot Finance customers can participate as referrers with zero addition
 - **Reseller close payouts:** Released after the customer completes **30 days** as a paying subscriber
 - **Renewal share:** Paid quarterly in arrears (e.g., Q1 renewals paid in April)
 - **Clawback:** If a customer churns or requests a refund within 90 days, the close payout is clawed back (deducted from your next payout or invoiced)
+- **Downgrade:** If a customer downgrades within 90 days (e.g. Pro → Starter), the payout is adjusted to the lower plan level. After 90 days, the original payout is kept
 - **Monthly payout cycle** for bounties and close payouts; **quarterly settlement** for renewal share
 
 ### Commission Basis
