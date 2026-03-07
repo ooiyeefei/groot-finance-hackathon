@@ -197,7 +197,7 @@ export default function CategoryFormModal({
       
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative transform overflow-hidden rounded-xl bg-card shadow-2xl text-left transition-all w-full max-w-[470px] max-h-[90vh] flex flex-col">
+        <div className="relative transform overflow-hidden rounded-xl bg-card shadow-2xl text-left transition-all w-full max-w-[611px] max-h-[90vh] flex flex-col">
 
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-border flex-shrink-0">
@@ -268,12 +268,13 @@ export default function CategoryFormModal({
 
                 <div>
                   <Label htmlFor="ai_keywords">Keywords (comma-separated)</Label>
-                  <Input
+                  <textarea
                     id="ai_keywords"
                     value={formData.ai_keywords}
                     onChange={(e) => setFormData(prev => ({ ...prev, ai_keywords: e.target.value }))}
                     placeholder="travel, hotel, flight, accommodation"
-                    className="mt-1"
+                    className="mt-1 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-y min-h-[38px]"
+                    rows={2}
                     disabled={isLoading}
                   />
                   <p className="text-muted-foreground text-xs mt-1">
@@ -283,12 +284,13 @@ export default function CategoryFormModal({
 
                 <div>
                   <Label htmlFor="vendor_patterns">Vendor Patterns (comma-separated)</Label>
-                  <Input
+                  <textarea
                     id="vendor_patterns"
                     value={formData.vendor_patterns}
                     onChange={(e) => setFormData(prev => ({ ...prev, vendor_patterns: e.target.value }))}
                     placeholder="*airline*, *hotel*, booking.com"
-                    className="mt-1"
+                    className="mt-1 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-y min-h-[38px]"
+                    rows={2}
                     disabled={isLoading}
                   />
                   <p className="text-muted-foreground text-xs mt-1">
