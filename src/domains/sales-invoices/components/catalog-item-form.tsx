@@ -28,6 +28,7 @@ interface CatalogItemFormData {
   unitMeasurement: string
   taxRate: string
   glCode: string
+  category: string
 }
 
 interface CatalogItemFormProps {
@@ -78,6 +79,7 @@ function getInitialFormData(initialData?: Partial<CatalogItem>): CatalogItemForm
         ? String(Math.round(initialData.taxRate * 10000) / 100)
         : '',
     glCode: initialData?.glCode ?? '',
+    category: initialData?.category ?? '',
   }
 }
 
@@ -179,6 +181,7 @@ export default function CatalogItemForm({
           unitMeasurement: formData.unitMeasurement.trim() || undefined,
           taxRate: taxRateDecimal,
           glCode: formData.glCode.trim() || undefined,
+          category: formData.category.trim() || undefined,
         })
       } finally {
         setIsSubmitting(false)
@@ -242,7 +245,7 @@ export default function CatalogItemForm({
             />
           </div>
 
-          {/* SKU & GL Code (side by side) */}
+          {/* GL Code & Category (side by side) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="catalog-glcode" className="text-foreground">
@@ -258,7 +261,20 @@ export default function CatalogItemForm({
                 Revenue account code for accounting export (IFRS 4xxx)
               </p>
             </div>
-            <div />
+            <div className="space-y-1.5">
+              <Label htmlFor="catalog-category" className="text-foreground">
+                Category
+              </Label>
+              <Input
+                id="catalog-category"
+                placeholder="e.g. SVC, HW, SW"
+                value={formData.category}
+                onChange={(e) => handleChange('category', e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Product category code for stock item grouping in accounting export
+              </p>
+            </div>
           </div>
 
           {/* Unit Price & Currency (side by side) */}

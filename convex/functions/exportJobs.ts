@@ -766,29 +766,24 @@ async function getMasterDataRecords(
   }
 
   if (tableName === "category_names") {
-    // Export expense/COGS category names as Category master data
-    const business = await ctx.db.get(businessId);
-    if (!business) return [];
-
-    const expenseCats = (business.customExpenseCategories || []) as Array<{
-      id?: string; category_name?: string; is_active?: boolean;
-    }>;
-    const cogsCats = (business.customCogsCategories || []) as Array<{
-      id?: string; category_name?: string; is_active?: boolean;
-    }>;
+    // Export distinct product categories from catalog items as Category master data
+    // Maps to Master Accounting's Category screen (product groupings like CPU, SOFTWARE, SVC)
+    const catalogItems = await ctx.db
+      .query("catalog_items")
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
+      .collect();
 
     const records: any[] = [];
     const seen = new Set<string>();
 
-    for (const cat of [...expenseCats, ...cogsCats]) {
-      if (!cat.category_name || !cat.is_active) continue;
-      // Use sanitized category name as code (max 20 chars)
-      const code = cat.category_name.replace(/[^a-zA-Z0-9 ]/g, "").substring(0, 20).trim();
+    for (const item of catalogItems) {
+      if (item.deletedAt || !item.category) continue;
+      const code = item.category.trim();
       if (!code || seen.has(code)) continue;
       seen.add(code);
       records.push({
-        categoryCode: code,
-        description: cat.category_name,
+        categoryCode: code.substring(0, 20),
+        description: code,
       });
     }
     return records;

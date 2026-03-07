@@ -1586,16 +1586,17 @@ const MASTER_ACCOUNTING_STOCK_ITEM: PrebuiltTemplate = {
 };
 
 /**
- * Master Accounting - Category (Expense/COGS Category Names → Master Data)
+ * Master Accounting - Category (Product/Stock Item Categories → Master Data)
  * Flat format, pipe-delimited, no column headers, .txt
  * Category Code|Description
+ * Maps to Master Accounting's Category screen (product groupings like CPU, SOFTWARE, SVC)
  */
 const MASTER_ACCOUNTING_CATEGORY: PrebuiltTemplate = {
   id: "master-accounting-category",
   name: "Master Accounting (Category)",
   description:
-    "Export expense/COGS category names as Category master data for Master Accounting import",
-  module: "accounting",
+    "Export product categories from catalog items as Category master data for Master Accounting import",
+  module: "invoice",
   version: "1.0.0",
   targetSystem: "master-accounting",
   formatType: "flat",
@@ -1669,7 +1670,6 @@ export const ACCOUNTING_TEMPLATES: PrebuiltTemplate[] = [
   GENERIC_ACCOUNTING,
   MASTER_ACCOUNTING_JOURNAL,
   MASTER_ACCOUNTING_CHART_OF_ACCOUNT,
-  MASTER_ACCOUNTING_CATEGORY,
   MASTER_ACCOUNTING_COST_CENTRE,
 ];
 
@@ -1684,6 +1684,7 @@ export const INVOICE_TEMPLATES: PrebuiltTemplate[] = [
   MASTER_ACCOUNTING_CASHBOOK_RECEIPT,
   MASTER_ACCOUNTING_SALES_CREDIT_NOTE,
   MASTER_ACCOUNTING_STOCK_ITEM,
+  MASTER_ACCOUNTING_CATEGORY,
 ];
 
 export const PREBUILT_TEMPLATES: PrebuiltTemplate[] = [

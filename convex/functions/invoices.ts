@@ -985,6 +985,95 @@ export const internalUpdateExtraction = internalMutation({
 
     await ctx.db.patch(invoice._id, updateData);
     console.log(`[Convex Internal] Updated invoice ${args.id} extraction results`);
+
+    // ============================================
+    // Auto-post to accounting_entries for AP invoices
+    // Mirrors expense claims (on approval) and sales invoices (on send)
+    // ============================================
+    if (invoice.businessId && invoice.documentDomain !== "expense_claims") {
+      const extracted = args.extractedData as Record<string, unknown> | undefined;
+      if (extracted) {
+        // Duplicate guard: skip if already posted (e.g. on reprocess)
+        const existingEntry = await ctx.db
+          .query("accounting_entries")
+          .withIndex("by_sourceDocument", (q) =>
+            q
+              .eq("sourceDocumentType", "invoice")
+              .eq("sourceRecordId", invoice._id.toString())
+          )
+          .first();
+
+        if (!existingEntry) {
+          const vendorName = (extracted.vendor_name as string) ?? (extracted.vendorName as string) ?? "";
+          const totalAmount = (extracted.total_amount as number) ?? (extracted.totalAmount as number) ?? 0;
+          const currency = (extracted.currency as string) ?? "MYR";
+          const invoiceDate = (extracted.invoice_date as string) ?? (extracted.invoiceDate as string) ?? new Date(now).toISOString().split("T")[0];
+          const invoiceNumber = (extracted.invoice_number as string) ?? (extracted.invoiceNumber as string) ?? "";
+          const description = vendorName
+            ? `Invoice from ${vendorName}${invoiceNumber ? ` #${invoiceNumber}` : ""}`
+            : `Supplier invoice${invoiceNumber ? ` #${invoiceNumber}` : ""}`;
+
+          // Map line items from OCR extracted data
+          type RawLineItem = {
+            item_description?: string; description?: string;
+            quantity?: number; unit_price?: number; total_amount?: number;
+            currency?: string; tax_amount?: number; tax_rate?: number;
+            item_category?: string; item_code?: string; unit_measurement?: string;
+          };
+          const rawLineItems = ((extracted.line_items ?? extracted.lineItems) as RawLineItem[] | undefined) ?? [];
+          const lineItems = rawLineItems
+            .filter((item) => item.item_description || item.description)
+            .map((item, index) => ({
+              itemDescription: (item.item_description || item.description || "Item")!,
+              quantity: item.quantity ?? 1,
+              unitPrice: item.unit_price ?? 0,
+              totalAmount: item.total_amount ?? (item.unit_price ?? 0) * (item.quantity ?? 1),
+              currency: item.currency || currency,
+              taxAmount: item.tax_amount,
+              taxRate: item.tax_rate,
+              itemCategory: item.item_category,
+              itemCode: item.item_code,
+              unitMeasurement: item.unit_measurement,
+              lineOrder: index + 1,
+            }));
+
+          // Look up vendor record for vendorId link
+          let matchedVendor: { _id: any } | undefined;
+          if (vendorName && invoice.businessId) {
+            const vendors = await ctx.db
+              .query("vendors")
+              .withIndex("by_businessId", (q) => q.eq("businessId", invoice.businessId!))
+              .collect();
+            matchedVendor = vendors.find((v) => v.name === vendorName);
+          }
+
+          const accountingEntryId = await ctx.db.insert("accounting_entries", {
+            businessId: invoice.businessId,
+            userId: invoice.userId,
+            vendorId: matchedVendor?._id,
+            transactionType: "Expense",
+            description,
+            originalAmount: totalAmount,
+            originalCurrency: currency,
+            transactionDate: invoiceDate,
+            category: "Accounts Payable",
+            vendorName: vendorName || undefined,
+            referenceNumber: invoiceNumber || undefined,
+            status: "pending",
+            createdByMethod: "document_extract",
+            sourceRecordId: invoice._id.toString(),
+            sourceDocumentType: "invoice",
+            lineItems: lineItems.length > 0 ? lineItems : undefined,
+            updatedAt: now,
+          });
+
+          console.log(`[Convex Internal] Auto-posted accounting entry ${accountingEntryId} for AP invoice ${args.id} with ${lineItems.length} line items`);
+        } else {
+          console.log(`[Convex Internal] Skipped auto-post for invoice ${args.id} — accounting entry already exists`);
+        }
+      }
+    }
+
     return invoice._id;
   },
 });
