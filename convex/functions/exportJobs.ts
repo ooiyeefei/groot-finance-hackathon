@@ -692,6 +692,23 @@ async function getMasterDataRecords(
       });
     }
 
+    // Product catalog items → SALES account type (revenue)
+    const catalogItems = await ctx.db
+      .query("catalog_items")
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
+      .collect();
+    const seenGlCodes = new Set(records.map((r: any) => r.glCode));
+    for (const item of catalogItems) {
+      if (!item.glCode || item.deletedAt || seenGlCodes.has(item.glCode)) continue;
+      seenGlCodes.add(item.glCode);
+      records.push({
+        glCode: item.glCode,
+        categoryName: item.name,
+        accountType: "SALES",
+        drCr: "CR",
+      });
+    }
+
     return records;
   }
 
