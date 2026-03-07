@@ -893,6 +893,7 @@ export async function getCOGSCategories(businessId: string): Promise<COGSCategor
       ai_keywords: cat.ai_keywords || [],
       vendor_patterns: cat.vendor_patterns || [],
       sort_order: cat.sort_order || 99,
+      glCode: cat.glCode,
       created_at: cat.created_at,
       updated_at: cat.updated_at
     }))
@@ -992,6 +993,7 @@ export async function createCOGSCategory(
     vendor_patterns: vendor_patterns || [],
     sort_order: sort_order || 99,
     is_active: true,
+    glCode,
     created_at: newCategory.created_at,
     updated_at: newCategory.updated_at
   }
@@ -1046,6 +1048,7 @@ export async function updateCOGSCategory(
     vendor_patterns: vendor_patterns || updatedCategory.vendor_patterns || [],
     sort_order: sort_order || updatedCategory.sort_order || 99,
     is_active: is_active ?? updatedCategory.is_active,
+    glCode: glCode ?? updatedCategory.glCode,
     created_at: updatedCategory.created_at,
     updated_at: updatedCategory.updated_at
   }
