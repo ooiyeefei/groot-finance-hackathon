@@ -34,7 +34,7 @@
  */
 
 import { GeminiService } from '@/lib/ai/ai-services/gemini-service'
-import { getBusinessTypeConfig, type BusinessType } from './business-type-defaults'
+import { getBusinessTypeConfig, resolveGlCode, type BusinessType } from './business-type-defaults'
 
 /**
  * Category metadata enhanced with AI-generated patterns and keywords
@@ -51,6 +51,8 @@ export interface CategoryMetadata {
   vendor_patterns: string[]
   /** Keywords to help AI classify expenses (5-10 keywords) */
   ai_keywords: string[]
+  /** IFRS-aligned GL code (5xxx for COGS, 6xxx for expenses) */
+  glCode: string
   /** Whether the category is active */
   is_active: boolean
   /** Sort order for display */
@@ -88,7 +90,9 @@ function generateCategoryId(categoryName: string): string {
  * @returns Array of basic category metadata without AI enhancements
  */
 function generateFallbackMetadata(
-  categoryNames: string[]
+  categoryNames: string[],
+  categoryType: 'cogs' | 'expense',
+  businessType?: BusinessType
 ): CategoryMetadata[] {
   console.log(`[AI-CategoryGenerator] Generating fallback metadata for ${categoryNames.length} categories`)
 
@@ -98,6 +102,7 @@ function generateFallbackMetadata(
     description: `${name} category`,
     vendor_patterns: [],
     ai_keywords: [name.toLowerCase()],
+    glCode: resolveGlCode(name, categoryType, businessType),
     is_active: true,
     sort_order: index + 1
   }))
@@ -171,7 +176,9 @@ IMPORTANT: Return ONLY the JSON array, no other text.`
  */
 function parseGeminiResponse(
   content: string,
-  categoryNames: string[]
+  categoryNames: string[],
+  categoryType: 'cogs' | 'expense',
+  businessType?: BusinessType
 ): CategoryMetadata[] | null {
   try {
     // Remove markdown code blocks if present
@@ -218,6 +225,7 @@ function parseGeminiResponse(
           description: aiData.description,
           vendor_patterns: aiData.vendor_patterns || [],
           ai_keywords: aiData.ai_keywords || [],
+          glCode: resolveGlCode(name, categoryType, businessType),
           is_active: true,
           sort_order: i + 1
         })
@@ -230,6 +238,7 @@ function parseGeminiResponse(
           description: `${name} category`,
           vendor_patterns: [],
           ai_keywords: [name.toLowerCase()],
+          glCode: resolveGlCode(name, categoryType, businessType),
           is_active: true,
           sort_order: i + 1
         })
@@ -318,16 +327,16 @@ export async function generateCategoryMetadata(
     if (!response.success || !response.content) {
       console.error(`[AI-CategoryGenerator] Gemini API error:`, response.error)
       console.warn(`[AI-CategoryGenerator] Falling back to basic metadata`)
-      return generateFallbackMetadata(categoryNames)
+      return generateFallbackMetadata(categoryNames, categoryType, businessType)
     }
 
     // Parse and validate response
-    const metadata = parseGeminiResponse(response.content, categoryNames)
+    const metadata = parseGeminiResponse(response.content, categoryNames, categoryType, businessType)
 
     if (!metadata) {
       console.warn(`[AI-CategoryGenerator] Failed to parse Gemini response, using fallback`)
       console.log(`[AI-CategoryGenerator] Raw response:`, response.content)
-      return generateFallbackMetadata(categoryNames)
+      return generateFallbackMetadata(categoryNames, categoryType, businessType)
     }
 
     console.log(`[AI-CategoryGenerator] ✅ Successfully generated metadata for ${metadata.length} categories in ${elapsed}ms`)
@@ -343,6 +352,6 @@ export async function generateCategoryMetadata(
     const elapsed = Date.now() - startTime
     console.error(`[AI-CategoryGenerator] Unexpected error after ${elapsed}ms:`, error)
     console.warn(`[AI-CategoryGenerator] Falling back to basic metadata`)
-    return generateFallbackMetadata(categoryNames)
+    return generateFallbackMetadata(categoryNames, categoryType, businessType)
   }
 }

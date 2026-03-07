@@ -17,6 +17,7 @@ import {
 } from './ai-category-generator';
 import {
   getSuggestedCategories,
+  resolveGlCode,
   type BusinessType
 } from './business-type-defaults';
 import { normalizeRegNumber } from '@/lib/validation/registration-number';
@@ -165,6 +166,7 @@ async function generateBusinessCategories(
         description: `${name} category`,
         vendor_patterns: [],
         ai_keywords: [name.toLowerCase()],
+        glCode: resolveGlCode(name, 'cogs', businessType),
         is_active: true,
         sort_order: index + 1,
         glCode: DEFAULT_GL_CODES[name] || '6010',
@@ -175,6 +177,7 @@ async function generateBusinessCategories(
         description: `${name} category`,
         vendor_patterns: [],
         ai_keywords: [name.toLowerCase()],
+        glCode: resolveGlCode(name, 'expense', businessType),
         is_active: true,
         sort_order: index + 1,
         glCode: DEFAULT_GL_CODES[name] || '9050',

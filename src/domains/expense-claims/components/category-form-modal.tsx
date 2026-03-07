@@ -25,6 +25,7 @@ export interface ExpenseCategory {
   requires_manager_approval: boolean
   sort_order: number
   is_default: boolean
+  glCode?: string
 }
 
 export interface CategoryFormData {
@@ -95,7 +96,7 @@ export default function CategoryFormModal({
           requires_manager_approval: true,
           sort_order: editingCategory.sort_order,
           is_active: editingCategory.is_active ?? true,
-          glCode: (editingCategory as any).glCode || ''
+          glCode: editingCategory.glCode || ''
         })
       } else {
         // Reset to default values for new category
