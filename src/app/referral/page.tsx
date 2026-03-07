@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { CheckCircle2, Gift, Send, Loader2 } from 'lucide-react'
+import { CheckCircle2, Gift, Send, Loader2, TrendingUp, Sparkles } from 'lucide-react'
 
 // Metadata is exported from layout.tsx (client components cannot export metadata)
 
@@ -98,99 +98,134 @@ export default function ReferralProgramPage() {
   const updateForm = (field: string, value: string) => setForm(prev => ({ ...prev, [field]: value }))
 
   return (
-    <div className="min-h-screen bg-[#F0F2F5]">
+    <div className="min-h-screen bg-[#F0F2F5] print:bg-white">
       <style>{`
+        @page {
+          size: A4;
+          margin: 12mm 10mm;
+        }
         @media print {
+          html, body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           .no-print { display: none !important; }
-          .page-shell { background: white !important; padding: 0 !important; margin: 0 !important; }
-          .brochure { box-shadow: none !important; max-width: 980px !important; margin: 0 auto !important; }
+          .page-shell { background: white !important; padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
+          .brochure { box-shadow: none !important; border: none !important; border-radius: 0 !important; max-width: 100% !important; }
           .print-card { break-inside: avoid; page-break-inside: avoid; }
+          details[open] summary ~ * { display: block !important; }
+          .dark-card { background: linear-gradient(135deg, #1E293B, #111827) !important; -webkit-print-color-adjust: exact !important; }
+          section { padding-top: 1.5rem !important; padding-bottom: 1.5rem !important; }
         }
       `}</style>
 
       {/* Brochure shell */}
-      <div className="page-shell mx-[5%] py-10 md:mx-[15%] md:py-14">
-        <main className="brochure overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-lg shadow-black/5">
+      <div className="page-shell mx-[5%] py-10 md:mx-[15%] md:py-14 print:mx-0 print:py-0">
+        <main className="brochure overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-lg shadow-black/5 print:shadow-none print:border-0 print:rounded-none">
 
           {/* Hero */}
-          <section className="print-card border-b border-[#E5E7EB] px-8 pb-10 pt-8 md:px-12 md:pb-12">
-            {/* Nav buttons */}
-            <div className="mb-8 flex items-center justify-end gap-3 no-print">
-              <Link
-                href="/reseller-program"
-                className="rounded-lg border border-[#E5E7EB] px-4 py-2 text-sm font-medium text-[#374151] transition-colors hover:bg-[#F3F4F6]"
-              >
-                Reseller Program
-              </Link>
-              <button
-                onClick={() => document.getElementById('apply-form')?.scrollIntoView({ behavior: 'smooth' })}
-                className="rounded-lg bg-[#4285F4] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#3367D6]"
-              >
-                Join Referral
-              </button>
-            </div>
+          <section className="print-card relative overflow-hidden">
+            {/* Top accent bar */}
+            <div className="h-1.5 bg-gradient-to-r from-[#4285F4] via-[#5B9BFF] to-[#4285F4]" />
 
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold text-[#111827] md:text-3xl">Groot Referral Program</h2>
-                <p className="mt-1 text-sm font-semibold uppercase tracking-wider text-[#4285F4]">Version 1.0 (Launch)</p>
+            <div className="px-8 pb-10 pt-6 md:px-12 md:pb-12">
+              {/* Nav buttons */}
+              <div className="mb-6 flex items-center justify-between no-print">
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-[#4285F4]/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-[#4285F4]">Referral Program</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Link
+                    href="/reseller-program?t=groot2026"
+                    className="rounded-lg border border-[#E5E7EB] px-4 py-2 text-sm font-medium text-[#374151] transition-colors hover:bg-[#F3F4F6]"
+                  >
+                    Reseller Program
+                  </Link>
+                  <button
+                    onClick={() => document.getElementById('apply-form')?.scrollIntoView({ behavior: 'smooth' })}
+                    className="rounded-lg bg-[#4285F4] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#3367D6]"
+                  >
+                    Join Referral
+                  </button>
+                </div>
               </div>
-              <div className="hidden text-right md:block">
-                <p className="text-xs font-semibold uppercase tracking-wider text-[#9CA3AF]">Effective Date</p>
-                <p className="text-base font-semibold text-[#111827]">March 7, 2026</p>
+
+              <div className="flex items-start justify-between gap-8">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-4">
+                    <h2 className="text-2xl font-bold text-[#111827] md:text-3xl">Groot Referral Program</h2>
+                    <span className="rounded-md bg-[#F0FDF4] border border-[#BBF7D0] px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-[#16A34A]">v1.0</span>
+                  </div>
+
+                  <h1 className="max-w-2xl text-3xl font-bold leading-snug text-[#111827] md:text-[2.5rem] md:leading-snug">
+                    Refer businesses. We close.{' '}
+                    <span className="text-[#4285F4]">You earn</span>.
+                  </h1>
+                  <p className="mt-5 max-w-2xl text-lg leading-relaxed text-[#6B7280]">
+                    A simple referral model for existing customers and partners who want zero sales overhead. Share your code, we handle the rest.
+                  </p>
+                </div>
+
+                {/* Date box */}
+                <div className="hidden md:flex flex-col items-center rounded-xl border-2 border-[#4285F4]/20 bg-[#4285F4]/5 px-6 py-4 text-center">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#4285F4]">Effective</p>
+                  <p className="text-2xl font-bold text-[#111827]">Mar 7</p>
+                  <p className="text-sm font-semibold text-[#6B7280]">{currentYear}</p>
+                </div>
               </div>
-            </div>
-
-            <div className="mt-6 h-px bg-[#E5E7EB]" />
-
-            <div className="mt-8">
-              <h1 className="max-w-2xl text-3xl font-bold leading-snug text-[#111827] md:text-[2.5rem] md:leading-snug">
-                Refer businesses. We close.{' '}
-                <span className="text-[#4285F4]">You earn</span>.
-              </h1>
-              <p className="mt-5 max-w-2xl text-lg leading-relaxed text-[#6B7280]">
-                A simple referral model for existing customers and partners who want zero sales overhead. Share your code, we handle the rest.
-              </p>
             </div>
           </section>
 
-          {/* How It Works */}
-          <section className="print-card border-b border-[#E5E7EB] px-8 py-10 md:px-12">
-            <h2 className="mb-6 text-sm font-semibold uppercase tracking-wider text-[#4285F4]">How It Works</h2>
-            <div className="grid gap-6 md:grid-cols-3">
+          {/* How It Works - numbered cards */}
+          <section className="print-card border-t border-[#E5E7EB] bg-[#FAFBFC] px-8 py-10 md:px-12">
+            <h2 className="mb-8 text-sm font-bold uppercase tracking-wider text-[#4285F4]">How It Works</h2>
+            <div className="grid gap-5 md:grid-cols-3">
               {howItWorks.map((item) => (
-                <div key={item.step}>
-                  <span className="text-4xl font-bold text-[#4285F4]/20">{item.step}</span>
-                  <h3 className="mt-2 text-xl font-semibold text-[#111827]">{item.title}</h3>
-                  <p className="mt-2 text-base leading-relaxed text-[#6B7280]">{item.description}</p>
+                <div key={item.step} className="rounded-xl border border-[#E5E7EB] bg-white p-6 transition-shadow hover:shadow-md">
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-[#4285F4] text-lg font-bold text-white">
+                    {item.step}
+                  </div>
+                  <h3 className="text-lg font-bold text-[#111827]">{item.title}</h3>
+                  <p className="mt-2 text-[15px] leading-relaxed text-[#6B7280]">{item.description}</p>
                 </div>
               ))}
             </div>
           </section>
 
-          {/* Earnings Table */}
-          <section className="print-card border-b border-[#E5E7EB] px-8 py-10 md:px-12">
-            <h2 className="mb-6 text-sm font-semibold uppercase tracking-wider text-[#4285F4]">Referrer Rewards (Annual Deals)</h2>
-            <div className="overflow-hidden rounded-xl border border-[#E5E7EB]">
-              <div className="grid grid-cols-2 border-b border-[#E5E7EB] bg-[#F9FAFB] px-6 py-3.5">
-                <span className="text-xs font-semibold uppercase tracking-wider text-[#9CA3AF]">Plan</span>
-                <span className="text-xs font-semibold uppercase tracking-wider text-[#9CA3AF]">One-time Payout</span>
-              </div>
-              {earningsData.map((item, i) => (
-                <div key={item.plan} className={`grid grid-cols-2 items-center px-6 py-5 ${i < earningsData.length - 1 ? 'border-b border-[#F3F4F6]' : ''}`}>
-                  <span className="text-base font-semibold text-[#111827]">{item.plan}</span>
-                  <span className="text-2xl font-bold text-[#111827]">{item.payout}</span>
+          {/* Earnings Table + Upgrade Bonus */}
+          <section className="print-card border-t border-[#E5E7EB] px-8 py-10 md:px-12">
+            <h2 className="mb-6 text-sm font-bold uppercase tracking-wider text-[#4285F4]">Referrer Rewards (Annual Deals Only)</h2>
+
+            <div className="grid gap-6 md:grid-cols-[1fr,auto]">
+              <div className="overflow-hidden rounded-xl border border-[#E5E7EB]">
+                <div className="grid grid-cols-2 border-b border-[#E5E7EB] bg-[#F9FAFB] px-6 py-3.5">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#9CA3AF]">Plan</span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#9CA3AF]">One-time Payout</span>
                 </div>
-              ))}
+                {earningsData.map((item, i) => (
+                  <div key={item.plan} className={`grid grid-cols-2 items-center px-6 py-5 ${i < earningsData.length - 1 ? 'border-b border-[#F3F4F6]' : ''}`}>
+                    <span className="text-base font-semibold text-[#111827]">{item.plan}</span>
+                    <span className="text-2xl font-bold text-[#111827]">{item.payout}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Upgrade Bonus callout */}
+              <div className="md:w-52">
+                <div className="rounded-xl border-2 border-[#4285F4]/30 bg-gradient-to-br from-[#4285F4]/5 to-[#4285F4]/10 p-5 text-center">
+                  <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-[#4285F4]/15">
+                    <TrendingUp className="h-5 w-5 text-[#4285F4]" />
+                  </div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-[#4285F4]">Upgrade Bonus</p>
+                  <p className="mt-2 text-2xl font-bold text-[#111827]">+RM 120</p>
+                  <p className="mt-1 text-sm text-[#6B7280]">
+                    Starter to Pro upgrade within 12 months
+                  </p>
+                </div>
+              </div>
             </div>
-            <p className="mt-3 text-sm text-[#9CA3AF]">
-              Bonus: +RM 120 for Starter &rarr; Pro upgrades within 12 months.
-            </p>
           </section>
 
           {/* Why Refer - Dark card */}
-          <section className="print-card border-b border-[#E5E7EB] px-8 py-10 md:px-12">
-            <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-[#1E293B] to-[#111827] p-8 md:p-10">
+          <section className="print-card border-t border-[#E5E7EB] px-8 py-10 md:px-12">
+            <div className="dark-card overflow-hidden rounded-2xl bg-gradient-to-br from-[#1E293B] to-[#111827] p-8 md:p-10">
               <h2 className="mb-6 text-xl font-bold text-white md:text-2xl">Why refer with Groot?</h2>
               <div className="grid gap-4 md:grid-cols-2">
                 {whyRefer.map((item) => (
@@ -204,9 +239,11 @@ export default function ReferralProgramPage() {
           </section>
 
           {/* Existing Customers callout */}
-          <section className="print-card border-b border-[#E5E7EB] px-8 py-6 md:px-12">
-            <div className="flex items-start gap-4 rounded-xl bg-[#F8FAFC] p-5">
-              <Gift className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#4285F4]" />
+          <section className="print-card border-t border-[#E5E7EB] px-8 py-6 md:px-12">
+            <div className="flex items-start gap-4 rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-5">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[#4285F4]/10">
+                <Gift className="h-4.5 w-4.5 text-[#4285F4]" />
+              </div>
               <div>
                 <h3 className="text-base font-semibold text-[#111827]">Existing Groot customers</h3>
                 <p className="mt-1 text-[15px] text-[#6B7280]">
@@ -217,21 +254,23 @@ export default function ReferralProgramPage() {
           </section>
 
           {/* Program Rules */}
-          <section className="print-card border-b border-[#E5E7EB] px-8 py-10 md:px-12">
-            <h2 className="mb-5 text-sm font-semibold uppercase tracking-wider text-[#4285F4]">Program Rules</h2>
-            <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
-              {programRules.map((rule) => (
-                <p key={rule} className="flex items-start gap-2.5 text-[15px] text-[#4B5563]">
-                  <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#CBD5E1]" />
-                  {rule}
-                </p>
-              ))}
+          <section className="print-card border-t border-[#E5E7EB] px-8 py-10 md:px-12">
+            <h2 className="mb-5 text-sm font-bold uppercase tracking-wider text-[#4285F4]">Program Rules</h2>
+            <div className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-6">
+              <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
+                {programRules.map((rule) => (
+                  <p key={rule} className="flex items-start gap-2.5 text-[15px] text-[#4B5563]">
+                    <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#4285F4]/40" />
+                    {rule}
+                  </p>
+                ))}
+              </div>
             </div>
           </section>
 
           {/* FAQ */}
-          <section className="print-card border-b border-[#E5E7EB] px-8 py-10 md:px-12">
-            <h2 className="mb-5 text-xl font-bold text-[#111827]">FAQ</h2>
+          <section className="print-card border-t border-[#E5E7EB] px-8 py-10 md:px-12">
+            <h2 className="mb-5 text-lg font-bold text-[#111827]">Frequently Asked Questions</h2>
             <div className="space-y-3">
               {faqItems.map((item) => (
                 <details key={item.q} className="group rounded-xl border border-[#E5E7EB] bg-[#FCFCFD] transition-all hover:border-[#D1D5DB]">
@@ -245,11 +284,18 @@ export default function ReferralProgramPage() {
           </section>
 
           {/* Application Form */}
-          <section id="apply-form" className="print-card px-8 py-10 md:px-12">
-            <h2 className="text-2xl font-bold text-[#111827] md:text-3xl">Start Referring Today</h2>
-            <p className="mt-3 text-base text-[#6B7280]">
-              For existing users, referral access will be available from your dashboard settings. External partners, apply below.
-            </p>
+          <section id="apply-form" className="print-card border-t border-[#E5E7EB] px-8 py-10 md:px-12">
+            <div className="flex items-start gap-4">
+              <div className="hidden md:flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-[#4285F4]">
+                <Sparkles className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-[#111827] md:text-3xl">Start Referring Today</h2>
+                <p className="mt-2 text-base text-[#6B7280]">
+                  For existing users, referral access will be available from your dashboard settings. External partners, apply below.
+                </p>
+              </div>
+            </div>
 
             {isSubmitted ? (
               <div className="mt-8 rounded-xl border border-green-200 bg-green-50 p-6 text-center">
@@ -294,7 +340,7 @@ export default function ReferralProgramPage() {
 
                   {/* Optional section */}
                   <div className="mt-6 border-t border-[#F3F4F6] pt-5">
-                    <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-[#9CA3AF]">Optional</p>
+                    <p className="mb-4 text-xs font-bold uppercase tracking-wider text-[#9CA3AF]">Optional</p>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
                         <label htmlFor="smeClients" className={labelClass}>How many SME clients do you serve?</label>
@@ -347,7 +393,7 @@ export default function ReferralProgramPage() {
         </main>
 
         {/* Footer */}
-        <footer className="mt-6 flex items-center justify-between px-2">
+        <footer className="mt-6 flex items-center justify-between px-2 print:mt-4 print:border-t print:border-[#E5E7EB] print:pt-3">
           <p className="text-sm text-[#9CA3AF]">
             &copy; {currentYear} Groot Finance
           </p>

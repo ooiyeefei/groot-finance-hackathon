@@ -3,21 +3,21 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useState } from 'react'
-import { ArrowRight, CheckCircle2, Sparkles, Send, Loader2 } from 'lucide-react'
+import { ArrowRight, CheckCircle2, Sparkles, Send, Loader2, TrendingUp, Gift, BookOpen, Presentation, Play, Calculator, FileText, Users } from 'lucide-react'
 
 // Metadata is exported from layout.tsx (client components cannot export metadata)
 
 const earningsData = [
-  { plan: 'Starter', payout: 'RM 300', renewal: '+ 5% Renewal' },
-  { plan: 'Pro', payout: 'RM 800', renewal: '+ 5% Renewal' },
-  { plan: 'Enterprise', value: '10-15% Y1', renewal: '+ 5% Renewal' },
+  { plan: 'Starter', payout: 'RM 300', renewal: '5% renewal share' },
+  { plan: 'Pro', payout: 'RM 800', renewal: '5% renewal share' },
+  { plan: 'Enterprise', value: '10-15% Y1', renewal: '5% renewal share' },
 ]
 
 const howItWorks = [
   {
     step: '01',
     title: 'Register',
-    description: 'Complete your partner profile and get approved. Receive your unique partner code and access partner resources.',
+    description: 'Complete your partner profile and get approved. Receive your unique partner code and access to partner resources.',
   },
   {
     step: '02',
@@ -27,7 +27,7 @@ const howItWorks = [
   {
     step: '03',
     title: 'Get Paid',
-    description: 'Receive close payout after 30 days of active billing. Earn 5% renewal share from Year 2 onward.',
+    description: 'Receive close payout after 30 days of active billing. Earn renewal share from Year 2 onward.',
   },
 ]
 
@@ -49,6 +49,15 @@ const programRules = [
   'Downgrade within 90 days: payout adjusted to lower plan level',
 ]
 
+const partnerResources = [
+  { icon: Presentation, title: 'Co-branded Pitch Deck', description: 'Ready-to-present slides for client meetings' },
+  { icon: Play, title: 'Product Demo Recordings', description: 'Walkthrough videos of key workflows' },
+  { icon: Users, title: 'Sandbox Demo Account', description: 'Full-access demo environment for live demos' },
+  { icon: Calculator, title: 'ROI Calculator', description: 'Show prospects their time & cost savings' },
+  { icon: FileText, title: 'Sales Battlecard', description: 'Quick-reference competitive comparison' },
+  { icon: BookOpen, title: 'Partner Onboarding Guide', description: 'Step-by-step: register deals, track payouts' },
+]
+
 const faqItems = [
   {
     q: 'Who should join as a reseller?',
@@ -58,9 +67,9 @@ const faqItems = [
     q: 'Are reseller payouts annual-only?',
     a: 'Yes. Launch v1 reseller payouts apply to annual closed-won deals.',
   },
-{
+  {
     q: 'How are payouts and renewals handled?',
-    a: 'Close payouts are released after the customer completes 30 days as a paying subscriber. Renewal share (5%) is settled quarterly in arrears.',
+    a: 'Close payouts are released after the customer completes 30 days as a paying subscriber. Renewal share details are outlined in the partner agreement.',
   },
   {
     q: 'Where are full terms and legal rules?',
@@ -102,105 +111,151 @@ export default function ResellerProgramPage() {
   const updateForm = (field: string, value: string) => setForm(prev => ({ ...prev, [field]: value }))
 
   return (
-    <div className="min-h-screen bg-[#F0F2F5]">
+    <div className="min-h-screen bg-[#F0F2F5] print:bg-white">
       <style>{`
+        @page {
+          size: A4;
+          margin: 12mm 10mm;
+        }
         @media print {
+          html, body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           .no-print { display: none !important; }
-          .page-shell { background: white !important; padding: 0 !important; margin: 0 !important; }
-          .brochure { box-shadow: none !important; max-width: 980px !important; margin: 0 auto !important; }
+          .page-shell { background: white !important; padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
+          .brochure { box-shadow: none !important; border: none !important; border-radius: 0 !important; max-width: 100% !important; }
           .print-card { break-inside: avoid; page-break-inside: avoid; }
+          .print-break { break-before: page; page-break-before: always; }
           details { border-color: #d1d5db !important; }
+          details[open] summary ~ * { display: block !important; }
+          .founding-card { background: linear-gradient(135deg, #1E293B, #111827) !important; -webkit-print-color-adjust: exact !important; }
+          section { padding-top: 1.5rem !important; padding-bottom: 1.5rem !important; }
         }
       `}</style>
 
       {/* Brochure shell - floating card effect */}
-      <div className="page-shell mx-[5%] py-10 md:mx-[15%] md:py-14">
-        <main className="brochure overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-lg shadow-black/5">
+      <div className="page-shell mx-[5%] py-10 md:mx-[15%] md:py-14 print:mx-0 print:py-0">
+        <main className="brochure overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-lg shadow-black/5 print:shadow-none print:border-0 print:rounded-none">
 
-          {/* Hero - clean white with blue accents */}
-          <section className="print-card border-b border-[#E5E7EB] px-8 pb-10 pt-8 md:px-12 md:pb-12">
-            {/* Nav buttons */}
-            <div className="mb-8 flex items-center justify-end gap-3 no-print">
-              <Link
-                href="/referral"
-                className="rounded-lg border border-[#E5E7EB] px-4 py-2 text-sm font-medium text-[#374151] transition-colors hover:bg-[#F3F4F6]"
-              >
-                Referral Program
-              </Link>
-              <button
-                onClick={() => document.getElementById('apply-form')?.scrollIntoView({ behavior: 'smooth' })}
-                className="rounded-lg bg-[#4285F4] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#3367D6]"
-              >
-                Become a Partner
-              </button>
-            </div>
+          {/* Hero - gradient top bar + clean layout */}
+          <section className="print-card relative overflow-hidden">
+            {/* Top accent bar */}
+            <div className="h-1.5 bg-gradient-to-r from-[#4285F4] via-[#5B9BFF] to-[#4285F4]" />
 
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold text-[#111827] md:text-3xl">Groot Reseller Program</h2>
-                <p className="mt-1 text-sm font-semibold uppercase tracking-wider text-[#4285F4]">Version 1.0 (Launch)</p>
+            <div className="px-8 pb-10 pt-6 md:px-12 md:pb-12">
+              {/* Nav buttons */}
+              <div className="mb-6 flex items-center justify-between no-print">
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-[#4285F4]/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-[#4285F4]">Partner Program</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Link
+                    href="/referral?t=groot2026"
+                    className="rounded-lg border border-[#E5E7EB] px-4 py-2 text-sm font-medium text-[#374151] transition-colors hover:bg-[#F3F4F6]"
+                  >
+                    Referral Program
+                  </Link>
+                  <button
+                    onClick={() => document.getElementById('apply-form')?.scrollIntoView({ behavior: 'smooth' })}
+                    className="rounded-lg bg-[#4285F4] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#3367D6]"
+                  >
+                    Become a Partner
+                  </button>
+                </div>
               </div>
-              <div className="hidden text-right md:block">
-                <p className="text-xs font-semibold uppercase tracking-wider text-[#9CA3AF]">Effective Date</p>
-                <p className="text-base font-semibold text-[#111827]">March 7, 2026</p>
+
+              <div className="flex items-start justify-between gap-8">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-4">
+                    <h2 className="text-2xl font-bold text-[#111827] md:text-3xl">Groot Reseller Program</h2>
+                    <span className="rounded-md bg-[#F0FDF4] border border-[#BBF7D0] px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-[#16A34A]">v1.0</span>
+                  </div>
+
+                  <h1 className="max-w-2xl text-3xl font-bold leading-snug text-[#111827] md:text-[2.5rem] md:leading-snug">
+                    Sell Groot Finance. Earn meaningful{' '}
+                    <span className="text-[#4285F4]">recurring revenue</span>.
+                  </h1>
+                  <p className="mt-5 max-w-2xl text-lg leading-relaxed text-[#6B7280]">
+                    Purpose-built for accounting firms, consultants, and IT advisors supporting SMEs in Malaysia. Source, demo, close — and get paid.
+                  </p>
+                </div>
+
+                {/* Date box - right side callout */}
+                <div className="hidden md:flex flex-col items-center rounded-xl border-2 border-[#4285F4]/20 bg-[#4285F4]/5 px-6 py-4 text-center">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#4285F4]">Effective</p>
+                  <p className="text-2xl font-bold text-[#111827]">Mar 7</p>
+                  <p className="text-sm font-semibold text-[#6B7280]">{currentYear}</p>
+                </div>
               </div>
-            </div>
-
-            <div className="mt-6 h-px bg-[#E5E7EB]" />
-
-            <div className="mt-8">
-              <h1 className="max-w-2xl text-3xl font-bold leading-snug text-[#111827] md:text-[2.5rem] md:leading-snug">
-                Sell Groot Finance. Earn meaningful{' '}
-                <span className="text-[#4285F4]">recurring revenue</span>.
-              </h1>
-              <p className="mt-5 max-w-2xl text-lg leading-relaxed text-[#6B7280]">
-                Purpose-built for accounting firms, consultants, and IT advisors supporting SMEs in Malaysia. Source, demo, close — and get paid.
-              </p>
             </div>
           </section>
 
-          {/* How It Works */}
-          <section className="print-card border-b border-[#E5E7EB] px-8 py-10 md:px-12">
-            <h2 className="mb-6 text-sm font-semibold uppercase tracking-wider text-[#4285F4]">How It Works</h2>
-            <div className="grid gap-6 md:grid-cols-3">
+          {/* How It Works - numbered cards */}
+          <section className="print-card border-t border-[#E5E7EB] bg-[#FAFBFC] px-8 py-10 md:px-12">
+            <h2 className="mb-8 text-sm font-bold uppercase tracking-wider text-[#4285F4]">How It Works</h2>
+            <div className="grid gap-5 md:grid-cols-3">
               {howItWorks.map((item) => (
-                <div key={item.step}>
-                  <span className="text-4xl font-bold text-[#4285F4]/20">{item.step}</span>
-                  <h3 className="mt-2 text-xl font-semibold text-[#111827]">{item.title}</h3>
-                  <p className="mt-2 text-base leading-relaxed text-[#6B7280]">{item.description}</p>
+                <div key={item.step} className="rounded-xl border border-[#E5E7EB] bg-white p-6 transition-shadow hover:shadow-md">
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-[#4285F4] text-lg font-bold text-white">
+                    {item.step}
+                  </div>
+                  <h3 className="text-lg font-bold text-[#111827]">{item.title}</h3>
+                  <p className="mt-2 text-[15px] leading-relaxed text-[#6B7280]">{item.description}</p>
                 </div>
               ))}
             </div>
           </section>
 
-          {/* Earnings Table */}
-          <section className="print-card border-b border-[#E5E7EB] px-8 py-10 md:px-12">
-            <h2 className="mb-6 text-sm font-semibold uppercase tracking-wider text-[#4285F4]">Reseller Earnings (Annual Deals)</h2>
-            <div className="overflow-hidden rounded-xl border border-[#E5E7EB]">
-              <div className="grid grid-cols-3 border-b border-[#E5E7EB] bg-[#F9FAFB] px-6 py-3.5">
-                <span className="text-xs font-semibold uppercase tracking-wider text-[#9CA3AF]">Plan</span>
-                <span className="text-xs font-semibold uppercase tracking-wider text-[#9CA3AF]">Close Payout</span>
-                <span className="text-xs font-semibold uppercase tracking-wider text-[#9CA3AF]">Renewal</span>
-              </div>
-              {earningsData.map((item, i) => (
-                <div key={item.plan} className={`grid grid-cols-3 items-center px-6 py-5 ${i < earningsData.length - 1 ? 'border-b border-[#F3F4F6]' : ''}`}>
-                  <span className="text-base font-semibold text-[#111827]">{item.plan}</span>
-                  <span className="text-2xl font-bold text-[#111827]">{item.payout || item.value}</span>
-                  <span className="text-sm font-medium text-[#4285F4]">{item.renewal}</span>
+          {/* Earnings Table + Upgrade Bonus - side by side on desktop */}
+          <section className="print-card border-t border-[#E5E7EB] px-8 py-10 md:px-12">
+            <h2 className="mb-6 text-sm font-bold uppercase tracking-wider text-[#4285F4]">Reseller Earnings (Annual Deals Only)</h2>
+
+            <div className="grid gap-6 md:grid-cols-[1fr,auto]">
+              {/* Earnings table */}
+              <div className="overflow-hidden rounded-xl border border-[#E5E7EB]">
+                <div className="grid grid-cols-3 border-b border-[#E5E7EB] bg-[#F9FAFB] px-6 py-3.5">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#9CA3AF]">Plan</span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#9CA3AF]">Close Payout</span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#9CA3AF]">Year 2+</span>
                 </div>
-              ))}
+                {earningsData.map((item, i) => (
+                  <div key={item.plan} className={`grid grid-cols-3 items-center px-6 py-5 ${i < earningsData.length - 1 ? 'border-b border-[#F3F4F6]' : ''}`}>
+                    <span className="text-base font-semibold text-[#111827]">{item.plan}</span>
+                    <span className="text-2xl font-bold text-[#111827]">{item.payout || item.value}</span>
+                    <span className="text-sm font-medium text-[#6B7280]">{item.renewal}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Upgrade Bonus - highlighted callout card */}
+              <div className="flex flex-col gap-4 md:w-56">
+                <div className="rounded-xl border-2 border-[#4285F4]/30 bg-gradient-to-br from-[#4285F4]/5 to-[#4285F4]/10 p-5 text-center">
+                  <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-[#4285F4]/15">
+                    <TrendingUp className="h-5 w-5 text-[#4285F4]" />
+                  </div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-[#4285F4]">Upgrade Bonus</p>
+                  <p className="mt-2 text-2xl font-bold text-[#111827]">+RM 500</p>
+                  <p className="mt-1 text-sm text-[#6B7280]">
+                    Starter to Pro upgrade within 12 months
+                  </p>
+                </div>
+
+                <p className="text-xs text-[#9CA3AF] leading-relaxed">
+                  Renewal share details finalized in partner agreement upon onboarding.
+                </p>
+              </div>
             </div>
-            <p className="mt-3 text-sm text-[#9CA3AF]">
-              Bonus: +RM 500 for Starter &rarr; Pro upgrades within 12 months.
-            </p>
           </section>
 
           {/* Founding Partner Benefits - Dark card */}
-          <section className="print-card border-b border-[#E5E7EB] px-8 py-10 md:px-12">
-            <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-[#1E293B] to-[#111827] p-8 md:p-10">
+          <section className="print-card border-t border-[#E5E7EB] px-8 py-10 md:px-12">
+            <div className="founding-card overflow-hidden rounded-2xl bg-gradient-to-br from-[#1E293B] to-[#111827] p-8 md:p-10">
               <div className="mb-6 flex items-center gap-3">
-                <span className="rounded-md bg-[#4285F4] px-3 py-1 text-xs font-bold uppercase tracking-wider text-white">Exclusive</span>
-                <h2 className="text-xl font-bold text-white md:text-2xl">Founding Partner Benefits</h2>
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#4285F4]">
+                  <Gift className="h-4 w-4 text-white" />
+                </span>
+                <div>
+                  <span className="rounded-md bg-amber-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-400">Exclusive</span>
+                  <h2 className="text-xl font-bold text-white md:text-2xl">Founding Partner Benefits</h2>
+                </div>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 {foundingBenefits.map((benefit) => (
@@ -210,28 +265,57 @@ export default function ResellerProgramPage() {
                   </div>
                 ))}
               </div>
-              <p className="mt-6 text-sm text-[#64748B]">
-                *Requires 3+ active customers. **Paid at 10th active customer.
-              </p>
+              <div className="mt-6 rounded-lg bg-white/5 px-4 py-3">
+                <p className="text-[13px] leading-relaxed text-[#94A3B8]">
+                  *Requires 3+ active customers.<br />
+                  **Paid at 10th active customer.
+                </p>
+              </div>
             </div>
           </section>
 
-          {/* Program Rules */}
-          <section className="print-card border-b border-[#E5E7EB] px-8 py-10 md:px-12">
-            <h2 className="mb-5 text-sm font-semibold uppercase tracking-wider text-[#4285F4]">Program Rules</h2>
-            <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
-              {programRules.map((rule) => (
-                <p key={rule} className="flex items-start gap-2.5 text-[15px] text-[#4B5563]">
-                  <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#CBD5E1]" />
-                  {rule}
-                </p>
+          {/* Partner Resources - grid of resource cards */}
+          <section className="print-card print-break border-t border-[#E5E7EB] bg-[#FAFBFC] px-8 py-10 md:px-12">
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-[#4285F4]">Partner Resources</h2>
+              <span className="rounded-full bg-[#4285F4]/10 px-3 py-1 text-xs font-semibold text-[#4285F4]">Provided upon approval</span>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+              {partnerResources.map((resource) => (
+                <div key={resource.title} className="flex items-start gap-3 rounded-xl border border-[#E5E7EB] bg-white p-4">
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[#4285F4]/10">
+                    <resource.icon className="h-4.5 w-4.5 text-[#4285F4]" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-[#111827]">{resource.title}</p>
+                    <p className="mt-0.5 text-xs text-[#6B7280]">{resource.description}</p>
+                  </div>
+                </div>
               ))}
+            </div>
+            <p className="mt-4 text-center text-sm text-[#9CA3AF]">
+              ...and more resources added regularly as the program grows.
+            </p>
+          </section>
+
+          {/* Program Rules */}
+          <section className="print-card border-t border-[#E5E7EB] px-8 py-10 md:px-12">
+            <h2 className="mb-5 text-sm font-bold uppercase tracking-wider text-[#4285F4]">Program Rules</h2>
+            <div className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-6">
+              <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
+                {programRules.map((rule) => (
+                  <p key={rule} className="flex items-start gap-2.5 text-[15px] text-[#4B5563]">
+                    <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#4285F4]/40" />
+                    {rule}
+                  </p>
+                ))}
+              </div>
             </div>
           </section>
 
           {/* FAQ */}
-          <section className="print-card border-b border-[#E5E7EB] px-8 py-10 md:px-12">
-            <h2 className="mb-5 text-xl font-bold text-[#111827]">FAQ</h2>
+          <section className="print-card border-t border-[#E5E7EB] px-8 py-10 md:px-12">
+            <h2 className="mb-5 text-lg font-bold text-[#111827]">Frequently Asked Questions</h2>
             <div className="space-y-3">
               {faqItems.map((item) => (
                 <details key={item.q} className="group rounded-xl border border-[#E5E7EB] bg-[#FCFCFD] transition-all hover:border-[#D1D5DB]">
@@ -245,13 +329,20 @@ export default function ResellerProgramPage() {
           </section>
 
           {/* Application Form */}
-          <section id="apply-form" className="print-card px-8 py-10 md:px-12">
-            <h2 className="text-2xl font-bold text-[#111827] md:text-3xl">
-              Join Groot Founding Partner Cohort {currentYear}
-            </h2>
-            <p className="mt-3 text-base text-[#6B7280]">
-              Start with a simple, high-clarity payout model and grow with us as the program evolves.
-            </p>
+          <section id="apply-form" className="print-card border-t border-[#E5E7EB] px-8 py-10 md:px-12">
+            <div className="flex items-start gap-4">
+              <div className="hidden md:flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-[#4285F4]">
+                <Sparkles className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-[#111827] md:text-3xl">
+                  Join Groot Founding Partner Cohort {currentYear}
+                </h2>
+                <p className="mt-2 text-base text-[#6B7280]">
+                  Start with a simple, high-clarity payout model and grow with us as the program evolves.
+                </p>
+              </div>
+            </div>
 
             {isSubmitted ? (
               <div className="mt-8 rounded-xl border border-green-200 bg-green-50 p-6 text-center">
@@ -296,7 +387,7 @@ export default function ResellerProgramPage() {
 
                   {/* Optional section */}
                   <div className="mt-6 border-t border-[#F3F4F6] pt-5">
-                    <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-[#9CA3AF]">Optional</p>
+                    <p className="mb-4 text-xs font-bold uppercase tracking-wider text-[#9CA3AF]">Optional</p>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
                         <label htmlFor="smeClients" className={labelClass}>How many SME clients do you serve?</label>
@@ -349,7 +440,7 @@ export default function ResellerProgramPage() {
         </main>
 
         {/* Footer - outside brochure card */}
-        <footer className="mt-6 flex items-center justify-between px-2">
+        <footer className="mt-6 flex items-center justify-between px-2 print:mt-4 print:border-t print:border-[#E5E7EB] print:pt-3">
           <p className="text-sm text-[#9CA3AF]">
             &copy; {currentYear} Groot Finance
           </p>

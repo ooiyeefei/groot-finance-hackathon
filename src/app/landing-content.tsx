@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import { Bot, Radar, FileText, ScanLine, Printer, Building2, Sparkles, Check } from 'lucide-react';
+import { Bot, Radar, FileText, ScanLine, Printer, Building2, Sparkles, Check, Clock } from 'lucide-react';
 import { localizeEInvoiceLabel } from '@/lib/utils/e-invoice-label';
 import { isNativePlatform } from '@/lib/capacitor/platform';
 
@@ -62,6 +62,15 @@ const PRICING_DATA: Record<string, { price: number; listPrice: number }[]> = {
   USD: [{ price: 249, listPrice: 299 }, { price: 599, listPrice: 699 }],
 }
 
+/** Annual launch promo prices (17% off monthly × 12). Valid until June 30, 2026. */
+const ANNUAL_PRICING_DATA: Record<string, { price: number; monthlyEquiv: number; savings: number }[]> = {
+  MYR: [{ price: 2490, monthlyEquiv: 208, savings: 498 }, { price: 5990, monthlyEquiv: 499, savings: 1198 }],
+  SGD: [{ price: 1490, monthlyEquiv: 124, savings: 298 }, { price: 3490, monthlyEquiv: 291, savings: 698 }],
+  THB: [{ price: 2490, monthlyEquiv: 208, savings: 498 }, { price: 5990, monthlyEquiv: 499, savings: 1198 }],
+  IDR: [{ price: 2490, monthlyEquiv: 208, savings: 498 }, { price: 5990, monthlyEquiv: 499, savings: 1198 }],
+  USD: [{ price: 2490, monthlyEquiv: 208, savings: 498 }, { price: 5990, monthlyEquiv: 499, savings: 1198 }],
+}
+
 const PRICING_TIERS = [
   {
     name: 'Groot Finance Starter',
@@ -114,6 +123,7 @@ const PRICING_TIERS = [
 
 export default function LandingContent({ country }: { country: string }) {
   const heroRef = useRef<HTMLDivElement>(null);
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
   const currency = getCurrencyInfo(country);
 
   useEffect(() => {
@@ -407,7 +417,7 @@ export default function LandingContent({ country }: { country: string }) {
             <img src={FINANCE_ICON} alt="" width={20} height={20} className="w-5 h-5" />
           </div>
           <div className="flex items-center gap-3">
-            <a href="/reseller-program" className="text-sm text-[#6B7280] hover:text-[#111111] transition-colors">Partners</a>
+            <a href="/reseller-program?t=groot2026" className="text-sm text-[#6B7280] hover:text-[#111111] transition-colors">Partners</a>
             <a href="/en/sign-in" className="btn-beam text-sm px-4 py-2 rounded-lg"><span className="btn-beam-text">Sign in</span></a>
           </div>
         </div>
@@ -497,7 +507,33 @@ export default function LandingContent({ country }: { country: string }) {
               Simple, transparent <span className="text-[#4285F4]">pricing</span>
             </h2>
             <p className="text-sm text-[#6B7280] font-medium">Choose the plan that works for your business</p>
+
+            {/* Monthly / Annual toggle */}
+            <div className="flex items-center justify-center gap-3 mt-5">
+              <span className={`text-sm font-medium ${billingCycle === 'monthly' ? 'text-[#111111]' : 'text-[#9CA3AF]'}`}>Monthly</span>
+              <button
+                onClick={() => setBillingCycle(billingCycle === 'monthly' ? 'annual' : 'monthly')}
+                className={`relative w-12 h-6 rounded-full transition-colors ${billingCycle === 'annual' ? 'bg-[#4285F4]' : 'bg-[#D1D5DB]'}`}
+                aria-label="Toggle billing cycle"
+              >
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${billingCycle === 'annual' ? 'translate-x-6' : ''}`} />
+              </button>
+              <span className={`text-sm font-medium ${billingCycle === 'annual' ? 'text-[#111111]' : 'text-[#9CA3AF]'}`}>
+                Annual
+                <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/15 text-green-600 border border-green-500/30">
+                  Save 17%
+                </span>
+              </span>
+            </div>
           </div>
+
+          {/* Annual launch promo banner */}
+          {billingCycle === 'annual' && (
+            <div className="flex items-center justify-center gap-2 mb-6 px-4 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm font-medium">
+              <Clock className="w-4 h-4 flex-shrink-0" />
+              <span>Launch promo — 17% off annual plans until <strong>June 30, 2026</strong></span>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {PRICING_TIERS.map((tier) => (
@@ -519,7 +555,7 @@ export default function LandingContent({ country }: { country: string }) {
                 <div className="text-center mb-5">
                   {tier.name === 'Enterprise' ? (
                     <span className="text-2xl font-semibold text-[#111111]">Custom pricing</span>
-                  ) : (() => {
+                  ) : billingCycle === 'monthly' ? (() => {
                     const tierIndex = tier.name.includes('Starter') ? 0 : 1
                     const prices = PRICING_DATA[currency.code] || PRICING_DATA.MYR
                     const { price, listPrice } = prices[tierIndex]
@@ -533,6 +569,27 @@ export default function LandingContent({ country }: { country: string }) {
                         </div>
                         <p className="text-xs font-medium text-green-600 mt-1">
                           Save {currency.symbol}{savings} — Launch Special
+                        </p>
+                      </>
+                    )
+                  })() : (() => {
+                    const tierIndex = tier.name.includes('Starter') ? 0 : 1
+                    const annualPrices = ANNUAL_PRICING_DATA[currency.code] || ANNUAL_PRICING_DATA.MYR
+                    const monthlyPrices = PRICING_DATA[currency.code] || PRICING_DATA.MYR
+                    const { price: annualPrice, monthlyEquiv, savings } = annualPrices[tierIndex]
+                    const monthlyTotal = monthlyPrices[tierIndex].price * 12
+                    return (
+                      <>
+                        <p className="text-sm text-[#9CA3AF] line-through">{currency.symbol}{monthlyTotal.toLocaleString()}/yr</p>
+                        <div className="flex items-baseline gap-1 justify-center">
+                          <span className="text-3xl font-semibold text-[#111111]">{currency.symbol}{monthlyEquiv}</span>
+                          <span className="text-sm text-[#6B7280]">/mo</span>
+                        </div>
+                        <p className="text-xs text-[#6B7280] mt-0.5">
+                          Billed {currency.symbol}{annualPrice.toLocaleString()}/year
+                        </p>
+                        <p className="text-xs font-medium text-green-600 mt-1">
+                          Save {currency.symbol}{savings.toLocaleString()} — Launch Promo
                         </p>
                       </>
                     )
