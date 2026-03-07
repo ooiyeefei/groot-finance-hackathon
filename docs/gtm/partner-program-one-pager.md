@@ -107,24 +107,6 @@ You source, demo, close deals, and optionally assist with basic onboarding.
 - 5 Starter: RM 300 × 5 = RM 1,500
 - **Q2 total: RM 3,900**
 
-### Reseller — Implementation Fee (Optional)
-
-Resellers are encouraged to charge their own setup and migration fee directly to the customer. This is **100% kept by the reseller** — Groot does not take a cut.
-
-| Service | Suggested Range | Who Pays |
-|---------|----------------|----------|
-| Setup & onboarding assistance | RM 300–800 | Customer pays reseller directly |
-| Data migration support | RM 200–500 | Customer pays reseller directly |
-| Training session | RM 200–500 | Customer pays reseller directly |
-
-**Total reseller income per Starter customer (Y1):** RM 300 (commission) + ~RM 500 (setup fee) = ~RM 800
-
-To support this, Groot provides a **Certified Partner Onboarding Playbook** including:
-- Product demo script and sales pitch deck
-- Customer onboarding checklist (account setup, category configuration, team invites)
-- ROI calculator (compare Groot vs incumbent stack costs)
-- FAQ sheet for common objections (vs SQL, AutoCount, Xero)
-
 ---
 
 ## Founding Partner Benefits (Launch Cohort — First 20 Partners or Until June 30, 2026)
@@ -244,7 +226,7 @@ Existing Groot Finance customers can participate as referrers with zero addition
 | | **Groot** | **AutoCount** | **SQL Account** | **Xero** |
 |---|---|---|---|---|
 | Referral payout | RM 80–500 per deal | Fixed % (undisclosed) | Not public | No cash — discount only |
-| Reseller Y1 | RM 300–800 + setup fee | Margin on license | ~30-40% margin on perpetual | Wholesale discount |
+| Reseller Y1 | RM 300–800 | Margin on license | ~30-40% margin on perpetual | Wholesale discount |
 | Recurring income | 5% renewal share | Up to 20% on cloud subs | None (perpetual license) | Tiered wholesale discount |
 | Free software for firm | Yes (Founding Partner) | Free cloud trial (1 year) | No | Free practice subscription |
 | Training provided | Yes (online, ~2 hours) | Yes (certification) | Dealer training | Online learning |

@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowRight, CheckCircle2, ChevronRight, Sparkles } from 'lucide-react'
+import { ArrowRight, CheckCircle2, Sparkles } from 'lucide-react'
 
 // Metadata is exported from layout.tsx (client components cannot export metadata)
 
@@ -56,11 +56,7 @@ const faqItems = [
     q: 'Are reseller payouts annual-only?',
     a: 'Yes. Launch v1 reseller payouts apply to annual closed-won deals.',
   },
-  {
-    q: 'Can resellers charge setup fees?',
-    a: 'Yes. Resellers may charge customers directly for setup, migration, and training services (suggested RM 300-800 for setup assistance). 100% yours to keep.',
-  },
-  {
+{
     q: 'How are payouts and renewals handled?',
     a: 'Close payouts are released after the customer completes 60 days as a paying subscriber. Renewal share (5%) is settled quarterly in arrears.',
   },
@@ -172,19 +168,6 @@ export default function ResellerProgramPage() {
             <p className="mt-3 text-sm text-[#9CA3AF]">
               Bonus: +RM 500 for Starter &rarr; Pro upgrades within 12 months.
             </p>
-          </section>
-
-          {/* Setup Fees callout */}
-          <section className="print-card border-b border-[#E5E7EB] px-8 py-6 md:px-12">
-            <div className="flex items-start gap-4 rounded-xl bg-[#F8FAFC] p-5">
-              <ChevronRight className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#4285F4]" />
-              <div>
-                <h3 className="text-base font-semibold text-[#111827]">Charge your own setup fees</h3>
-                <p className="mt-1 text-[15px] text-[#6B7280]">
-                  Resellers may charge customers directly for setup, migration, and training (suggested RM 300–800). 100% yours to keep — separate from Groot commissions.
-                </p>
-              </div>
-            </div>
           </section>
 
           {/* Founding Partner Benefits - Dark card */}
