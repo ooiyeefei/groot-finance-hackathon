@@ -109,7 +109,7 @@ export default function ResellerProgramPage() {
       </header>
 
       {/* Brochure shell - floating card effect */}
-      <div className="page-shell mx-auto w-full max-w-3xl px-6 py-10 md:px-10 md:py-14">
+      <div className="page-shell mx-auto w-full max-w-[668px] px-6 py-10 md:py-14">
         <main className="brochure overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-lg shadow-black/5">
 
           {/* Hero - clean white with blue accents */}
