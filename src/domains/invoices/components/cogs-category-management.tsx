@@ -24,6 +24,7 @@ interface COGSCategory {
   ai_keywords: string[]
   vendor_patterns: string[]
   sort_order: number
+  glCode?: string
 }
 
 interface COGSCategoryManagementProps {
@@ -281,7 +282,10 @@ export default function COGSCategoryManagement({ userRole }: COGSCategoryManagem
                             <p className="text-muted-foreground text-sm mt-1">{category.description}</p>
                           )}
                         </div>
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 items-start">
+                          {category.glCode && (
+                            <span className="text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded border border-border">{category.glCode}</span>
+                          )}
                           {!category.is_active && (
                             <Badge variant="secondary" className="text-xs bg-muted text-muted-foreground border border-border">Inactive</Badge>
                           )}

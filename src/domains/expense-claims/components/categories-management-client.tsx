@@ -28,6 +28,7 @@ interface ExpenseCategory {
   requires_manager_approval: boolean
   sort_order: number
   is_default: boolean
+  glCode?: string
 }
 
 
@@ -375,7 +376,10 @@ function ExpenseCategoryManagement({ userRole }: { userRole: UserRole }) {
                             <p className="text-muted-foreground text-sm mt-1">{category.description}</p>
                           )}
                         </div>
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 items-start">
+                          {category.glCode && (
+                            <span className="text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded border border-border">{category.glCode}</span>
+                          )}
                           {!category.is_active && (
                             <Badge variant="secondary" className="text-xs bg-muted text-muted-foreground border border-border">Inactive</Badge>
                           )}
