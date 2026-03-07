@@ -1,8 +1,8 @@
 'use client'
 
-import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowRight, CheckCircle2, Gift } from 'lucide-react'
+import { useState } from 'react'
+import { CheckCircle2, Gift, Send, Loader2 } from 'lucide-react'
 
 // Metadata is exported from layout.tsx (client components cannot export metadata)
 
@@ -31,7 +31,7 @@ const howItWorks = [
 ]
 
 const whyRefer = [
-  'Simple referral link tracking — no sales skills needed',
+  'Simple referral code tracking — no sales skills needed',
   'No technical knowledge required',
   'Ideal for influencers, accountants, and busy firms',
   'Monthly payout cycle',
@@ -64,50 +64,73 @@ const faqItems = [
   },
 ]
 
+const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-[#D1D5DB] bg-[#F9FAFB] text-[#111827] text-sm placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#4285F4] focus:border-transparent'
+const labelClass = 'block text-sm font-medium text-[#111827] mb-1.5'
+
 export default function ReferralProgramPage() {
   const currentYear = new Date().getFullYear()
+  const [form, setForm] = useState({ fullName: '', email: '', phone: '', companyName: '', companyWebsite: '', smeClients: '', currentServices: '', heardFrom: '' })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSubmitted, setIsSubmitted] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setFormError(null)
+    setIsSubmitting(true)
+    try {
+      const res = await fetch('/api/v1/partner-application', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, partnerType: 'referrer' }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to submit')
+      }
+      setIsSubmitted(true)
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+  const updateForm = (field: string, value: string) => setForm(prev => ({ ...prev, [field]: value }))
 
   return (
     <div className="min-h-screen bg-[#F0F2F5]">
       <style>{`
         @media print {
-          header, .no-print { display: none !important; }
-          .page-shell { background: white !important; padding: 0 !important; }
+          .no-print { display: none !important; }
+          .page-shell { background: white !important; padding: 0 !important; margin: 0 !important; }
           .brochure { box-shadow: none !important; max-width: 980px !important; margin: 0 auto !important; }
           .print-card { break-inside: avoid; page-break-inside: avoid; }
         }
       `}</style>
-
-      {/* Header */}
-      <header className="border-b border-[#E5E7EB] bg-white">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
-          <Link href="/" className="inline-flex items-center gap-2">
-            <Image src="/groot-wordmark.png" alt="Groot Finance" width={118} height={30} className="h-7 w-auto" />
-          </Link>
-          <div className="flex items-center gap-3 no-print">
-            <Link
-              href="/reseller-program"
-              className="rounded-lg border border-[#E5E7EB] px-4 py-2 text-sm font-medium text-[#374151] transition-colors hover:bg-[#F3F4F6]"
-            >
-              Reseller Program
-            </Link>
-            <a
-              href="mailto:partners@hellogroot.com?subject=Groot%20Referral%20Program%20Application"
-              className="rounded-lg bg-[#4285F4] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#3367D6]"
-            >
-              Join Referral
-            </a>
-          </div>
-        </div>
-      </header>
 
       {/* Brochure shell */}
       <div className="page-shell mx-[5%] py-10 md:mx-[15%] md:py-14">
         <main className="brochure overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-lg shadow-black/5">
 
           {/* Hero */}
-          <section className="print-card border-b border-[#E5E7EB] px-8 pb-10 pt-10 md:px-12 md:pt-14 md:pb-12">
-            <div className="mb-8 flex items-center justify-between">
+          <section className="print-card border-b border-[#E5E7EB] px-8 pb-10 pt-8 md:px-12 md:pb-12">
+            {/* Nav buttons */}
+            <div className="mb-8 flex items-center justify-end gap-3 no-print">
+              <Link
+                href="/reseller-program"
+                className="rounded-lg border border-[#E5E7EB] px-4 py-2 text-sm font-medium text-[#374151] transition-colors hover:bg-[#F3F4F6]"
+              >
+                Reseller Program
+              </Link>
+              <button
+                onClick={() => document.getElementById('apply-form')?.scrollIntoView({ behavior: 'smooth' })}
+                className="rounded-lg bg-[#4285F4] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#3367D6]"
+              >
+                Join Referral
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-bold text-[#111827] md:text-3xl">Groot Referral Program</h2>
                 <p className="mt-1 text-sm font-semibold uppercase tracking-wider text-[#4285F4]">Version 1.0 (Launch)</p>
@@ -118,7 +141,7 @@ export default function ReferralProgramPage() {
               </div>
             </div>
 
-            <div className="h-px bg-[#E5E7EB]" />
+            <div className="mt-6 h-px bg-[#E5E7EB]" />
 
             <div className="mt-8">
               <h1 className="max-w-2xl text-3xl font-bold leading-snug text-[#111827] md:text-[2.5rem] md:leading-snug">
@@ -126,7 +149,7 @@ export default function ReferralProgramPage() {
                 <span className="text-[#4285F4]">You earn</span>.
               </h1>
               <p className="mt-5 max-w-2xl text-lg leading-relaxed text-[#6B7280]">
-                A simple referral model for existing customers and partners who want zero sales overhead. Share your link, we handle the rest.
+                A simple referral model for existing customers and partners who want zero sales overhead. Share your code, we handle the rest.
               </p>
             </div>
           </section>
@@ -187,7 +210,7 @@ export default function ReferralProgramPage() {
               <div>
                 <h3 className="text-base font-semibold text-[#111827]">Existing Groot customers</h3>
                 <p className="mt-1 text-[15px] text-[#6B7280]">
-                  Referral access will be available from your dashboard Settings. Share your link and start earning — no application required.
+                  Referral access will be available from your dashboard Settings. Share your code and start earning — no application required.
                 </p>
               </div>
             </div>
@@ -221,33 +244,105 @@ export default function ReferralProgramPage() {
             </div>
           </section>
 
-          {/* CTA */}
-          <section className="print-card px-8 py-10 md:px-12">
+          {/* Application Form */}
+          <section id="apply-form" className="print-card px-8 py-10 md:px-12">
             <h2 className="text-2xl font-bold text-[#111827] md:text-3xl">Start Referring Today</h2>
-            <p className="mt-3 text-lg text-[#6B7280]">
+            <p className="mt-3 text-base text-[#6B7280]">
               For existing users, referral access will be available from your dashboard settings. External partners, apply below.
             </p>
-            <a
-              href="mailto:partners@hellogroot.com"
-              className="mt-2 inline-block text-lg font-semibold text-[#4285F4] hover:underline"
-            >
-              partners@hellogroot.com
-            </a>
-            <div className="mt-6 flex flex-wrap gap-3 no-print">
-              <a
-                href="mailto:partners@hellogroot.com?subject=Apply%20-%20Groot%20Referral%20Program"
-                className="inline-flex items-center gap-2 rounded-lg bg-[#4285F4] px-6 py-3 text-base font-semibold text-white hover:bg-[#3367D6]"
-              >
-                Join Referral Program
-                <ArrowRight className="h-4 w-4" />
-              </a>
-              <button
-                onClick={() => window.print()}
-                className="rounded-lg border border-[#D1D5DB] bg-white px-6 py-3 text-base font-medium text-[#374151] hover:bg-[#F3F4F6]"
-              >
-                Export as PDF
-              </button>
-            </div>
+
+            {isSubmitted ? (
+              <div className="mt-8 rounded-xl border border-green-200 bg-green-50 p-6 text-center">
+                <CheckCircle2 className="mx-auto h-10 w-10 text-green-600" />
+                <h3 className="mt-3 text-lg font-semibold text-[#111827]">Application Submitted</h3>
+                <p className="mt-1 text-sm text-[#6B7280]">
+                  Thank you! Our partnerships team will review your application and get back to you via email.
+                </p>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="mt-8 space-y-5 no-print">
+                <div className="overflow-hidden rounded-xl border border-[#E5E7EB] bg-white p-6">
+                  {/* Row 1: Name & Email */}
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label htmlFor="fullName" className={labelClass}>Full Name *</label>
+                      <input id="fullName" type="text" required value={form.fullName} onChange={e => updateForm('fullName', e.target.value)} placeholder="John Doe" className={inputClass} />
+                    </div>
+                    <div>
+                      <label htmlFor="email" className={labelClass}>Work Email *</label>
+                      <input id="email" type="email" required value={form.email} onChange={e => updateForm('email', e.target.value)} placeholder="john@company.com" className={inputClass} />
+                    </div>
+                  </div>
+
+                  {/* Row 2: Phone & Company */}
+                  <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label htmlFor="phone" className={labelClass}>Phone / WhatsApp *</label>
+                      <input id="phone" type="tel" required value={form.phone} onChange={e => updateForm('phone', e.target.value)} placeholder="+60 12-345 6789" className={inputClass} />
+                    </div>
+                    <div>
+                      <label htmlFor="companyName" className={labelClass}>Company Name *</label>
+                      <input id="companyName" type="text" required value={form.companyName} onChange={e => updateForm('companyName', e.target.value)} placeholder="Your Company Sdn Bhd" className={inputClass} />
+                    </div>
+                  </div>
+
+                  {/* Row 3: Website */}
+                  <div className="mt-4">
+                    <label htmlFor="companyWebsite" className={labelClass}>Company Website / SSM Number</label>
+                    <input id="companyWebsite" type="text" value={form.companyWebsite} onChange={e => updateForm('companyWebsite', e.target.value)} placeholder="www.company.com or SSM 202401012345" className={inputClass} />
+                  </div>
+
+                  {/* Optional section */}
+                  <div className="mt-6 border-t border-[#F3F4F6] pt-5">
+                    <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-[#9CA3AF]">Optional</p>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div>
+                        <label htmlFor="smeClients" className={labelClass}>How many SME clients do you serve?</label>
+                        <input id="smeClients" type="text" value={form.smeClients} onChange={e => updateForm('smeClients', e.target.value)} placeholder="e.g. 20-50" className={inputClass} />
+                      </div>
+                      <div>
+                        <label htmlFor="heardFrom" className={labelClass}>How did you hear about us?</label>
+                        <input id="heardFrom" type="text" value={form.heardFrom} onChange={e => updateForm('heardFrom', e.target.value)} placeholder="e.g. LinkedIn, referral" className={inputClass} />
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <label htmlFor="currentServices" className={labelClass}>Current services offered</label>
+                      <input id="currentServices" type="text" value={form.currentServices} onChange={e => updateForm('currentServices', e.target.value)} placeholder="e.g. Bookkeeping, tax filing, IT consulting" className={inputClass} />
+                    </div>
+                  </div>
+                </div>
+
+                {formError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                    <p className="text-sm text-red-600">{formError}</p>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="inline-flex items-center gap-2 rounded-lg bg-[#4285F4] px-6 py-3 text-base font-semibold text-white hover:bg-[#3367D6] disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSubmitting ? (
+                      <><Loader2 className="h-4 w-4 animate-spin" /> Submitting...</>
+                    ) : (
+                      <><Send className="h-4 w-4" /> Join Referral Program</>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="rounded-lg border border-[#D1D5DB] bg-white px-6 py-3 text-base font-medium text-[#374151] hover:bg-[#F3F4F6]"
+                  >
+                    Export as PDF
+                  </button>
+                  <a href="mailto:partners@hellogroot.com" className="text-sm font-medium text-[#4285F4] hover:underline">
+                    partners@hellogroot.com
+                  </a>
+                </div>
+              </form>
+            )}
           </section>
         </main>
 
