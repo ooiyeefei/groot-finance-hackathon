@@ -101,7 +101,7 @@ export default function ReferralProgramPage() {
       </header>
 
       {/* Brochure shell */}
-      <div className="page-shell mx-auto w-full max-w-4xl px-4 py-10 md:px-8 md:py-14">
+      <div className="page-shell mx-auto w-full max-w-3xl px-6 py-10 md:px-10 md:py-14">
         <main className="brochure overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-lg shadow-black/5">
 
           {/* Hero */}
