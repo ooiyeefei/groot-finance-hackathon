@@ -1,3 +1,6 @@
+// Force dynamic rendering - required for authentication
+export const dynamic = 'force-dynamic'
+
 import { redirect } from 'next/navigation'
 
 export default async function SalesInvoicesPage({ params }: { params: Promise<{ locale: string }> }) {

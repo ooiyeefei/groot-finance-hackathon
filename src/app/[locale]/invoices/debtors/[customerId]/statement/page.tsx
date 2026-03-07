@@ -1,3 +1,6 @@
+// Force dynamic rendering - required for authentication
+export const dynamic = 'force-dynamic'
+
 import DebtorStatement from '@/domains/sales-invoices/components/debtor-statement'
 
 interface StatementPageProps {

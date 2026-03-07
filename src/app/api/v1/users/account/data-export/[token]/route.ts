@@ -12,8 +12,6 @@ import { ConvexHttpClient } from 'convex/browser'
 import { api } from '@/convex/_generated/api'
 import { getPresignedDownloadUrl } from '@/lib/aws-s3'
 
-const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
-
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
@@ -27,6 +25,9 @@ export async function GET(
         { status: 400 }
       )
     }
+
+    // Initialize Convex client at runtime (not module level)
+    const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
 
     // Look up the export record
     const exportRecord = await convex.query(

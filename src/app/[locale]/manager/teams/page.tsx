@@ -1,3 +1,6 @@
+// Force dynamic rendering - required for authentication
+export const dynamic = 'force-dynamic'
+
 /**
  * Teams Management Page
  * Allows managers and finance users to manage team member roles, permissions, and invitations

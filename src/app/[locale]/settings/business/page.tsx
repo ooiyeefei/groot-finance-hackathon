@@ -1,3 +1,6 @@
+// Force dynamic rendering - required for authentication
+export const dynamic = 'force-dynamic'
+
 /**
  * Business Profile Settings Page
  * Company information, logo, and basic settings (managers and admins only)

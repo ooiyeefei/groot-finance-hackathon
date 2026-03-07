@@ -23,6 +23,9 @@ interface LocaleLayoutProps {
   }>;
 }
 
+// Force dynamic rendering for all routes (required for Clerk authentication)
+export const dynamic = 'force-dynamic'
+
 // Generate static params for all supported locales
 export function generateStaticParams() {
   return locales.map((locale) => ({ locale }));

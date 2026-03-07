@@ -7,6 +7,9 @@
  * Business initialization is now synchronous, so this redirects to onboarding.
  */
 
+// Force dynamic rendering - redirects to auth-protected page
+export const dynamic = 'force-dynamic'
+
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'

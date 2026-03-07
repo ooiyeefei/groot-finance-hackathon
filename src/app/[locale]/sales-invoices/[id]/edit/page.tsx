@@ -1,5 +1,8 @@
 'use client'
 
+// Force dynamic rendering - required for authentication
+export const dynamic = 'force-dynamic'
+
 import { useParams, useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { useLocale } from 'next-intl'

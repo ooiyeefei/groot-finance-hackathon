@@ -1,9 +1,12 @@
+'use client'
+
 /**
  * Invitation Acceptance Page
  * Handles invitation validation and redirects to signup or processes acceptance
  */
 
-'use client'
+// Force dynamic rendering - required for authentication
+export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter, useParams } from 'next/navigation'

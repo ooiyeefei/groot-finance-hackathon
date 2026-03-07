@@ -1,3 +1,6 @@
+// Force dynamic rendering - required for authentication
+export const dynamic = 'force-dynamic'
+
 /**
  * Manager Categories Page
  * Interface for managing expense and COGS categories

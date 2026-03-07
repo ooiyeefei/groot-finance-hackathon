@@ -1,3 +1,6 @@
+// Force dynamic rendering - required for authentication
+export const dynamic = 'force-dynamic'
+
 /**
  * Submission Detail Page - Server Component
  * /[locale]/expense-claims/submissions/[id]

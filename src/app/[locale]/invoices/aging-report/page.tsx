@@ -1,5 +1,8 @@
 'use client'
 
+// Force dynamic rendering - required for authentication
+export const dynamic = 'force-dynamic'
+
 import { useRouter, useParams } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'

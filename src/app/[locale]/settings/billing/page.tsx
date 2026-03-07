@@ -1,5 +1,8 @@
 'use client'
 
+// Force dynamic rendering - required for authentication
+export const dynamic = 'force-dynamic'
+
 /**
  * Billing Settings Page
  *

@@ -1,5 +1,8 @@
 'use client'
 
+// Force dynamic rendering - required for Clerk authentication
+export const dynamic = 'force-dynamic'
+
 import { useState } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { Button } from '@/components/ui/button'

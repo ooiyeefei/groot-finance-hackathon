@@ -1,3 +1,6 @@
+// Force dynamic rendering - required for authentication
+export const dynamic = 'force-dynamic'
+
 /**
  * Manager Approvals Page
  * Dashboard for managers to review and approve expense claims

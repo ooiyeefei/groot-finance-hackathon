@@ -12,6 +12,9 @@
  * shared with the "Create New Business" flow in the sidebar.
  */
 
+// Force dynamic rendering - required for Clerk authentication
+export const dynamic = 'force-dynamic'
+
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@clerk/nextjs'

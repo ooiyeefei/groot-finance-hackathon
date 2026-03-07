@@ -8,6 +8,9 @@
  * - Finance Admins/Owners: Export all business records
  */
 
+// Force dynamic rendering - required for Clerk authentication
+export const dynamic = 'force-dynamic'
+
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import Sidebar from '@/components/ui/sidebar';

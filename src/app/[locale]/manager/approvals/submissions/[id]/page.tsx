@@ -1,3 +1,6 @@
+// Force dynamic rendering - required for authentication
+export const dynamic = 'force-dynamic'
+
 /**
  * Manager Submission Review Page
  * Renders the submission detail page in manager view mode with approve/reject actions

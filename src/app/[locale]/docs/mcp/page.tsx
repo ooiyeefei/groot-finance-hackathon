@@ -1,3 +1,6 @@
+// Force dynamic rendering - required for authentication
+export const dynamic = 'force-dynamic'
+
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, BookOpen, Key, Shield, Zap, AlertTriangle, ExternalLink } from 'lucide-react'

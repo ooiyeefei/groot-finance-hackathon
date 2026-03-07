@@ -1,3 +1,6 @@
+// Force dynamic rendering - required for authentication
+export const dynamic = 'force-dynamic'
+
 /**
  * Legacy Settings Page - Redirects to unified Settings
  * Personal settings are now the "Profile" tab in /business-settings

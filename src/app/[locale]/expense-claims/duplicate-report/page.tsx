@@ -1,3 +1,6 @@
+// Force dynamic rendering - required for authentication
+export const dynamic = 'force-dynamic'
+
 /**
  * Duplicate Report Page
  * Feature: 007-duplicate-expense-detection (User Story 3)

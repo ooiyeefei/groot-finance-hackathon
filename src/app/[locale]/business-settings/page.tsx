@@ -1,3 +1,6 @@
+// Force dynamic rendering - required for authentication
+export const dynamic = 'force-dynamic'
+
 /**
  * Settings Page (unified)
  * Central hub for all settings: business management (managers/owners) and personal profile (all users)

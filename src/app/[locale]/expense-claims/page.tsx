@@ -1,3 +1,6 @@
+// Force dynamic rendering - required for authentication
+export const dynamic = 'force-dynamic'
+
 /**
  * Expense Claims Main Page
  * Implements Mel's role-adaptive dashboard with progressive disclosure
