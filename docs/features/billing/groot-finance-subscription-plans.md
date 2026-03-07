@@ -172,9 +172,20 @@ Stripe Tax handles calculation and collection automatically.
 
 ## Annual Billing
 
-| Plan | Monthly | Annual | Savings |
+### Standard Annual (10% off — permanent baseline)
+
+| Plan | Monthly | Annual (10% off) | Savings |
 |---|---|---|---|
-| Starter (MY) | RM 249/mo | RM 2,490/yr | 17% (2 months free) |
-| Pro (MY) | RM 599/mo | RM 5,990/yr | 17% (2 months free) |
-| Starter (SG) | SGD 149/mo | SGD 1,490/yr | 17% (2 months free) |
-| Pro (SG) | SGD 349/mo | SGD 3,490/yr | 17% (2 months free) |
+| Starter | RM 249/mo | RM 2,689/yr | 10% |
+| Pro | RM 599/mo | RM 6,469/yr | 10% |
+
+### Launch Promo Annual (17% off — first term only, expires June 30, 2026)
+
+| Plan | Monthly | Launch Annual (17% off) | Renewal Annual (10% off) |
+|---|---|---|---|
+| Starter | RM 249/mo | RM 2,490/yr | RM 2,689/yr |
+| Pro | RM 599/mo | RM 5,990/yr | RM 6,469/yr |
+
+> **Note:** Launch promo annual prices are separate Stripe price IDs. After June 30, 2026, archive the promo prices so new customers only see the standard 10% annual rate. Existing promo customers renew at standard rate via Stripe subscription schedule.
+>
+> **Singapore (SGD)** pricing is managed as a separate market with separate Stripe products/prices. Will be configured when SG market launches.

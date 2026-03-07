@@ -222,24 +222,36 @@ Month 5: Upgrades to Pro.
 
 ## Annual Billing
 
-| Plan | Monthly | Annual (pay 10 months) | Savings |
-|---|---|---|---|
-| **Starter** | RM 249/mo | RM 2,490/yr (RM 207.50/mo effective) | 17% (2 months free) |
-| **Pro** | RM 599/mo | RM 5,990/yr (RM 499.17/mo effective) | 17% (2 months free) |
+### Standard Annual Discount (Permanent Baseline)
 
-### Singapore (SGD)
+10% off monthly list price, billed upfront annually.
 
-| Plan | Monthly | Annual (pay 10 months) | Savings |
+| Plan | Monthly | Annual (10% off) | Savings |
 |---|---|---|---|
-| **Starter** | SGD 149/mo | SGD 1,490/yr (SGD 124.17/mo effective) | 17% |
-| **Pro** | SGD 349/mo | SGD 3,490/yr (SGD 290.83/mo effective) | 17% |
+| **Starter** | RM 249/mo | RM 2,689/yr (RM 224.10/mo effective) | 10% |
+| **Pro** | RM 599/mo | RM 6,469/yr (RM 539.08/mo effective) | 10% |
+
+> **Note:** Singapore (SGD) pricing is managed as a separate market with separate Stripe price objects. See SG-specific pricing docs when SG market launches.
+
+### Launch Annual Promotion (Time-Boxed)
+
+**Valid:** March 7, 2026 — June 30, 2026 (or until extended)
+
+17% off (2 months free) for annual plans purchased during the launch window. Applies to **first term only** — renewals revert to standard 10% annual discount.
+
+| Plan | Monthly | Launch Annual (17% off) | Standard Annual (10% off) |
+|---|---|---|---|
+| **Starter** | RM 249/mo | RM 2,490/yr | RM 2,689/yr |
+| **Pro** | RM 599/mo | RM 5,990/yr | RM 6,469/yr |
 
 ### Design Principles
 
-- **2 months free** is SaaS standard and what customers expect
-- Improves cash flow and reduces monthly churn
+- **10% annual is the permanent baseline** — defensible long-term, room for tactical promos
+- **17% launch promo** creates urgency, rewards early adopters, and is explicitly temporary
+- Launch promo customers are told at sign-up: "Renews at standard annual rate"
 - Annual billing displayed as **total annual price** (not monthly equivalent) to emphasise commitment
 - Annual customers get **priority onboarding** (incentive beyond price)
+- Can run future time-boxed promos (Q4, partner launches, etc.) without devaluing the standard rate
 
 ---
 
@@ -511,11 +523,12 @@ feature_audit_trail         = false
 feature_advanced_analytics  = false
 ```
 
-**Prices (4 per product):**
+**Prices (3 for MYR — monthly + 2 annual tiers):**
 - MYR 249/month (recurring)
-- MYR 2,490/year (recurring)
-- SGD 149/month (recurring)
-- SGD 1,490/year (recurring)
+- MYR 2,689/year (recurring) — **standard annual** (10% off, permanent)
+- MYR 2,490/year (recurring) — **launch promo annual** (17% off, archive after June 30, 2026)
+
+> **Note:** SGD prices are separate Stripe price objects for the SG market (not currency_options). SG pricing will be configured when SG market launches.
 
 ### Complete Stripe Product Metadata — Pro
 
@@ -557,11 +570,10 @@ feature_audit_trail         = true
 feature_advanced_analytics  = true
 ```
 
-**Prices (4 per product):**
+**Prices (3 for MYR — monthly + 2 annual tiers):**
 - MYR 599/month (recurring)
-- MYR 5,990/year (recurring)
-- SGD 349/month (recurring)
-- SGD 3,490/year (recurring)
+- MYR 6,469/year (recurring) — **standard annual** (10% off, permanent)
+- MYR 5,990/year (recurring) — **launch promo annual** (17% off, archive after June 30, 2026)
 
 ### Feature Flag Design Principles
 
@@ -646,6 +658,8 @@ These are always enabled — the code should NOT check a feature flag for these:
 | 2026-02-19 | SST tiering: basic in Starter, full in Pro | Starter: flat 8%/5%/10% rates. Pro: category management, input tax tracking. |
 | 2026-02-19 | Prices exclusive of SST/GST | B2B SaaS standard. RM 249 + 8% SST = RM 268.92 displayed on invoice. |
 | 2026-02-19 | Annual billing: 2 months free (17% discount) | SaaS standard. Improves cash flow, reduces churn. |
+| 2026-03-07 | Annual discount: 10% standard baseline, 17% as launch promo only | 17% as permanent default makes future price increases difficult. 10% is defensible long-term. 17% runs as time-boxed "Founding/Launch Annual Offer" (Mar 7 – Jun 30, 2026). First-term only; renewals at 10%. Preserves pricing flexibility for future promos. |
+| 2026-03-07 | Partner program launched: Referrer (RM80+) and Reseller (RM300+ with 5% renewal) | GTM via reseller/referral channel. See docs/gtm/partner-program-one-pager.md for full terms. Reseller commission includes Y2+ renewal share to align with retention. Referrer program open to existing customers. |
 | 2026-02-19 | Enterprise floor: RM 1,499/mo (MY), SGD 799/mo (SG) | Published floor anchors Pro as value. Custom quote above floor. |
 | 2026-02-19 | SG InvoiceNow via same Peppol partner as MY | Both markets use Peppol. Single partner covers both. |
 | 2026-02-19 | Payroll: partner (not build) | Too complex to build (EPF/SOCSO/CPF). Refer to Swingvy/Talenox. CSV export templates for integration. |
