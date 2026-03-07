@@ -91,9 +91,23 @@ async function checkTrialExpiration(clerkUserId: string): Promise<{
   }
 }
 
+// Partner pages require a secret token in the URL to access
+const PARTNER_TOKEN = process.env.PARTNER_PAGE_TOKEN || 'groot2026'
+const isPartnerPage = (req: NextRequest) =>
+  req.nextUrl.pathname.startsWith('/reseller-program') || req.nextUrl.pathname.startsWith('/referral')
+
 // Clerk middleware with route protection and trial expiration checking
 // Redirects unauthenticated users to sign-in page (pages only, not API)
 export default clerkMiddleware(async (auth, req) => {
+  // Gate partner pages behind a secret token
+  if (isPartnerPage(req)) {
+    const token = req.nextUrl.searchParams.get('t')
+    if (token !== PARTNER_TOKEN) {
+      return NextResponse.redirect(new URL('/', req.url))
+    }
+    return NextResponse.next()
+  }
+
   // Allow public routes without authentication
   if (isPublicRoute(req)) {
     return NextResponse.next()
