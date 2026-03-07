@@ -2668,3 +2668,96 @@ export const setBusinessRegion = mutation({
     return { success: true };
   },
 });
+
+// ============================================
+// ONE-TIME MIGRATION: Backfill glCode on categories
+// Run manually: npx convex run functions/businesses:backfillGlCodes
+// Safe to re-run: only adds glCode to categories that don't have one
+// ============================================
+
+const GL_CODE_DEFAULTS: Record<string, string> = {
+  // Expense categories
+  "Travel": "9120",
+  "Office Supplies": "9040",
+  "Office Expenses": "9040",
+  "Entertainment & Meal": "9050",
+  "Client Entertainment": "9050",
+  "IT Expenses": "9050",
+  "Subscription & Licenses": "9050",
+  "Professional Development": "9050",
+  "Client Gifts": "9050",
+  // COGS categories
+  "Subcontractors": "6010",
+  "Software Licenses": "6010",
+  "Project Materials": "6010",
+  "Raw Materials": "6000",
+  "Components": "6010",
+  "Machinery Parts": "6010",
+  "Packaging": "6010",
+  "Food Ingredients": "6000",
+  "Beverages": "6000",
+};
+
+export const backfillGlCodes = mutation({
+  args: {
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const isDryRun = args.dryRun ?? false;
+    const businesses = await ctx.db.query("businesses").collect();
+
+    let totalBusinesses = 0;
+    let totalExpenseCatsUpdated = 0;
+    let totalCogsCatsUpdated = 0;
+    let skippedAlreadyHasGlCode = 0;
+
+    for (const business of businesses) {
+      let needsUpdate = false;
+
+      // Process expense categories
+      const expenseCats = (business.customExpenseCategories || []) as Array<any>;
+      const updatedExpense = expenseCats.map((cat: any) => {
+        if (cat.glCode) {
+          skippedAlreadyHasGlCode++;
+          return cat; // Already has glCode, don't overwrite
+        }
+        const defaultCode = GL_CODE_DEFAULTS[cat.category_name] || "9050";
+        totalExpenseCatsUpdated++;
+        needsUpdate = true;
+        return { ...cat, glCode: defaultCode };
+      });
+
+      // Process COGS categories
+      const cogsCats = (business.customCogsCategories || []) as Array<any>;
+      const updatedCogs = cogsCats.map((cat: any) => {
+        if (cat.glCode) {
+          skippedAlreadyHasGlCode++;
+          return cat; // Already has glCode, don't overwrite
+        }
+        const defaultCode = GL_CODE_DEFAULTS[cat.category_name] || "6010";
+        totalCogsCatsUpdated++;
+        needsUpdate = true;
+        return { ...cat, glCode: defaultCode };
+      });
+
+      if (needsUpdate && !isDryRun) {
+        await ctx.db.patch(business._id, {
+          customExpenseCategories: updatedExpense,
+          customCogsCategories: updatedCogs,
+        });
+        totalBusinesses++;
+      } else if (needsUpdate) {
+        totalBusinesses++;
+      }
+    }
+
+    return {
+      dryRun: isDryRun,
+      totalBusinessesProcessed: businesses.length,
+      businessesUpdated: totalBusinesses,
+      expenseCategoriesBackfilled: totalExpenseCatsUpdated,
+      cogsCategoriesBackfilled: totalCogsCatsUpdated,
+      skippedAlreadyHasGlCode,
+    };
+  },
+});
