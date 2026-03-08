@@ -2,7 +2,7 @@
 
 import { Suspense, lazy, memo, useCallback } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
-import { Building2, DollarSign, Users, Key, Loader2, Calendar, Sparkles, User, Plug, Clock, Shield } from 'lucide-react'
+import { Building2, DollarSign, Users, Key, Loader2, Calendar, Sparkles, User, Plug, Clock, Shield, Gift } from 'lucide-react'
 import { usePermissions } from '@/contexts/business-context'
 import { isNativePlatform } from '@/lib/capacitor/platform'
 import { useUser } from '@clerk/nextjs'
@@ -19,6 +19,7 @@ const StripeIntegrationCard = lazy(() => import('@/domains/account-management/co
 const UserProfileSection = lazy(() => import('@/domains/account-management/components/user-profile-section'))
 const TimesheetSettings = lazy(() => import('@/domains/timesheet-attendance/components/timesheet-settings'))
 const PrivacyDataSection = lazy(() => import('@/domains/account-management/components/privacy-data-section').then(m => ({ default: m.PrivacyDataSection })))
+const ReferralDashboard = lazy(() => import('@/domains/referral/components/referral-dashboard'))
 
 // Wrapper components for existing components that need userId
 const CategoryManagementTab = ({ userId }: { userId?: string }) => (
@@ -37,7 +38,7 @@ const TabbedBusinessSettings = memo(() => {
   const pathname = usePathname()
 
   // URL-based tab persistence: read from ?tab= query param
-  const validTabs = ['business-profile', 'category-management', 'leave-management', 'timesheet', 'team-management', 'api-keys', 'billing', 'integrations', 'privacy', 'profile'] as const
+  const validTabs = ['business-profile', 'category-management', 'leave-management', 'timesheet', 'team-management', 'api-keys', 'billing', 'integrations', 'referral', 'privacy', 'profile'] as const
   type TabValue = typeof validTabs[number]
   const tabFromUrl = searchParams.get('tab') as TabValue | null
   // Default tab: 'business-profile' for finance_admin/owner, 'profile' for everyone else
@@ -136,6 +137,14 @@ const TabbedBusinessSettings = memo(() => {
               <span className="sm:hidden">Intg</span>
             </TabsTrigger>
           )}
+          <TabsTrigger
+            value="referral"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+          >
+            <Gift className="w-4 h-4 mr-1.5" />
+            <span className="hidden sm:inline">Referral</span>
+            <span className="sm:hidden">Refer</span>
+          </TabsTrigger>
           <TabsTrigger
             value="privacy"
             className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
@@ -278,6 +287,20 @@ const TabbedBusinessSettings = memo(() => {
             </div>
           </TabsContent>
         )}
+
+        {/* Referral Tab Content - Available to ALL users */}
+        <TabsContent value="referral" className="space-y-4">
+          <div className="max-w-2xl mx-auto">
+            <Suspense fallback={
+              <div className="flex items-center justify-center p-8">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <span className="ml-2 text-muted-foreground">Loading referral program...</span>
+              </div>
+            }>
+              <ReferralDashboard />
+            </Suspense>
+          </div>
+        </TabsContent>
 
         {/* Privacy & Data Tab Content - Available to ALL users */}
         <TabsContent value="privacy" className="space-y-4">

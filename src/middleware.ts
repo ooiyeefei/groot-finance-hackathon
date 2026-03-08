@@ -30,6 +30,7 @@ const isPublicRoute = createRouteMatcher([
   '/referral(.*)',
   '/api/v1/support(.*)',
   '/api/v1/partner-application(.*)',
+  '/api/v1/referral/validate(.*)',
   // Onboarding routes (allowed for expired trial users)
   '/:locale/onboarding(.*)',
   '/onboarding(.*)',

@@ -59,6 +59,7 @@ import type * as functions_payments from "../functions/payments.js";
 import type * as functions_payrollAdjustments from "../functions/payrollAdjustments.js";
 import type * as functions_publicHolidays from "../functions/publicHolidays.js";
 import type * as functions_pushSubscriptions from "../functions/pushSubscriptions.js";
+import type * as functions_referral from "../functions/referral.js";
 import type * as functions_retentionJobs from "../functions/retentionJobs.js";
 import type * as functions_salesInvoiceUsage from "../functions/salesInvoiceUsage.js";
 import type * as functions_salesInvoices from "../functions/salesInvoices.js";
@@ -138,6 +139,7 @@ declare const fullApi: ApiFromModules<{
   "functions/payrollAdjustments": typeof functions_payrollAdjustments;
   "functions/publicHolidays": typeof functions_publicHolidays;
   "functions/pushSubscriptions": typeof functions_pushSubscriptions;
+  "functions/referral": typeof functions_referral;
   "functions/retentionJobs": typeof functions_retentionJobs;
   "functions/salesInvoiceUsage": typeof functions_salesInvoiceUsage;
   "functions/salesInvoices": typeof functions_salesInvoices;

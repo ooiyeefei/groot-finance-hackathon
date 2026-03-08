@@ -203,6 +203,7 @@ export async function POST(request: NextRequest) {
       },
       // Enable automatic tax calculation if needed
       // automatic_tax: { enabled: true },
+      allow_promotion_codes: true,
       billing_address_collection: 'required',
       customer_update: {
         address: 'auto',

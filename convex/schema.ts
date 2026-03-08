@@ -226,6 +226,12 @@ export default defineSchema({
     // 001-lhdn-einvoice-submission: Auto self-bill setting
     autoSelfBillExemptVendors: v.optional(v.boolean()),
 
+    // 001-in-app-referral-code: Referral attribution
+    referredByCode: v.optional(v.string()),
+    referredByUserId: v.optional(v.string()),
+    referredByBusinessId: v.optional(v.id("businesses")),
+    referralCapturedAt: v.optional(v.number()),
+
     // Timestamps
     updatedAt: v.optional(v.number()),
   })
@@ -2234,6 +2240,63 @@ export default defineSchema({
   // ============================================
   // ACCOUNT DELETION DATA EXPORTS
   // ============================================
+
+  // ============================================
+  // REFERRAL PROGRAM (001-in-app-referral-code)
+  // ============================================
+
+  referral_codes: defineTable({
+    code: v.string(),
+    userId: v.string(),                          // Clerk user ID
+    businessId: v.id("businesses"),               // Business at time of creation
+    stripePromotionCodeId: v.optional(v.string()),
+    stripeCouponId: v.optional(v.string()),
+    type: v.union(
+      v.literal("customer"),
+      v.literal("partner_referrer"),
+      v.literal("partner_reseller")
+    ),
+    isActive: v.boolean(),
+    totalReferrals: v.number(),
+    totalConversions: v.number(),
+    totalEarnings: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_code", ["code"])
+    .index("by_userId", ["userId"])
+    .index("by_businessId", ["businessId"])
+    .index("by_stripePromotionCodeId", ["stripePromotionCodeId"]),
+
+  referrals: defineTable({
+    referralCodeId: v.id("referral_codes"),
+    referralCode: v.string(),
+    referrerUserId: v.string(),                   // Clerk user ID
+    referrerBusinessId: v.id("businesses"),
+    referredBusinessId: v.optional(v.id("businesses")),
+    referredBusinessName: v.optional(v.string()),
+    status: v.union(
+      v.literal("signed_up"),
+      v.literal("trial"),
+      v.literal("paid"),
+      v.literal("upgraded"),
+      v.literal("downgraded"),
+      v.literal("churned"),
+      v.literal("cancelled"),
+      v.literal("expired")
+    ),
+    capturedAt: v.number(),
+    convertedAt: v.optional(v.number()),
+    planAtConversion: v.optional(v.string()),
+    currentPlan: v.optional(v.string()),
+    estimatedEarning: v.optional(v.number()),
+    attributionExpiresAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_referralCodeId", ["referralCodeId"])
+    .index("by_referrerUserId", ["referrerUserId"])
+    .index("by_referredBusinessId", ["referredBusinessId"])
+    .index("by_status", ["status"]),
 
   deletion_data_exports: defineTable({
     businessId: v.id("businesses"),

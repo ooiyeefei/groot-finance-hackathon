@@ -11,6 +11,7 @@ import { useActiveBusiness } from '@/contexts/business-context'
 import { useBusinessMemberships, useBusinessContext } from '@/contexts/business-context'
 import { isNativePlatform } from '@/lib/capacitor/platform'
 import { NativeUserButton } from '@/components/capacitor/native-user-button'
+import { EarnHeaderButton } from '@/domains/referral/components/earn-header-button'
 import { Check, ChevronDown, Loader2 } from 'lucide-react'
 
 interface HeaderWithUserProps {
@@ -145,6 +146,7 @@ export default function HeaderWithUser({ title, subtitle, actions }: HeaderWithU
         {/* Right: Notifications, feedback, theme toggle, language switcher and user button */}
         <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
           <NotificationBell businessId={businessId} />
+          <EarnHeaderButton />
           <span className="hidden sm:inline-flex"><FeedbackButton /></span>
           <ThemeToggle />
           <span className="hidden sm:inline-flex"><LanguageSwitcher /></span>

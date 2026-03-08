@@ -57,6 +57,26 @@ export async function handleCheckoutSessionCompletedConvex(
   })
 
   console.log(`[Webhook Handler Convex] Updated business ${businessId} with customer ${customerId}`)
+
+  // 001-in-app-referral-code: Check if a promotion code was used and capture referral attribution
+  try {
+    const totalDetails = (session as any).total_details
+    const discounts = totalDetails?.breakdown?.discounts
+    if (discounts && discounts.length > 0) {
+      const promotionCodeId = discounts[0]?.discount?.promotion_code
+      if (promotionCodeId && typeof promotionCodeId === 'string') {
+        console.log(`[Webhook Handler Convex] Referral promo code detected: ${promotionCodeId}`)
+        await convex.mutation(api.functions.referral.captureReferralFromWebhook, {
+          businessId,
+          stripePromotionCodeId: promotionCodeId,
+          businessName: session.metadata?.business_name,
+        })
+      }
+    }
+  } catch (referralError) {
+    // Non-fatal: referral capture failure shouldn't block checkout completion
+    console.warn(`[Webhook Handler Convex] Referral capture failed (non-fatal):`, referralError)
+  }
 }
 
 /**
@@ -71,6 +91,9 @@ export async function handleSubscriptionCreatedConvex(
   console.log(`[Webhook Handler Convex] subscription.created: ${subscription.id}`)
 
   await updateBusinessSubscriptionConvex(subscription)
+
+  // 001-in-app-referral-code: Update referral status on subscription creation
+  await updateReferralFromSubscription(subscription, subscription.status === 'trialing' ? 'trial' : 'paid')
 }
 
 /**
@@ -85,6 +108,16 @@ export async function handleSubscriptionUpdatedConvex(
   console.log(`[Webhook Handler Convex] subscription.updated: ${subscription.id}`)
 
   await updateBusinessSubscriptionConvex(subscription)
+
+  // 001-in-app-referral-code: Update referral status on subscription changes
+  const priceId = subscription.items.data[0]?.price?.id
+  const planName = priceId ? await getPlanFromPriceId(priceId) : undefined
+  const status = subscription.status === 'trialing' ? 'trial' as const
+    : subscription.status === 'active' ? 'paid' as const
+    : null
+  if (status) {
+    await updateReferralFromSubscription(subscription, status, planName)
+  }
 }
 
 /**
@@ -104,6 +137,9 @@ export async function handleSubscriptionDeletedConvex(
   await convex.mutation(api.functions.businesses.downgradeToFreeFromWebhook, {
     stripeCustomerId: customerId,
   })
+
+  // 001-in-app-referral-code: Update referral status to churned
+  await updateReferralFromSubscription(subscription, 'churned')
 
   console.log(`[Webhook Handler Convex] Downgraded business for customer ${customerId} to free plan`)
 }
@@ -166,6 +202,19 @@ export async function handleInvoicePaymentSucceededConvex(
     })
 
     console.log(`[Webhook Handler Convex] Cleared past_due status for customer ${customerId}`)
+  }
+
+  // 001-in-app-referral-code: Update referral to paid on first successful payment
+  if (business.referredByCode && business._id) {
+    try {
+      await convex.mutation(api.functions.referral.updateReferralStatus, {
+        referredBusinessId: business._id,
+        newStatus: 'paid',
+        planName: business.planName || undefined,
+      })
+    } catch (referralError) {
+      console.warn(`[Webhook Handler Convex] Referral status update failed (non-fatal):`, referralError)
+    }
   }
 }
 
@@ -351,6 +400,38 @@ export async function handleCreditPackPurchaseConvex(
   console.log(
     `[Webhook Handler Convex] Created ${packName} credit pack (${totalCredits} ${packType}) for business ${businessId}`
   )
+}
+
+/**
+ * 001-in-app-referral-code: Helper to update referral status from subscription events.
+ * Looks up the business by stripeCustomerId and calls updateReferralStatus if the business was referred.
+ */
+async function updateReferralFromSubscription(
+  subscription: Stripe.Subscription,
+  newStatus: 'trial' | 'paid' | 'upgraded' | 'downgraded' | 'churned' | 'cancelled',
+  planName?: string
+): Promise<void> {
+  try {
+    const customerId = subscription.customer as string
+    const convex = getConvexInternalClient()
+
+    const business = await convex.query(api.functions.businesses.getByStripeCustomerIdInternal, {
+      stripeCustomerId: customerId,
+    })
+
+    if (!business?.referredByCode || !business._id) return
+
+    await convex.mutation(api.functions.referral.updateReferralStatus, {
+      referredBusinessId: business._id,
+      newStatus,
+      planName,
+    })
+
+    console.log(`[Webhook Handler Convex] Referral status updated to ${newStatus} for business ${business._id}`)
+  } catch (error) {
+    // Non-fatal: referral status update failure shouldn't block webhook processing
+    console.warn(`[Webhook Handler Convex] Referral status update failed (non-fatal):`, error)
+  }
 }
 
 /**

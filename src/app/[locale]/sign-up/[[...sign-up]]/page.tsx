@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import { isNativePlatform } from '@/lib/capacitor/platform'
 import { NativeSignUp } from '@/components/capacitor/native-sign-in'
+import { Gift } from 'lucide-react'
 
 /**
  * Sign-up page using Clerk's built-in component (web) or
@@ -17,10 +18,33 @@ export default function SignUpPage() {
   const { isLoaded, isSignedIn } = useAuth()
   const locale = (params?.locale || 'en') as string
   const [isNative, setIsNative] = useState(false)
+  const [referrerName, setReferrerName] = useState<string | null>(null)
 
   useEffect(() => {
     setIsNative(isNativePlatform())
   }, [])
+
+  // 001-in-app-referral-code: Capture ?ref= param and validate
+  useEffect(() => {
+    const refCode = searchParams.get('ref')
+    if (refCode) {
+      // Persist in localStorage for checkout flow
+      localStorage.setItem('groot_referral_code', refCode)
+      // Validate and show referrer badge
+      fetch('/api/v1/referral/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: refCode }),
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.valid && data.referrerName) {
+            setReferrerName(data.referrerName)
+          }
+        })
+        .catch(() => {})
+    }
+  }, [searchParams])
 
   // Get redirect URL from query params or default to dashboard
   const redirectUrl = searchParams.get('redirect_url') || `/${locale}`
@@ -58,20 +82,28 @@ export default function SignUpPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
-      {isNative ? (
-        <NativeSignUp
-          locale={locale}
-          redirectUrl={redirectUrl}
-          signInUrl={`/${locale}/sign-in`}
-        />
-      ) : (
-        <SignUp
-          routing="path"
-          path={`/${locale}/sign-up`}
-          signInUrl={`/${locale}/sign-in`}
-          afterSignUpUrl={redirectUrl}
-        />
-      )}
+      <div className="flex flex-col items-center gap-4">
+        {referrerName && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-full text-sm text-foreground shadow-sm">
+            <Gift className="w-4 h-4 text-primary" />
+            <span>Referred by <strong>{referrerName}</strong></span>
+          </div>
+        )}
+        {isNative ? (
+          <NativeSignUp
+            locale={locale}
+            redirectUrl={redirectUrl}
+            signInUrl={`/${locale}/sign-in`}
+          />
+        ) : (
+          <SignUp
+            routing="path"
+            path={`/${locale}/sign-up`}
+            signInUrl={`/${locale}/sign-in`}
+            afterSignUpUrl={redirectUrl}
+          />
+        )}
+      </div>
     </div>
   )
 }
