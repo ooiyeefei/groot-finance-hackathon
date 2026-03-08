@@ -89,12 +89,13 @@ Reseller sources lead, runs demo, drives close, and provides basic onboarding ha
 
 ### 4.2 Reseller Payouts
 
-| Plan Sold | Close Payout (one-time) | Y2+ Renewal Share |
-|-----------|------------------------|-------------------|
+| Plan Sold | Close Payout (one-time) | Y2–Y6 Renewal Share (5 years) |
+|-----------|------------------------|-------------------------------|
 | **Starter (annual)** | RM 300 | 5% of renewal revenue |
 | **Pro (annual)** | RM 800 | 5% of renewal revenue |
 | **Enterprise** | 10–15% of Y1 contract value | 5% of renewal revenue |
 
+- **Renewal share duration:** 5 years (Y2–Y6). Renewal commissions end after the customer's 6th year. Partners can re-earn by closing new deals.
 - **Quarterly accelerator:** Extra **RM 150 per deal** from the 6th closed annual deal in the same quarter (deals 1–5: RM 300; deals 6+: RM 450 for Starter)
 - **Upgrades:** If a reseller's customer upgrades from Starter to Pro within 12 months, the reseller earns the difference (RM 800 - RM 300 = **RM 500 upgrade bonus**)
 
@@ -102,7 +103,7 @@ Reseller sources lead, runs demo, drives close, and provides basic onboarding ha
 
 **Reseller closing 8 Starter annual deals in Q2:**
 - 8 x RM 300 = **RM 2,400** close payouts
-- Y2 renewal share (if all 8 renew): 5% of (8 x RM 2,689) = RM 1,076/yr passive
+- Y2–Y6 renewal share (if all 8 renew): 5% of (8 x RM 2,689) = RM 1,076/yr passive (for 5 years)
 
 **Reseller closing 3 Pro + 5 Starter annual deals in Q2:**
 - 3 Pro: RM 800 x 3 = RM 2,400
@@ -187,7 +188,7 @@ Existing Groot Finance customers can participate as referrers with zero addition
 |---|---|---|---|---|
 | Referral payout | RM 80–500 per deal | Fixed % (undisclosed) | Not public | No cash — discount only |
 | Reseller Y1 | RM 300–800 | Margin on license | ~30-40% margin on perpetual | Wholesale discount |
-| Recurring income | 5% renewal share | Up to 20% on cloud subs | None (perpetual license) | Tiered wholesale discount |
+| Recurring income | 5% renewal share (5 years) | Up to 20% on cloud subs | None (perpetual license) | Tiered wholesale discount |
 | Free software for firm | Yes (Founding Partner) | Free cloud trial (1 year) | No | Free practice subscription |
 | Training provided | Yes (online, ~2 hours) | Yes (certification) | Dealer training | Online learning |
 
@@ -334,7 +335,7 @@ Commission rates can always be increased ("we're making the program more generou
 
 - Referral reward set at **RM 80** base (not RM 100 — keeps CAC controlled for lead-only motion)
 - Starter reseller close payout kept at **RM 300** (11.16% effective rate, aligned with industry standard for one-time payouts)
-- Added **5% renewals** from Y2+ to improve long-term partner motivation and retention alignment
+- Added **5% renewals** from Y2–Y6 (5-year cap) to improve long-term partner motivation and retention alignment
 - Added **quarterly accelerators** for both referrer and reseller motions
 - Added **plan-scaled payouts** (Pro: RM 800, Enterprise: 10–15%) to prevent Starter-only skew
 - Added commercial guardrails: 30-day payout hold, 90-day attribution window, 90-day clawback

@@ -237,7 +237,7 @@ export default function ResellerProgramPage() {
                 <div className="grid grid-cols-3 border-b border-[#E5E7EB] bg-[#F9FAFB] px-6 py-3.5">
                   <span className="text-xs font-bold uppercase tracking-wider text-[#9CA3AF]">Plan</span>
                   <span className="text-xs font-bold uppercase tracking-wider text-[#9CA3AF]">Close Payout</span>
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#9CA3AF]">Year 2+</span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#9CA3AF]">Year 2–6</span>
                 </div>
                 {earningsData.map((item, i) => (
                   <div key={item.plan} className={`grid grid-cols-3 items-center px-6 py-5 ${i < earningsData.length - 1 ? 'border-b border-[#F3F4F6]' : ''}`}>

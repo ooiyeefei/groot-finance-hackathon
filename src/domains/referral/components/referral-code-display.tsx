@@ -73,6 +73,10 @@ export function ReferralCodeDisplay({ code, referralUrl }: ReferralCodeDisplayPr
         </span>
       </div>
 
+      <p className="text-xs text-muted-foreground mb-4 text-center">
+        Applicable to annual plans only. Referred businesses get RM 100 off.
+      </p>
+
       {/* Action buttons */}
       <div className="flex gap-2">
         <Button
