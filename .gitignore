@@ -46,6 +46,7 @@ next-env.d.ts
 # AWS CDK
 cdk.out/
 infra/cdk.out/
+infra/cdk-out-*/
 
 # Lambda build artifacts
 **/dist/
