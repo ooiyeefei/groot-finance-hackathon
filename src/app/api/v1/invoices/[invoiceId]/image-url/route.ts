@@ -1,13 +1,44 @@
 /**
  * GET /api/v1/invoices/[invoiceId]/image-url - Generate signed URLs for invoice images
- * Using Convex (database) + AWS S3 (storage)
+ * Using Convex (database) + CloudFront CDN (primary) / AWS S3 (fallback)
+ *
+ * CloudFront benefits:
+ * - Edge caching (faster loads from nearest location)
+ * - No AWS API call for URL generation (instant)
+ * - Better security (S3 bucket not directly exposed)
  */
 
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
-import { getPresignedDownloadUrl, listFiles, fileExists, URL_EXPIRY } from '@/lib/aws-s3'
+import { getPresignedDownloadUrl, listFiles, URL_EXPIRY } from '@/lib/aws-s3'
+import {
+  isCloudFrontConfigured,
+  getInvoiceImageUrl,
+  CLOUDFRONT_URL_EXPIRY,
+} from '@/lib/cloudfront-signer'
+
+/**
+ * Generate signed URL using CloudFront (if configured) or S3 (fallback)
+ */
+async function generateSignedUrl(storagePath: string): Promise<string> {
+  // Try CloudFront first (faster, no AWS API call)
+  if (isCloudFrontConfigured()) {
+    return getInvoiceImageUrl(storagePath, CLOUDFRONT_URL_EXPIRY.download)
+  }
+
+  // Fallback to S3 presigned URL
+  return getPresignedDownloadUrl('invoices', storagePath, URL_EXPIRY.download)
+}
+
+/** Helper to attach cache headers to a successful response */
+function cachedJson(data: Record<string, unknown>): NextResponse {
+  const response = NextResponse.json(data)
+  // Cache signed URL response for 30 min (URLs valid for 1 hour)
+  response.headers.set('Cache-Control', 'private, max-age=1800')
+  return response
+}
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ invoiceId: string }> }) {
   try {
@@ -52,7 +83,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Determine the actual storage path to use
-    let actualStoragePath = storagePath || invoice.storagePath
+    const actualStoragePath = storagePath || invoice.storagePath
 
     if (!actualStoragePath) {
       return NextResponse.json(
@@ -62,17 +93,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     if (useRawFile) {
-      // For raw files: use the exact storagePath
+      // For raw files: use the exact storagePath — skip S3 HEAD check since
+      // storagePath comes from our own DB and CloudFront returns 403 if missing
       console.log(`[Invoice Image URL] Using raw file path: ${actualStoragePath}`)
 
       try {
-        const signedUrl = await getPresignedDownloadUrl('invoices', actualStoragePath, URL_EXPIRY.download)
-
-        // Extract filename from storage path
+        const signedUrl = await generateSignedUrl(actualStoragePath)
         const filename = actualStoragePath.split('/').pop() || 'invoice'
         console.log(`[Invoice Image URL] Generated signed URL successfully for raw file: ${filename}`)
 
-        return NextResponse.json({
+        return cachedJson({
           success: true,
           data: {
             imageUrl: signedUrl,
@@ -95,29 +125,26 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       const convertedPath = invoice.convertedImagePath || actualStoragePath
       console.log(`[Invoice Image URL] Using ${invoice.convertedImagePath ? 'converted' : 'raw'} image path: ${convertedPath}`)
 
-      // If no converted path, try direct file access first for raw files
+      // If no converted path, try direct signed URL first (skip S3 HEAD check)
       if (!invoice.convertedImagePath && convertedPath) {
-        console.log(`[Invoice Image URL] No converted image found, trying direct file access for: ${convertedPath}`)
+        console.log(`[Invoice Image URL] No converted image found, trying direct access for: ${convertedPath}`)
 
-        const exists = await fileExists('invoices', convertedPath)
-        if (exists) {
-          try {
-            const signedUrl = await getPresignedDownloadUrl('invoices', convertedPath, URL_EXPIRY.download)
-            console.log(`[Invoice Image URL] Direct file access successful for: ${convertedPath}`)
-            return NextResponse.json({
-              success: true,
-              data: {
-                imageUrl: signedUrl,
-                filename: convertedPath.split('/').pop() || 'invoice',
-                storagePath: convertedPath,
-                currentPage: 1,
-                totalPages: 1,
-                availablePages: [{ pageNumber: 1, filename: convertedPath.split('/').pop() || 'invoice' }]
-              }
-            })
-          } catch (error) {
-            console.log(`[Invoice Image URL] Direct file access failed, falling back to directory listing:`, error)
-          }
+        try {
+          const signedUrl = await generateSignedUrl(convertedPath)
+          console.log(`[Invoice Image URL] Direct file access successful for: ${convertedPath}`)
+          return cachedJson({
+            success: true,
+            data: {
+              imageUrl: signedUrl,
+              filename: convertedPath.split('/').pop() || 'invoice',
+              storagePath: convertedPath,
+              currentPage: 1,
+              totalPages: 1,
+              availablePages: [{ pageNumber: 1, filename: convertedPath.split('/').pop() || 'invoice' }]
+            }
+          })
+        } catch (error) {
+          console.log(`[Invoice Image URL] Direct file access failed, falling back to directory listing:`, error)
         }
       }
 
@@ -194,11 +221,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       console.log(`[Invoice Image URL] Creating signed URL for file: ${fullImagePath}`)
 
       try {
-        const signedUrl = await getPresignedDownloadUrl('invoices', fullImagePath, URL_EXPIRY.download)
+        const signedUrl = await generateSignedUrl(fullImagePath)
 
         console.log(`[Invoice Image URL] Generated signed URL successfully for: ${selectedImageFile.name}`)
 
-        return NextResponse.json({
+        return cachedJson({
           success: true,
           data: {
             imageUrl: signedUrl,

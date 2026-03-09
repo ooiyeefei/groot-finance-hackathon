@@ -96,18 +96,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     if (useRawFile) {
-      // For raw files: use the exact storagePath
+      // For raw files: use the exact storagePath — skip S3 HEAD check since
+      // storagePath comes from our own DB and CloudFront returns 403 if missing
       console.log(`[Expense Claim Image URL] Using raw file path: ${actualStoragePath}`)
-
-      // Verify file exists before generating presigned URL
-      const exists = await fileExists('expense_claims', actualStoragePath)
-      if (!exists) {
-        console.error(`[Expense Claim Image URL] File not found in S3: expense_claims/${actualStoragePath}`)
-        return NextResponse.json(
-          { success: false, error: `Receipt file not found in storage. Path: ${actualStoragePath}` },
-          { status: 404 }
-        )
-      }
 
       try {
         const signedUrl = await generateSignedUrl(actualStoragePath)
@@ -116,7 +107,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         const filename = actualStoragePath.split('/').pop() || 'receipt'
         console.log(`[Expense Claim Image URL] Generated signed URL successfully for raw file: ${filename}`)
 
-        return NextResponse.json({
+        const response = NextResponse.json({
           success: true,
           data: {
             imageUrl: signedUrl,
@@ -127,6 +118,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             availablePages: [{ pageNumber: 1, filename: filename }]
           }
         })
+        // Cache signed URL response for 30 min (URLs valid for 1 hour)
+        response.headers.set('Cache-Control', 'private, max-age=1800')
+        return response
       } catch (error) {
         console.error('[Expense Claim Image URL] Failed to generate signed URL for raw file:', error)
         return NextResponse.json(
@@ -148,7 +142,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           try {
             const signedUrl = await generateSignedUrl(convertedPath)
             console.log(`[Expense Claim Image URL] Direct file access successful for: ${convertedPath}`)
-            return NextResponse.json({
+            const resp = NextResponse.json({
               success: true,
               data: {
                 imageUrl: signedUrl,
@@ -159,6 +153,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
                 availablePages: [{ pageNumber: 1, filename: convertedPath.split('/').pop() || 'receipt' }]
               }
             })
+            resp.headers.set('Cache-Control', 'private, max-age=1800')
+            return resp
           } catch (error) {
             console.log(`[Expense Claim Image URL] Direct file access failed, falling back to directory listing:`, error)
           }
@@ -242,7 +238,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
         console.log(`[Expense Claim Image URL] Generated signed URL successfully for: ${selectedImageFile.name}`)
 
-        return NextResponse.json({
+        const resp = NextResponse.json({
           success: true,
           data: {
             imageUrl: signedUrl,
@@ -256,6 +252,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             }))
           }
         })
+        resp.headers.set('Cache-Control', 'private, max-age=1800')
+        return resp
       } catch (error) {
         console.error('[Expense Claim Image URL] Failed to generate signed URL:', error)
         return NextResponse.json(
