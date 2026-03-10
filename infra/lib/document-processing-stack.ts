@@ -191,6 +191,16 @@ export class DocumentProcessingStack extends cdk.Stack {
     formFillFunction.addEnvironment('BROWSERBASE_API_KEY_SSM_PARAM', '/finanseal/browserbase-api-key');
     formFillFunction.addEnvironment('BROWSERBASE_PROJECT_ID_SSM_PARAM', '/finanseal/browserbase-project-id');
 
+    // Merchant login credentials (SSM) — e.g. /finanseal/7eleven-einvoice-email
+    formFillFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ['ssm:GetParameters', 'ssm:GetParameter'],
+      resources: [
+        `arn:aws:ssm:${this.region}:${this.account}:parameter/finanseal/*-einvoice-email`,
+        `arn:aws:ssm:${this.region}:${this.account}:parameter/finanseal/*-einvoice-password`,
+      ],
+    }));
+
     // Form fill Lambda needs S3 read (receipt images for CUA) + write (download-einvoice saves PDFs)
     bucket.grantReadWrite(formFillFunction);
 
