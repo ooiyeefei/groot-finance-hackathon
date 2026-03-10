@@ -108,7 +108,7 @@ export function ReferralCodeDisplay({ code, referralUrl, codeType }: ReferralCod
       </div>
 
       <p className="text-sm text-muted-foreground mt-3">
-        Applicable to annual plans only. Referred businesses get RM {discount} off.
+        Applicable to annual plans only. Referred businesses get <strong className="text-foreground">RM {discount} off</strong>.
       </p>
     </div>
   )

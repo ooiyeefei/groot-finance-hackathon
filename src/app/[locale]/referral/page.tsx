@@ -23,8 +23,8 @@ export default async function ReferralPage() {
         <Sidebar />
         <div className="flex-1 flex flex-col min-w-0">
           <HeaderWithUser
-            title="Referral Program"
-            subtitle="Earn rewards by referring businesses to Groot Finance"
+            title=""
+            subtitle=""
           />
           <main className="flex-1 overflow-auto p-4 sm:p-6 pb-24 sm:pb-6">
             <div className="w-full max-w-2xl mx-auto">

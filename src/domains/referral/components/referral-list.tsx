@@ -11,13 +11,17 @@ export function ReferralList({ codeType }: { codeType?: string }) {
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <div className="px-6 py-4 border-b border-border">
-        <h3 className="text-base font-semibold text-foreground">Referred Businesses</h3>
+        <h3 className="text-base font-semibold text-foreground">
+          {codeType === 'partner_reseller' ? 'Reseller Clients' : 'Referred Businesses'}
+        </h3>
       </div>
 
       {referrals.length === 0 ? (
         <div className="px-6 py-12 text-center">
           <p className="text-muted-foreground text-base">
-            No referrals yet. Share your code to start earning!
+            {codeType === 'partner_reseller'
+              ? 'No clients yet. Share your code to start earning!'
+              : 'No referrals yet. Share your code to start earning!'}
           </p>
           <p className="text-muted-foreground text-sm mt-1">
             Earn RM {getCommissionRange(codeType).min} (Starter) or RM {getCommissionRange(codeType).max} (Pro) for every annual subscription.

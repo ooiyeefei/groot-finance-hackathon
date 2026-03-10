@@ -35,8 +35,21 @@ export default function ReferralDashboard() {
   const promoMin = min * 2
   const promoMax = max * 2
 
+  const programLabel = isReseller ? 'Reseller Program' : 'Referral Program'
+  const programUrl = isReseller
+    ? 'https://finance.hellogroot.com/reseller-program?t=groot2026'
+    : 'https://finance.hellogroot.com/referral?t=groot2026'
+
   return (
     <div className="space-y-6 max-w-5xl">
+      {/* Dynamic Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">{programLabel}</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Earn rewards by {isReseller ? 'reselling' : 'referring'} businesses to Groot Finance
+        </p>
+      </div>
+
       {/* Launch Promo Banner */}
       <div className="rounded-xl bg-primary p-6 text-primary-foreground">
         <div className="flex items-start gap-4">
@@ -67,12 +80,12 @@ export default function ReferralDashboard() {
       {/* Program Link */}
       <div className="text-center pt-2">
         <a
-          href="https://finance.hellogroot.com/referral?t=groot2026"
+          href={programUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 font-medium transition-colors"
         >
-          View full Referral Program details
+          View full {programLabel} details
           <ExternalLink className="w-3.5 h-3.5" />
         </a>
       </div>
