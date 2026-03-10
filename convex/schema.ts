@@ -465,14 +465,6 @@ export default defineSchema({
     // Linked Accounting Entry (created on approval)
     accountingEntryId: v.optional(v.id("accounting_entries")),
 
-    // Batch Payment Processing (001-batch-payment)
-    paymentMethod: v.optional(v.string()),        // Bank Transfer, Cheque, Cash, etc.
-    paymentReference: v.optional(v.string()),      // Transaction reference number
-    paidBy: v.optional(v.id("users")),             // Finance admin who processed payment
-    sentBackBy: v.optional(v.id("users")),         // Finance admin who sent back for correction
-    sentBackReason: v.optional(v.string()),         // Reason for sending back
-    sentBackAt: v.optional(v.number()),             // When sent back
-
     // ============================================
     // DUPLICATE DETECTION FIELDS (007-duplicate-expense-detection)
     // ============================================
@@ -1802,15 +1794,9 @@ export default defineSchema({
     countryCode: v.optional(v.string()),
 
     // Extended customer particulars
-    contactPersonPosition: v.optional(v.string()),
     phone2: v.optional(v.string()),
     fax: v.optional(v.string()),
     email2: v.optional(v.string()),
-    website: v.optional(v.string()),
-    businessNature: v.optional(v.string()),
-    paymentTerms: v.optional(v.string()), // NET30, NET60, COD, etc.
-    creditLimit: v.optional(v.number()),
-    currencyCode: v.optional(v.string()), // Default currency for this customer
 
     // 001-lhdn-einvoice-submission: LHDN exempt customer flag
     isLhdnExempt: v.optional(v.boolean()),
