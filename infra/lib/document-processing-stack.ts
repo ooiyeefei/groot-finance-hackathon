@@ -9,7 +9,6 @@ import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as ses from 'aws-cdk-lib/aws-ses';
 import * as sesActions from 'aws-cdk-lib/aws-ses-actions';
-import * as cr from 'aws-cdk-lib/custom-resources';
 import { Construct } from 'constructs';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -192,9 +191,10 @@ export class DocumentProcessingStack extends cdk.Stack {
     formFillFunction.addEnvironment('BROWSERBASE_API_KEY_SSM_PARAM', '/finanseal/browserbase-api-key');
     formFillFunction.addEnvironment('BROWSERBASE_PROJECT_ID_SSM_PARAM', '/finanseal/browserbase-project-id');
 
-    // Merchant login credentials (SSM SecureString) — read at runtime for login-required merchants
+    // Merchant login credentials (SSM) — e.g. /finanseal/7eleven-einvoice-email
     formFillFunction.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['ssm:GetParameters'],
+      effect: iam.Effect.ALLOW,
+      actions: ['ssm:GetParameters', 'ssm:GetParameter'],
       resources: [
         `arn:aws:ssm:${this.region}:${this.account}:parameter/finanseal/*-einvoice-email`,
         `arn:aws:ssm:${this.region}:${this.account}:parameter/finanseal/*-einvoice-password`,
@@ -405,58 +405,6 @@ export class DocumentProcessingStack extends cdk.Stack {
           function: emailProcessorFunction,
         }),
       ],
-    });
-
-    // ========================================================================
-    // S3 Lifecycle: SES Email Retention (PDPA compliance)
-    //
-    // Delete raw SES emails after 90 days. These are incoming e-invoice emails
-    // stored at ses-emails/einvoice/ — the Lambda processor extracts data to
-    // Convex, so the raw emails are only needed for short-term debugging.
-    // ========================================================================
-    new cr.AwsCustomResource(this, 'SesEmailLifecycleRule', {
-      onCreate: {
-        service: 'S3',
-        action: 'putBucketLifecycleConfiguration',
-        parameters: {
-          Bucket: 'finanseal-bucket',
-          LifecycleConfiguration: {
-            Rules: [
-              {
-                ID: 'ses-email-90-day-cleanup',
-                Filter: { Prefix: 'ses-emails/' },
-                Status: 'Enabled',
-                Expiration: { Days: 90 },
-              },
-            ],
-          },
-        },
-        physicalResourceId: cr.PhysicalResourceId.of('ses-email-lifecycle-v1'),
-      },
-      onUpdate: {
-        service: 'S3',
-        action: 'putBucketLifecycleConfiguration',
-        parameters: {
-          Bucket: 'finanseal-bucket',
-          LifecycleConfiguration: {
-            Rules: [
-              {
-                ID: 'ses-email-90-day-cleanup',
-                Filter: { Prefix: 'ses-emails/' },
-                Status: 'Enabled',
-                Expiration: { Days: 90 },
-              },
-            ],
-          },
-        },
-        physicalResourceId: cr.PhysicalResourceId.of('ses-email-lifecycle-v1'),
-      },
-      policy: cr.AwsCustomResourcePolicy.fromStatements([
-        new iam.PolicyStatement({
-          actions: ['s3:PutLifecycleConfiguration', 's3:GetLifecycleConfiguration'],
-          resources: ['arn:aws:s3:::finanseal-bucket'],
-        }),
-      ]),
     });
 
     // ========================================================================
