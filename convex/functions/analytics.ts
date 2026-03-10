@@ -104,7 +104,7 @@ export const getDashboardAnalytics = query({
 
     for (const txn of transactions) {
       const amount = txn.homeCurrencyAmount || txn.originalAmount || 0;
-      const currency = txn.homeCurrency || txn.originalCurrency || "SGD";
+      const currency = txn.homeCurrency || txn.originalCurrency || "MYR";
       const category = txn.category || "uncategorized";
 
       console.log(`[Analytics] Processing txn ${txn._id}: type="${txn.transactionType}", amount=${amount}, homeCurrencyAmount=${txn.homeCurrencyAmount}, originalAmount=${txn.originalAmount}`);
@@ -465,7 +465,7 @@ export const getOverdueReceivables = query({
           id: txn._id,
           vendorName: txn.vendorName || null,
           amount: txn.homeCurrencyAmount || txn.originalAmount || 0,
-          currency: txn.homeCurrency || txn.originalCurrency || "SGD",
+          currency: txn.homeCurrency || txn.originalCurrency || "MYR",
           dueDate: dueDate.toISOString(),
           daysPastDue,
         });
@@ -549,7 +549,7 @@ export const getUpcomingPayments = query({
           id: txn._id,
           vendorName: txn.vendorName || null,
           amount: Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0),
-          currency: txn.homeCurrency || txn.originalCurrency || "SGD",
+          currency: txn.homeCurrency || txn.originalCurrency || "MYR",
           dueDate: dueDate.toISOString(),
           daysUntilDue,
         });
@@ -606,7 +606,7 @@ export const getCurrencyExposure = query({
 
     for (const txn of activeTransactions) {
       const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
-      const currency = txn.originalCurrency || "SGD";
+      const currency = txn.originalCurrency || "MYR";
 
       if (!currencyTotals[currency]) {
         currencyTotals[currency] = 0;
@@ -706,7 +706,7 @@ export const getCashFlowProjection = query({
 
     // Get business home currency
     const business = await ctx.db.get(args.businessId);
-    const homeCurrency = business?.homeCurrency || "SGD";
+    const homeCurrency = business?.homeCurrency || "MYR";
 
     return {
       periodStart: currentDateStr,

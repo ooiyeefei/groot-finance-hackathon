@@ -1879,7 +1879,7 @@ export const getCompletedForAI = query({
           description: item.item_description ?? item.description ?? "",
           quantity: item.quantity ?? 1,
           unitPrice: item.unit_price ?? 0,
-          totalAmount: item.total_amount ?? 0,
+          totalAmount: item.total_amount ?? Math.round((item.unit_price ?? 0) * (item.quantity ?? 1) * 100) / 100,
         }));
 
         return {

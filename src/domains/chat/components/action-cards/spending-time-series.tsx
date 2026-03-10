@@ -44,7 +44,7 @@ function SpendingTimeSeries({ action }: ActionCardProps) {
 
   if (!data?.periods?.length) return null
 
-  const currency = data.currency || 'SGD'
+  const currency = data.currency || 'MYR'
   const maxTotal = Math.max(...data.periods.map((p) => p.total))
 
   // Collect unique category names for legend

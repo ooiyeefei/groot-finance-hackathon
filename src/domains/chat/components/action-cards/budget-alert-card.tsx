@@ -52,7 +52,7 @@ function BudgetAlertCard({ action, onViewDetails }: ActionCardProps) {
 
   if (!data?.categories?.length) return null
 
-  const currency = data.currency || 'SGD'
+  const currency = data.currency || 'MYR'
   const overallConfig = STATUS_CONFIG[data.overallStatus] || STATUS_CONFIG.on_track
 
   return (

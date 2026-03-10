@@ -81,8 +81,8 @@ export async function getUserBusinessMemberships(userId?: string): Promise<Busin
       name: b.name,
       slug: b.slug || '',
       owner_id: b.ownerId,
-      country_code: b.countryCode || 'SG',
-      home_currency: b.homeCurrency || 'SGD',
+      country_code: b.countryCode || 'MY',
+      home_currency: b.homeCurrency || 'MYR',
       logo_url: b.logoUrl,
       logo_fallback_color: b.logoFallbackColor || '#4F46E5',
       membership: b.membership ? {

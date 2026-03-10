@@ -43,7 +43,7 @@ function SpendingChart({ action }: ActionCardProps) {
 
   if (!data?.categories?.length) return null
 
-  const currency = data.currency || 'SGD'
+  const currency = data.currency || 'MYR'
   const maxValue = Math.max(...data.categories.map((c) => c.value))
 
   // Calculate percentages if not provided

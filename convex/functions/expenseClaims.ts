@@ -1122,7 +1122,7 @@ export const updateStatus = mutation({
         {
           // Get the business to fetch homeCurrency if not set on claim
           const business = await ctx.db.get(claim.businessId);
-          const homeCurrency = claim.homeCurrency || business?.homeCurrency || "SGD";
+          const homeCurrency = claim.homeCurrency || business?.homeCurrency || "MYR";
 
           // Validate required fields for accounting entry
           if (!claim.totalAmount || !claim.currency || !claim.transactionDate) {
@@ -1718,7 +1718,7 @@ export const getReportData = query({
     return {
       categoryGroups,
       categoryLookup,
-      homeCurrency: business.homeCurrency || "SGD",
+      homeCurrency: business.homeCurrency || "MYR",
       totalClaims: enrichedClaims.length,
       role,
     };
@@ -1926,7 +1926,7 @@ export const getFormattedReportData = query({
         businessName: business.name,
         reportMonth: args.month,
         generatedAt: new Date().toISOString(),
-        homeCurrency: business.homeCurrency || "SGD",
+        homeCurrency: business.homeCurrency || "MYR",
         totalClaims: enrichedClaims.length,
         grandTotal,
       },
@@ -2092,7 +2092,7 @@ export const getExportClaims = query({
     return {
       claims: enrichedClaims,
       categoryLookup,
-      homeCurrency: business.homeCurrency || "SGD",
+      homeCurrency: business.homeCurrency || "MYR",
       hasMore: offset + limit < claims.length,
       total: claims.length,
       role,

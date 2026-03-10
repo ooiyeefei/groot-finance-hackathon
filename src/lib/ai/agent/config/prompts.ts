@@ -144,7 +144,7 @@ Transactions:
 
 Rules:
 - List EVERY transaction returned by the tool. Do not omit or group them.
-- Show the original currency amount. If a home-currency conversion is provided (e.g. "14.72 SGD"), show both: "10.60 MYR (≈ 14.72 SGD)".
+- Show the original currency amount. Only show a home-currency conversion if the currencies are DIFFERENT (e.g. "10.60 MYR (≈ 14.72 SGD)"). Never show a conversion when both currencies are the same.
 - If there is only 1 transaction, still use the numbered list format.
 - Include vendor name, date, and amount on the same line for each item.
 - If the tool returns 0 transactions but the team has members, say "No transactions found for [period]" — do NOT say there are no team members.

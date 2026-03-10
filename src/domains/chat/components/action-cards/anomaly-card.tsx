@@ -84,7 +84,7 @@ function AnomalyCard({ action, isHistorical }: ActionCardProps) {
               <div className="flex items-center gap-3 text-xs text-muted-foreground mb-2">
                 {anomaly.amount && (
                   <span className="font-medium text-foreground">
-                    {anomaly.currency || 'SGD'} {anomaly.amount.toLocaleString()}
+                    {anomaly.currency || 'MYR'} {anomaly.amount.toLocaleString()}
                   </span>
                 )}
                 {anomaly.date && <span>{anomaly.date}</span>}

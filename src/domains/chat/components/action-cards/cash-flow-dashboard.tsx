@@ -40,7 +40,7 @@ function CashFlowDashboard({ action, onViewDetails }: ActionCardProps) {
 
   if (!data || data.runwayDays === undefined) return null
 
-  const currency = data.currency || 'SGD'
+  const currency = data.currency || 'MYR'
   const netCashFlow = data.totalIncome - data.totalExpenses
   const isPositiveFlow = netCashFlow >= 0
 

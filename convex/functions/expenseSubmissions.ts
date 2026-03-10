@@ -894,7 +894,7 @@ export const approve = mutation({
 
     // Get business for home currency
     const business = await ctx.db.get(submission.businessId);
-    const homeCurrency = business?.homeCurrency || "SGD";
+    const homeCurrency = business?.homeCurrency || "MYR";
 
     // Fetch all claims
     const claims = await ctx.db
@@ -999,7 +999,7 @@ export const approvePartial = mutation({
 
     // Get business for home currency
     const business = await ctx.db.get(submission.businessId);
-    const homeCurrency = business?.homeCurrency || "SGD";
+    const homeCurrency = business?.homeCurrency || "MYR";
 
     // If ALL claims are approved, short-circuit to full approve (no split needed)
     if (rejectedClaims.length === 0) {

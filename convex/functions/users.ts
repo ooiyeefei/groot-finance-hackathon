@@ -507,7 +507,7 @@ export const ensureUserWithBusiness = mutation({
         clerkUserId: args.clerkUserId,
         email: args.email,
         fullName: args.fullName,
-        homeCurrency: "SGD", // Default for SEA
+        homeCurrency: "MYR", // Default for SEA
         updatedAt: Date.now(),
       });
       user = await ctx.db.get(userId);
@@ -525,8 +525,8 @@ export const ensureUserWithBusiness = mutation({
     const businessId = await ctx.db.insert("businesses", {
       name: businessName,
       slug: `${args.email.split("@")[0]}-business-${Date.now()}`,
-      countryCode: "SG",
-      homeCurrency: "SGD",
+      countryCode: "MY",
+      homeCurrency: "MYR",
       logoFallbackColor: "#3b82f6",
       updatedAt: Date.now(),
     });
@@ -799,7 +799,7 @@ export const createUserWithBusinessInternal = internalMutation({
       clerkUserId: args.clerkUserId,
       email: args.email.toLowerCase(),
       fullName: args.fullName,
-      homeCurrency: "SGD", // Default for SEA
+      homeCurrency: "MYR", // Default for SEA
       updatedAt: Date.now(),
     });
 
@@ -811,8 +811,8 @@ export const createUserWithBusinessInternal = internalMutation({
     const businessId = await ctx.db.insert("businesses", {
       name: businessName,
       slug: `${args.email.split("@")[0]}-business-${Date.now()}`,
-      countryCode: "SG",
-      homeCurrency: "SGD",
+      countryCode: "MY",
+      homeCurrency: "MYR",
       logoFallbackColor: "#3b82f6",
       updatedAt: Date.now(),
     });

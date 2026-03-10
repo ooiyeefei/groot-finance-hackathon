@@ -1004,7 +1004,7 @@ export const getTeamMembersWithManagers = query({
           status: membership.status,
           full_name: memberUser?.fullName || null,
           email: memberUser?.email || null,
-          home_currency: memberUser?.homeCurrency || business.homeCurrency || "SGD",
+          home_currency: memberUser?.homeCurrency || business.homeCurrency || "MYR",
           clerk_user_id: memberUser?.clerkUserId || null,
           // Manager info
           manager_id: membership.managerId || null,
@@ -1097,7 +1097,7 @@ export const getDirectReports = query({
           status: membership.status,
           full_name: memberUser?.fullName || null,
           email: memberUser?.email || null,
-          home_currency: memberUser?.homeCurrency || business.homeCurrency || "SGD",
+          home_currency: memberUser?.homeCurrency || business.homeCurrency || "MYR",
           clerk_user_id: memberUser?.clerkUserId || null,
           manager_id: membership.managerId || null,
           created_at: new Date(membership._creationTime).toISOString(),
