@@ -1251,6 +1251,31 @@ def prefill_custom_dropdowns(page: Page, buyer: dict):
             print(f"[Pre-fill] Cascade dropdown '{label_hint}' failed: {e}")
 
 
+# ── Receipt image upload ──────────────────────────────────
+
+def upload_receipt_image(page: Page, local_path: str) -> bool:
+    """Find file input on the page and upload the receipt image via Playwright.
+    Handles both visible and hidden <input type="file"> elements.
+    Returns True if upload was performed."""
+    try:
+        # Find all file inputs (visible or hidden — many forms hide the real input behind a styled button)
+        file_inputs = page.locator('input[type="file"]')
+        count = file_inputs.count()
+        if count == 0:
+            print("[Upload] No file input found on page")
+            return False
+
+        # Use the first file input (most forms have just one)
+        file_input = file_inputs.first
+        file_input.set_input_files(local_path)
+        print(f"[Upload] Receipt image uploaded via input[type=file] ({local_path})")
+        time.sleep(1)  # Wait for upload preview/processing
+        return True
+    except Exception as e:
+        print(f"[Upload] Failed: {e}")
+        return False
+
+
 # ── CUA action executor ────────────────────────────────────
 
 def execute_action(page: Page, name: str, args: dict):
@@ -1877,12 +1902,13 @@ TASK:
 11. For any long dropdown: TYPE the first few letters to filter/jump instead of scrolling.
 12. KEYBOARD KEYS: Use correct capitalized names — "Backspace" (not "backspace"), "Control+A" (not "control+a"), "Delete" (not "delete"), "Enter" (not "enter"), "ArrowDown" (not "arrowdown").
 13. For any field not covered above, check the RECEIPT IMAGE for the answer.
-14. Check consent checkbox → click Submit.
-15. Fix validation errors if any (only the specific field mentioned).
-16. CAPTCHA handling:
+14. RECEIPT IMAGE UPLOAD: If the form has a "Upload Receipt" or "Choose File" button, the receipt image has ALREADY been uploaded automatically by the system. Do NOT click any file upload buttons or try to upload again. If you see a thumbnail/preview of the uploaded image, that confirms it's done.
+15. Check consent checkbox → click Submit.
+16. Fix validation errors if any (only the specific field mentioned).
+17. CAPTCHA handling:
    - reCAPTCHA (Google — shows image puzzles like "select all buses"): Do NOT interact. It is handled automatically by the system. Skip completely.
    - Cloudflare "Verify you are human" checkbox: DO click it and wait 3-5 seconds. It usually auto-verifies after clicking. If it shows "Verification failed", click it again.
-17. For forms requiring OTP/TAC: Use the system email ({buyer["email"]}) for the email field. After filling all fields, click "Request OTP" or "Send OTP". The OTP will be handled automatically — just wait for the code to appear and then submit."""
+18. For forms requiring OTP/TAC: Use the system email ({buyer["email"]}) for the email field. After filling all fields, click "Request OTP" or "Send OTP". The OTP will be handled automatically — just wait for the code to appear and then submit."""
 
     shot = base64.b64encode(page.screenshot(type="png")).decode()
     # Build CUA context: receipt image (reference) + form screenshot (current page)
@@ -2388,6 +2414,7 @@ def handler(event: dict, context=None) -> dict:
     _run_state["merchant"] = merchant
 
     print(f"[Form Fill] Start: claim={claim_id}, url={url[:80]}")
+    receipt_image_local: str | None = None  # Temp file path for form upload (cleaned up in finally)
 
     try:
         if not GEMINI_KEY:
@@ -2435,20 +2462,27 @@ def handler(event: dict, context=None) -> dict:
             if merchant_hints:
                 print(f"[Form Fill] Merchant hints: {merchant_hints[:100]}...")
 
-        # Download receipt image from S3 for CUA vision (to read Store Code, etc.)
+        # Download receipt image from S3 for CUA vision + file upload
         receipt_image_b64 = None
         receipt_image_path = event.get("receiptImagePath")
         if receipt_image_path:
             try:
-                # Use urllib to download from S3 via presigned URL — avoids boto3 asyncio conflict with Playwright
                 import boto3 as _boto3
                 s3 = _boto3.client("s3")
                 s3_key = receipt_image_path if receipt_image_path.startswith("expense_claims/") else f"expense_claims/{receipt_image_path}"
                 presigned = s3.generate_presigned_url("get_object", Params={"Bucket": "finanseal-bucket", "Key": s3_key}, ExpiresIn=300)
                 req = Request(presigned)
                 with urlopen(req, timeout=15) as resp:
-                    receipt_image_b64 = base64.b64encode(resp.read()).decode()
-                print(f"[Form Fill] Receipt image loaded: {receipt_image_path} ({len(receipt_image_b64)//1024}KB)")
+                    image_bytes = resp.read()
+                receipt_image_b64 = base64.b64encode(image_bytes).decode()
+                # Save to temp file for Playwright file upload
+                import tempfile
+                ext = ".jpeg" if receipt_image_path.endswith((".jpeg", ".jpg")) else ".png"
+                tmp = tempfile.NamedTemporaryFile(suffix=ext, delete=False, dir="/tmp")
+                tmp.write(image_bytes)
+                tmp.close()
+                receipt_image_local = tmp.name
+                print(f"[Form Fill] Receipt image loaded: {receipt_image_path} ({len(receipt_image_b64)//1024}KB) → {receipt_image_local}")
 
                 # Pre-extract store code from receipt image via Gemini Flash
                 if not receipt.get("storeCode"):
@@ -2662,6 +2696,11 @@ def handler(event: dict, context=None) -> dict:
         prefill_all(page, buyer, receipt)
         prefill_custom_dropdowns(page, buyer)
 
+        # Phase 2: Upload receipt image if a file input exists on the page
+        receipt_uploaded = False
+        if receipt_image_local:
+            receipt_uploaded = upload_receipt_image(page, receipt_image_local)
+
         # ── Tier 1: Check for saved formConfig (merchant config already fetched above) ──
         if merchant and fc and fc.get("fields") and (fc.get("successCount", 0) > 0):
             _run_state["tier"] = "tier1"
@@ -2746,6 +2785,11 @@ def handler(event: dict, context=None) -> dict:
                 time.sleep(5)
         else:
             time.sleep(3)  # CUA already submitted
+
+        # ── Post-CUA: Upload receipt image if not done during pre-fill ──
+        # (e.g. 7-Eleven: CUA navigates from dashboard to form, file input wasn't available during pre-fill)
+        if receipt_image_local and not receipt_uploaded:
+            receipt_uploaded = upload_receipt_image(page, receipt_image_local)
 
         # ── Post-CUA: Solve any CAPTCHA (may have loaded lazily after scroll/CUA) ──
         captcha_ok = solve_captcha(page, url)
@@ -2895,11 +2939,17 @@ def handler(event: dict, context=None) -> dict:
                 handle_validate_gate(page2, buyer)
                 prefill_all(page2, buyer, receipt)
                 prefill_custom_dropdowns(page2, buyer)
+                if receipt_image_local:
+                    upload_receipt_image(page2, receipt_image_local)
                 solve_captcha(page2, url)
 
                 _run_state["tier"] = "tier2"
                 actions = run_tier2(page2, buyer, receipt, receipt_image_b64, merchant_hints=ts_result.get("cua_hints", ""))
                 time.sleep(3)
+
+                # Post-CUA: upload if not done during pre-fill (e.g. CUA navigated to form)
+                if receipt_image_local:
+                    upload_receipt_image(page2, receipt_image_local)
 
                 # Post-CUA CAPTCHA + submit
                 if solve_captcha(page2, url):
@@ -2981,3 +3031,11 @@ def handler(event: dict, context=None) -> dict:
             pass
 
         return {"success": False, "error": error, "durationMs": dur, "cost": cost_tracker.to_dict()}
+
+    finally:
+        # Clean up temp receipt image file
+        if receipt_image_local:
+            try:
+                os.remove(receipt_image_local)
+            except Exception:
+                pass
