@@ -8,53 +8,60 @@ export function ReferralList() {
 
   if (isLoading) return null
 
-  if (referrals.length === 0) {
-    return (
-      <div className="bg-card border border-border rounded-lg p-6 text-center">
-        <p className="text-muted-foreground text-sm">
-          No referrals yet. Share your code to start earning!
-        </p>
-      </div>
-    )
-  }
-
   return (
-    <div className="bg-card border border-border rounded-lg overflow-hidden">
-      <div className="px-4 py-3 border-b border-border">
-        <h3 className="text-sm font-medium text-foreground">Referred Businesses</h3>
+    <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className="px-6 py-4 border-b border-border">
+        <h3 className="text-base font-semibold text-foreground">Referred Businesses</h3>
       </div>
-      <div className="divide-y divide-border">
-        {referrals.map((referral) => {
-          const statusConfig = REFERRAL_STATUS_CONFIG[referral.status] ?? {
-            label: referral.status,
-            color: 'text-muted-foreground',
-          }
 
-          return (
-            <div key={referral._id} className="px-4 py-3 flex items-center justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-foreground truncate">
-                  {referral.referredBusinessName || 'Pending'}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {new Date(referral.capturedAt).toLocaleDateString()}
-                  {referral.currentPlan && ` \u00B7 ${referral.currentPlan}`}
-                </p>
-              </div>
-              <div className="flex items-center gap-3 flex-shrink-0">
-                {referral.estimatedEarning != null && referral.estimatedEarning > 0 && (
-                  <span className="text-sm font-medium text-foreground">
-                    RM {referral.estimatedEarning}
+      {referrals.length === 0 ? (
+        <div className="px-6 py-12 text-center">
+          <p className="text-muted-foreground text-base">
+            No referrals yet. Share your code to start earning!
+          </p>
+          <p className="text-muted-foreground text-sm mt-1">
+            You earn RM 80 for every business that subscribes to an annual plan.
+          </p>
+        </div>
+      ) : (
+        <div className="divide-y divide-border">
+          {referrals.map((referral) => {
+            const statusConfig = REFERRAL_STATUS_CONFIG[referral.status] ?? {
+              label: referral.status,
+              color: 'text-muted-foreground',
+            }
+
+            return (
+              <div key={referral._id} className="px-6 py-4 flex items-center justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <p className="text-base font-medium text-foreground truncate">
+                    {referral.referredBusinessName || 'Pending'}
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    {new Date(referral.capturedAt).toLocaleDateString()}
+                    {referral.currentPlan && ` \u00B7 ${referral.currentPlan}`}
+                  </p>
+                </div>
+                <div className="flex items-center gap-4 flex-shrink-0">
+                  {referral.estimatedEarning != null && referral.estimatedEarning > 0 && (
+                    <span className="text-base font-semibold text-foreground">
+                      RM {referral.estimatedEarning}
+                    </span>
+                  )}
+                  <span className={`text-sm font-semibold px-3 py-1 rounded-full ${statusConfig.color} ${
+                    referral.status === 'paid' || referral.status === 'upgraded' ? 'bg-green-50' :
+                    referral.status === 'trial' ? 'bg-yellow-50' :
+                    referral.status === 'churned' || referral.status === 'cancelled' ? 'bg-red-50' :
+                    'bg-muted'
+                  }`}>
+                    {statusConfig.label}
                   </span>
-                )}
-                <span className={`text-xs font-medium ${statusConfig.color}`}>
-                  {statusConfig.label}
-                </span>
+                </div>
               </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

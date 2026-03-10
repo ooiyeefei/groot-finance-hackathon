@@ -40,35 +40,11 @@ export function generateUniqueReferralCode(
 }
 
 /**
- * Calculate referral earning based on plan name.
- * Per partner program: Starter RM 80, Pro RM 200, Enterprise RM 500.
- * Monthly plans are tracked but not commissionable (RM 0).
+ * Flat RM 80 referral commission for any annual plan conversion.
  */
-export function calculateEarning(planName: string, isAnnual = true): number {
+export function calculateEarning(_planName: string, isAnnual = true): number {
   if (!isAnnual) return 0
-
-  switch (planName) {
-    case 'starter':
-      return 80
-    case 'pro':
-      return 200
-    case 'enterprise':
-      return 500
-    default:
-      return 0
-  }
-}
-
-/**
- * Calculate upgrade bonus when referred business upgrades plan.
- * Starter → Pro within 12 months = RM 120 bonus.
- */
-export function calculateUpgradeBonus(
-  fromPlan: string,
-  toPlan: string
-): number {
-  if (fromPlan === 'starter' && toPlan === 'pro') return 120
-  return 0
+  return 80
 }
 
 /**

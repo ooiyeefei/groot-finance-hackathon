@@ -63,52 +63,49 @@ export function ReferralCodeDisplay({ code, referralUrl }: ReferralCodeDisplayPr
   }
 
   return (
-    <div className="bg-card border border-border rounded-lg p-6">
-      <h3 className="text-sm font-medium text-muted-foreground mb-3">Your Referral Code</h3>
+    <div className="bg-card border border-border rounded-xl p-8">
+      <h3 className="text-base font-semibold text-muted-foreground mb-4">Your Referral Code</h3>
 
       {/* Code display */}
-      <div className="bg-muted rounded-lg p-4 mb-4 text-center">
-        <span className="text-2xl font-mono font-bold text-foreground tracking-wider">
+      <div className="bg-muted rounded-xl p-6 mb-4 text-center">
+        <span className="text-3xl sm:text-4xl font-mono font-bold text-foreground tracking-widest">
           {code}
         </span>
       </div>
 
-      <p className="text-xs text-muted-foreground mb-4 text-center">
+      <p className="text-sm text-muted-foreground mb-6 text-center">
         Applicable to annual plans only. Referred businesses get RM 100 off.
       </p>
 
       {/* Action buttons */}
-      <div className="flex gap-2">
+      <div className="grid grid-cols-3 gap-3">
         <Button
           variant="outline"
-          size="sm"
           onClick={() => copyToClipboard(code, 'code')}
-          className="flex-1"
+          className="h-11 text-sm font-medium"
         >
           {copiedCode ? (
-            <><Check className="w-4 h-4 mr-1.5 text-green-600" /> Copied!</>
+            <><Check className="w-4 h-4 mr-2 text-green-600" /> Copied!</>
           ) : (
-            <><Copy className="w-4 h-4 mr-1.5" /> Copy Code</>
+            <><Copy className="w-4 h-4 mr-2" /> Copy Code</>
           )}
         </Button>
         <Button
           variant="outline"
-          size="sm"
           onClick={() => copyToClipboard(referralUrl, 'link')}
-          className="flex-1"
+          className="h-11 text-sm font-medium"
         >
           {copiedLink ? (
-            <><Check className="w-4 h-4 mr-1.5 text-green-600" /> Copied!</>
+            <><Check className="w-4 h-4 mr-2 text-green-600" /> Copied!</>
           ) : (
-            <><Link className="w-4 h-4 mr-1.5" /> Copy Link</>
+            <><Link className="w-4 h-4 mr-2" /> Copy Link</>
           )}
         </Button>
         <Button
-          size="sm"
           onClick={handleShare}
-          className="bg-primary hover:bg-primary/90 text-primary-foreground flex-1"
+          className="bg-primary hover:bg-primary/90 text-primary-foreground h-11 text-sm font-medium"
         >
-          <Share2 className="w-4 h-4 mr-1.5" /> Share
+          <Share2 className="w-4 h-4 mr-2" /> Share
         </Button>
       </div>
     </div>

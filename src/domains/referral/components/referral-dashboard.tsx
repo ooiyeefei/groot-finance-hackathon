@@ -12,8 +12,8 @@ export default function ReferralDashboard() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      <div className="flex items-center justify-center p-12">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     )
   }
@@ -23,7 +23,7 @@ export default function ReferralDashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 max-w-5xl">
       <ReferralCodeDisplay code={code.code} referralUrl={code.referralUrl} />
       <ReferralStatsCards />
       <ReferralList />

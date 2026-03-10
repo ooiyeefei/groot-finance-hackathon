@@ -14,14 +14,14 @@ export function ReferralStatsCards() {
   ]
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
       {cards.map((card) => (
-        <div key={card.label} className="bg-card border border-border rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <card.icon className={`w-4 h-4 ${card.color}`} />
-            <span className="text-xs text-muted-foreground">{card.label}</span>
+        <div key={card.label} className="bg-card border border-border rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <card.icon className={`w-5 h-5 ${card.color}`} />
+            <span className="text-sm text-muted-foreground font-medium">{card.label}</span>
           </div>
-          <p className={`text-xl font-bold ${card.color}`}>
+          <p className={`text-2xl sm:text-3xl font-bold ${card.color}`}>
             {isLoading ? '-' : card.value}
           </p>
         </div>

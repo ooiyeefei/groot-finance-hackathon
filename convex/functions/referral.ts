@@ -355,12 +355,8 @@ export const updateReferralStatus = mutation({
       updates.convertedAt = now;
       updates.planAtConversion = args.planName;
 
-      // Calculate earning based on plan
-      // Earnings are for annual plans only
-      const earning = args.planName === "starter" ? 80
-        : args.planName === "pro" ? 200
-        : args.planName === "enterprise" ? 500
-        : 0;
+      // Flat RM 80 referral commission for any annual plan conversion
+      const earning = 80;
       updates.estimatedEarning = earning;
 
       // Update referral code aggregate stats
@@ -370,22 +366,6 @@ export const updateReferralStatus = mutation({
           totalConversions: referralCode.totalConversions + 1,
           totalEarnings: referralCode.totalEarnings + earning,
         });
-      }
-    }
-
-    // Calculate upgrade bonus (Starter → Pro within 12 months)
-    if (args.newStatus === "upgraded" && referral.planAtConversion === "starter" && args.planName === "pro") {
-      const twelveMonths = 365 * 24 * 60 * 60 * 1000;
-      if (referral.convertedAt && (now - referral.convertedAt) < twelveMonths) {
-        const upgradeBonus = 120;
-        updates.estimatedEarning = (referral.estimatedEarning ?? 0) + upgradeBonus;
-
-        const referralCode = await ctx.db.get(referral.referralCodeId);
-        if (referralCode) {
-          await ctx.db.patch(referralCode._id, {
-            totalEarnings: referralCode.totalEarnings + upgradeBonus,
-          });
-        }
       }
     }
 
