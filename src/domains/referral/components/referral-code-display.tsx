@@ -26,7 +26,6 @@ export function ReferralCodeDisplay({ code, referralUrl, codeType }: ReferralCod
         setTimeout(() => setCopiedLink(false), 2000)
       }
     } catch {
-      // Fallback for older browsers
       const textarea = document.createElement('textarea')
       textarea.value = text
       document.body.appendChild(textarea)
@@ -59,56 +58,61 @@ export function ReferralCodeDisplay({ code, referralUrl, codeType }: ReferralCod
         // User cancelled or share failed — fall through to copy
       }
     }
-    // Fallback: copy the full share message
     await copyToClipboard(shareMessage, 'link')
   }
 
+  const { discount } = getCommissionRange(codeType)
+
   return (
     <div className="bg-card border border-border rounded-xl p-8">
-      <h3 className="text-base font-semibold text-muted-foreground mb-4">Your Referral Code</h3>
+      {/* Inline: code on left, buttons on right */}
+      <div className="flex flex-col lg:flex-row items-center gap-6">
+        {/* Code display */}
+        <div className="bg-muted rounded-xl px-8 py-5 flex-1 w-full lg:w-auto text-center">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+            {codeType === 'partner_reseller' ? 'Reseller Code' : 'Referral Code'}
+          </p>
+          <span className="text-3xl sm:text-4xl font-mono font-bold text-foreground tracking-widest">
+            {code}
+          </span>
+        </div>
 
-      {/* Code display */}
-      <div className="bg-muted rounded-xl p-6 mb-4 text-center">
-        <span className="text-3xl sm:text-4xl font-mono font-bold text-foreground tracking-widest">
-          {code}
-        </span>
+        {/* Action buttons - stacked vertically on right */}
+        <div className="flex flex-row lg:flex-col gap-3 w-full lg:w-auto">
+          <Button
+            variant="outline"
+            onClick={() => copyToClipboard(code, 'code')}
+            className="h-11 text-sm font-medium flex-1 lg:w-40"
+          >
+            {copiedCode ? (
+              <><Check className="w-4 h-4 mr-2 text-green-600" /> Copied!</>
+            ) : (
+              <><Copy className="w-4 h-4 mr-2" /> Copy Code</>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => copyToClipboard(referralUrl, 'link')}
+            className="h-11 text-sm font-medium flex-1 lg:w-40"
+          >
+            {copiedLink ? (
+              <><Check className="w-4 h-4 mr-2 text-green-600" /> Copied!</>
+            ) : (
+              <><Link className="w-4 h-4 mr-2" /> Copy Link</>
+            )}
+          </Button>
+          <Button
+            onClick={handleShare}
+            className="bg-primary hover:bg-primary/90 text-primary-foreground h-11 text-sm font-medium flex-1 lg:w-40"
+          >
+            <Share2 className="w-4 h-4 mr-2" /> Share
+          </Button>
+        </div>
       </div>
 
-      <p className="text-sm text-muted-foreground mb-6 text-center">
-        Applicable to annual plans only. Referred businesses get RM {getCommissionRange(codeType).discount} off.
+      <p className="text-sm text-muted-foreground mt-4 text-center lg:text-left">
+        Applicable to annual plans only. Referred businesses get RM {discount} off.
       </p>
-
-      {/* Action buttons */}
-      <div className="grid grid-cols-3 gap-3">
-        <Button
-          variant="outline"
-          onClick={() => copyToClipboard(code, 'code')}
-          className="h-11 text-sm font-medium"
-        >
-          {copiedCode ? (
-            <><Check className="w-4 h-4 mr-2 text-green-600" /> Copied!</>
-          ) : (
-            <><Copy className="w-4 h-4 mr-2" /> Copy Code</>
-          )}
-        </Button>
-        <Button
-          variant="outline"
-          onClick={() => copyToClipboard(referralUrl, 'link')}
-          className="h-11 text-sm font-medium"
-        >
-          {copiedLink ? (
-            <><Check className="w-4 h-4 mr-2 text-green-600" /> Copied!</>
-          ) : (
-            <><Link className="w-4 h-4 mr-2" /> Copy Link</>
-          )}
-        </Button>
-        <Button
-          onClick={handleShare}
-          className="bg-primary hover:bg-primary/90 text-primary-foreground h-11 text-sm font-medium"
-        >
-          <Share2 className="w-4 h-4 mr-2" /> Share
-        </Button>
-      </div>
     </div>
   )
 }
