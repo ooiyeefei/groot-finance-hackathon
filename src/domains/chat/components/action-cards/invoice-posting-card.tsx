@@ -10,7 +10,7 @@
 import { useState } from 'react'
 import { useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
-import { FileText, Check, Loader2, AlertTriangle } from 'lucide-react'
+import { FileText, Check, Loader2, AlertTriangle, ExternalLink } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { registerActionCard, type ActionCardProps } from './registry'
 
@@ -84,8 +84,13 @@ function InvoicePostingCard({ action, isHistorical }: ActionCardProps) {
 
   return (
     <div className="border border-border rounded-lg overflow-hidden bg-card">
-      {/* Header */}
-      <div className="px-3 py-2 bg-primary/5 border-b border-border flex items-center gap-2">
+      {/* Header — clickable to navigate to invoices page */}
+      <a
+        href="/invoices"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="px-3 py-2 bg-primary/5 border-b border-border flex items-center gap-2 hover:bg-primary/10 transition-colors cursor-pointer"
+      >
         <FileText className="w-3.5 h-3.5 text-primary flex-shrink-0" />
         <span className="text-xs font-medium text-foreground">Invoice Posting</span>
         {data.invoiceNumber && (
@@ -96,7 +101,8 @@ function InvoicePostingCard({ action, isHistorical }: ActionCardProps) {
             Posted
           </span>
         )}
-      </div>
+        <ExternalLink className="w-3 h-3 text-muted-foreground ml-auto flex-shrink-0" />
+      </a>
 
       {/* Details */}
       <div className="px-3 py-2.5">

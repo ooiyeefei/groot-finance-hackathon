@@ -83,34 +83,28 @@ This tool queries the AP invoices table (NOT accounting_entries and NOT sales in
 
         console.log(`[GetInvoicesTool] Found ${result.invoices.length} completed invoice(s)`)
 
-        // Format as structured text so LLM produces clean markdown output
-        const invoices = result.invoices
-        let dataText = `Found ${invoices.length} invoice(s):\n\n`
-
-        invoices.forEach((inv: any, i: number) => {
-          const status = inv.isPosted ? '✓ Posted to Accounting' : '⏳ Pending — not yet posted'
-          dataText += `### ${i + 1}. ${inv.vendorName}\n`
-          dataText += `- **Invoice #**: ${inv.invoiceNumber || '—'}\n`
-          dataText += `- **Date**: ${inv.invoiceDate || '—'}\n`
-          dataText += `- **Total**: ${inv.amount?.toFixed(2)} ${inv.currency}\n`
-          dataText += `- **Status**: ${status}\n`
-          dataText += `- **OCR Confidence**: ${Math.round((inv.confidenceScore ?? 0) * 100)}%\n`
-
-          if (inv.lineItems && inv.lineItems.length > 0) {
-            dataText += `- **Line items**:\n`
-            inv.lineItems.forEach((item: any) => {
-              const amt = item.totalAmount ?? item.total_amount ?? 0
-              const desc = item.description ?? item.item_description ?? 'Item'
-              const qty = item.quantity ?? 1
-              dataText += `  - ${desc} × ${qty} — ${amt.toFixed(2)} ${inv.currency}\n`
-            })
-          }
-          dataText += '\n'
-        })
+        // Return structured JSON so the auto-card builder can generate invoice_posting cards.
+        // The LLM also reads this JSON to produce its text summary.
+        const invoices = result.invoices.map((inv: any) => ({
+          _id: inv._id,
+          vendorName: inv.vendorName,
+          invoiceNumber: inv.invoiceNumber || null,
+          invoiceDate: inv.invoiceDate || null,
+          amount: inv.amount,
+          currency: inv.currency,
+          isPosted: inv.isPosted,
+          confidenceScore: inv.confidenceScore ?? 0,
+          lineItems: (inv.lineItems || []).map((item: any) => ({
+            description: item.description ?? item.item_description ?? 'Item',
+            quantity: item.quantity ?? 1,
+            unitPrice: item.unitPrice ?? item.unit_price ?? 0,
+            totalAmount: item.totalAmount ?? item.total_amount ?? Math.round((item.unit_price ?? 0) * (item.quantity ?? 1) * 100) / 100,
+          })),
+        }))
 
         return {
           success: true,
-          data: dataText,
+          data: JSON.stringify({ invoices }),
           metadata: { resultsCount: invoices.length }
         }
       } catch (error) {
