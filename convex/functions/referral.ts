@@ -472,7 +472,7 @@ export const createStripePromotionCode = internalAction({
     });
 
     // Find or create the shared referral coupon
-    const COUPON_ID = "referral-rm100-off";
+    const COUPON_ID = "gr-finance-referral-rm100-off";
     let couponId = COUPON_ID;
 
     try {
