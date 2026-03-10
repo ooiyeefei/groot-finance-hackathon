@@ -516,6 +516,129 @@ export const createStripePromotionCode = internalAction({
 });
 
 /**
+ * Auto-generate referral code for a user+business.
+ * Called from initializeBusinessFromOnboarding and backfill.
+ * Skips if user already has a referral code.
+ */
+export const autoGenerateCode = internalMutation({
+  args: {
+    clerkUserId: v.string(),
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    // Check if already has a code
+    const existing = await ctx.db
+      .query("referral_codes")
+      .withIndex("by_userId", (q) => q.eq("userId", args.clerkUserId))
+      .first();
+
+    if (existing) return existing.code;
+
+    // Generate code: GR-FIN-XXXXX from Clerk userId
+    const raw = args.clerkUserId.startsWith("user_") ? args.clerkUserId.slice(5) : args.clerkUserId;
+    let code = `GR-FIN-${raw.slice(0, 5).toUpperCase()}`;
+
+    // Check for collision and extend if needed
+    for (let len = 5; len <= 8; len++) {
+      const collision = await ctx.db
+        .query("referral_codes")
+        .withIndex("by_code", (q) => q.eq("code", code))
+        .first();
+      if (!collision) break;
+      code = `GR-FIN-${raw.slice(0, len + 1).toUpperCase()}`;
+    }
+
+    await ctx.db.insert("referral_codes", {
+      code,
+      userId: args.clerkUserId,
+      businessId: args.businessId,
+      type: "customer",
+      isActive: true,
+      totalReferrals: 0,
+      totalConversions: 0,
+      totalEarnings: 0,
+      createdAt: Date.now(),
+    });
+
+    // Schedule async Stripe Promotion Code creation
+    await ctx.scheduler.runAfter(0, internal.functions.referral.createStripePromotionCode, {
+      code,
+      userId: args.clerkUserId,
+    });
+
+    console.log(`[Referral] Auto-generated code ${code} for user ${args.clerkUserId}`);
+    return code;
+  },
+});
+
+/**
+ * Backfill referral codes for all existing users who don't have one.
+ * Run once from Convex Dashboard: npx convex run functions/referral:backfillAllCodes
+ */
+export const backfillAllCodes = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+    let created = 0;
+    let skipped = 0;
+
+    for (const user of users) {
+      if (!user.clerkUserId || !user.businessId) {
+        skipped++;
+        continue;
+      }
+
+      // Check if already has a code
+      const existing = await ctx.db
+        .query("referral_codes")
+        .withIndex("by_userId", (q) => q.eq("userId", user.clerkUserId))
+        .first();
+
+      if (existing) {
+        skipped++;
+        continue;
+      }
+
+      // Generate code
+      const raw = user.clerkUserId.startsWith("user_") ? user.clerkUserId.slice(5) : user.clerkUserId;
+      let code = `GR-FIN-${raw.slice(0, 5).toUpperCase()}`;
+
+      for (let len = 5; len <= 8; len++) {
+        const collision = await ctx.db
+          .query("referral_codes")
+          .withIndex("by_code", (q) => q.eq("code", code))
+          .first();
+        if (!collision) break;
+        code = `GR-FIN-${raw.slice(0, len + 1).toUpperCase()}`;
+      }
+
+      await ctx.db.insert("referral_codes", {
+        code,
+        userId: user.clerkUserId,
+        businessId: user.businessId,
+        type: "customer",
+        isActive: true,
+        totalReferrals: 0,
+        totalConversions: 0,
+        totalEarnings: 0,
+        createdAt: Date.now(),
+      });
+
+      // Schedule Stripe Promotion Code creation
+      await ctx.scheduler.runAfter(created * 500, internal.functions.referral.createStripePromotionCode, {
+        code,
+        userId: user.clerkUserId,
+      });
+
+      created++;
+    }
+
+    console.log(`[Referral Backfill] Created ${created} codes, skipped ${skipped} users`);
+    return { created, skipped };
+  },
+});
+
+/**
  * Internal query to get referral code by code string.
  */
 export const getByCode = internalQuery({

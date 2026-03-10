@@ -9,6 +9,7 @@
 
 import { v } from "convex/values";
 import { query, mutation, internalQuery, internalMutation } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 
 // ============================================
@@ -1992,6 +1993,13 @@ export const initializeBusinessFromOnboarding = mutation({
     });
 
     console.log(`[initializeBusinessFromOnboarding] ✅ Step 5 COMPLETE: User's active business updated`);
+
+    // Step 6: Auto-generate referral code for the new business owner
+    await ctx.scheduler.runAfter(0, internal.functions.referral.autoGenerateCode, {
+      clerkUserId: args.clerkUserId,
+      businessId,
+    });
+
     console.log(`[initializeBusinessFromOnboarding] ========================================`);
     console.log(`[initializeBusinessFromOnboarding] 🎉 SUCCESS: Created NEW business: ${businessId}`);
     console.log(`[initializeBusinessFromOnboarding] ========================================`);
