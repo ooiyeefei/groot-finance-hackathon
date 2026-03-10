@@ -258,6 +258,7 @@ After making changes to any system (e-invoice, expense claims, chat, etc.), **al
 - Markdown (documentation deliverable) + None (documentation only; references existing infrastructure) (001-pdpa-breach-notif-sop)
 - Git repository (`grootdev-ai/groot-finance`) (001-pdpa-breach-notif-sop)
 - TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, Clerk 6.30.0, Stripe SDK 20.1.0, React 19.1.2 (001-account-deletion)
+- Convex (existing `referral_codes` and `referrals` tables — no schema changes) (001-reseller-code-system)
 
 ## Recent Changes
 - 001-category-3-mcp: Added MCP Server with API key management
