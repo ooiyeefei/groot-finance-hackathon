@@ -143,19 +143,19 @@ export default function ReferralProgramPage() {
       `}</style>
 
       {/* Top Promo Banner */}
-      <div className="no-print sticky top-0 z-50 flex items-center justify-center gap-3 bg-gradient-to-r from-[#1E293B] to-[#111827] px-4 py-2.5 text-white">
-        <span className="h-2 w-2 rounded-full bg-amber-400" />
-        <p className="text-sm font-medium">
+      <div className="no-print sticky top-0 z-50 flex items-center justify-center gap-3 bg-gradient-to-r from-[#1E293B] to-[#111827] px-4 py-3 text-white">
+        <span className="h-2.5 w-2.5 rounded-full bg-amber-400 animate-pulse" />
+        <p className="text-[15px] font-medium">
           <span className="font-semibold text-amber-400">Launch Promo:</span>{' '}
-          2x referral fee (RM 160 – RM 400) on first 50 annual deals{' '}
+          2x referral fee — RM 160 (Starter) to RM 400 (Pro) on first 50 annual deals{' '}
           <span className="mx-1.5">—</span>{' '}
           <span className="font-semibold text-amber-400">First come, first served</span>
         </p>
         <button
           onClick={() => document.getElementById('apply-form')?.scrollIntoView({ behavior: 'smooth' })}
-          className="ml-2 rounded-full bg-white px-4 py-1 text-xs font-semibold text-[#111827] transition-colors hover:bg-gray-100"
+          className="ml-2 rounded-full bg-white px-4 py-1.5 text-[13px] font-semibold text-[#111827] transition-colors hover:bg-gray-100"
         >
-          <Sparkles className="mr-1 inline h-3 w-3" /> Join Referral
+          <Sparkles className="mr-1 inline h-3.5 w-3.5" /> Join Referral
         </button>
       </div>
 
