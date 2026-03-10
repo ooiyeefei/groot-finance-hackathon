@@ -4,6 +4,16 @@
  */
 
 /**
+ * Round a number to 2 decimal places to eliminate IEEE 754 floating-point
+ * precision errors in currency arithmetic (e.g., 1 * 52.02 → 52.01999999999999).
+ *
+ * Use this after any multiplication, division, or summation of currency values.
+ */
+export function roundCurrency(value: number): number {
+  return Math.round(value * 100) / 100
+}
+
+/**
  * Format a number with comma separators (e.g., 101596428 → "101,596,428")
  * @param value - The number to format
  * @param decimals - Number of decimal places (optional, defaults to no forced decimals)

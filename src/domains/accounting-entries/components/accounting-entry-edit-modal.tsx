@@ -7,6 +7,7 @@ import type { AccountingEntry, CreateAccountingEntryRequest, LineItem } from '@/
 import type { SupportedCurrency, TransactionType } from '@/domains/accounting-entries/types'
 import { TRANSACTION_CATEGORIES } from '@/domains/accounting-entries/types'
 import { formatCurrency } from '@/domains/accounting-entries/hooks/use-accounting-entries'
+import { roundCurrency } from '@/lib/utils/format-number'
 import { useHomeCurrency } from '@/domains/users/hooks/use-home-currency'
 import { useExpenseCategories, DynamicExpenseCategory } from '@/domains/expense-claims/hooks/use-expense-categories'
 import { useCOGSCategories, DynamicCOGSCategory } from '@/lib/hooks/accounting/use-cogs-categories'
@@ -194,9 +195,9 @@ export default function AccountingEntryFormModal({
 
   useEffect(() => {
     if (lineItems.length > 0) {
-      const calculatedTotal = lineItems.reduce((sum, item) => {
-        return sum + ((item.quantity || 0) * (item.unit_price || 0))
-      }, 0)
+      const calculatedTotal = roundCurrency(lineItems.reduce((sum, item) => {
+        return sum + roundCurrency((item.quantity || 0) * (item.unit_price || 0))
+      }, 0))
 
       if (Math.abs(calculatedTotal - formData.original_amount) > 0.01) {
         setFormData(prev => ({
@@ -285,7 +286,7 @@ export default function AccountingEntryFormModal({
           item_description: item.item_description!,
           quantity: item.quantity!,
           unit_price: item.unit_price!,
-          total_amount: (item.quantity! * item.unit_price!),
+          total_amount: roundCurrency(item.quantity! * item.unit_price!),
           currency: formData.original_currency as SupportedCurrency,
           item_code: item.item_code,
           unit_measurement: item.unit_measurement,
@@ -833,7 +834,7 @@ export default function AccountingEntryFormModal({
                                   />
                                 </td>
                                 <td className="px-3 py-2 text-right text-green-600 dark:text-green-400 font-medium">
-                                  {formatCurrency((item.quantity || 0) * (item.unit_price || 0), formData.original_currency as SupportedCurrency)}
+                                  {formatCurrency(roundCurrency((item.quantity || 0) * (item.unit_price || 0)), formData.original_currency as SupportedCurrency)}
                                 </td>
                                 <td className="px-3 py-2 text-center">
                                   <button
@@ -871,7 +872,7 @@ export default function AccountingEntryFormModal({
                           <span className="text-muted-foreground">Subtotal:</span>
                           <span className="text-foreground">
                             {formatCurrency(
-                              lineItems.reduce((sum, item) => sum + ((item.quantity || 0) * (item.unit_price || 0)), 0),
+                              roundCurrency(lineItems.reduce((sum, item) => sum + roundCurrency((item.quantity || 0) * (item.unit_price || 0)), 0)),
                               formData.original_currency as SupportedCurrency
                             )}
                           </span>

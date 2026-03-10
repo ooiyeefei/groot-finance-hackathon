@@ -11,6 +11,7 @@ import type {
   AccountingEntryListParams
 } from '@/domains/accounting-entries/lib/data-access';
 import type { SupportedCurrency } from '@/domains/accounting-entries/types';
+import { roundCurrency } from '@/lib/utils/format-number';
 
 interface AccountingEntryListResponse {
   success: boolean;
@@ -293,10 +294,10 @@ export function useAccountingEntries(
           quantity: item.quantity,
           unitMeasurement: item.unit_measurement,
           unitPrice: item.unit_price,
-          totalAmount: item.quantity * item.unit_price,
+          totalAmount: roundCurrency(item.quantity * item.unit_price),
           currency: item.currency || data.original_currency,
           taxRate: item.tax_rate || 0,
-          taxAmount: item.tax_rate ? (item.quantity * item.unit_price) * (item.tax_rate / 100) : 0,
+          taxAmount: item.tax_rate ? roundCurrency(roundCurrency(item.quantity * item.unit_price) * (item.tax_rate / 100)) : 0,
           lineOrder: index + 1,
         }));
       }

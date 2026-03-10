@@ -8,6 +8,7 @@
 
 import { getAuthenticatedConvex } from '@/lib/convex'
 import { currencyService } from '@/lib/services/currency-service'
+import { roundCurrency } from '@/lib/utils/format-number'
 import { CrossBorderTaxComplianceTool } from '@/lib/ai/tools'
 import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import {
@@ -303,10 +304,10 @@ export async function createAccountingEntry(
       quantity: item.quantity,
       unitMeasurement: item.unit_measurement,
       unitPrice: item.unit_price,
-      totalAmount: item.quantity * item.unit_price,
+      totalAmount: roundCurrency(item.quantity * item.unit_price),
       currency: original_currency,
       taxRate: item.tax_rate || 0,
-      taxAmount: item.tax_rate ? (item.quantity * item.unit_price) * (item.tax_rate / 100) : 0,
+      taxAmount: item.tax_rate ? roundCurrency(roundCurrency(item.quantity * item.unit_price) * (item.tax_rate / 100)) : 0,
       lineOrder: index + 1
     }))
 
@@ -697,10 +698,10 @@ export async function updateAccountingEntry(
         quantity: item.quantity,
         unitMeasurement: item.unit_measurement,
         unitPrice: item.unit_price,
-        totalAmount: item.quantity * item.unit_price,
+        totalAmount: roundCurrency(item.quantity * item.unit_price),
         currency: item.currency || updates.original_currency,
         taxRate: item.tax_rate || 0,
-        taxAmount: item.tax_rate ? (item.quantity * item.unit_price) * (item.tax_rate / 100) : 0,
+        taxAmount: item.tax_rate ? roundCurrency(roundCurrency(item.quantity * item.unit_price) * (item.tax_rate / 100)) : 0,
         lineOrder: index + 1
       }))
     }

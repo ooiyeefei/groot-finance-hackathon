@@ -10,6 +10,7 @@ import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
 import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { currencyService } from '@/lib/services/currency-service'
+import { roundCurrency } from '@/lib/utils/format-number'
 import { StoragePathBuilder, type DocumentType } from '@/lib/storage-paths'
 import { invokeDocumentProcessor } from '@/lib/lambda-invoker'
 import {
@@ -322,9 +323,9 @@ export async function createExpenseClaim(
         description: item.description,
         quantity: item.quantity,
         unit_price: item.unit_price,
-        total_amount: item.quantity * item.unit_price,
+        total_amount: roundCurrency(item.quantity * item.unit_price),
         currency: original_currency,
-        tax_amount: item.tax_rate ? (item.quantity * item.unit_price * item.tax_rate) : 0,
+        tax_amount: item.tax_rate ? roundCurrency(item.quantity * item.unit_price * item.tax_rate) : 0,
         tax_rate: item.tax_rate || 0,
         line_order: index + 1
       })),

@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LineItem } from '@/domains/accounting-entries/hooks/use-line-items'
+import { roundCurrency } from '@/lib/utils/format-number'
 import type { AdditionalCharge } from '@/domains/expense-claims/types/expense-extraction'
 
 /** Title-case a charge label while preserving short abbreviations (SST, GST, VAT, etc.) */
@@ -273,7 +274,7 @@ export default function LineItemTable({
                     ...(serviceChargeAmount > 0 ? [{ label: 'Service Charge', amount: serviceChargeAmount, chargeType: 'service_charge' as const }] : []),
                     ...(taxAmount > 0 ? [{ label: 'Tax', amount: taxAmount, chargeType: 'tax' as const }] : []),
                   ]
-              const chargesTotal = charges.reduce((sum, c) => sum + c.amount, 0)
+              const chargesTotal = roundCurrency(charges.reduce((sum, c) => sum + c.amount, 0))
               const computedTotal = subtotalAmount !== undefined
                 ? subtotalAmount + chargesTotal
                 : totalAmount

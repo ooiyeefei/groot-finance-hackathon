@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
+import { roundCurrency } from '@/lib/utils/format-number'
 
 // Line item interface
 export interface LineItem {
@@ -51,7 +52,7 @@ export function useLineItems({
   const [lineItems, setLineItems] = useState<LineItem[]>(initialItems)
 
   // Calculate total amount whenever line items change
-  const totalAmount = lineItems.reduce((sum, item) => sum + (item.total_amount || 0), 0)
+  const totalAmount = roundCurrency(lineItems.reduce((sum, item) => sum + (item.total_amount || 0), 0))
 
   // Notify parent of total changes (only when total actually changes)
   useEffect(() => {
@@ -92,7 +93,7 @@ export function useLineItems({
         if (field === 'quantity' || field === 'unit_price') {
           const quantity = field === 'quantity' ? (value || 0) : (updated[index].quantity || 0)
           const unitPrice = field === 'unit_price' ? (value || 0) : (updated[index].unit_price || 0)
-          updated[index].total_amount = quantity * unitPrice
+          updated[index].total_amount = roundCurrency(quantity * unitPrice)
         }
       }
 
@@ -119,7 +120,7 @@ export function useLineItems({
   const recalculateTotals = useCallback(() => {
     setLineItems(prev => prev.map(item => ({
       ...item,
-      total_amount: (item.quantity || 0) * (item.unit_price || 0)
+      total_amount: roundCurrency((item.quantity || 0) * (item.unit_price || 0))
     })))
   }, [])
 

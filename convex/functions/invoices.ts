@@ -1027,7 +1027,7 @@ export const internalUpdateExtraction = internalMutation({
               itemDescription: (item.item_description || item.description || "Item")!,
               quantity: item.quantity ?? 1,
               unitPrice: item.unit_price ?? 0,
-              totalAmount: item.total_amount ?? (item.unit_price ?? 0) * (item.quantity ?? 1),
+              totalAmount: item.total_amount ?? Math.round((item.unit_price ?? 0) * (item.quantity ?? 1) * 100) / 100,
               currency: item.currency || currency,
               taxAmount: item.tax_amount,
               taxRate: item.tax_rate,

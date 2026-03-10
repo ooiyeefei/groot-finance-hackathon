@@ -6,6 +6,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { roundCurrency } from '@/lib/utils/format-number'
 import { Plus, Trash2, AlertCircle, CheckCircle, Loader2, Eye, AlertTriangle, Users, Brain } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -122,7 +123,7 @@ export default function ComprehensiveFormStep({
   }, [])
 
   // Calculate totals from line items
-  const lineItemsTotal = formData.line_items.reduce((sum, item) => sum + item.total_amount, 0)
+  const lineItemsTotal = roundCurrency(formData.line_items.reduce((sum, item) => sum + item.total_amount, 0))
   const hasLineItems = formData.line_items.length > 0
 
   // Update main amount when line items change
@@ -449,7 +450,7 @@ export default function ComprehensiveFormStep({
                           value={item.quantity}
                           onChange={(e) => {
                             const quantity = parseFloat(e.target.value) || 0
-                            const total = quantity * item.unit_price
+                            const total = roundCurrency(quantity * item.unit_price)
                             updateLineItem(item.id, { quantity, total_amount: total })
                           }}
                           className="bg-muted border-border text-foreground text-sm"
