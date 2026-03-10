@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { CheckCircle2, Gift, Send, Loader2, TrendingUp, Sparkles } from 'lucide-react'
+import { ArrowRight, CheckCircle2, Gift, Send, Loader2, TrendingUp, Sparkles } from 'lucide-react'
 
 // Metadata is exported from layout.tsx (client components cannot export metadata)
 
@@ -175,7 +175,6 @@ export default function ReferralProgramPage() {
                 <div className="flex-1">
                   <div className="flex flex-wrap items-center gap-2 mb-4">
                     <h2 className="text-xl font-bold text-[#111827] sm:text-2xl md:text-3xl">Groot Referral Program</h2>
-                    <span className="rounded-md bg-[#F0FDF4] border border-[#BBF7D0] px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-[#16A34A]">v1.0</span>
                   </div>
 
                   <h1 className="max-w-2xl text-2xl font-bold leading-snug text-[#111827] sm:text-3xl md:text-[2.5rem] md:leading-snug">
@@ -194,6 +193,26 @@ export default function ReferralProgramPage() {
                   <p className="text-sm font-semibold text-[#6B7280]">{currentYear}</p>
                 </div>
               </div>
+            </div>
+          </section>
+
+          {/* Launch Promo Banner */}
+          <section className="print-card border-t border-[#E5E7EB] px-5 py-8 sm:px-8 sm:py-10 md:px-12">
+            <div className="rounded-xl border-2 border-[#4285F4]/30 bg-gradient-to-br from-[#4285F4]/5 to-[#4285F4]/10 p-6 text-center">
+              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-[#4285F4]/15">
+                <TrendingUp className="h-5 w-5 text-[#4285F4]" />
+              </div>
+              <p className="text-xs font-bold uppercase tracking-wider text-[#4285F4]">Founding Bonus</p>
+              <p className="mt-2 text-3xl font-bold text-[#111827]">2x Commission</p>
+              <p className="mt-2 text-base text-[#6B7280]">
+                RM 160 (Starter Annual) to RM 400 (Pro Annual) per deal — limited to first 50 annual subscriptions across all referrers.
+              </p>
+              <p className="mt-2 text-sm font-bold uppercase tracking-wider text-amber-600">First come, first served — act fast</p>
+            </div>
+            <div className="mt-4 text-center">
+              <Link href="/pricing" className="inline-flex items-center gap-1.5 text-sm font-medium text-[#4285F4] hover:underline">
+                View full pricing details <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
             </div>
           </section>
 
