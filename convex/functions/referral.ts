@@ -355,12 +355,17 @@ export const updateReferralStatus = mutation({
       updates.convertedAt = now;
       updates.planAtConversion = args.planName;
 
-      // Tiered referral commission: Starter RM 80, Pro RM 200 (annual plans only)
-      const earning = args.planName === "pro" ? 200 : 80;
+      // Look up code type for commission tier
+      const referralCode = await ctx.db.get(referral.referralCodeId);
+      const isReseller = referralCode?.type === "partner_reseller";
+
+      // Commission by code type: customer RM 80/200, reseller RM 300/800
+      const earning = isReseller
+        ? (args.planName === "pro" ? 800 : 300)
+        : (args.planName === "pro" ? 200 : 80);
       updates.estimatedEarning = earning;
 
       // Update referral code aggregate stats
-      const referralCode = await ctx.db.get(referral.referralCodeId);
       if (referralCode) {
         await ctx.db.patch(referralCode._id, {
           totalConversions: referralCode.totalConversions + 1,

@@ -31,10 +31,10 @@ export function ReferralOptIn() {
         Start Earning with Referrals
       </h2>
       <p className="text-muted-foreground text-sm mb-1">
-        Share your unique code and earn <strong className="text-foreground">RM 80 – 200</strong> for every business that subscribes to an annual plan.
+        Share your unique code and earn <strong className="text-foreground">RM 80 – 800</strong> for every business that subscribes to an annual plan.
       </p>
       <p className="text-muted-foreground text-sm mb-6">
-        Referred businesses get <strong className="text-foreground">RM 100 off</strong> their annual plan.
+        Referred businesses get <strong className="text-foreground">up to RM 200 off</strong> their annual plan.
       </p>
       {error && (
         <p className="text-destructive text-sm mb-4">{error}</p>

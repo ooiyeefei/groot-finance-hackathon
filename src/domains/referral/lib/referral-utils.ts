@@ -40,13 +40,27 @@ export function generateUniqueReferralCode(
 }
 
 /**
- * Tiered referral commission: Starter RM 80, Pro RM 200.
+ * Tiered commission based on code type and plan.
+ * Customer: Starter RM 80, Pro RM 200.
+ * Reseller: Starter RM 300, Pro RM 800.
  * Monthly plans are not commissionable (RM 0).
  */
-export function calculateEarning(planName: string, isAnnual = true): number {
+export function calculateEarning(planName: string, isAnnual = true, codeType?: string): number {
   if (!isAnnual) return 0
-  if (planName === 'pro') return 200
-  return 80
+  if (codeType === 'partner_reseller') {
+    return planName === 'pro' ? 800 : 300
+  }
+  return planName === 'pro' ? 200 : 80
+}
+
+/**
+ * Get commission range and discount amount by code type.
+ */
+export function getCommissionRange(codeType?: string): { min: number; max: number; discount: number } {
+  if (codeType === 'partner_reseller') {
+    return { min: 300, max: 800, discount: 200 }
+  }
+  return { min: 80, max: 200, discount: 100 }
 }
 
 /**
@@ -62,9 +76,10 @@ export function buildReferralUrl(code: string): string {
 /**
  * Build the pre-composed share message for referral.
  */
-export function buildShareMessage(code: string): string {
+export function buildShareMessage(code: string, codeType?: string): string {
   const url = buildReferralUrl(code)
-  return `Try Groot Finance for your business! Use my referral code ${code} to get RM 100 off your annual plan. Sign up here: ${url}`
+  const discount = codeType === 'partner_reseller' ? 'RM 200' : 'RM 100'
+  return `Try Groot Finance for your business! Use my referral code ${code} to get ${discount} off your annual plan. Sign up here: ${url}`
 }
 
 /**

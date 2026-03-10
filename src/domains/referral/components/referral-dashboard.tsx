@@ -31,9 +31,9 @@ export default function ReferralDashboard() {
 
   return (
     <div className="space-y-8 max-w-5xl">
-      <ReferralCodeDisplay code={code.code} referralUrl={code.referralUrl} />
+      <ReferralCodeDisplay code={code.code} referralUrl={code.referralUrl} codeType={code.type} />
       <ReferralStatsCards />
-      <ReferralList />
+      <ReferralList codeType={code.type} />
     </div>
   )
 }

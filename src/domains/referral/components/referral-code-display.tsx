@@ -3,14 +3,15 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Copy, Share2, Check, Link } from 'lucide-react'
-import { buildReferralUrl, buildShareMessage } from '../lib/referral-utils'
+import { buildReferralUrl, buildShareMessage, getCommissionRange } from '../lib/referral-utils'
 
 interface ReferralCodeDisplayProps {
   code: string
   referralUrl: string
+  codeType?: string
 }
 
-export function ReferralCodeDisplay({ code, referralUrl }: ReferralCodeDisplayProps) {
+export function ReferralCodeDisplay({ code, referralUrl, codeType }: ReferralCodeDisplayProps) {
   const [copiedCode, setCopiedCode] = useState(false)
   const [copiedLink, setCopiedLink] = useState(false)
 
@@ -43,7 +44,7 @@ export function ReferralCodeDisplay({ code, referralUrl }: ReferralCodeDisplayPr
   }
 
   const handleShare = async () => {
-    const shareMessage = buildShareMessage(code)
+    const shareMessage = buildShareMessage(code, codeType)
     const shareUrl = buildReferralUrl(code)
 
     if (navigator.share) {
@@ -74,7 +75,7 @@ export function ReferralCodeDisplay({ code, referralUrl }: ReferralCodeDisplayPr
       </div>
 
       <p className="text-sm text-muted-foreground mb-6 text-center">
-        Applicable to annual plans only. Referred businesses get RM 100 off.
+        Applicable to annual plans only. Referred businesses get RM {getCommissionRange(codeType).discount} off.
       </p>
 
       {/* Action buttons */}

@@ -1,9 +1,9 @@
 'use client'
 
 import { useMyReferrals } from '../hooks/use-referral'
-import { REFERRAL_STATUS_CONFIG } from '../lib/referral-utils'
+import { REFERRAL_STATUS_CONFIG, getCommissionRange } from '../lib/referral-utils'
 
-export function ReferralList() {
+export function ReferralList({ codeType }: { codeType?: string }) {
   const { referrals, isLoading } = useMyReferrals()
 
   if (isLoading) return null
@@ -20,7 +20,7 @@ export function ReferralList() {
             No referrals yet. Share your code to start earning!
           </p>
           <p className="text-muted-foreground text-sm mt-1">
-            Earn RM 80 (Starter) or RM 200 (Pro) for every annual subscription.
+            Earn RM {getCommissionRange(codeType).min} (Starter) or RM {getCommissionRange(codeType).max} (Pro) for every annual subscription.
           </p>
         </div>
       ) : (
