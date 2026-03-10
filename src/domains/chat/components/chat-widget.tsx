@@ -10,7 +10,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react'
-import { MessageCircle, X } from 'lucide-react'
+import { MessageCircle } from 'lucide-react'
 import { ChatWindow } from './chat-window'
 import { useAuth } from '@clerk/nextjs'
 import { useActiveBusiness } from '@/contexts/business-context'
@@ -36,11 +36,6 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
     setIsOpen(false)
     setPendingMessage(undefined)
   }, [])
-
-  const handleToggle = useCallback(() => {
-    if (isOpen) handleClose()
-    else handleOpen()
-  }, [isOpen, handleClose, handleOpen])
 
   // Handle Escape key to close
   useEffect(() => {
@@ -95,30 +90,20 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
         />
       </div>
 
-      {/* Floating Action Button — fixed bottom-right */}
-      <button
-        onClick={handleToggle}
-        className={`
-          fixed z-50
-          bottom-6 right-6 md:bottom-8 md:right-8
-          w-14 h-14 rounded-full shadow-lg
-          flex items-center justify-center
-          transition-all duration-200 ease-out
-          ${
-            isOpen
-              ? 'bg-muted hover:bg-muted/80 text-foreground'
-              : 'bg-primary hover:bg-primary/90 text-primary-foreground'
-          }
-        `}
-        aria-label={isOpen ? 'Close chat' : 'Open chat assistant'}
-        aria-expanded={isOpen}
-      >
-        {isOpen ? (
-          <X className="w-6 h-6" />
-        ) : (
+      {/* Floating Action Button — hidden when drawer is open (header X handles close) */}
+      {!isOpen && (
+        <button
+          onClick={handleOpen}
+          className="fixed z-50 bottom-6 right-6 md:bottom-8 md:right-8
+            w-14 h-14 rounded-full shadow-lg
+            flex items-center justify-center
+            transition-all duration-200 ease-out
+            bg-primary hover:bg-primary/90 text-primary-foreground"
+          aria-label="Open chat assistant"
+        >
           <MessageCircle className="w-6 h-6" />
-        )}
-      </button>
+        </button>
+      )}
     </>
   )
 }
