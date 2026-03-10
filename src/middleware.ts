@@ -98,6 +98,28 @@ const PARTNER_TOKEN = process.env.PARTNER_PAGE_TOKEN || 'groot2026'
 const isPartnerPage = (req: NextRequest) =>
   req.nextUrl.pathname.startsWith('/reseller-program') || req.nextUrl.pathname.startsWith('/referral')
 
+// Cookie-based cache for trial status to avoid Convex query on every request.
+// TTL: 5 minutes — trial/business status changes rarely, so this is safe.
+const TRIAL_CACHE_COOKIE = 'x-trial-cache'
+const TRIAL_CACHE_TTL_SECONDS = 300 // 5 minutes
+
+/**
+ * Parse cached trial status from cookie.
+ * Format: "businessId|isExpired" e.g. "abc123|0" or "|1" (no business, expired)
+ */
+function parseCachedTrialStatus(cookieValue: string): { businessId: string | null; isExpired: boolean } | null {
+  const parts = cookieValue.split('|')
+  if (parts.length !== 2) return null
+  return {
+    businessId: parts[0] || null,
+    isExpired: parts[1] === '1',
+  }
+}
+
+function encodeCachedTrialStatus(status: { businessId: string | null; isExpired: boolean }): string {
+  return `${status.businessId || ''}|${status.isExpired ? '1' : '0'}`
+}
+
 // Clerk middleware with route protection and trial expiration checking
 // Redirects unauthenticated users to sign-in page (pages only, not API)
 export default clerkMiddleware(async (auth, req) => {
@@ -143,8 +165,25 @@ export default clerkMiddleware(async (auth, req) => {
     return NextResponse.next()
   }
 
-  // Check trial expiration status
-  const trialStatus = await checkTrialExpiration(userId)
+  // PERFORMANCE: Try cached trial status from cookie first (saves ~50-200ms Convex round-trip)
+  const cachedCookie = req.cookies.get(TRIAL_CACHE_COOKIE)?.value
+  let trialStatus: { businessId: string | null; isExpired: boolean }
+  let shouldSetCookie = false
+
+  if (cachedCookie) {
+    const parsed = parseCachedTrialStatus(cachedCookie)
+    if (parsed) {
+      trialStatus = parsed
+    } else {
+      // Malformed cookie — fetch fresh
+      trialStatus = await checkTrialExpiration(userId)
+      shouldSetCookie = true
+    }
+  } else {
+    // No cache — fetch from Convex and cache the result
+    trialStatus = await checkTrialExpiration(userId)
+    shouldSetCookie = true
+  }
 
   const pathname = req.nextUrl.pathname
   const localeMatch = pathname.match(/^\/([a-z]{2})\//)
@@ -174,7 +213,18 @@ export default clerkMiddleware(async (auth, req) => {
     return NextResponse.redirect(planSelectionUrl)
   }
 
-  return NextResponse.next()
+  // Set cache cookie on the response if we fetched fresh data
+  const response = NextResponse.next()
+  if (shouldSetCookie) {
+    response.cookies.set(TRIAL_CACHE_COOKIE, encodeCachedTrialStatus(trialStatus), {
+      maxAge: TRIAL_CACHE_TTL_SECONDS,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+    })
+  }
+  return response
 })
 
 // Middleware configuration

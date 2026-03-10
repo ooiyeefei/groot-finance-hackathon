@@ -420,16 +420,6 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
     prevUserIdRef.current = currentUserId
   }, [isAuthLoaded, userId])
 
-  // ULTRA-EARLY PREFETCH: Start role prefetching as soon as Clerk is ready
-  useEffect(() => {
-    if (isAuthLoaded && isSignedIn && userId) {
-      // Start prefetching immediately, don't wait for business context initialization
-      prefetchUserRole().catch(error => {
-        log.warn(' Ultra-early role prefetch failed:', error)
-      })
-    }
-  }, [isAuthLoaded, isSignedIn, userId])
-
   // Initial data loading - only when authenticated
   useEffect(() => {
     // Only load data if Clerk is loaded and user is signed in
