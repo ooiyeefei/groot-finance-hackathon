@@ -450,7 +450,13 @@ export default defineSchema({
     submittedAt: v.optional(v.number()),
     approvedAt: v.optional(v.number()),
     rejectedAt: v.optional(v.number()),
+    sentBackAt: v.optional(v.number()),
+    sentBackBy: v.optional(v.id("users")),
+    sentBackReason: v.optional(v.string()),
     paidAt: v.optional(v.number()),
+    paidBy: v.optional(v.id("users")),
+    paymentMethod: v.optional(v.string()),
+    paymentReference: v.optional(v.string()),
     processingStartedAt: v.optional(v.number()),
     processedAt: v.optional(v.number()),
     failedAt: v.optional(v.number()),
@@ -539,6 +545,7 @@ export default defineSchema({
 
     // Email Matching
     einvoiceEmailRef: v.optional(v.string()),          // Unique 6-char token for + addressing
+    einvoiceMerchantSlug: v.optional(v.string()),      // SSM slug (e.g. "vizmyinvoice", "7eleven") — for account-level email matching
 
     // E-Invoice storage (S3) — used by both SES email pipeline and manual upload
     einvoiceStoragePath: v.optional(v.string()),       // S3 path: {bizId}/{userId}/{claimId}/einvoice/{filename}
@@ -1762,12 +1769,18 @@ export default defineSchema({
     businessId: v.id("businesses"),
     businessName: v.string(),
     contactPerson: v.optional(v.string()),
+    contactPersonPosition: v.optional(v.string()),
     email: v.string(),
     phone: v.optional(v.string()),
     address: v.optional(v.string()),
+    website: v.optional(v.string()),
     taxId: v.optional(v.string()),
     customerCode: v.optional(v.string()),
+    currencyCode: v.optional(v.string()),
+    businessNature: v.optional(v.string()),
     notes: v.optional(v.string()),
+    creditLimit: v.optional(v.number()),
+    paymentTerms: v.optional(v.string()),
     status: customerStatusValidator,
 
     // 016-e-invoice-schema-change: Tax identifiers

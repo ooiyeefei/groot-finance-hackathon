@@ -1187,6 +1187,7 @@ export const reportEinvoiceFormFillResult = mutation({
     browserType: v.optional(v.string()),
     cuaActions: v.optional(v.number()),
     verifyEvidence: v.optional(v.string()),
+    merchantSlug: v.optional(v.string()),  // SSM slug for account-level email matching
     cost: v.optional(v.object({
       cuaInputTokens: v.optional(v.number()),
       cuaOutputTokens: v.optional(v.number()),
@@ -1270,6 +1271,9 @@ export const reportEinvoiceFormFillResult = mutation({
     };
     if (args.status === "failed" && args.errorMessage) {
       claimUpdate.einvoiceAgentError = args.errorMessage;
+    }
+    if (args.status === "success" && args.merchantSlug) {
+      claimUpdate.einvoiceMerchantSlug = args.merchantSlug;
     }
     await ctx.db.patch(claim._id, claimUpdate);
 
@@ -1481,6 +1485,98 @@ export const processEinvoiceEmail = mutation({
     console.log(`[E-Invoice Email] Updated ${args.claimId}: status=received, type=${args.emailType}, attached=${!!isEinvoice}`);
   },
 });
+
+/**
+ * Public Query: Find pending expense claim by fuzzy matching (no emailRef).
+ * Used when e-invoice email arrives at account-level address (e.g. einvoice@einv.hellogroot.com)
+ * instead of claim-specific +ref address.
+ *
+ * Layered matching:
+ *   Layer 1: Receipt number substring match → unique? done
+ *   Layer 2: Date + amount match (±0.01) → unique? done
+ *   Layer 3: Only 1 pending claim for this merchant slug → done
+ *   Otherwise: null (manual review needed)
+ */
+export const getClaimByFuzzyMatch = query({
+  args: {
+    merchantSlug: v.string(),
+    receiptNumber: v.optional(v.string()),
+    totalAmount: v.optional(v.number()),
+    transactionDate: v.optional(v.string()),
+    emailBody: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // Find all pending claims (status = "requested") — these are waiting for e-invoice emails
+    const allClaims = await ctx.db
+      .query("expense_claims")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("einvoiceRequestStatus"), "requested"),
+          q.eq(q.field("einvoiceMerchantSlug"), args.merchantSlug),
+        )
+      )
+      .collect();
+
+    const pendingClaims = allClaims.filter((c) => !c.deletedAt);
+    if (pendingClaims.length === 0) return null;
+
+    console.log(`[FuzzyMatch] ${pendingClaims.length} pending claims for slug=${args.merchantSlug}`);
+
+    // Layer 1: Receipt number match — check if stored referenceNumber appears in email body
+    if (args.receiptNumber || args.emailBody) {
+      const byReceipt = pendingClaims.filter((c) => {
+        if (!c.referenceNumber) return false;
+        // Check if claim's receipt number appears in email body OR matches extracted number
+        if (args.emailBody && args.emailBody.includes(c.referenceNumber)) return true;
+        if (args.receiptNumber && c.referenceNumber === args.receiptNumber) return true;
+        // Also try: email body contains the receipt number as substring
+        if (args.receiptNumber && c.referenceNumber.includes(args.receiptNumber)) return true;
+        return false;
+      });
+      if (byReceipt.length === 1) {
+        console.log(`[FuzzyMatch] Layer 1 (receipt#): matched claim ${byReceipt[0]._id}`);
+        return await formatClaimResultWithEmail(ctx, byReceipt[0]);
+      }
+      if (byReceipt.length > 1) {
+        console.log(`[FuzzyMatch] Layer 1: ${byReceipt.length} matches — too ambiguous, trying next layer`);
+      }
+    }
+
+    // Layer 2: Date + amount match
+    if (args.transactionDate && args.totalAmount !== undefined) {
+      const byDateAmount = pendingClaims.filter((c) => {
+        const dateMatch = c.transactionDate === args.transactionDate;
+        const amountMatch = c.totalAmount !== undefined
+          && Math.abs((c.totalAmount as number) - args.totalAmount!) < 0.02;
+        return dateMatch && amountMatch;
+      });
+      if (byDateAmount.length === 1) {
+        console.log(`[FuzzyMatch] Layer 2 (date+amount): matched claim ${byDateAmount[0]._id}`);
+        return await formatClaimResultWithEmail(ctx, byDateAmount[0]);
+      }
+    }
+
+    // Layer 3: Only one pending claim for this merchant → it's the match
+    if (pendingClaims.length === 1) {
+      console.log(`[FuzzyMatch] Layer 3 (single pending): matched claim ${pendingClaims[0]._id}`);
+      return await formatClaimResultWithEmail(ctx, pendingClaims[0]);
+    }
+
+    console.log(`[FuzzyMatch] No unique match found — ${pendingClaims.length} candidates remain`);
+    return null;
+  },
+});
+
+async function formatClaimResultWithEmail(ctx: any, claim: { _id: any; businessId: any; userId: any }) {
+  const user = await ctx.db.get(claim.userId);
+  return {
+    claimId: claim._id as string,
+    businessId: claim.businessId as string,
+    userId: claim.userId as string,
+    userEmail: user?.email || null,
+    storagePath: `${claim.businessId}/${claim.userId}/${claim._id}`,
+  };
+}
 
 /**
  * Helper: Parse email ref from einvoice+XXX@einv.hellogroot.com address

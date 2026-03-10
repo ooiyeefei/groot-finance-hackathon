@@ -395,6 +395,8 @@ def _debug_fields() -> dict:
         fields["cuaActions"] = _run_state["cua_actions"]
     if _run_state.get("evidence"):
         fields["verifyEvidence"] = _run_state["evidence"][:500]
+    if _run_state.get("merchant_slug"):
+        fields["merchantSlug"] = _run_state["merchant_slug"]
     cost_data = cost_tracker.to_dict()
     if cost_data.get("totalCostUsd", 0) > 0:
         fields["cost"] = cost_data
@@ -478,19 +480,32 @@ def _read_merchant_credentials(merchant_slug: str) -> dict | None:
 
 
 # Mapping from merchant name (lowercase) to SSM slug
-_MERCHANT_SSM_SLUGS = {
+_MERCHANT_NAME_SLUGS = {
     "7-eleven": "7eleven",
     "7-eleven malaysia": "7eleven",
     "7-eleven malaysia sdn. bhd.": "7eleven",
     "7-eleven malaysia sdn bhd": "7eleven",
 }
 
+# Mapping from e-invoice URL domain to SSM slug (platform-based detection).
+# Multiple merchants may use the same e-invoice platform (e.g. vizmyinvoice).
+_URL_DOMAIN_SLUGS = {
+    "vizmyinvoice.com": "vizmyinvoice",
+}
 
-def _get_merchant_slug(merchant_name: str) -> str | None:
-    """Get the SSM slug for a merchant that requires login credentials."""
-    lower = (merchant_name or "").lower().strip()
-    for pattern, slug in _MERCHANT_SSM_SLUGS.items():
-        if pattern in lower or lower in pattern:
+
+def _get_merchant_slug(merchant_name: str, einvoice_url: str = "") -> str | None:
+    """Get the SSM slug for a merchant that requires login credentials.
+    Checks URL domain first (platform-based), then merchant name."""
+    # 1. URL-based: any merchant using a known e-invoice platform
+    url_lower = (einvoice_url or "").lower()
+    for domain, slug in _URL_DOMAIN_SLUGS.items():
+        if domain in url_lower:
+            return slug
+    # 2. Name-based: specific merchant names
+    name_lower = (merchant_name or "").lower().strip()
+    for pattern, slug in _MERCHANT_NAME_SLUGS.items():
+        if pattern in name_lower or name_lower in pattern:
             return slug
     return None
 
@@ -694,15 +709,26 @@ def _run_login_flow(page: Page, url: str, creds: dict, merchant_slug: str, email
             print("[Login] CAPTCHA still not detected — login may require manual CAPTCHA interaction")
             return
 
-    # Check if OTP/TAC verification is needed
+    # Check if OTP/TAC verification is needed — look for a visible OTP input field, not just page text
     otp_needed = page.evaluate(r"""() => {
-        const src = document.documentElement.innerHTML.toLowerCase();
-        return src.includes('otp') || src.includes('tac') || src.includes('verification code')
-            || src.includes('one-time password') || src.includes('one time password');
+        // Must have a visible input field for OTP (not just text mentioning OTP in scripts/CSS)
+        const otpInput = document.querySelector(
+            'input[id*="otp" i], input[name*="otp" i], input[id*="tac" i], input[name*="tac" i], '
+            + 'input[placeholder*="otp" i], input[placeholder*="tac" i], input[placeholder*="verification" i]'
+        );
+        if (otpInput && otpInput.offsetParent !== null) return true;
+        // Also check for visible text labels near input fields
+        const labels = Array.from(document.querySelectorAll('label, .label, h2, h3, p'));
+        const hasOtpLabel = labels.some(l => {
+            const t = l.textContent.toLowerCase();
+            return (t.includes('otp') || t.includes('tac') || t.includes('verification code'))
+                && l.offsetParent !== null;
+        });
+        return hasOtpLabel;
     }""")
 
     if otp_needed:
-        print(f"[Login] OTP/TAC required — polling S3 for OTP email to {login_email}")
+        print(f"[Login] OTP/TAC input field detected — polling S3 for OTP email to {login_email}")
         otp_code = _poll_otp_from_s3(login_email, timeout_seconds=90)
 
         if otp_code:
@@ -777,6 +803,7 @@ def launch_browserbase(pw, use_proxy: bool = False) -> tuple:
     create_params = {
         "project_id": BB_PROJECT_ID,
         "region": "ap-southeast-1",  # Singapore — closest to Malaysia, avoids geo-blocking
+        "api_timeout": 420,  # 7 minutes — complex flows (login + buyer profile + form fill) need more time
     }
     if use_proxy:
         create_params["proxies"] = True
@@ -2413,6 +2440,16 @@ def handler(event: dict, context=None) -> dict:
             except Exception as e:
                 print(f"[Form Fill] Receipt image download failed: key={receipt_image_path}, error={e}")
 
+        # 99SM: Construct full URL with ReceiptDetails if QR scan only got the base URL
+        if "99einvoice.com" in url and "ReceiptDetails" not in url and receipt.get("referenceNumber"):
+            ref = receipt["referenceNumber"]
+            date_str = (receipt.get("transactionDate") or "").replace("-", "")
+            amt_str = f"{float(receipt.get('totalAmount') or 0):.2f}"
+            receipt_payload = f"{ref}|{date_str}|{amt_str}|{ref}"
+            receipt_b64 = base64.b64encode(receipt_payload.encode()).decode()
+            url = f"https://99einvoice.com/?ReceiptDetails={receipt_b64}"
+            print(f"[Form Fill] 99SM: Constructed URL from receipt data: {receipt_payload}")
+
         # Launch browser — Browserbase for Cloudflare-managed merchants, local for everything else
         pw = sync_playwright().start()
         use_bb = needs_browserbase(merchant_hints)
@@ -2568,11 +2605,13 @@ def handler(event: dict, context=None) -> dict:
         solve_captcha(page, url)
 
         # ── Login flow for merchants that require authentication ──
-        merchant_slug = _get_merchant_slug(merchant or "")
+        merchant_slug = _get_merchant_slug(merchant or "", einvoice_url=url)
+        if merchant_slug:
+            _run_state["merchant_slug"] = merchant_slug
         merchant_creds = _read_merchant_credentials(merchant_slug) if merchant_slug else None
         if merchant_creds:
             _run_login_flow(page, url, merchant_creds, merchant_slug, event.get("emailRef", ""))
-            # Add CUA hint: login done, navigate to form and handle tricky UI elements
+            # Add CUA hint: login done, navigate to form, use correct buyer email (NOT login email)
             merchant_hints += (
                 "\nIMPORTANT: Login has already been completed automatically. You are now on the merchant dashboard."
                 "\n- Navigate to the e-invoice request form (e.g. click 'E-Invoice' menu → 'Request E-Invoice')."
@@ -2580,6 +2619,9 @@ def handler(event: dict, context=None) -> dict:
                 "\n- For DATE PICKER fields: Do NOT try to click individual dates in the calendar popup."
                 "  Instead, click the date input field, then use keyboard: select all text (Ctrl+A), "
                 "  then type the date in DD/MM/YYYY format. If that doesn't work, try clearing the field first."
+                f"\n- CRITICAL: For the buyer EMAIL field, you MUST use: {buyer['email']}"
+                f"  Do NOT use the login email ({merchant_creds['email']}). They are different."
+                "  If the email field is pre-filled with the login email, CLEAR it and type the correct buyer email."
                 "\n- Fill all buyer detail fields, then submit."
                 "\n- Do NOT try to log in again."
             )
