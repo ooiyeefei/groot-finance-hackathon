@@ -142,6 +142,23 @@ export default function ReferralProgramPage() {
         }
       `}</style>
 
+      {/* Top Promo Banner */}
+      <div className="no-print sticky top-0 z-50 flex items-center justify-center gap-3 bg-gradient-to-r from-[#1E293B] to-[#111827] px-4 py-2.5 text-white">
+        <span className="h-2 w-2 rounded-full bg-amber-400" />
+        <p className="text-sm font-medium">
+          <span className="font-semibold text-amber-400">Launch Promo:</span>{' '}
+          2x referral fee (RM 160 – RM 400) on first 50 annual deals{' '}
+          <span className="mx-1.5">—</span>{' '}
+          <span className="font-semibold text-amber-400">First come, first served</span>
+        </p>
+        <button
+          onClick={() => document.getElementById('apply-form')?.scrollIntoView({ behavior: 'smooth' })}
+          className="ml-2 rounded-full bg-white px-4 py-1 text-xs font-semibold text-[#111827] transition-colors hover:bg-gray-100"
+        >
+          <Sparkles className="mr-1 inline h-3 w-3" /> Join Referral
+        </button>
+      </div>
+
       {/* Brochure shell */}
       <div className="page-shell mx-[5%] py-10 md:mx-[15%] md:py-14 print:mx-0 print:py-0">
         <main className="brochure overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-lg shadow-black/5 print:shadow-none print:border-0 print:rounded-none">
@@ -205,7 +222,7 @@ export default function ReferralProgramPage() {
               <p className="text-xs font-bold uppercase tracking-wider text-[#4285F4]">Founding Bonus</p>
               <p className="mt-2 text-3xl font-bold text-[#111827]">2x Commission</p>
               <p className="mt-2 text-base text-[#6B7280]">
-                RM 160 (Starter Annual) to RM 400 (Pro Annual) per deal — limited to first 50 annual subscriptions across all referrers.
+                <strong>RM 160 (Starter Annual)</strong> to <strong>RM 400 (Pro Annual)</strong> per deal — limited to first 50 annual subscriptions across all referrers.
               </p>
               <p className="mt-2 text-sm font-bold uppercase tracking-wider text-amber-600">First come, first served — act fast</p>
             </div>
