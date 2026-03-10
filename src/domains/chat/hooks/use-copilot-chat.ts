@@ -114,8 +114,17 @@ export function useCopilotBridge(
 
   // Create a new conversation
   const handleCreateConversation = useCallback(async () => {
+    // Abort any in-flight request from the previous conversation
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
     const newId = await convexCreateConversation(undefined, language)
     setActiveConversationId(newId)
+    setIsLoading(false)
+    setStreamingText('')
+    setStreamingStatus('')
+    setStreamingActions([])
     setError(null)
     return newId
   }, [convexCreateConversation, language])
@@ -124,7 +133,16 @@ export function useCopilotBridge(
   const handleSwitchConversation = useCallback(
     (conversationId: string) => {
       if (conversationId === activeConversationId) return
+      // Abort any in-flight request from the previous conversation
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+        abortControllerRef.current = null
+      }
       setActiveConversationId(conversationId)
+      setIsLoading(false)
+      setStreamingText('')
+      setStreamingStatus('')
+      setStreamingActions([])
       setError(null)
     },
     [activeConversationId]

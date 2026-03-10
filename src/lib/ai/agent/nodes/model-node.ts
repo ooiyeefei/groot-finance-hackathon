@@ -39,7 +39,7 @@ export async function callModel(state: AgentState): Promise<Partial<AgentState>>
   console.log('[CallModel] Setting phase to execution for model processing');
 
   const modelType = detectModelType();
-  const systemPrompt = getSystemPrompt(state.language || 'en', modelType);
+  const systemPrompt = getSystemPrompt(state.language || 'en', modelType, undefined, state.userContext.homeCurrency);
 
   const processedMessages = [...state.messages];
 

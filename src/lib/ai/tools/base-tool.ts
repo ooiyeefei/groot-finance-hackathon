@@ -18,6 +18,7 @@ export interface UserContext {
   businessId?: string // Business ID for tenant isolation
   conversationId?: string
   role?: string // Business membership role (manager, finance_admin, owner, employee)
+  homeCurrency?: string // Business/user home currency (e.g. 'MYR', 'SGD')
 }
 
 export interface ToolParameters {

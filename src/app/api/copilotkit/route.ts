@@ -130,6 +130,7 @@ export async function POST(req: NextRequest) {
             convexUserId: userData.id,
             businessId: resolvedBusinessId,
             conversationId: conversationId || 'new',
+            homeCurrency: userData.home_currency || undefined,
           },
           language,
         })

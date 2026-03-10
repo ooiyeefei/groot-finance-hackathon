@@ -9,13 +9,20 @@ import { ModelType } from '../../tools/base-tool';
  * Get system prompt — language-aware wrapper around the core financial agent prompt.
  * Injects the current server-side date so the LLM never hallucinates temporal expressions.
  */
-export function getSystemPrompt(language: string, modelType: ModelType, currentDate?: Date): string {
+export function getSystemPrompt(language: string, modelType: ModelType, currentDate?: Date, homeCurrency?: string): string {
   const basePrompt = getFinancialAgentPrompt(language, currentDate ?? new Date());
 
+  // Inject the user's home currency so the LLM knows when NOT to show conversions
+  const currencyContext = homeCurrency
+    ? `\n\n## USER HOME CURRENCY\nThis user's home/preferred currency is **${homeCurrency}**. When displaying amounts in ${homeCurrency}, do NOT show a converted amount in parentheses — it is already in their home currency. Only show conversions when an amount is in a DIFFERENT currency from ${homeCurrency}.`
+    : '';
+
+  const fullPrompt = basePrompt + currencyContext;
+
   const translations = {
-    en: basePrompt,
-    th: `${basePrompt}\n\nตอบเป็นภาษาไทยเสมอ และรักษาความปลอดภัยของข้อมูลผู้ใช้`,
-    id: `${basePrompt}\n\nSelalu jawab dalam bahasa Indonesia dan jaga keamanan data pengguna.`
+    en: fullPrompt,
+    th: `${fullPrompt}\n\nตอบเป็นภาษาไทยเสมอ และรักษาความปลอดภัยของข้อมูลผู้ใช้`,
+    id: `${fullPrompt}\n\nSelalu jawab dalam bahasa Indonesia dan jaga keamanan data pengguna.`
   };
 
   return translations[language as keyof typeof translations] || translations.en;
