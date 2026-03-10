@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { usePathname } from 'next/navigation'
 import { useConsent } from '@/domains/compliance/hooks/use-consent'
@@ -18,11 +18,21 @@ export function ConsentBanner() {
   const [isAccepting, setIsAccepting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Once consent is confirmed in this session, never show the banner again —
+  // prevents flash during Convex subscription re-initialization on navigation
+  const consentConfirmedRef = useRef(false)
+  useEffect(() => {
+    if (hasConsent) {
+      consentConfirmedRef.current = true
+    }
+  }, [hasConsent])
+
   // Hide banner on pages that have their own consent checkbox
   const isHiddenPath = HIDDEN_PATHS.some((path) => pathname?.includes(path))
 
-  // Hide banner if: not signed in, loading, already consented, revoked, or on a page with its own consent UI
-  if (!isSignedIn || isLoading || hasConsent || wasRevoked || isHiddenPath) return null
+  // Hide banner if: not signed in, loading, already consented (current or cached),
+  // revoked, or on a page with its own consent UI
+  if (!isSignedIn || isLoading || hasConsent || consentConfirmedRef.current || wasRevoked || isHiddenPath) return null
 
   async function handleAccept() {
     setIsAccepting(true)

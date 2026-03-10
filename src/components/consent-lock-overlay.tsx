@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { useClerk } from '@clerk/nextjs'
 import { useConsent } from '@/domains/compliance/hooks/use-consent'
@@ -33,11 +33,20 @@ export function ConsentLockOverlay() {
   const { signOut } = useClerk()
   const [isAccepting, setIsAccepting] = useState(false)
 
+  // Once consent is confirmed in this session, never show the overlay again —
+  // prevents flash during Convex subscription re-initialization on navigation
+  const consentConfirmedRef = useRef(false)
+  useEffect(() => {
+    if (hasConsent) {
+      consentConfirmedRef.current = true
+    }
+  }, [hasConsent])
+
   // Don't block while loading
   if (isLoading) return null
 
-  // Don't block if user has consented
-  if (hasConsent) return null
+  // Don't block if user has consented (current query or cached from this session)
+  if (hasConsent || consentConfirmedRef.current) return null
 
   // If user actively revoked consent, block immediately (no grace period)
   // If user never consented, only block after grace period expires
