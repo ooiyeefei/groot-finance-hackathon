@@ -38,18 +38,17 @@ export default function ReferralDashboard() {
   return (
     <div className="space-y-6 max-w-5xl">
       {/* Launch Promo Banner */}
-      <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-slate-900 to-slate-800 p-6 text-white">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full -translate-y-8 translate-x-8" />
-        <div className="relative flex items-start gap-4">
-          <div className="flex-shrink-0 w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center">
-            <Zap className="w-5 h-5 text-yellow-400" />
+      <div className="rounded-xl bg-primary p-6 text-primary-foreground">
+        <div className="flex items-start gap-4">
+          <div className="flex-shrink-0 w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+            <Zap className="w-5 h-5" />
           </div>
           <div className="flex-1">
-            <p className="text-sm font-semibold text-yellow-400 uppercase tracking-wider mb-1">Launch Promo</p>
+            <p className="text-sm font-semibold uppercase tracking-wider mb-1 opacity-90">Launch Promo</p>
             <p className="text-lg font-bold">
-              2x {isReseller ? 'reseller' : 'referral'} fee — RM {promoMin} to RM {promoMax} per deal
+              2x {isReseller ? 'reseller' : 'referral'} fee — RM {promoMin} (Starter Annual) to RM {promoMax} (Pro Annual) per deal
             </p>
-            <p className="text-sm text-slate-300 mt-1">
+            <p className="text-sm mt-1 opacity-80">
               Limited to the first 50 annual subscriptions. First come, first served.
             </p>
           </div>
