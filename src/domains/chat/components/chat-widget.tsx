@@ -1,26 +1,20 @@
 'use client'
 
 /**
- * Floating Chat Widget
+ * Chat Drawer Widget
  *
- * A floating button anchored at bottom-right that opens an expandable
- * chat window. Renders globally on every page via the root layout.
+ * A right-side drawer panel (desktop) or full-screen overlay (mobile)
+ * that houses the AI chat assistant. Renders globally via root layout.
+ * The ChatWindow stays mounted when the drawer is closed to preserve
+ * conversation state across navigations.
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { MessageCircle, X } from 'lucide-react'
 import { ChatWindow } from './chat-window'
 import { useAuth } from '@clerk/nextjs'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { useSubscription } from '@/domains/billing/hooks/use-subscription'
-
-const STORAGE_KEY = 'chat-widget-position'
-const BTN_SIZE = 56 // w-14 h-14 = 56px
-const MARGIN = 16  // keep button inside viewport with a margin
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max)
-}
 
 interface ChatWidgetProps {
   businessId?: string
@@ -30,96 +24,23 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
   const { businessId: activeBusinessId } = useActiveBusiness()
   const businessId = businessIdProp || activeBusinessId || undefined
   const [isOpen, setIsOpen] = useState(false)
-  const [isMinimized, setIsMinimized] = useState(false)
   const [pendingMessage, setPendingMessage] = useState<string | undefined>()
   const { isSignedIn } = useAuth()
   const { data: subscriptionData } = useSubscription()
 
-  // Draggable position — stored as { right, bottom } from viewport edges
-  // Default bottom is 80px to clear the mobile bottom nav bar (~64px + spacer)
-  const DEFAULT_BOTTOM = 80
-  const [pos, setPos] = useState<{ right: number; bottom: number }>(() => {
-    if (typeof window === 'undefined') return { right: MARGIN, bottom: DEFAULT_BOTTOM }
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY)
-      if (saved) return JSON.parse(saved)
-    } catch {}
-    return { right: MARGIN, bottom: DEFAULT_BOTTOM }
-  })
-
-  const isDragging = useRef(false)
-  const dragStart = useRef<{ mouseX: number; mouseY: number; right: number; bottom: number } | null>(null)
-  const hasMoved = useRef(false)
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    isDragging.current = true
-    hasMoved.current = false
-    dragStart.current = { mouseX: e.clientX, mouseY: e.clientY, right: pos.right, bottom: pos.bottom }
-    e.preventDefault()
-  }, [pos])
-
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    const touch = e.touches[0]
-    isDragging.current = true
-    hasMoved.current = false
-    dragStart.current = { mouseX: touch.clientX, mouseY: touch.clientY, right: pos.right, bottom: pos.bottom }
-  }, [pos])
-
-  useEffect(() => {
-    const onMouseMove = (e: MouseEvent) => {
-      if (!isDragging.current || !dragStart.current) return
-      const dx = dragStart.current.mouseX - e.clientX
-      const dy = dragStart.current.mouseY - e.clientY
-      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) hasMoved.current = true
-      const newRight = clamp(dragStart.current.right + dx, MARGIN, window.innerWidth - BTN_SIZE - MARGIN)
-      const newBottom = clamp(dragStart.current.bottom + dy, MARGIN, window.innerHeight - BTN_SIZE - MARGIN)
-      setPos({ right: newRight, bottom: newBottom })
-    }
-    const onTouchMove = (e: TouchEvent) => {
-      if (!isDragging.current || !dragStart.current) return
-      const touch = e.touches[0]
-      const dx = dragStart.current.mouseX - touch.clientX
-      const dy = dragStart.current.mouseY - touch.clientY
-      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) hasMoved.current = true
-      const newRight = clamp(dragStart.current.right + dx, MARGIN, window.innerWidth - BTN_SIZE - MARGIN)
-      const newBottom = clamp(dragStart.current.bottom + dy, MARGIN, window.innerHeight - BTN_SIZE - MARGIN)
-      setPos({ right: newRight, bottom: newBottom })
-    }
-    const onEnd = () => {
-      if (isDragging.current) {
-        isDragging.current = false
-        setPos((p) => {
-          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(p)) } catch {}
-          return p
-        })
-      }
-    }
-    window.addEventListener('mousemove', onMouseMove)
-    window.addEventListener('mouseup', onEnd)
-    window.addEventListener('touchmove', onTouchMove, { passive: false })
-    window.addEventListener('touchend', onEnd)
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove)
-      window.removeEventListener('mouseup', onEnd)
-      window.removeEventListener('touchmove', onTouchMove)
-      window.removeEventListener('touchend', onEnd)
-    }
-  }, [])
-
   const handleOpen = useCallback(() => {
     setIsOpen(true)
-    setIsMinimized(false)
   }, [])
 
   const handleClose = useCallback(() => {
     setIsOpen(false)
-    setIsMinimized(false)
     setPendingMessage(undefined)
   }, [])
 
-  const handleMinimize = useCallback(() => {
-    setIsMinimized(true)
-  }, [])
+  const handleToggle = useCallback(() => {
+    if (isOpen) handleClose()
+    else handleOpen()
+  }, [isOpen, handleClose, handleOpen])
 
   // Handle Escape key to close
   useEffect(() => {
@@ -140,7 +61,6 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
         setPendingMessage(detail.message)
       }
       setIsOpen(true)
-      setIsMinimized(false)
     }
     window.addEventListener('finanseal:open-chat', handleOpenChat)
     return () => window.removeEventListener('finanseal:open-chat', handleOpenChat)
@@ -151,45 +71,39 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
   if (!isSignedIn) return null
   if (subscriptionData && LOCKED_STATUSES.includes(subscriptionData.subscription.status)) return null
 
-  const chatWindowBottom = pos.bottom + BTN_SIZE + MARGIN
-  const chatWindowRight = pos.right
-
   return (
     <>
-      {/* Chat Window — positioned above the button */}
-      {isOpen && !isMinimized && (
-        <div
-          className="fixed z-50 w-[452px] h-[678px] max-h-[85vh] max-w-[calc(100vw-2rem)]
-            animate-in slide-in-from-bottom-4 fade-in duration-200"
-          style={{ bottom: chatWindowBottom, right: chatWindowRight }}
-          role="dialog"
-          aria-label="Groot Finance Chat Assistant"
-        >
-          <ChatWindow
-            onClose={handleClose}
-            onMinimize={handleMinimize}
-            businessId={businessId}
-            initialMessage={pendingMessage}
-            onInitialMessageConsumed={() => setPendingMessage(undefined)}
-          />
-        </div>
-      )}
+      {/* Drawer Panel — always mounted, translated off-screen when closed */}
+      <div
+        className={`
+          fixed z-40 bg-background border-l border-border
+          transition-transform duration-250 ease-out
+          top-0 right-0 h-full
+          w-full md:w-[380px]
+          ${isOpen ? 'translate-x-0' : 'translate-x-full'}
+        `}
+        role="dialog"
+        aria-label="Groot Finance Chat Assistant"
+        aria-hidden={!isOpen}
+      >
+        <ChatWindow
+          onClose={handleClose}
+          onMinimize={handleClose}
+          businessId={businessId}
+          initialMessage={pendingMessage}
+          onInitialMessageConsumed={() => setPendingMessage(undefined)}
+        />
+      </div>
 
-      {/* Floating Button — draggable */}
+      {/* Floating Action Button — fixed bottom-right */}
       <button
-        onMouseDown={handleMouseDown}
-        onTouchStart={handleTouchStart}
-        onClick={() => {
-          if (hasMoved.current) return // suppress click after drag
-          if (isOpen) handleClose(); else handleOpen()
-        }}
-        style={{ bottom: pos.bottom, right: pos.right }}
+        onClick={handleToggle}
         className={`
           fixed z-50
+          bottom-6 right-6 md:bottom-8 md:right-8
           w-14 h-14 rounded-full shadow-lg
           flex items-center justify-center
-          transition-colors duration-200 ease-out
-          cursor-grab active:cursor-grabbing select-none
+          transition-all duration-200 ease-out
           ${
             isOpen
               ? 'bg-muted hover:bg-muted/80 text-foreground'
@@ -198,7 +112,6 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
         `}
         aria-label={isOpen ? 'Close chat' : 'Open chat assistant'}
         aria-expanded={isOpen}
-        title="Drag to move"
       >
         {isOpen ? (
           <X className="w-6 h-6" />

@@ -9,7 +9,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback, useMemo, type FormEvent } from 'react'
-import { X, Minus, ArrowUp, Square, Loader2, Sparkles } from 'lucide-react'
+import { X, ArrowUp, Square, Loader2, Sparkles } from 'lucide-react'
 import { MessageRenderer } from './message-renderer'
 import { ConversationSwitcher } from './conversation-switcher'
 import { RichContentPanel, type RichContentData } from './rich-content-panel'
@@ -188,7 +188,7 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
       onClose={handleCloseRichContent}
     />
 
-    <div className="flex flex-col h-full bg-background rounded-t-xl overflow-hidden border border-border shadow-2xl">
+    <div className="flex flex-col h-full bg-background overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-surface border-b border-border">
         <div className="flex items-center gap-2 min-w-0">
@@ -202,22 +202,13 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
             isLoading={isLoadingConversations}
           />
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={onMinimize}
-            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
-            aria-label="Minimize"
-          >
-            <Minus className="w-4 h-4" />
-          </button>
-          <button
-            onClick={onClose}
-            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
-            aria-label="Close"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+        <button
+          onClick={onClose}
+          className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+          aria-label="Close"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
 
       {/* Messages Area */}
