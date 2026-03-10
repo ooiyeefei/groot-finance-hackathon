@@ -30,15 +30,49 @@ NON_EINVOICE_PATTERNS = [
     re.compile(r"(play\.google|apps\.apple|itunes\.apple)\.com", re.IGNORECASE),  # App stores
     re.compile(r"(facebook|instagram|twitter|tiktok|youtube)\.com", re.IGNORECASE),  # Social
     re.compile(r"/qrcode\?.*orderId=", re.IGNORECASE),        # Order lookup / app QR (e.g. Luckin)
-    re.compile(r"/(download|app|install|referral)", re.IGNORECASE),  # App downloads
     re.compile(r"(wa\.me|whatsapp\.com|t\.me|telegram)", re.IGNORECASE),  # Messaging
     re.compile(r"(maps\.google|goo\.gl/maps|waze\.com)", re.IGNORECASE),  # Maps
     re.compile(r"(wifi|password|ssid)", re.IGNORECASE),        # WiFi QR codes
 ]
 
+# Known URL shortener domains — resolve before classifying
+URL_SHORTENERS = re.compile(
+    r"^https?://(ron\.ac|bit\.ly|tinyurl\.com|t\.co|goo\.gl|ow\.ly|is\.gd|buff\.ly|rb\.gy|cutt\.ly|short\.io|shrtco\.de)",
+    re.IGNORECASE,
+)
+
+
+def _resolve_short_url(url: str, document_id: str) -> str:
+    """Follow redirects on shortened URLs to get the final destination URL."""
+    try:
+        from urllib.request import Request, urlopen
+        req = Request(url, method="HEAD", headers={"User-Agent": "Mozilla/5.0"})
+        with urlopen(req, timeout=5) as resp:
+            final_url = resp.url
+            if final_url != url:
+                print(f"[{document_id}] QR: Resolved short URL: {url[:50]} → {final_url[:80]}")
+                return final_url
+    except Exception as e:
+        # HEAD might not be supported — try GET with no body read
+        try:
+            from urllib.request import Request, urlopen
+            req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urlopen(req, timeout=5) as resp:
+                final_url = resp.url
+                if final_url != url:
+                    print(f"[{document_id}] QR: Resolved short URL (GET): {url[:50]} → {final_url[:80]}")
+                    return final_url
+        except Exception as e2:
+            print(f"[{document_id}] QR: Failed to resolve short URL {url[:50]}: {e2}")
+    return url
+
 
 def _classify_url(url: str, document_id: str) -> str:
     """Classify a QR URL as 'einvoice', 'lhdn', or 'non_einvoice'."""
+    # Resolve shortened URLs first (ron.ac, bit.ly, etc.)
+    if URL_SHORTENERS.match(url):
+        url = _resolve_short_url(url, document_id)
+
     if LHDN_QR_PATTERN.search(url):
         return "lhdn"
 
@@ -53,26 +87,116 @@ def _classify_url(url: str, document_id: str) -> str:
             print(f"[{document_id}] QR: Filtered non-einvoice URL: {url[:80]}")
             return "non_einvoice"
 
-    # Unknown URL — use Gemini Flash to classify
-    return _llm_classify_url(url, document_id)
+    # Unknown URL — fetch the page and analyze content (much more reliable than URL guessing)
+    return _fetch_and_classify_page(url, document_id)
 
 
-def _llm_classify_url(url: str, document_id: str) -> str:
-    """Ask Gemini Flash whether this URL is likely an e-invoice submission form."""
+# Keywords that indicate an e-invoice form page (checked against page HTML)
+_EINVOICE_PAGE_KEYWORDS = [
+    "e-invoice", "einvoice", "e invoice", "einvois",
+    "buyer details", "buyer information", "buyer info",
+    "tax identification", "tin number", "business registration",
+    "request invoice", "request e-invoice", "claim invoice",
+    "ic number", "identification number",
+    "company name", "company registration",
+    "submit request", "next", "proceed",
+]
+
+# Keywords that indicate NOT an e-invoice form
+_NON_EINVOICE_PAGE_KEYWORDS = [
+    "download the app", "download now", "get the app", "install app",
+    "app store", "google play", "play store",
+    "sign in with google", "login with facebook",
+    "page not found", "404 error",
+]
+
+
+def _fetch_and_classify_page(url: str, document_id: str) -> str:
+    """Actually visit the URL and analyze the page content to classify it.
+    Much more reliable than guessing from URL string alone."""
+    try:
+        from urllib.request import Request, urlopen
+        req = Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml",
+            "Accept-Language": "en-US,en;q=0.9",
+        })
+        with urlopen(req, timeout=10) as resp:
+            # Check final URL after redirects (might have resolved to a known pattern)
+            final_url = resp.url
+            if final_url != url:
+                print(f"[{document_id}] QR: URL redirected: {url[:50]} → {final_url[:80]}")
+                # Re-check known patterns on the resolved URL
+                if LHDN_QR_PATTERN.search(final_url):
+                    return "lhdn"
+                for pattern in KNOWN_EINVOICE_PATTERNS:
+                    if pattern.search(final_url):
+                        return "einvoice"
+                for pattern in NON_EINVOICE_PATTERNS:
+                    if pattern.search(final_url):
+                        return "non_einvoice"
+
+            # Read page content (first 50KB is enough for classification)
+            raw_bytes = resp.read(50000)
+            content = raw_bytes.decode("utf-8", errors="ignore").lower()
+            http_status = resp.status
+
+            # WAF/challenge pages return empty or near-empty body — can't classify from content
+            if len(content.strip()) < 100 or http_status in (202, 403, 503):
+                print(f"[{document_id}] QR: Page returned empty/WAF response (status={http_status}, len={len(content)}), treating as potential einvoice")
+                return "einvoice"
+
+            page_title = ""
+            title_match = re.search(r"<title[^>]*>(.*?)</title>", content, re.DOTALL)
+            if title_match:
+                page_title = title_match.group(1).strip()
+
+            # Score based on keyword presence
+            einvoice_score = sum(1 for kw in _EINVOICE_PAGE_KEYWORDS if kw in content)
+            non_einvoice_score = sum(1 for kw in _NON_EINVOICE_PAGE_KEYWORDS if kw in content)
+
+            print(f"[{document_id}] QR: Page analysis — title='{page_title[:60]}', einvoice_keywords={einvoice_score}, non_einvoice_keywords={non_einvoice_score}, status={http_status}")
+
+            if einvoice_score >= 2:
+                print(f"[{document_id}] QR: Page content confirms e-invoice form (score={einvoice_score})")
+                return "einvoice"
+            if non_einvoice_score >= 2 and einvoice_score == 0:
+                print(f"[{document_id}] QR: Page content confirms non-einvoice (score={non_einvoice_score})")
+                return "non_einvoice"
+
+            # Low confidence from keywords — fall back to LLM with page context
+            return _llm_classify_with_content(url, page_title, content[:2000], document_id)
+
+    except Exception as e:
+        print(f"[{document_id}] QR: Page fetch failed ({e}), treating as potential einvoice")
+        return "einvoice"  # Conservative — if we can't fetch, assume it might be einvoice
+
+
+def _llm_classify_with_content(url: str, title: str, content_snippet: str, document_id: str) -> str:
+    """Ask Gemini to classify based on actual page content (not just URL)."""
     gemini_key = os.environ.get("GEMINI_API_KEY", "")
     if not gemini_key:
-        # No API key — be conservative, treat as potential einvoice
-        print(f"[{document_id}] QR: No GEMINI_API_KEY, treating unknown URL as potential einvoice")
+        print(f"[{document_id}] QR: No GEMINI_API_KEY, treating as potential einvoice")
         return "einvoice"
 
     try:
         from urllib.request import Request, urlopen
-        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}"
+        # Strip HTML tags for cleaner text
+        text_content = re.sub(r"<[^>]+>", " ", content_snippet)
+        text_content = re.sub(r"\s+", " ", text_content).strip()[:1000]
+
+        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key={gemini_key}"
         payload = {
             "contents": [{"role": "user", "parts": [{"text":
-                f"Is this URL an e-invoice request/submission form for Malaysian buyers? "
-                f"Or is it something else (app download, payment page, order lookup, social media, etc.)?\n\n"
-                f"URL: {url}\n\n"
+                f"I visited this URL from a QR code on a Malaysian receipt. "
+                f"Is this page an e-invoice request/submission form where buyers can request an e-invoice?\n\n"
+                f"URL: {url}\n"
+                f"Page title: {title}\n"
+                f"Page content excerpt: {text_content}\n\n"
+                f"Signs of e-invoice form: buyer details fields, TIN/BRN inputs, company name, email, phone, submit/next button.\n"
+                f"Signs of non-einvoice: app download, social media, payment page, login-only portal, 404 error.\n\n"
+                f"IMPORTANT: If the page has a form with fields for buyer information, it IS an e-invoice form.\n"
+                f"If unsure, reply EINVOICE to be safe.\n\n"
                 f"Reply with ONLY one word: EINVOICE or OTHER"
             }]}],
             "generationConfig": {"temperature": 0.0, "maxOutputTokens": 10},
@@ -82,11 +206,58 @@ def _llm_classify_url(url: str, document_id: str) -> str:
             r = json.loads(resp.read())
             answer = r.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip().upper()
             result = "einvoice" if "EINVOICE" in answer else "non_einvoice"
-            print(f"[{document_id}] QR: LLM classified {url[:60]} → {result}")
+            print(f"[{document_id}] QR: LLM classified (with page content) {url[:60]} → {result}")
             return result
     except Exception as e:
         print(f"[{document_id}] QR: LLM classification failed ({e}), treating as potential einvoice")
-        return "einvoice"  # Conservative fallback
+        return "einvoice"
+
+
+def _vision_classify_qr_codes(image_bytes: bytes, qr_data_list: list, document_id: str) -> dict:
+    """Use Gemini vision to look at the receipt and identify which QR codes are for e-invoice.
+    Reads the labels printed next to QR codes (e.g. 'Scan for E-Invoice', 'Download App')."""
+    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    if not gemini_key:
+        return {}
+
+    try:
+        import base64
+        from urllib.request import Request, urlopen
+
+        image_b64 = base64.b64encode(image_bytes).decode()
+        qr_list_str = "\n".join(f"QR #{i}: {d[:100]}" for i, d in enumerate(qr_data_list))
+
+        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key={gemini_key}"
+        payload = {
+            "contents": [{"role": "user", "parts": [
+                {"text":
+                    f"Look at this receipt image. There are {len(qr_data_list)} QR codes on it.\n"
+                    f"For EACH QR code, read the text/label printed near it on the receipt.\n\n"
+                    f"QR codes found:\n{qr_list_str}\n\n"
+                    f"For each QR code, classify it as:\n"
+                    f"- 'einvoice' if the label says anything about e-invoice, einvoice, einvois, invoice request, claim invoice\n"
+                    f"- 'lhdn' if the label mentions LHDN, MyInvois, or tax validation\n"
+                    f"- 'app' if the label says download app, install, or similar\n"
+                    f"- 'other' for anything else\n\n"
+                    f"Respond in JSON ONLY: {{\"0\": \"einvoice\", \"1\": \"app\"}} (use QR index as key)"
+                },
+                {"inlineData": {"mimeType": "image/jpeg", "data": image_b64}},
+            ]}],
+            "generationConfig": {"temperature": 0.0, "maxOutputTokens": 200},
+        }
+        req = Request(api_url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+        with urlopen(req, timeout=15) as resp:
+            r = json.loads(resp.read())
+            answer = r.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+            # Extract JSON from response
+            json_match = re.search(r'\{[^}]+\}', answer)
+            if json_match:
+                result = json.loads(json_match.group())
+                print(f"[{document_id}] QR Vision: {result}")
+                return result
+    except Exception as e:
+        print(f"[{document_id}] QR Vision classification failed: {e}")
+    return {}
 
 
 def detect_qr_step(
@@ -96,7 +267,8 @@ def detect_qr_step(
 ) -> dict:
     """
     Detect QR codes in a receipt image and extract URLs.
-    Classifies each URL as einvoice form, LHDN validation, or non-einvoice.
+    Uses Gemini vision to read labels next to QR codes for accurate classification.
+    Falls back to URL-based classification if vision is unavailable.
     """
     print(f"[{document_id}] QR Detection: Starting")
 
@@ -122,11 +294,43 @@ def detect_qr_step(
         else:
             print(f"[{document_id}] QR Detection: Found {len(qr_results)} QR codes")
 
+            # Collect all QR data first
+            qr_data_list = []
             for i, qr in enumerate(qr_results):
                 data = qr.text.strip()
                 print(f"[{document_id}] QR Detection: Code #{i} data: {data[:150]}")
                 detected_qr_codes.append(data)
+                # Auto-prepend https:// for www. URLs
+                if data.lower().startswith("www."):
+                    data = "https://" + data
+                    print(f"[{document_id}] QR Detection: Added https:// prefix → {data[:80]}")
+                qr_data_list.append(data)
 
+            # Step 1: Use Gemini vision to classify QR codes by reading labels on the receipt
+            vision_labels = _vision_classify_qr_codes(image_bytes, qr_data_list, document_id)
+
+            # Step 2: Classify each QR code
+            for i, data in enumerate(qr_data_list):
+                vision_label = vision_labels.get(str(i), "").lower()
+
+                # Vision-based classification (highest priority — reads actual receipt text)
+                if vision_label == "einvoice":
+                    if URL_PATTERN.match(data):
+                        merchant_form_urls.append(data)
+                        print(f"[{document_id}] QR Detection: E-invoice form URL (vision confirmed) ✓ {data[:80]}")
+                    else:
+                        print(f"[{document_id}] QR Detection: Vision says einvoice but not a URL: {data[:50]}")
+                    continue
+                elif vision_label == "lhdn":
+                    if URL_PATTERN.match(data):
+                        lhdn_validation_urls.append(data)
+                        print(f"[{document_id}] QR Detection: LHDN validation QR (vision confirmed)")
+                    continue
+                elif vision_label in ("app", "other"):
+                    print(f"[{document_id}] QR Detection: Skipped (vision: {vision_label})")
+                    continue
+
+                # Fallback: URL-based classification (if vision didn't classify this QR)
                 if URL_PATTERN.match(data):
                     classification = _classify_url(data, document_id)
                     if classification == "lhdn":

@@ -119,12 +119,66 @@ async function copyInS3(sourceKey: string, sourceBucket: string, destKey: string
   await s3.send(new CopyObjectCommand({ Bucket: S3_BUCKET, CopySource: `${sourceBucket}/${sourceKey}`, Key: destKey }));
 }
 
+// ── Merchant slug detection from email address ─────────────
+
+/** Map account-level email local parts to merchant slugs */
+const ACCOUNT_EMAIL_SLUGS: Record<string, string> = {
+  "einvoice": "vizmyinvoice",          // einvoice@einv.hellogroot.com → vizmyinvoice
+  "otp.7eleven": "7eleven",            // otp.7eleven@einv.hellogroot.com → 7eleven
+};
+
+function detectMerchantSlug(toAddress: string): string | null {
+  const match = toAddress.match(/^([^@+]+)@einv\.hellogroot\.com$/i);
+  if (!match) return null;
+  const localPart = match[1].toLowerCase();
+  return ACCOUNT_EMAIL_SLUGS[localPart] || null;
+}
+
 // ── Email parsing ──────────────────────────────────────────
 
 function parseEmailRef(toAddress: string): string | null {
   // Match both formats: einvoice+ref@ (plus addressing) and einvoice.ref@ (dot format for 99SM etc.)
   const match = toAddress.match(/einvoice[+.]([^@]+)@/i);
   return match ? match[1] : null;
+}
+
+/** Extract receipt-related data from email body using regex (no LLM). */
+function extractReceiptSignals(textBody: string): {
+  receiptNumber: string | null;
+  totalAmount: number | null;
+  transactionDate: string | null;
+} {
+  // Receipt/invoice numbers: common patterns like "INV-123456", "A051-633814", "Receipt No: 12345"
+  let receiptNumber: string | null = null;
+  const refPatterns = [
+    /(?:receipt|invoice|inv|ref|no\.?|number)[^a-z0-9]{0,10}([A-Z0-9][\w-]{3,20})/i,
+    /([A-Z]{1,5}[\-\/]\d{4,10})/,  // A051-633814, INV/20240301
+  ];
+  for (const pat of refPatterns) {
+    const m = textBody.match(pat);
+    if (m) { receiptNumber = m[1]; break; }
+  }
+
+  // Amount: RM 12.50, MYR 1,234.56, Total: 45.00
+  let totalAmount: number | null = null;
+  const amtMatch = textBody.match(/(?:total|amount|rm|myr)[^0-9]{0,10}([\d,]+\.\d{2})/i);
+  if (amtMatch) {
+    totalAmount = parseFloat(amtMatch[1].replace(/,/g, ""));
+  }
+
+  // Date: DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD
+  let transactionDate: string | null = null;
+  const dateMatch = textBody.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (dateMatch) {
+    const [, a, b, year] = dateMatch;
+    // If first number > 12, it's DD/MM/YYYY; otherwise ambiguous, assume DD/MM/YYYY (Malaysian format)
+    transactionDate = `${year}-${b.padStart(2, "0")}-${a.padStart(2, "0")}`;
+  } else {
+    const isoMatch = textBody.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) transactionDate = isoMatch[0];
+  }
+
+  return { receiptNumber, totalAmount, transactionDate };
 }
 
 function findPdfAttachment(parsed: ParsedMail): { filename: string; content: Buffer } | null {
@@ -235,32 +289,72 @@ export async function handler(event: SESEvent) {
 
     console.log(`[Email] Processing: ${messageId} from ${fromAddress} subject="${subject}"`);
 
-    // 1. Find einvoice+ address
+    // 1. Find einvoice+ address (direct ref matching)
     let emailRef: string | null = null;
     for (const addr of toAddresses) {
       emailRef = parseEmailRef(addr);
       if (emailRef) break;
     }
-    if (!emailRef) {
-      console.log(`[Email] No einvoice+ address in: ${toAddresses.join(", ")}`);
-      continue;
-    }
-    console.log(`[Email] emailRef: ${emailRef}`);
 
-    // 2. Look up expense claim
-    const claimDetails = await convexQuery(
-      "functions/system:getClaimByEmailRef", { emailRef }
-    ) as ClaimDetails | null;
+    let claimDetails: ClaimDetails | null = null;
+    let matchMethod: "emailRef" | "fuzzyMatch" = "emailRef";
+    let cachedRawEmail: Buffer | null = null;
+
+    if (emailRef) {
+      console.log(`[Email] emailRef: ${emailRef}`);
+      claimDetails = await convexQuery(
+        "functions/system:getClaimByEmailRef", { emailRef }
+      ) as ClaimDetails | null;
+    }
+
+    // 2. Fallback: account-level email → fuzzy match by receipt data
+    if (!claimDetails) {
+      let merchantSlug: string | null = null;
+      for (const addr of toAddresses) {
+        merchantSlug = detectMerchantSlug(addr);
+        if (merchantSlug) break;
+      }
+
+      if (!merchantSlug) {
+        console.log(`[Email] No einvoice+ ref and no known account email in: ${toAddresses.join(", ")}`);
+        continue;
+      }
+
+      console.log(`[Email] Account-level email detected, merchantSlug=${merchantSlug} — trying fuzzy match`);
+
+      // Download email early to extract receipt signals for matching (cached for later)
+      cachedRawEmail = await downloadFromS3(rawEmailBucket, rawEmailKey);
+      const parsedForMatch = await simpleParser(cachedRawEmail);
+      const matchBody = parsedForMatch.text || "";
+      const signals = extractReceiptSignals(matchBody);
+      console.log(`[Email] Extracted signals: receipt=${signals.receiptNumber}, amount=${signals.totalAmount}, date=${signals.transactionDate}`);
+
+      claimDetails = await convexQuery(
+        "functions/system:getClaimByFuzzyMatch", {
+          merchantSlug,
+          receiptNumber: signals.receiptNumber || undefined,
+          totalAmount: signals.totalAmount ?? undefined,
+          transactionDate: signals.transactionDate || undefined,
+          emailBody: matchBody.substring(0, 5000),
+        }
+      ) as ClaimDetails | null;
+
+      if (claimDetails) {
+        matchMethod = "fuzzyMatch";
+        // Generate a synthetic emailRef for downstream processing
+        emailRef = `fuzzy-${merchantSlug}-${Date.now()}`;
+      }
+    }
 
     if (!claimDetails) {
-      console.log(`[Email] No claim found for emailRef: ${emailRef}`);
+      console.log(`[Email] No claim found (ref=${emailRef || "none"}, fuzzy attempted)`);
       continue;
     }
     const { claimId, businessId, userId, storagePath } = claimDetails;
-    console.log(`[Email] Matched claim ${claimId} (biz: ${businessId})`);
+    console.log(`[Email] Matched claim ${claimId} (biz: ${businessId}) via ${matchMethod}`);
 
-    // 3. Download and parse email
-    const rawEmailBytes = await downloadFromS3(rawEmailBucket, rawEmailKey);
+    // 3. Download and parse email (use cached version if already downloaded for fuzzy matching)
+    const rawEmailBytes = cachedRawEmail || await downloadFromS3(rawEmailBucket, rawEmailKey);
     const parsed = await simpleParser(rawEmailBytes);
     const textBody = parsed.text || "";
     const htmlBody = parsed.html || "";

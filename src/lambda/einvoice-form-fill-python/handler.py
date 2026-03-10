@@ -107,7 +107,7 @@ def _solve_captcha_once(page: Page, url: str) -> bool:
     """Single attempt to detect and solve CAPTCHA."""
     try:
         # Detect CAPTCHA type — checks DOM elements, hidden inputs, scripts, AND network requests
-        captcha_info = page.evaluate("""() => {
+        captcha_info = page.evaluate(r"""() => {
             // reCAPTCHA v2
             const recaptcha = document.querySelector('iframe[src*="recaptcha"], .g-recaptcha, #g-recaptcha');
             if (recaptcha) {
@@ -395,6 +395,8 @@ def _debug_fields() -> dict:
         fields["cuaActions"] = _run_state["cua_actions"]
     if _run_state.get("evidence"):
         fields["verifyEvidence"] = _run_state["evidence"][:500]
+    if _run_state.get("merchant_slug"):
+        fields["merchantSlug"] = _run_state["merchant_slug"]
     cost_data = cost_tracker.to_dict()
     if cost_data.get("totalCostUsd", 0) > 0:
         fields["cost"] = cost_data
@@ -447,15 +449,366 @@ def gemini_flash(prompt: str, image_b64: str) -> str:
     return r.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
 
 
+# ── Merchant credentials (SSM) ──────────────────────────────
+
+_merchant_creds_cache: dict = {}
+
+def _read_merchant_credentials(merchant_slug: str) -> dict | None:
+    """Read login credentials for a merchant from SSM Parameter Store.
+    Convention: /finanseal/{slug}-einvoice-email and /finanseal/{slug}-einvoice-password.
+    Returns {"email": "...", "password": "..."} or None if not configured.
+    """
+    if merchant_slug in _merchant_creds_cache:
+        return _merchant_creds_cache[merchant_slug]
+    try:
+        import boto3 as _boto3
+        ssm = _boto3.client("ssm")
+        email_param = f"/finanseal/{merchant_slug}-einvoice-email"
+        pw_param = f"/finanseal/{merchant_slug}-einvoice-password"
+        resp = ssm.get_parameters(Names=[email_param, pw_param], WithDecryption=True)
+        params = {p["Name"]: p["Value"] for p in resp.get("Parameters", [])}
+        if email_param in params and pw_param in params:
+            creds = {"email": params[email_param], "password": params[pw_param]}
+            _merchant_creds_cache[merchant_slug] = creds
+            print(f"[Creds] Loaded credentials for {merchant_slug} from SSM")
+            return creds
+        print(f"[Creds] Missing SSM params for {merchant_slug}: found {list(params.keys())}")
+        return None
+    except Exception as e:
+        print(f"[Creds] SSM read failed for {merchant_slug}: {e}")
+        return None
+
+
+# Mapping from merchant name (lowercase) to SSM slug
+_MERCHANT_NAME_SLUGS = {
+    "7-eleven": "7eleven",
+    "7-eleven malaysia": "7eleven",
+    "7-eleven malaysia sdn. bhd.": "7eleven",
+    "7-eleven malaysia sdn bhd": "7eleven",
+}
+
+# Mapping from e-invoice URL domain to SSM slug (platform-based detection).
+# Multiple merchants may use the same e-invoice platform (e.g. vizmyinvoice).
+_URL_DOMAIN_SLUGS = {
+    "vizmyinvoice.com": "vizmyinvoice",
+}
+
+
+def _get_merchant_slug(merchant_name: str, einvoice_url: str = "") -> str | None:
+    """Get the SSM slug for a merchant that requires login credentials.
+    Checks URL domain first (platform-based), then merchant name."""
+    # 1. URL-based: any merchant using a known e-invoice platform
+    url_lower = (einvoice_url or "").lower()
+    for domain, slug in _URL_DOMAIN_SLUGS.items():
+        if domain in url_lower:
+            return slug
+    # 2. Name-based: specific merchant names
+    name_lower = (merchant_name or "").lower().strip()
+    for pattern, slug in _MERCHANT_NAME_SLUGS.items():
+        if pattern in name_lower or name_lower in pattern:
+            return slug
+    return None
+
+
+def _poll_otp_from_s3(otp_email: str, timeout_seconds: int = 90) -> str | None:
+    """Poll S3 for an OTP email sent to the given address. Returns the OTP code or None.
+    SES stores emails to *@einv.hellogroot.com in s3://finanseal-bucket/ses-emails/einvoice/.
+    """
+    import boto3 as _boto3
+    s3 = _boto3.client("s3")
+    bucket = "finanseal-bucket"
+    prefix = "ses-emails/einvoice/"
+    start_time = time.time()
+    seen_keys: set = set()
+
+    # Record objects that existed BEFORE we started polling (to ignore old emails)
+    try:
+        pre_resp = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=50)
+        for obj in pre_resp.get("Contents", []):
+            seen_keys.add(obj["Key"])
+        print(f"[OTP] Pre-existing emails: {len(seen_keys)}, polling for new OTP to {otp_email}...")
+    except Exception as e:
+        print(f"[OTP] Failed to list pre-existing emails: {e}")
+
+    while time.time() - start_time < timeout_seconds:
+        time.sleep(5)
+        try:
+            resp = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=50)
+            for obj in sorted(resp.get("Contents", []), key=lambda x: x.get("LastModified", ""), reverse=True):
+                key = obj["Key"]
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                # Download and check if it's an OTP email for our address
+                try:
+                    email_resp = s3.get_object(Bucket=bucket, Key=key)
+                    email_body = email_resp["Body"].read().decode("utf-8", errors="replace")
+                    # Check if this email is addressed to our OTP email
+                    if otp_email.lower() not in email_body.lower():
+                        continue
+                    # Extract OTP code (4-8 digit number near OTP/TAC/verification keywords)
+                    otp_match = re.search(
+                        r'(?:otp|tac|verification\s*code|one.time\s*password)[^0-9]{0,50}(\d{4,8})',
+                        email_body, re.IGNORECASE
+                    )
+                    if not otp_match:
+                        # Try reverse: digits followed by OTP keyword
+                        otp_match = re.search(
+                            r'(\d{4,8})[^0-9]{0,50}(?:otp|tac|verification|one.time)',
+                            email_body, re.IGNORECASE
+                        )
+                    if not otp_match:
+                        # Broadest: standalone 4-8 digit number in a short email
+                        if len(email_body) < 5000:
+                            otp_match = re.search(r'\b(\d{4,8})\b', email_body)
+                    if otp_match:
+                        otp_code = otp_match.group(1)
+                        elapsed = int(time.time() - start_time)
+                        print(f"[OTP] Found OTP: {otp_code} (from {key}, {elapsed}s)")
+                        return otp_code
+                    print(f"[OTP] Email found but no OTP code extracted: {key}")
+                except Exception as parse_err:
+                    print(f"[OTP] Failed to parse {key}: {parse_err}")
+        except Exception as list_err:
+            print(f"[OTP] S3 list failed: {list_err}")
+
+    elapsed = int(time.time() - start_time)
+    print(f"[OTP] Timeout after {elapsed}s — no OTP received at {otp_email}")
+    return None
+
+
+def _run_login_flow(page: Page, url: str, creds: dict, merchant_slug: str, email_ref: str) -> None:
+    """Handle merchant login (email + password + OTP) before the buyer form.
+    Detects login page, fills credentials, solves CAPTCHA, handles OTP via email polling.
+    """
+    # Check if we're on a login page
+    is_login = page.evaluate(r"""() => {
+        const src = document.documentElement.innerHTML.toLowerCase();
+        const hasLogin = src.includes('log in') || src.includes('login') || src.includes('sign in');
+        const hasPassword = !!document.querySelector('input[type="password"]');
+        const hasEmail = !!document.querySelector('input[type="email"], input[name*="email" i], input[placeholder*="email" i]');
+        return hasLogin && (hasPassword || hasEmail);
+    }""")
+
+    if not is_login:
+        print(f"[Login] No login page detected for {merchant_slug} — skipping login flow")
+        return
+
+    print(f"[Login] Login page detected for {merchant_slug} — filling credentials")
+    login_email = creds["email"]
+    login_password = creds["password"]
+
+    # Fill email field
+    email_filled = False
+    for selector in ['input[type="email"]', 'input[name*="email" i]', 'input[placeholder*="email" i]',
+                     'input[id*="email" i]', 'input[id*="user" i]', 'input[name*="user" i]']:
+        try:
+            el = page.locator(selector).first
+            if el.count() > 0 and el.is_visible():
+                el.click()
+                el.fill(login_email)
+                email_filled = True
+                print(f"[Login] Email filled via {selector}")
+                break
+        except Exception:
+            continue
+
+    if not email_filled:
+        print("[Login] Could not find email field — will rely on CUA")
+
+    # Fill password field
+    pw_filled = False
+    try:
+        pw_el = page.locator('input[type="password"]').first
+        if pw_el.count() > 0 and pw_el.is_visible():
+            pw_el.click()
+            pw_el.fill(login_password)
+            pw_filled = True
+            print("[Login] Password filled")
+    except Exception:
+        print("[Login] Could not find password field — will rely on CUA")
+
+    # Wait for reCAPTCHA to load, then solve before clicking login
+    time.sleep(3)
+    captcha_solved = solve_captcha(page, url)
+    if captcha_solved:
+        print("[Login] CAPTCHA solved before login click")
+    else:
+        print("[Login] No CAPTCHA detected (or solve failed) — proceeding with login")
+
+    # Click login/submit button
+    login_clicked = False
+    for selector in ['button:has-text("Log In")', 'button:has-text("Login")', 'button:has-text("Sign In")',
+                     'button[type="submit"]', 'input[type="submit"]']:
+        try:
+            btn = page.locator(selector).first
+            if btn.count() > 0 and btn.is_visible():
+                btn.click(timeout=5000)
+                login_clicked = True
+                print(f"[Login] Clicked login button: {selector}")
+                break
+        except Exception:
+            continue
+
+    if not login_clicked:
+        print("[Login] Could not find login button — will rely on CUA")
+        return
+
+    # Wait for page response after login
+    time.sleep(5)
+
+    # Check if login failed (auth error) — might be CAPTCHA not solved or bad credentials
+    login_failed = page.evaluate(r"""() => {
+        const src = document.documentElement.innerHTML.toLowerCase();
+        return src.includes('authentication failed') || src.includes('invalid credentials')
+            || src.includes('login failed') || src.includes('incorrect password');
+    }""")
+    if login_failed:
+        print("[Login] ⚠ Authentication failed — may need CAPTCHA or credentials are wrong")
+        # Try dismissing error modal and re-solving CAPTCHA
+        try:
+            # Close modal (common patterns: OK button, X button, backdrop click)
+            for dismiss in ['button:has-text("OK")', 'button:has-text("Close")', '.modal button',
+                           'button[aria-label="Close"]', '.close']:
+                try:
+                    el = page.locator(dismiss).first
+                    if el.count() > 0 and el.is_visible():
+                        el.click(timeout=3000)
+                        print(f"[Login] Dismissed error modal via {dismiss}")
+                        time.sleep(1)
+                        break
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        # Re-attempt: solve CAPTCHA (it may have reset after failed login)
+        time.sleep(2)
+        if solve_captcha(page, url):
+            print("[Login] CAPTCHA solved after failed attempt — retrying login")
+            # Re-fill password (some forms clear it on failed login)
+            try:
+                pw_el = page.locator('input[type="password"]').first
+                if pw_el.count() > 0 and pw_el.is_visible():
+                    pw_el.fill(login_password)
+            except Exception:
+                pass
+            # Click login again
+            for selector in ['button:has-text("Log In")', 'button:has-text("Login")',
+                             'button[type="submit"]']:
+                try:
+                    btn = page.locator(selector).first
+                    if btn.count() > 0 and btn.is_visible():
+                        btn.click(timeout=5000)
+                        print(f"[Login] Re-clicked login: {selector}")
+                        break
+                except Exception:
+                    continue
+            time.sleep(5)
+        else:
+            print("[Login] CAPTCHA still not detected — login may require manual CAPTCHA interaction")
+            return
+
+    # Check if OTP/TAC verification is needed — look for a visible OTP input field, not just page text
+    otp_needed = page.evaluate(r"""() => {
+        // Must have a visible input field for OTP (not just text mentioning OTP in scripts/CSS)
+        const otpInput = document.querySelector(
+            'input[id*="otp" i], input[name*="otp" i], input[id*="tac" i], input[name*="tac" i], '
+            + 'input[placeholder*="otp" i], input[placeholder*="tac" i], input[placeholder*="verification" i]'
+        );
+        if (otpInput && otpInput.offsetParent !== null) return true;
+        // Also check for visible text labels near input fields
+        const labels = Array.from(document.querySelectorAll('label, .label, h2, h3, p'));
+        const hasOtpLabel = labels.some(l => {
+            const t = l.textContent.toLowerCase();
+            return (t.includes('otp') || t.includes('tac') || t.includes('verification code'))
+                && l.offsetParent !== null;
+        });
+        return hasOtpLabel;
+    }""")
+
+    if otp_needed:
+        print(f"[Login] OTP/TAC input field detected — polling S3 for OTP email to {login_email}")
+        otp_code = _poll_otp_from_s3(login_email, timeout_seconds=90)
+
+        if otp_code:
+            # Fill OTP field
+            otp_filled = False
+            for selector in ['input[id*="otp" i]', 'input[name*="otp" i]', 'input[id*="tac" i]',
+                             'input[name*="tac" i]', 'input[placeholder*="otp" i]',
+                             'input[placeholder*="tac" i]', 'input[placeholder*="verification" i]',
+                             'input[type="tel"]', 'input[maxlength="6"]', 'input[maxlength="4"]']:
+                try:
+                    el = page.locator(selector).first
+                    if el.count() > 0 and el.is_visible():
+                        el.click()
+                        el.fill(otp_code)
+                        otp_filled = True
+                        print(f"[Login] OTP filled via {selector}: {otp_code}")
+                        break
+                except Exception:
+                    continue
+
+            if not otp_filled:
+                # Try filling all visible short inputs (OTP fields are often unlabeled)
+                try:
+                    inputs = page.locator('input:visible').all()
+                    for inp in inputs:
+                        input_type = inp.get_attribute("type") or ""
+                        maxlen = inp.get_attribute("maxlength") or ""
+                        if input_type not in ("hidden", "password", "email", "checkbox", "radio"):
+                            if maxlen and int(maxlen) <= 8:
+                                inp.click()
+                                inp.fill(otp_code)
+                                otp_filled = True
+                                print(f"[Login] OTP filled via short input (maxlength={maxlen})")
+                                break
+                except Exception as e:
+                    print(f"[Login] OTP field search failed: {e}")
+
+            if otp_filled:
+                # Click verify/submit button
+                for selector in ['button:has-text("Verify")', 'button:has-text("Submit")',
+                                 'button:has-text("Confirm")', 'button[type="submit"]']:
+                    try:
+                        btn = page.locator(selector).first
+                        if btn.count() > 0 and btn.is_visible():
+                            btn.click(timeout=5000)
+                            print(f"[Login] Clicked verify button: {selector}")
+                            break
+                    except Exception:
+                        continue
+                time.sleep(5)
+                print(f"[Login] Login + OTP complete for {merchant_slug}, current URL: {page.url}")
+            else:
+                print(f"[Login] Could not find OTP field — CUA will need to handle it")
+        else:
+            print(f"[Login] OTP not received — CUA will need to handle it manually")
+    else:
+        # Check if login succeeded (no OTP needed)
+        time.sleep(3)
+        print(f"[Login] Login submitted for {merchant_slug}, current URL: {page.url}")
+
+
 # ── Browser launch helpers ──────────────────────────────────
 
-def launch_browserbase(pw) -> tuple:
-    """Launch a cloud browser via Browserbase (residential IP, real fingerprint).
-    Returns (browser, page, session_id). Used for Cloudflare-managed merchants."""
+def launch_browserbase(pw, use_proxy: bool = False) -> tuple:
+    """Launch a cloud browser via Browserbase (real fingerprint, Singapore region).
+    Returns (browser, page, session_id). Used for WAF-blocked/geo-blocked merchants.
+    Args:
+        use_proxy: Enable residential proxy for sites that block datacenter IPs.
+    """
     from browserbase import Browserbase
     bb = Browserbase(api_key=BB_API_KEY)
-    session = bb.sessions.create(project_id=BB_PROJECT_ID)
-    print(f"[Browser] Browserbase session: {session.id}")
+    create_params = {
+        "project_id": BB_PROJECT_ID,
+        "region": "ap-southeast-1",  # Singapore — closest to Malaysia, avoids geo-blocking
+        "api_timeout": 420,  # 7 minutes — complex flows (login + buyer profile + form fill) need more time
+    }
+    if use_proxy:
+        create_params["proxies"] = True
+    session = bb.sessions.create(**create_params)
+    print(f"[Browser] Browserbase session: {session.id} (region=ap-southeast-1, proxy={use_proxy})")
     browser = pw.chromium.connect_over_cdp(session.connect_url)
     context = browser.contexts[0]
     page = context.pages[0]
@@ -476,11 +829,30 @@ def launch_local(pw) -> tuple:
 
 
 def needs_browserbase(merchant_hints: str) -> bool:
-    """Check if merchant requires Browserbase (Cloudflare managed challenge, WAF blocking, etc.)."""
+    """Check if merchant requires Browserbase (Cloudflare managed challenge, WAF blocking, connection issues, etc.)."""
     if not BB_API_KEY or not BB_PROJECT_ID:
         return False
     hints_lower = (merchant_hints or "").lower()
-    return any(k in hints_lower for k in ["browserbase", "cloudflare_managed", "cloudflare managed", "waf block"])
+    return any(k in hints_lower for k in [
+        "browserbase", "cloudflare_managed", "cloudflare managed", "waf block",
+        "connection_error", "socket_not_connected", "use_browserbase",
+    ])
+
+
+# Network errors that indicate Lambda can't reach the site but Browserbase might
+_RETRYABLE_NETWORK_ERRORS = [
+    "ERR_SOCKET_NOT_CONNECTED",
+    "ERR_CONNECTION_REFUSED",
+    "ERR_CONNECTION_RESET",
+    "ERR_CONNECTION_TIMED_OUT",
+    "ERR_SSL_PROTOCOL_ERROR",
+    "ERR_TIMED_OUT",
+]
+
+
+def _is_retryable_network_error(error_msg: str) -> bool:
+    """Check if a page.goto error is a network-level failure that Browserbase might fix."""
+    return any(code in error_msg for code in _RETRYABLE_NETWORK_ERRORS)
 
 
 def detect_managed_turnstile(page) -> bool:
@@ -1675,9 +2047,11 @@ Return ONLY the JSON array, no markdown."""
 
 # ── DSPy Signatures for structured troubleshooting ──────────
 
-def troubleshoot(screenshot_b64: str, error: str, merchant: str):
-    """DSPy-structured troubleshooting: diagnoses failure → saves fix suggestions."""
+def troubleshoot(screenshot_b64: str, error: str, merchant: str) -> dict:
+    """DSPy-structured troubleshooting: diagnoses failure → saves fix suggestions.
+    Returns diagnosis dict with keys: fixable, diagnosis, infra_action, cua_hints, fields."""
     print(f"[Troubleshoot] Diagnosing '{merchant}': {error[:80]}")
+    result_info: dict = {"fixable": False, "infra_action": None, "diagnosis": "", "cua_hints": "", "fields": []}
     try:
         # Lazy import DSPy (avoids 10s cold start on every invocation)
         os.environ["DSPY_CACHEDIR"] = "/tmp/dspy_cache"
@@ -1691,27 +2065,46 @@ def troubleshoot(screenshot_b64: str, error: str, merchant: str):
             suggested_default: str = PydanticField(default="", description="Default value")
 
         class FormDiagnosis(_dspy.Signature):
-            """Analyze a failed e-invoice form and diagnose the root cause. Provide actionable hints for future attempts."""
+            """Analyze a failed e-invoice form and diagnose the root cause.
+            You handle BOTH form-level issues (unfilled fields, validation errors) AND
+            infrastructure-level issues (network errors, IP blocking, bot detection).
+
+            Infrastructure issues you MUST recognize:
+            - ERR_SOCKET_NOT_CONNECTED, ERR_CONNECTION_REFUSED, ERR_CONNECTION_RESET → site blocks Lambda IP → infra_action: 'use_browserbase'
+            - ERR_TIMED_OUT, timeout → site unreachable from Lambda region → infra_action: 'use_browserbase'
+            - 403/401 status, WAF, bot detection → IP/fingerprint blocked → infra_action: 'use_browserbase'
+            - ERR_NAME_NOT_RESOLVED → domain doesn't exist → infra_action: 'invalid_url'
+            - Login page, password field required → not a buyer form → infra_action: 'wrong_url'
+            - CAPTCHA persistent after solving → infra_action: 'manual_only'
+
+            Set fixable=True for BOTH form fixes AND infra fixes. Only set fixable=False if truly unfixable (e.g. domain doesn't exist)."""
             error_message: str = _dspy.InputField(desc="Error that caused the form fill to fail")
             merchant_name: str = _dspy.InputField(desc="Merchant name")
             screenshot_description: str = _dspy.InputField(desc="Description of the screenshot")
-            diagnosis: str = _dspy.OutputField(desc="What went wrong")
-            unfilled_fields: list[UnfilledField] = _dspy.OutputField(desc="Fields needing fixes")
-            fixable: bool = _dspy.OutputField(desc="Can this be fixed by filling fields?")
-            cua_hints: str = _dspy.OutputField(desc="Merchant-specific instructions for the CUA agent on next attempt. E.g. 'Click Company tab before filling fields', 'Phone field uses react-phone-input with +60 prefix — use 9-digit number without 0', 'Must click Validate button first to unlock fields'. Be specific and actionable.")
+            diagnosis: str = _dspy.OutputField(desc="What went wrong — be specific about root cause")
+            unfilled_fields: list[UnfilledField] = _dspy.OutputField(desc="Fields needing fixes (empty list for infra issues)")
+            fixable: bool = _dspy.OutputField(desc="True if fixable by form changes OR infrastructure changes (Browserbase, URL fix). False only if truly unfixable.")
+            infra_action: str = _dspy.OutputField(desc="Infrastructure fix action. One of: 'use_browserbase' (IP/geo/WAF block), 'invalid_url' (domain doesn't exist), 'wrong_url' (login page, not buyer form), 'manual_only' (persistent CAPTCHA), 'none' (form-level issue only)")
+            cua_hints: str = _dspy.OutputField(desc="Merchant-specific instructions for the CUA agent on next attempt. E.g. 'Click Company tab before filling fields', 'Phone field uses react-phone-input with +60 prefix — use 9-digit number without 0', 'Must click Validate button first to unlock fields'. For infra issues: 'use_browserbase: Site blocks Lambda IP, requires residential proxy'. Be specific and actionable.")
 
         # Configure DSPy
         lm = _dspy.LM("gemini/gemini-3.1-flash-lite-preview", api_key=GEMINI_KEY, max_tokens=2048, temperature=0.1)
         _dspy.settings.configure(lm=lm, adapter=_dspy.JSONAdapter())
 
         # Gemini Flash describes the screenshot (DSPy doesn't handle images natively)
-        description = gemini_flash(
-            "Describe this e-invoice form screenshot. Focus on:\n"
-            "1. Which fields are filled vs empty\n"
-            "2. Any validation error messages visible\n"
-            "3. The state of dropdowns and checkboxes",
-            screenshot_b64,
-        )
+        # If no real screenshot (e.g. network error before page loaded), skip vision call
+        if screenshot_b64 and len(screenshot_b64) > 100:
+            description = gemini_flash(
+                "Describe this screenshot. Focus on:\n"
+                "1. Is this an e-invoice form? Or a login page, error page, blank page, or CAPTCHA?\n"
+                "2. Which fields are filled vs empty\n"
+                "3. Any validation error messages visible\n"
+                "4. The state of dropdowns and checkboxes\n"
+                "5. Any signs of bot detection, WAF blocks, or network errors",
+                screenshot_b64,
+            )
+        else:
+            description = "No screenshot available — page never loaded (network error before rendering)"
         print(f"[Troubleshoot] Screenshot: {description[:150]}...")
 
         # DSPy structured diagnosis
@@ -1720,9 +2113,39 @@ def troubleshoot(screenshot_b64: str, error: str, merchant: str):
             merchant_name=merchant,
             screenshot_description=description[:2000],
         )
+        infra_action = getattr(result, "infra_action", "none") or "none"
         print(f"[Troubleshoot] Diagnosis: {result.diagnosis}")
-        print(f"[Troubleshoot] Fixable: {result.fixable}, Fields: {len(result.unfilled_fields)}")
+        print(f"[Troubleshoot] Fixable: {result.fixable}, Fields: {len(result.unfilled_fields)}, Infra: {infra_action}")
 
+        result_info["fixable"] = result.fixable
+        result_info["diagnosis"] = result.diagnosis
+        result_info["infra_action"] = infra_action if infra_action != "none" else None
+        result_info["cua_hints"] = getattr(result, "cua_hints", "") or ""
+
+        # Save infra-level hints (Browserbase, manual-only, wrong URL)
+        if infra_action == "use_browserbase":
+            hint = "connection_error: Use Browserbase (site blocks Lambda IP — diagnosed by troubleshooter)"
+            config_update: dict[str, Any] = {
+                "fields": (fc or {}).get("fields", []) if 'fc' in dir() else [],
+                "cuaHints": hint,
+                "lastFailureReason": result.diagnosis[:200],
+            }
+            convex_mutation("functions/system:saveMerchantFormConfig", {
+                "merchantName": merchant,
+                "formConfig": config_update,
+            })
+            print(f"[Troubleshoot] Saved Browserbase hint for {merchant}")
+        elif infra_action == "manual_only":
+            hint = "manual_only: This merchant requires manual form fill (persistent CAPTCHA or other blocker)"
+            convex_mutation("functions/system:saveMerchantFormConfig", {
+                "merchantName": merchant,
+                "formConfig": {"fields": [], "cuaHints": hint, "lastFailureReason": result.diagnosis[:200]},
+            })
+            print(f"[Troubleshoot] Marked {merchant} as manual-only")
+        elif infra_action == "wrong_url":
+            print(f"[Troubleshoot] ⚠ URL appears to be a login/merchant portal, not a buyer form")
+
+        # Save form-level fixes
         if result.fixable and result.unfilled_fields:
             valid_types = {"text", "select", "radix_select", "radio", "checkbox"}
             fields = []
@@ -1733,8 +2156,9 @@ def troubleshoot(screenshot_b64: str, error: str, merchant: str):
                 if uf.suggested_default:
                     field["defaultValue"] = uf.suggested_default
                 fields.append(field)
+            result_info["fields"] = fields
 
-            config_update: dict[str, Any] = {"fields": fields, "lastFailureReason": result.diagnosis[:200]}
+            config_update = {"fields": fields, "lastFailureReason": result.diagnosis[:200]}
             if result.cua_hints:
                 config_update["cuaHints"] = result.cua_hints[:500]
                 print(f"[Troubleshoot] Learned CUA hints: {result.cua_hints[:150]}")
@@ -1747,6 +2171,8 @@ def troubleshoot(screenshot_b64: str, error: str, merchant: str):
     except Exception as e:
         print(f"[Troubleshoot] Failed: {e}")
         traceback.print_exc()
+
+    return result_info
 
 
 # ── Extract formConfig from filled page (post-success) ─────
@@ -2014,6 +2440,16 @@ def handler(event: dict, context=None) -> dict:
             except Exception as e:
                 print(f"[Form Fill] Receipt image download failed: key={receipt_image_path}, error={e}")
 
+        # 99SM: Construct full URL with ReceiptDetails if QR scan only got the base URL
+        if "99einvoice.com" in url and "ReceiptDetails" not in url and receipt.get("referenceNumber"):
+            ref = receipt["referenceNumber"]
+            date_str = (receipt.get("transactionDate") or "").replace("-", "")
+            amt_str = f"{float(receipt.get('totalAmount') or 0):.2f}"
+            receipt_payload = f"{ref}|{date_str}|{amt_str}|{ref}"
+            receipt_b64 = base64.b64encode(receipt_payload.encode()).decode()
+            url = f"https://99einvoice.com/?ReceiptDetails={receipt_b64}"
+            print(f"[Form Fill] 99SM: Constructed URL from receipt data: {receipt_payload}")
+
         # Launch browser — Browserbase for Cloudflare-managed merchants, local for everything else
         pw = sync_playwright().start()
         use_bb = needs_browserbase(merchant_hints)
@@ -2026,10 +2462,67 @@ def handler(event: dict, context=None) -> dict:
         else:
             browser, page, _ = launch_local(pw)
 
-        # Navigate
-        resp = page.goto(url, wait_until="domcontentloaded", timeout=45000)
-        status = resp.status if resp else 0
-        print(f"[Form Fill] Navigated: {page.url}, status={status}")
+        # Navigate (with Browserbase fallback on network errors)
+        try:
+            resp = page.goto(url, wait_until="domcontentloaded", timeout=45000)
+            status = resp.status if resp else 0
+            print(f"[Form Fill] Navigated: {page.url}, status={status}")
+        except Exception as nav_err:
+            nav_error_str = str(nav_err)
+            if _is_retryable_network_error(nav_error_str) and BB_API_KEY:
+                print(f"[Browser] Navigation failed: {nav_error_str.split(chr(10))[0]}")
+                try:
+                    browser.close()
+                except Exception:
+                    pass
+                if not use_bb:
+                    # Local browser failed — retry with Browserbase (Singapore region)
+                    print("[Browser] Retrying with Browserbase (Singapore region)")
+                    _run_state["browser_type"] = "browserbase"
+                    browser, page, bb_session_id = launch_browserbase(pw)
+                    use_bb = True
+                    try:
+                        resp = page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                        status = resp.status if resp else 0
+                        print(f"[Form Fill] Navigated via Browserbase: {page.url}, status={status}")
+                    except Exception as bb_nav_err:
+                        bb_nav_str = str(bb_nav_err)
+                        if _is_retryable_network_error(bb_nav_str):
+                            # Browserbase Singapore also blocked — retry with proxy
+                            print(f"[Browser] Browserbase (no proxy) also blocked: {bb_nav_str.split(chr(10))[0]}")
+                            print("[Browser] Retrying with Browserbase + residential proxy")
+                            try:
+                                browser.close()
+                            except Exception:
+                                pass
+                            browser, page, bb_session_id = launch_browserbase(pw, use_proxy=True)
+                            resp = page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                            status = resp.status if resp else 0
+                            print(f"[Form Fill] Navigated via Browserbase+proxy: {page.url}, status={status}")
+                        else:
+                            raise
+                else:
+                    # Already on Browserbase but failed — retry with proxy
+                    print("[Browser] Browserbase failed — retrying with residential proxy")
+                    browser, page, bb_session_id = launch_browserbase(pw, use_proxy=True)
+                    resp = page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                    status = resp.status if resp else 0
+                    print(f"[Form Fill] Navigated via Browserbase+proxy: {page.url}, status={status}")
+                # Save hint so future runs use Browserbase from the start
+                if merchant:
+                    new_hint = (merchant_hints + "\n" if merchant_hints else "") + "connection_error: Use Browserbase (site blocks Lambda/datacenter IPs)"
+                    try:
+                        existing_fields = (fc or {}).get("fields", [])
+                        convex_mutation("functions/system:saveMerchantFormConfig", {
+                            "merchantName": merchant,
+                            "formConfig": {"fields": existing_fields, "cuaHints": new_hint[:500]},
+                        })
+                        print(f"[Form Fill] Saved Browserbase hint for {merchant}")
+                    except Exception as hint_err:
+                        print(f"[Form Fill] Failed to save Browserbase hint: {hint_err}")
+                    merchant_hints = new_hint
+            else:
+                raise  # Non-retryable error — propagate
 
         # Runtime detection: if managed Turnstile found and we're on local browser → switch to Browserbase
         if not use_bb and status == 200:
@@ -2110,6 +2603,28 @@ def handler(event: dict, context=None) -> dict:
         # ── Phase 0: Solve CAPTCHA early (some forms like McDonald's trigger reCAPTCHA on any interaction) ──
         time.sleep(3)  # Wait for reCAPTCHA/Turnstile to fully load
         solve_captcha(page, url)
+
+        # ── Login flow for merchants that require authentication ──
+        merchant_slug = _get_merchant_slug(merchant or "", einvoice_url=url)
+        if merchant_slug:
+            _run_state["merchant_slug"] = merchant_slug
+        merchant_creds = _read_merchant_credentials(merchant_slug) if merchant_slug else None
+        if merchant_creds:
+            _run_login_flow(page, url, merchant_creds, merchant_slug, event.get("emailRef", ""))
+            # Add CUA hint: login done, navigate to form, use correct buyer email (NOT login email)
+            merchant_hints += (
+                "\nIMPORTANT: Login has already been completed automatically. You are now on the merchant dashboard."
+                "\n- Navigate to the e-invoice request form (e.g. click 'E-Invoice' menu → 'Request E-Invoice')."
+                "\n- If a guideline/info popup appears, dismiss it."
+                "\n- For DATE PICKER fields: Do NOT try to click individual dates in the calendar popup."
+                "  Instead, click the date input field, then use keyboard: select all text (Ctrl+A), "
+                "  then type the date in DD/MM/YYYY format. If that doesn't work, try clearing the field first."
+                f"\n- CRITICAL: For the buyer EMAIL field, you MUST use: {buyer['email']}"
+                f"  Do NOT use the login email ({merchant_creds['email']}). They are different."
+                "  If the email field is pre-filled with the login email, CLEAR it and type the correct buyer email."
+                "\n- Fill all buyer detail fields, then submit."
+                "\n- Do NOT try to log in again."
+            )
 
         # ── Pre-fill with Playwright (runs BEFORE Tier 1 so phone/dropdowns are ready) ──
         # Phase 0b: Handle validate-gated forms (BRN+TIN → Validate → fields unlock)
@@ -2287,16 +2802,139 @@ def handler(event: dict, context=None) -> dict:
         print(f"[Cost] {cost_tracker.summary()}")
         traceback.print_exc()
 
-        # ── Tier 3: Troubleshoot on failure ──
-        if merchant and not error.startswith("BOT_BLOCKED") and browser:
+        # ── Tier 3: Troubleshoot on failure → diagnose + retry if fixable ──
+        ts_result: dict = {"fixable": False, "infra_action": None}
+        if merchant and not error.startswith("BOT_BLOCKED"):
             try:
-                pages = browser.contexts[0].pages if browser.contexts else []
-                if pages:
-                    shot = base64.b64encode(pages[0].screenshot(type="png")).decode()
-                    troubleshoot(shot, error, merchant)
+                shot = None
+                if browser:
+                    pages = browser.contexts[0].pages if browser.contexts else []
+                    if pages:
+                        shot = base64.b64encode(pages[0].screenshot(type="png")).decode()
+                if not shot:
+                    # No browser/page available (e.g. network error) — use a blank placeholder
+                    shot = base64.b64encode(b"blank").decode()
+                ts_result = troubleshoot(shot, error, merchant)
             except Exception:
                 pass
 
+        # ── Retry with Browserbase if troubleshooter says so (same invocation) ──
+        if (ts_result.get("infra_action") == "use_browserbase"
+                and not _run_state.get("browserbase_retry_attempted")
+                and BB_API_KEY and BB_PROJECT_ID):
+            _run_state["browserbase_retry_attempted"] = True
+            print("[Retry] Troubleshooter recommended Browserbase — retrying in same invocation")
+
+            # Close existing browser if still open
+            if browser:
+                try:
+                    browser.close()
+                except Exception:
+                    pass
+
+            try:
+                _run_state["browser_type"] = "browserbase"
+                # Use proxy if original failure was already on Browserbase (means geo-blocking)
+                retry_with_proxy = "socket_not_connected" in error.lower() or "connection_refused" in error.lower()
+                browser2, page2, bb_sid = launch_browserbase(pw, use_proxy=retry_with_proxy)
+                try:
+                    resp2 = page2.goto(url, wait_until="domcontentloaded", timeout=45000)
+                    status2 = resp2.status if resp2 else 0
+                except Exception as retry_nav:
+                    # If Browserbase without proxy failed, try with proxy
+                    if not use_proxy and _is_retryable_network_error(str(retry_nav)):
+                        print(f"[Retry] Browserbase (no proxy) failed: {str(retry_nav).split(chr(10))[0]}")
+                        print("[Retry] Retrying with Browserbase + residential proxy")
+                        try:
+                            browser2.close()
+                        except Exception:
+                            pass
+                        browser2, page2, bb_sid = launch_browserbase(pw, use_proxy=True)
+                        resp2 = page2.goto(url, wait_until="domcontentloaded", timeout=45000)
+                        status2 = resp2.status if resp2 else 0
+                    else:
+                        raise
+                print(f"[Retry] Browserbase navigated: {page2.url}, status={status2}")
+
+                if status2 in (403, 401, 0):
+                    raise RuntimeError(f"Browserbase retry also failed: status={status2}")
+
+                # Run pre-fill + CUA on the Browserbase page
+                time.sleep(2)
+                solve_captcha(page2, url)
+                handle_validate_gate(page2, buyer)
+                prefill_all(page2, buyer, receipt)
+                prefill_custom_dropdowns(page2, buyer)
+                solve_captcha(page2, url)
+
+                _run_state["tier"] = "tier2"
+                actions = run_tier2(page2, buyer, receipt, receipt_image_b64, merchant_hints=ts_result.get("cua_hints", ""))
+                time.sleep(3)
+
+                # Post-CUA CAPTCHA + submit
+                if solve_captcha(page2, url):
+                    submit_btn = page2.locator('button[type="submit"], button:has-text("Submit"), input[type="submit"]').first
+                    if submit_btn.count() > 0 and submit_btn.is_visible():
+                        try:
+                            submit_btn.click(timeout=5000)
+                            print("[Retry] Re-submitted after CAPTCHA")
+                            time.sleep(5)
+                        except Exception:
+                            pass
+
+                # Verify
+                time.sleep(2)
+                shot2 = base64.b64encode(page2.screenshot(type="png", full_page=True)).decode()
+                vresult = gemini_flash(
+                    "Analyze this page AFTER a form submit attempt. Classify:\n"
+                    "- submitted=true ONLY if you see a clear success message\n"
+                    "- submitted=false if: the SAME form is still visible, OR validation errors\n\n"
+                    "Respond in JSON only: {\"submitted\": true/false, \"confidence\": 0.0-1.0, \"evidence\": \"what you see\"}",
+                    shot2,
+                )
+                retry_success = False
+                retry_evidence = ""
+                json_match = re.search(r'\{[\s\S]*?\}', vresult)
+                if json_match:
+                    vdata = json.loads(json_match.group())
+                    retry_success = vdata.get("submitted", False) and vdata.get("confidence", 0) >= 0.7
+                    retry_evidence = vdata.get("evidence", "")
+                    print(f"[Retry Verify] submitted={vdata.get('submitted')}, confidence={vdata.get('confidence')}, evidence={retry_evidence[:100]}")
+
+                # Save formConfig on success
+                if retry_success and merchant:
+                    try:
+                        new_fc = extract_form_config(page2)
+                        if new_fc and new_fc.get("fields"):
+                            new_fc["cuaHints"] = ts_result.get("cua_hints", "")
+                            convex_mutation("functions/system:saveMerchantFormConfig", {"merchantName": merchant, "formConfig": new_fc})
+                    except Exception:
+                        pass
+
+                browser2.close()
+                dur = int((time.time() - start) * 1000)
+                status_str = "success" if retry_success else "failed"
+                print(f"[Retry] Done in {dur}ms, verified={status_str}")
+                print(f"[Cost] {cost_tracker.summary()}")
+                _run_state["evidence"] = retry_evidence
+                _run_state["cua_actions"] = actions
+                convex_mutation("functions/system:reportEinvoiceFormFillResult", {
+                    "expenseClaimId": claim_id, "emailRef": event["emailRef"],
+                    "status": status_str, "durationMs": dur,
+                    **({"errorMessage": f"Browserbase retry: {retry_evidence[:200]}"} if not retry_success else {}),
+                    **_debug_fields(),
+                })
+                return {"success": retry_success, "retry": "browserbase", "durationMs": dur, "cost": cost_tracker.to_dict()}
+
+            except Exception as retry_err:
+                print(f"[Retry] Browserbase retry failed: {retry_err}")
+                traceback.print_exc()
+                try:
+                    browser2.close()
+                except Exception:
+                    pass
+
+        # Close browser if still open
         if browser:
             try:
                 browser.close()
