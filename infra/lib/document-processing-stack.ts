@@ -178,8 +178,19 @@ export class DocumentProcessingStack extends cdk.Stack {
     });
     capsolverParam.grantRead(formFillFunction);
     formFillFunction.addEnvironment('CAPSOLVER_SSM_PARAM', '/finanseal/capsolver-api-key');
-    formFillFunction.addEnvironment('BROWSERBASE_API_KEY', process.env.BROWSERBASE_API_KEY || '');
-    formFillFunction.addEnvironment('BROWSERBASE_PROJECT_ID', process.env.BROWSERBASE_PROJECT_ID || '');
+
+    // Browserbase credentials (SSM) — read at runtime, not baked into env
+    // This prevents CDK deploys from overwriting credentials with stale .env.local values
+    const bbApiKeyParam = ssm.StringParameter.fromSecureStringParameterAttributes(this, 'BrowserbaseApiKey', {
+      parameterName: '/finanseal/browserbase-api-key',
+    });
+    const bbProjectIdParam = ssm.StringParameter.fromStringParameterAttributes(this, 'BrowserbaseProjectId', {
+      parameterName: '/finanseal/browserbase-project-id',
+    });
+    bbApiKeyParam.grantRead(formFillFunction);
+    bbProjectIdParam.grantRead(formFillFunction);
+    formFillFunction.addEnvironment('BROWSERBASE_API_KEY_SSM_PARAM', '/finanseal/browserbase-api-key');
+    formFillFunction.addEnvironment('BROWSERBASE_PROJECT_ID_SSM_PARAM', '/finanseal/browserbase-project-id');
 
     // Merchant login credentials (SSM SecureString) — read at runtime for login-required merchants
     formFillFunction.addToRolePolicy(new iam.PolicyStatement({

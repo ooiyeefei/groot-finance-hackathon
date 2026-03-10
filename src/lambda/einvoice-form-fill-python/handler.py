@@ -33,8 +33,8 @@ MAX_TURNS = 50
 CONVEX_URL = os.environ.get("NEXT_PUBLIC_CONVEX_URL", "")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 BU_LAMBDA_ARN = os.environ.get("EINVOICE_FORM_FILL_BU_LAMBDA_ARN", "")
-BB_API_KEY = os.environ.get("BROWSERBASE_API_KEY", "")
-BB_PROJECT_ID = os.environ.get("BROWSERBASE_PROJECT_ID", "")
+BB_API_KEY_SSM = os.environ.get("BROWSERBASE_API_KEY_SSM_PARAM", "/finanseal/browserbase-api-key")
+BB_PROJECT_ID_SSM = os.environ.get("BROWSERBASE_PROJECT_ID_SSM_PARAM", "/finanseal/browserbase-project-id")
 
 STATE_CODES = {
     "JHR": "Johor", "KDH": "Kedah", "KTN": "Kelantan", "MLK": "Melaka",
@@ -65,6 +65,31 @@ def convex_query(path: str, args: dict) -> Any:
         return r.get("value") if r.get("status") == "success" else None
     except Exception:
         return None
+
+
+# ── Browserbase credentials (SSM, cached) ────────────────────
+
+_bb_api_key_cache: str | None = None
+_bb_project_id_cache: str | None = None
+
+def _get_bb_credentials() -> tuple[str, str]:
+    """Read Browserbase API key + project ID from SSM (cached for Lambda warm starts)."""
+    global _bb_api_key_cache, _bb_project_id_cache
+    if _bb_api_key_cache and _bb_project_id_cache:
+        return _bb_api_key_cache, _bb_project_id_cache
+    try:
+        import boto3
+        ssm_client = boto3.client("ssm")
+        resp = ssm_client.get_parameters(
+            Names=[BB_API_KEY_SSM, BB_PROJECT_ID_SSM], WithDecryption=True
+        )
+        params = {p["Name"]: p["Value"] for p in resp.get("Parameters", [])}
+        _bb_api_key_cache = params.get(BB_API_KEY_SSM, "")
+        _bb_project_id_cache = params.get(BB_PROJECT_ID_SSM, "")
+        return _bb_api_key_cache, _bb_project_id_cache
+    except Exception as e:
+        print(f"[BB] SSM read failed: {e}")
+        return "", ""
 
 
 # ── CAPTCHA Solver (CapSolver) ──────────────────────────────
@@ -799,9 +824,10 @@ def launch_browserbase(pw, use_proxy: bool = False) -> tuple:
         use_proxy: Enable residential proxy for sites that block datacenter IPs.
     """
     from browserbase import Browserbase
-    bb = Browserbase(api_key=BB_API_KEY)
+    bb_key, bb_proj = _get_bb_credentials()
+    bb = Browserbase(api_key=bb_key)
     create_params = {
-        "project_id": BB_PROJECT_ID,
+        "project_id": bb_proj,
         "region": "ap-southeast-1",  # Singapore — closest to Malaysia, avoids geo-blocking
         "api_timeout": 420,  # 7 minutes — complex flows (login + buyer profile + form fill) need more time
     }
@@ -830,7 +856,8 @@ def launch_local(pw) -> tuple:
 
 def needs_browserbase(merchant_hints: str) -> bool:
     """Check if merchant requires Browserbase (Cloudflare managed challenge, WAF blocking, connection issues, etc.)."""
-    if not BB_API_KEY or not BB_PROJECT_ID:
+    bb_key, bb_proj = _get_bb_credentials()
+    if not bb_key or not bb_proj:
         return False
     hints_lower = (merchant_hints or "").lower()
     return any(k in hints_lower for k in [
@@ -2469,7 +2496,8 @@ def handler(event: dict, context=None) -> dict:
             print(f"[Form Fill] Navigated: {page.url}, status={status}")
         except Exception as nav_err:
             nav_error_str = str(nav_err)
-            if _is_retryable_network_error(nav_error_str) and BB_API_KEY:
+            bb_key, _ = _get_bb_credentials()
+            if _is_retryable_network_error(nav_error_str) and bb_key:
                 print(f"[Browser] Navigation failed: {nav_error_str.split(chr(10))[0]}")
                 try:
                     browser.close()
@@ -2527,7 +2555,8 @@ def handler(event: dict, context=None) -> dict:
         # Runtime detection: if managed Turnstile found and we're on local browser → switch to Browserbase
         if not use_bb and status == 200:
             time.sleep(3)  # Let Turnstile script load
-            if detect_managed_turnstile(page) and BB_API_KEY:
+            bb_key_check, _ = _get_bb_credentials()
+            if detect_managed_turnstile(page) and bb_key_check:
                 print("[Browser] Managed Turnstile detected — switching to Browserbase")
                 _run_state["browser_type"] = "browserbase"
                 browser.close()
@@ -2819,9 +2848,10 @@ def handler(event: dict, context=None) -> dict:
                 pass
 
         # ── Retry with Browserbase if troubleshooter says so (same invocation) ──
+        _bb_retry_key, _bb_retry_proj = _get_bb_credentials()
         if (ts_result.get("infra_action") == "use_browserbase"
                 and not _run_state.get("browserbase_retry_attempted")
-                and BB_API_KEY and BB_PROJECT_ID):
+                and _bb_retry_key and _bb_retry_proj):
             _run_state["browserbase_retry_attempted"] = True
             print("[Retry] Troubleshooter recommended Browserbase — retrying in same invocation")
 
