@@ -289,41 +289,24 @@ export default function EditExpenseModalNew({
   }, [einvoiceData?.einvoiceRequestStatus, refreshEinvoiceData])
 
   // Generate signed URL when receipt info is loaded
+  // Uses lightweight /api/v1/signed-url endpoint (skips redundant Convex query)
   useEffect(() => {
     const generateSignedUrl = async () => {
-      if (!receiptInfo.storagePath) {
-        console.log('🔍 [Edit Modal] No storage_path available:', receiptInfo.storagePath)
-        return
-      }
+      if (!receiptInfo.storagePath) return
 
       try {
         setImageLoading(true)
-        console.log('🔍 [Edit Modal] Generating signed URL for storage path:', receiptInfo.storagePath)
-
-        const response = await fetch(`/api/v1/expense-claims/${expenseClaimId}/image-url?useRawFile=true&storagePath=${encodeURIComponent(receiptInfo.storagePath)}`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          }
-        })
+        const s3Key = `expense_claims/${receiptInfo.storagePath}`
+        const response = await fetch(`/api/v1/signed-url?path=${encodeURIComponent(s3Key)}`)
 
         if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.error || 'Failed to generate signed URL')
+          throw new Error('Failed to generate signed URL')
         }
 
         const result = await response.json()
-        const imageUrl = result?.data?.imageUrl || result?.imageUrl || result?.signedUrl || null
-
-        if (imageUrl) {
-          console.log('✅ [Edit Modal] Generated signed URL:', imageUrl)
-          setSignedImageUrl(imageUrl)
-        } else {
-          console.error('❌ [Edit Modal] No imageUrl found in response:', result)
-          setSignedImageUrl(null)
-        }
+        setSignedImageUrl(result?.data?.imageUrl || null)
       } catch (error) {
-        console.error('❌ [Edit Modal] Failed to generate signed URL:', error)
+        console.error('[Edit Modal] Failed to generate signed URL:', error)
         setSignedImageUrl(null)
       } finally {
         setImageLoading(false)
