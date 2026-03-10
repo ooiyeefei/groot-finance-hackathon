@@ -80,6 +80,9 @@ interface BusinessContextState {
   switchError: string | null
   profileError: string | null
 
+  // Data integrity warnings
+  isMissingCurrency: boolean
+
   // Actions
   refreshMemberships: () => Promise<void>
   refreshContext: () => Promise<void>
@@ -647,6 +650,21 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
   }, [activeContext, isLoadingProfile, profile, refreshProfile])
 
   // ============================================================================
+  // Data Integrity Checks
+  // ============================================================================
+
+  // Detect missing homeCurrency on loaded business profile
+  const isMissingCurrency = !!(
+    profile &&
+    !isLoadingProfile &&
+    !profile.home_currency
+  )
+
+  if (isMissingCurrency) {
+    log.warn('Business profile is missing home_currency — user should set it in Business Settings')
+  }
+
+  // ============================================================================
   // Context Value
   // ============================================================================
 
@@ -667,6 +685,9 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
     contextError,
     switchError,
     profileError,
+
+    // Data integrity warnings
+    isMissingCurrency,
 
     // Actions
     refreshMemberships,

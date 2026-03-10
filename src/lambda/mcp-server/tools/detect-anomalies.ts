@@ -179,7 +179,7 @@ export async function detectAnomalies(
           transaction_id: txn._id,
           description: txn.description || 'Unknown transaction',
           amount,
-          currency: txn.currency || 'SGD',
+          currency: txn.currency || 'MYR',
           category,
           category_name: txn.categoryName || category,
           transaction_date: txn.transactionDate || '',

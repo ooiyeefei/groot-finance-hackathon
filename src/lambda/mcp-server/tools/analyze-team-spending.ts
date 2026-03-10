@@ -106,7 +106,7 @@ export async function analyzeTeamSpending(
     }
 
     // Determine currency from first entry
-    const currency = filteredEntries[0]?.homeCurrency || 'SGD';
+    const currency = filteredEntries[0]?.homeCurrency || 'MYR';
 
     // Compute employee summaries
     const employeeMap = new Map<string, {

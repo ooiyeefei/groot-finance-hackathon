@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const homeCurrency = business?.homeCurrency || 'SGD'
+    const homeCurrency = business?.homeCurrency || 'MYR'
 
     // Helper function to escape CSV values
     const escapeCSV = (value: unknown): string => {

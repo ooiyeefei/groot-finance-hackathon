@@ -421,7 +421,7 @@ export default function ProcessingStep({
       thinking: {
         step1_vendor_analysis: `Identified vendor: ${claimData.vendor_name || 'Unknown'}`,
         step2_date_identification: `Found date: ${claimData.transaction_date || 'Not found'}`,
-        step3_amount_parsing: `Extracted amount: ${claimData.total_amount || 0} ${claimData.currency || 'SGD'}`,
+        step3_amount_parsing: `Extracted amount: ${claimData.total_amount || 0} ${claimData.currency || 'MYR'}`,
         step4_tax_calculation: `Tax analysis: No tax information found`,
         step5_line_items_extraction: `Line items: 0 items extracted`,
         step6_validation_checks: `Validation complete. Confidence: ${Math.round((claimData.extraction_quality === 'high' ? 0.9 : claimData.extraction_quality === 'medium' ? 0.7 : 0.5) * 100)}%`,
@@ -430,7 +430,7 @@ export default function ProcessingStep({
       extractedData: {
         vendorName: claimData.vendor_name || '',
         totalAmount: claimData.total_amount || 0,
-        currency: claimData.currency || 'SGD',
+        currency: claimData.currency || 'MYR',
         transactionDate: claimData.transaction_date || '',
         description: claimData.description || '',
         businessPurpose: claimData.business_purpose || '',

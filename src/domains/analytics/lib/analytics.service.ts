@@ -152,7 +152,7 @@ async function getBusinessHomeCurrency(businessId: string): Promise<SupportedCur
       businessId
     })
 
-    return (businessProfile?.home_currency as SupportedCurrency) || 'SGD'
+    return (businessProfile?.home_currency as SupportedCurrency) || 'MYR'
   } catch (error) {
     console.error('[Analytics Service] Failed to get business currency:', error)
     return 'SGD'
@@ -178,7 +178,7 @@ export async function calculateFinancialAnalytics(
   periodEnd: Date,
   options: AnalyticsCalculationOptions = {}
 ): Promise<FinancialAnalytics> {
-  const targetCurrency = options.homeCurrency || 'SGD'
+  const targetCurrency = options.homeCurrency || 'MYR'
 
   // Get user profile to find their business ID
   const userProfile = await ensureUserProfile(clerkUserId)
@@ -244,7 +244,7 @@ export async function calculateAnalyticsTrends(
     profit_change: number
   }
 }> {
-  const targetCurrency = options.homeCurrency || 'SGD'
+  const targetCurrency = options.homeCurrency || 'MYR'
 
   // Get user profile to find their business ID
   const userProfile = await ensureUserProfile(clerkUserId)
@@ -310,7 +310,7 @@ export async function runCashFlowMonitoring(
     throw new Error('No business context found')
   }
 
-  const homeCurrency = userProfile.home_currency || 'SGD'
+  const homeCurrency = userProfile.home_currency || 'MYR'
 
   // Get Convex client
   const { client: convexClient } = await getAuthenticatedConvex()

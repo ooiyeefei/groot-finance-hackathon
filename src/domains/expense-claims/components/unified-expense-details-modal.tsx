@@ -345,7 +345,7 @@ export default function UnifiedExpenseDetailsModal({
           vendorName: claimDetails.vendor_name || claimDetails.transaction?.vendor_name || '',
           transactionDate: claimDetails.transaction_date || claimDetails.transaction?.transaction_date || '',
           totalAmount: parseFloat(claimDetails.total_amount || claimDetails.transaction?.original_amount || '0'),
-          currency: claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD',
+          currency: claimDetails.currency || claimDetails.transaction?.original_currency || 'MYR',
           referenceNumber: claimDetails.reference_number || claimDetails.transaction?.reference_number || undefined,
         }),
       })
@@ -492,7 +492,7 @@ export default function UnifiedExpenseDetailsModal({
                       <div className="flex items-center gap-2">
                         <DollarSign className="w-4 md:w-5 h-4 md:h-5 text-success" />
                         <span className="font-semibold text-base md:text-lg text-success">
-                          {claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD'} {parseFloat(claimDetails.total_amount || claimDetails.transaction?.original_amount || '0').toFixed(2)}
+                          {claimDetails.currency || claimDetails.transaction?.original_currency || 'MYR'} {parseFloat(claimDetails.total_amount || claimDetails.transaction?.original_amount || '0').toFixed(2)}
                         </span>
                       </div>
                       <div className="hidden md:flex items-center gap-2">
@@ -798,11 +798,11 @@ export default function UnifiedExpenseDetailsModal({
                                         {item.item_description || 'Item'}
                                       </span>
                                       <span className="text-foreground font-semibold text-sm whitespace-nowrap">
-                                        {claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD'} {parseFloat(item.total_amount || '0').toFixed(2)}
+                                        {claimDetails.currency || claimDetails.transaction?.original_currency || 'MYR'} {parseFloat(item.total_amount || '0').toFixed(2)}
                                       </span>
                                     </div>
                                     <div className="text-xs text-muted-foreground">
-                                      Qty: {item.quantity || 1} × {claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD'} {parseFloat(item.unit_price || '0').toFixed(2)}
+                                      Qty: {item.quantity || 1} × {claimDetails.currency || claimDetails.transaction?.original_currency || 'MYR'} {parseFloat(item.unit_price || '0').toFixed(2)}
                                     </div>
                                   </div>
                                   {/* Desktop: grid layout */}
@@ -814,10 +814,10 @@ export default function UnifiedExpenseDetailsModal({
                                       {item.quantity || 1}
                                     </span>
                                     <span className="text-foreground text-right">
-                                      {claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD'} {parseFloat(item.unit_price || '0').toFixed(2)}
+                                      {claimDetails.currency || claimDetails.transaction?.original_currency || 'MYR'} {parseFloat(item.unit_price || '0').toFixed(2)}
                                     </span>
                                     <span className="text-foreground font-medium text-right">
-                                      {claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD'} {parseFloat(item.total_amount || '0').toFixed(2)}
+                                      {claimDetails.currency || claimDetails.transaction?.original_currency || 'MYR'} {parseFloat(item.total_amount || '0').toFixed(2)}
                                     </span>
                                   </div>
                                 </div>
@@ -827,7 +827,7 @@ export default function UnifiedExpenseDetailsModal({
                               <div className="flex justify-between items-center md:grid md:grid-cols-4 md:gap-2 bg-blue-50 dark:bg-gray-800 dark:bg-blue-900/10 p-3 rounded-lg border border-blue-200 dark:border-blue-700/50 mt-4">
                                 <span className="text-blue-900 dark:text-white font-medium md:col-span-3">Total Amount</span>
                                 <span className="text-blue-900 dark:text-white font-bold text-right text-base md:text-lg">
-                                  {claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD'} {parseFloat(claimDetails.total_amount || claimDetails.transaction?.original_amount || '0').toFixed(2)}
+                                  {claimDetails.currency || claimDetails.transaction?.original_currency || 'MYR'} {parseFloat(claimDetails.total_amount || claimDetails.transaction?.original_amount || '0').toFixed(2)}
                                 </span>
                               </div>
                             </div>
@@ -1034,7 +1034,7 @@ export default function UnifiedExpenseDetailsModal({
                 vendorName: claimDetails.vendor_name || claimDetails.transaction?.vendor_name || '',
                 transactionDate: claimDetails.transaction_date || claimDetails.transaction?.transaction_date || '',
                 totalAmount: parseFloat(claimDetails.total_amount || claimDetails.transaction?.original_amount || '0'),
-                currency: claimDetails.currency || claimDetails.transaction?.original_currency || 'SGD',
+                currency: claimDetails.currency || claimDetails.transaction?.original_currency || 'MYR',
                 referenceNumber: claimDetails.reference_number || claimDetails.transaction?.reference_number || null,
                 status: claimDetails.status,
                 submitter: { _id: '', fullName: claimDetails.employee_name || 'Unknown', email: '' },
@@ -1044,7 +1044,7 @@ export default function UnifiedExpenseDetailsModal({
                 vendorName: duplicateMatches[0]?.matchedClaim?.vendorName || '',
                 transactionDate: duplicateMatches[0]?.matchedClaim?.transactionDate || '',
                 totalAmount: duplicateMatches[0]?.matchedClaim?.totalAmount || 0,
-                currency: duplicateMatches[0]?.matchedClaim?.currency || 'SGD',
+                currency: duplicateMatches[0]?.matchedClaim?.currency || 'MYR',
                 referenceNumber: duplicateMatches[0]?.matchedClaim?.referenceNumber || null,
                 status: duplicateMatches[0]?.matchedClaim?.status || 'draft',
                 submitter: { _id: '', fullName: duplicateMatches[0]?.matchedClaim?.submittedByName || 'Unknown', email: '' },

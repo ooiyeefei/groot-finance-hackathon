@@ -1003,7 +1003,7 @@ CRITICAL: Return only the JSON object, no markdown formatting or additional text
         },
         vendor_name: parsed.vendor_name || 'Unknown Vendor',
         total_amount: parsed.total_amount || 0,
-        currency: parsed.currency || 'SGD',
+        currency: parsed.currency || 'MYR',
         transaction_date: parsed.transaction_date || new Date().toISOString().split('T')[0],
         description: parsed.description || '',
         invoice_data: parsed.invoice_data,

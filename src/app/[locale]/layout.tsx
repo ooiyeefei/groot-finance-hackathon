@@ -15,6 +15,7 @@ import { ChatWidget } from '@/domains/chat/components/chat-widget';
 import { SubscriptionLockOverlay } from '@/domains/billing/components/subscription-lock-overlay';
 import { ConsentBanner } from '@/components/consent-banner';
 import { ConsentLockOverlay } from '@/components/consent-lock-overlay';
+import { MissingCurrencyBanner } from '@/components/missing-currency-banner';
 
 interface LocaleLayoutProps {
   children: React.ReactNode;
@@ -75,6 +76,7 @@ export default async function LocaleLayout({
                     <PWAProvider>
                       <MobileAppShellConnected>
                         <ConsentBanner />
+                        <MissingCurrencyBanner />
                         {children}
                         <SubscriptionLockOverlay />
                         <ConsentLockOverlay />

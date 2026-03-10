@@ -366,7 +366,7 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
         if (extractedData.vendor_name) aiText.push(`Vendor: ${extractedData.vendor_name}`)
         if (extractedData.document_number) aiText.push(`Document Number: ${extractedData.document_number}`)
         if (extractedData.total_amount) {
-          const currency = extractedData.currency || 'SGD'
+          const currency = extractedData.currency || 'MYR'
           aiText.push(`Amount: ${extractedData.total_amount} ${currency}`)
         }
         if (extractedData.transaction_date) aiText.push(`Date: ${extractedData.transaction_date}`)
@@ -1134,7 +1134,7 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
                         >
                           <div className="text-xs text-muted-foreground mb-1">Amount</div>
                           <div className="text-sm text-foreground font-medium">
-                            {getFieldValue('currency') || 'SGD'} {formatNumber(getFieldValue('total_amount'), 2)}
+                            {getFieldValue('currency') || 'MYR'} {formatNumber(getFieldValue('total_amount'), 2)}
                           </div>
                         </div>
                       )}
@@ -1739,7 +1739,7 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
                             if (extractedData.vendor_name) parts.push(`Vendor: ${extractedData.vendor_name}`);
                             if (extractedData.transaction_date) parts.push(`Date: ${extractedData.transaction_date}`);
                             if (extractedData.total_amount) {
-                              const currency = extractedData.currency || 'SGD';
+                              const currency = extractedData.currency || 'MYR';
                               parts.push(`Total Amount: ${extractedData.total_amount} ${currency}`);
                             }
 

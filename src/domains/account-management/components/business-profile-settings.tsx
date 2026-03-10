@@ -82,7 +82,7 @@ export default function BusinessProfileSettings() {
     lhdnClientId: '',
     lhdnClientSecret: '',
     peppolParticipantId: '',
-    homeCurrency: 'SGD' as SupportedCurrency,
+    homeCurrency: 'MYR' as SupportedCurrency,
   })
 
   useEffect(() => {
@@ -106,7 +106,7 @@ export default function BusinessProfileSettings() {
         lhdnClientId: profile.lhdn_client_id || '',
         lhdnClientSecret: '', // Secret stored in AWS SSM, not returned from Convex
         peppolParticipantId: profile.peppol_participant_id || '',
-        homeCurrency: (profile.home_currency || 'SGD') as SupportedCurrency,
+        homeCurrency: (profile.home_currency || 'MYR') as SupportedCurrency,
       }
       setInitialValues(initial)
       setBusinessName(initial.businessName)
@@ -330,7 +330,7 @@ export default function BusinessProfileSettings() {
           lhdnClientId: lhdnClientId.trim(),
           lhdnClientSecret: lhdnClientSecret.trim(),
           peppolParticipantId: peppolParticipantId.trim(),
-          homeCurrency: (result.data.home_currency || 'SGD') as SupportedCurrency
+          homeCurrency: (result.data.home_currency || 'MYR') as SupportedCurrency
         })
         addToast({
           type: 'success',
@@ -1022,7 +1022,7 @@ export default function BusinessProfileSettings() {
               This currency will be used for dashboard summaries and conversions throughout the app.
             </p>
             <select
-              value={profile?.home_currency || 'SGD'}
+              value={profile?.home_currency || 'MYR'}
               onChange={(e) => handleCurrencyChange(e.target.value as SupportedCurrency)}
               disabled={isLoading || isCurrencySaving}
               className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
@@ -1051,7 +1051,7 @@ export default function BusinessProfileSettings() {
                 <div>
                   <h4 className="text-sm font-medium text-foreground mb-1">Currency Conversion</h4>
                   <p className="text-sm text-muted-foreground">
-                    Transactions in other currencies will be converted to {profile?.home_currency || 'SGD'} for dashboard summaries.
+                    Transactions in other currencies will be converted to {profile?.home_currency || 'MYR'} for dashboard summaries.
                     Original amounts and currencies are always preserved.
                   </p>
                 </div>

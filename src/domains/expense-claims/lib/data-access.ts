@@ -80,7 +80,7 @@ async function findNextApprover(
 async function getUserData(userId: string, convexClient: any) {
   const user = await convexClient.query(api.functions.users.getCurrentUser, {})
   return {
-    home_currency: user?.homeCurrency || 'SGD'
+    home_currency: user?.homeCurrency || 'MYR'
   }
 }
 
@@ -1182,7 +1182,7 @@ export async function getExpenseAnalytics(
             reimbursed: 0
           },
           total_amount: 0,
-          currency: employeeProfile.home_currency || 'SGD',
+          currency: employeeProfile.home_currency || 'MYR',
           trends: {
             total_amount_change: 0,
             total_claims_change: 0,
@@ -1210,7 +1210,7 @@ export async function getExpenseAnalytics(
         ...analytics.statusCounts
       },
       total_amount: analytics.totalAmount || 0,
-      currency: employeeProfile.home_currency || 'SGD',
+      currency: employeeProfile.home_currency || 'MYR',
       scope,
       user_role: {
         employee: true,

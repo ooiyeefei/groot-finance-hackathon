@@ -98,7 +98,7 @@ export async function getUserProfile(clerkUserId: string): Promise<UserProfile> 
     id: user._id,
     email: user.email,
     full_name: user.fullName || null,
-    preferred_currency: (user.homeCurrency || 'SGD') as SupportedCurrency,
+    preferred_currency: (user.homeCurrency || 'MYR') as SupportedCurrency,
     language_preference: user.preferences?.language || 'en',
     timezone: user.preferences?.timezone || 'Asia/Singapore',
     created_at: user._creationTime ? new Date(user._creationTime).toISOString() : null,
@@ -190,7 +190,7 @@ export async function getTeamMembers(
       manager: false,
       finance_admin: false
     },
-    home_currency: member.home_currency || 'SGD',
+    home_currency: member.home_currency || 'MYR',
     manager_id: member.manager_id,
     manager_name: member.manager_name,
     manager_user_id: member.manager_user_id,
@@ -284,7 +284,7 @@ export async function getDirectReports(
       manager: false,
       finance_admin: false
     },
-    home_currency: member.home_currency || 'SGD',
+    home_currency: member.home_currency || 'MYR',
     manager_id: member.manager_id,
     manager_name: null,
     manager_user_id: null,

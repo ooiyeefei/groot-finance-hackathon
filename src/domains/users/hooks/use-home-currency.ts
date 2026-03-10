@@ -60,8 +60,8 @@ export function useHomeCurrency() {
       }
     }
 
-    // Priority 3: Default to SGD (matches database default)
-    return 'SGD'
+    // Priority 3: Default to MYR (matches database default for MY-focused product)
+    return 'MYR'
   })
 
   const [isLoading, setIsLoading] = useState(!cachedCurrency)

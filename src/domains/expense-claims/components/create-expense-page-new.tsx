@@ -196,7 +196,7 @@ export default function CreateExpensePageNew({
           ...prev,
           vendor_name: expense_claim.vendor_name || '',
           original_amount: expense_claim.total_amount || 0,
-          original_currency: expense_claim.currency || 'SGD',
+          original_currency: expense_claim.currency || 'MYR',
           transaction_date: expense_claim.transaction_date || new Date().toISOString().split('T')[0],
           expense_category: expense_claim.expense_category || 'other_business',
           business_purpose: expense_claim.business_purpose || '',

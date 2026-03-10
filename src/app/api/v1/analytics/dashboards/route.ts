@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const period = searchParams.get('period') as 'month' | 'quarter' | 'year' || 'month'
-    const homeCurrency = searchParams.get('homeCurrency') as SupportedCurrency || 'SGD'
+    const homeCurrency = searchParams.get('homeCurrency') as SupportedCurrency || 'MYR'
     const includeTrends = searchParams.get('includeTrends') === 'true'
     const startDateParam = searchParams.get('startDate')
     const endDateParam = searchParams.get('endDate')
