@@ -355,8 +355,8 @@ export const updateReferralStatus = mutation({
       updates.convertedAt = now;
       updates.planAtConversion = args.planName;
 
-      // Flat RM 80 referral commission for any annual plan conversion
-      const earning = 80;
+      // Tiered referral commission: Starter RM 80, Pro RM 200 (annual plans only)
+      const earning = args.planName === "pro" ? 200 : 80;
       updates.estimatedEarning = earning;
 
       // Update referral code aggregate stats

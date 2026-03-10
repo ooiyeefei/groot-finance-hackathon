@@ -20,7 +20,7 @@ export function ReferralList() {
             No referrals yet. Share your code to start earning!
           </p>
           <p className="text-muted-foreground text-sm mt-1">
-            You earn RM 80 for every business that subscribes to an annual plan.
+            Earn RM 80 (Starter) or RM 200 (Pro) for every annual subscription.
           </p>
         </div>
       ) : (

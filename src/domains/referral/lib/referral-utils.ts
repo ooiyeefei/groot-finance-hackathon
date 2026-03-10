@@ -40,10 +40,12 @@ export function generateUniqueReferralCode(
 }
 
 /**
- * Flat RM 80 referral commission for any annual plan conversion.
+ * Tiered referral commission: Starter RM 80, Pro RM 200.
+ * Monthly plans are not commissionable (RM 0).
  */
-export function calculateEarning(_planName: string, isAnnual = true): number {
+export function calculateEarning(planName: string, isAnnual = true): number {
   if (!isAnnual) return 0
+  if (planName === 'pro') return 200
   return 80
 }
 
