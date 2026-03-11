@@ -2836,8 +2836,29 @@ def handler(event: dict, context=None) -> dict:
             time.sleep(3)  # CUA already submitted
             handle_confirmation_dialog(page)
 
+        # ── Check if CUA already submitted successfully (form reset = success) ──
+        # After successful submission, many merchant forms reset to a blank state.
+        # Detect this to skip post-CUA safety nets that would re-submit an empty form.
+        cua_already_submitted = False
+        try:
+            # Check for success indicators: success dialogs or form fields are now empty
+            success_dialog = page.locator('text=/Request Submitted|Successfully|Thank you/i')
+            if success_dialog.count() > 0 and success_dialog.first.is_visible():
+                cua_already_submitted = True
+                print("[Post-CUA] Success dialog detected — CUA already submitted")
+            elif receipt_image_local and receipt_uploaded:
+                # If we uploaded the image during CUA and fields are now empty, form was reset
+                receipt_field = page.locator('input[type="text"]').first
+                if receipt_field.count() > 0:
+                    val = receipt_field.input_value()
+                    if not val:
+                        cua_already_submitted = True
+                        print("[Post-CUA] Form fields empty — CUA already submitted (form reset)")
+        except Exception:
+            pass
+
         # ── Post-CUA: Final upload safety net (normally handled by CUA loop interceptor) ──
-        if receipt_image_local and not receipt_uploaded:
+        if not cua_already_submitted and receipt_image_local and not receipt_uploaded:
             # Dismiss any error dialog first (e.g. "Please select and upload an image!")
             try:
                 close_btn = page.locator('button:has-text("Close"), button:has-text("OK"), .swal2-confirm')
@@ -2862,7 +2883,10 @@ def handler(event: dict, context=None) -> dict:
                     print(f"[Post-CUA] Re-submit failed: {e}")
 
         # ── Post-CUA: Solve any CAPTCHA (may have loaded lazily after scroll/CUA) ──
-        captcha_ok = solve_captcha(page, url)
+        if cua_already_submitted:
+            captcha_ok = False  # Skip — form already submitted
+        else:
+            captcha_ok = solve_captcha(page, url)
         if captcha_ok:
             # Re-submit if CAPTCHA was solved and form is still visible
             submit_btn = page.locator('button[type="submit"], button:has-text("Submit"), input[type="submit"]').first
