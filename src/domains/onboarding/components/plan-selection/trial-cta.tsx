@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button'
 import { Check, Sparkles } from 'lucide-react'
+import { isNativePlatform } from '@/lib/capacitor/platform'
 
 interface TrialCTAProps {
   onStartTrial: () => void
@@ -15,6 +16,9 @@ export function TrialCTA({ onStartTrial, isLoading = false }: TrialCTAProps) {
     'All Pro features',
     'No credit card required'
   ]
+
+  // Hide trial CTA on native iOS
+  if (isNativePlatform()) return null
 
   return (
     <div className="relative overflow-hidden rounded-lg border border-border bg-gradient-to-br from-primary/10 via-primary/5 to-background p-6 sm:p-8">

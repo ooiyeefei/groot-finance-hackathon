@@ -77,7 +77,7 @@ export function SubscriptionCard() {
                 </Badge>
               </div>
               <p className="text-sm text-muted-foreground">
-                {isTrialing ? (isNativePlatform() ? 'Free trial' : 'Free trial • Upgrade anytime') : (isNativePlatform() ? plan.displayName : `${plan.currency} ${plan.price}/month`)}
+                {isTrialing ? (isNativePlatform() ? plan.displayName : 'Free trial • Upgrade anytime') : (isNativePlatform() ? plan.displayName : `${plan.currency} ${plan.price}/month`)}
               </p>
             </div>
           </div>

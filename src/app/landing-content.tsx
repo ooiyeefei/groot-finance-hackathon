@@ -445,23 +445,19 @@ export default function LandingContent({ country }: { country: string }) {
 
           <div className="hero-fade hero-fade-4 flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
             <a href="/en/sign-up" className="btn-primary px-6 py-3 rounded-lg text-base flex items-center gap-2">
-              <span className="btn-primary-text flex items-center gap-2">Start free trial <Sparkles className="w-4 h-4" /></span>
+              <span className="btn-primary-text flex items-center gap-2">{isNativePlatform() ? "Get started" : "Start free trial"} <Sparkles className="w-4 h-4" /></span>
             </a>
-            {!isNativePlatform() ? (
+            {!isNativePlatform() && (
               <button
                 onClick={() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' })}
                 className="btn-beam px-6 py-3 rounded-lg text-base"
               >
                 <span className="btn-beam-text">View pricing</span>
               </button>
-            ) : (
-              <p className="text-sm text-[#6B7280] font-medium">
-                Visit <span className="text-[#111111] font-semibold">hellogroot.com</span> in your browser for plan details
-              </p>
             )}
           </div>
 
-          <p className="hero-fade hero-fade-4 text-sm text-[#6B7280] font-medium mb-10">14-day free trial &middot; No credit card required</p>
+          {!isNativePlatform() && (<p className="hero-fade hero-fade-4 text-sm text-[#6B7280] font-medium mb-10">14-day free trial &middot; No credit card required</p>)}
 
           <div className="hero-fade hero-fade-4 grid grid-cols-3 gap-8 max-w-lg mx-auto">
             <div className="text-center">

@@ -35,6 +35,7 @@ import { useToast } from '@/components/ui/toast'
 import { useBusinessMemberships, useBusinessContext } from '@/contexts/business-context'
 import { AlertTriangle, Loader2, LogOut, ChevronRight } from 'lucide-react'
 import { isNativePlatform } from '@/lib/capacitor/platform'
+import { NativePlatformRedirect } from '@/components/capacitor/native-platform-redirect'
 
 // Inner component that uses useSearchParams (must be wrapped in Suspense)
 function PlanSelectionContent() {
@@ -225,7 +226,7 @@ function PlanSelectionContent() {
         )}
 
         {/* Pricing Table - Standalone mode for onboarding (hidden on native iOS per Apple IAP guidelines) */}
-        {!isNativePlatform() ? (
+        {!isNativePlatform() && (
           <PricingTable
             standalone
             showLimits
@@ -233,15 +234,7 @@ function PlanSelectionContent() {
             onCheckout={handleCheckout}
             className="max-w-6xl mx-auto"
           />
-        ) : isTrialExpired ? (
-          <div className="max-w-md mx-auto text-center p-6 bg-card border border-border rounded-lg">
-            <p className="text-muted-foreground">
-              To view plans and subscribe, visit{' '}
-              <span className="font-medium text-foreground">hellogroot.com</span>
-              {' '}in your browser.
-            </p>
-          </div>
-        ) : null}
+        )}
 
         {/* Footer Note */}
         <div className="text-center pt-4 space-y-3">

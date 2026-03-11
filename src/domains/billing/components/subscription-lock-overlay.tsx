@@ -115,7 +115,7 @@ export function SubscriptionLockOverlay() {
 
             <div className="flex items-center gap-2 justify-center text-sm text-muted-foreground">
               <Shield className="w-4 h-4" />
-              <span>{isNativePlatform() ? 'Your data is preserved. Please visit finance.hellogroot.com to manage your subscription.' : 'Your data is preserved. Pick up right where you left off.'}</span>
+              <span>{isNativePlatform() ? 'Your data is preserved.' : 'Your data is preserved. Pick up right where you left off.'}</span>
             </div>
 
             <button

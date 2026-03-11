@@ -39,6 +39,9 @@ export function TrialCountdown({
   className,
 }: TrialCountdownProps) {
   const router = useRouter()
+
+  // Hide trial UI entirely on native iOS
+  if (isNativePlatform()) return null
   // Don't render if not on trial or no trial end date
   if (!trial.isOnTrial || trial.daysRemaining === null) {
     return null
