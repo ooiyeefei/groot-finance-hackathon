@@ -1488,6 +1488,27 @@ export default defineSchema({
     .index("by_businessId_module", ["businessId", "module"])
     .index("by_createdBy", ["createdBy"]),
 
+  // CSV Import Templates — saved column mappings for repeat uploads
+  csv_import_templates: defineTable({
+    businessId: v.id("businesses"),
+    name: v.string(),
+    schemaType: v.union(v.literal("sales_statement"), v.literal("bank_statement")),
+    columnMappings: v.array(v.object({
+      sourceHeader: v.string(),
+      targetField: v.string(),
+      confidence: v.optional(v.number()),
+      order: v.number(),
+    })),
+    headerFingerprint: v.string(),
+    sourceHeaders: v.array(v.string()),
+    createdBy: v.id("users"),
+    updatedBy: v.optional(v.id("users")),
+    lastUsedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_fingerprint", ["businessId", "headerFingerprint"])
+    .index("by_businessId_schemaType", ["businessId", "schemaType"]),
+
   // Scheduled export configurations
   export_schedules: defineTable({
     // Multi-tenant scope

@@ -26,6 +26,42 @@ src/domains/
 ├── analytics/        # Dashboards & metrics
 ├── users/            # Team management
 └── ...               # See docs/architecture/overview.md
+
+src/lib/
+├── csv-parser/       # Shared: CSV/XLSX parsing + column mapping
+├── ai/               # Shared: AI config, LangGraph agent
+├── utils/            # Shared: formatters, helpers
+└── hooks/            # Shared: reusable React hooks
+```
+
+### Domain-Driven Design (MANDATORY)
+
+**`src/domains/` is for business domains only** — features that represent a real user capability (expense claims, sales invoices, accounting entries). Each domain owns its pages, components, hooks, and business logic.
+
+**`src/lib/` is for shared capabilities** — reusable infrastructure that multiple domains consume (CSV parsing, AI services, utilities). Shared capabilities NEVER get their own route/page or sidebar entry.
+
+**Rules when adding new features:**
+1. **Ask "Is this a business domain or a shared capability?"**
+   - Business domain = something users navigate to (expense claims, sales invoices, analytics)
+   - Shared capability = something other features use (CSV parsing, file upload, AI mapping, export engine)
+2. **Business domains** → `src/domains/<domain-name>/` with components, hooks, lib, types
+3. **Shared capabilities** → `src/lib/<capability-name>/` with the same internal structure
+4. **Shared UI components** that aren't domain-specific → `src/components/ui/` or `src/components/<feature>/`
+5. **Never create a standalone page or sidebar entry for a shared capability** — it should be embedded within the consuming domain's UI (e.g., CSV import appears as a modal inside the sales invoices page, not as its own "Import" page)
+6. **Consuming domains own the user journey** — the domain decides when to trigger the shared capability and what to do with the results
+7. **Shared capabilities are parser/mapper only** — they return structured data; the consuming domain handles persistence (writing to Convex tables)
+
+**Example flow for CSV import in AR Reconciliation (#271):**
+```
+src/domains/sales-invoices/         # Business domain (owns the page)
+  └── components/
+      └── ar-reconciliation.tsx     # Renders <CsvImportModal> from shared lib
+                                    # Receives CsvImportResult
+                                    # Writes to sales_orders table (domain logic)
+
+src/lib/csv-parser/                 # Shared capability (no page, no route)
+  └── components/
+      └── csv-import-modal.tsx      # Reusable modal, returns structured data
 ```
 
 ## Mandatory Rules
@@ -259,6 +295,8 @@ After making changes to any system (e-invoice, expense claims, chat, etc.), **al
 - Git repository (`grootdev-ai/groot-finance`) (001-pdpa-breach-notif-sop)
 - TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, Clerk 6.30.0, Stripe SDK 20.1.0, React 19.1.2 (001-account-deletion)
 - Convex (existing `referral_codes` and `referrals` tables — no schema changes) (001-reseller-code-system)
+- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, React 19.1.2, Convex 1.31.3, papaparse (CSV), xlsx/SheetJS (Excel), Clerk 6.30.0 (001-csv-parser)
+- Convex (csv_import_templates table). No file storage — files parsed in browser memory. (001-csv-parser)
 
 ## Recent Changes
 - 001-category-3-mcp: Added MCP Server with API key management

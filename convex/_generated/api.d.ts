@@ -24,6 +24,7 @@ import type * as functions_catalogItems from "../functions/catalogItems.js";
 import type * as functions_consent from "../functions/consent.js";
 import type * as functions_conversations from "../functions/conversations.js";
 import type * as functions_creditPacks from "../functions/creditPacks.js";
+import type * as functions_csvImportTemplates from "../functions/csvImportTemplates.js";
 import type * as functions_customers from "../functions/customers.js";
 import type * as functions_duplicateMatches from "../functions/duplicateMatches.js";
 import type * as functions_einvoiceJobs from "../functions/einvoiceJobs.js";
@@ -104,6 +105,7 @@ declare const fullApi: ApiFromModules<{
   "functions/consent": typeof functions_consent;
   "functions/conversations": typeof functions_conversations;
   "functions/creditPacks": typeof functions_creditPacks;
+  "functions/csvImportTemplates": typeof functions_csvImportTemplates;
   "functions/customers": typeof functions_customers;
   "functions/duplicateMatches": typeof functions_duplicateMatches;
   "functions/einvoiceJobs": typeof functions_einvoiceJobs;
