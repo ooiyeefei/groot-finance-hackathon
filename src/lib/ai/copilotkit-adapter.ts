@@ -248,12 +248,17 @@ export async function* streamLangGraphAgent(
     // then merge with LLM-emitted cards (deduplicating by content)
     const autoActions = autoGenerateActionsFromToolResults(finalMessages)
 
-    // Always strip residual ```actions blocks from text (safety net for edge cases
+    // Always strip residual action card JSON from text (safety net for edge cases
     // where the regex extraction partially matched or the LLM used unusual formatting).
-    // Handles any level of backtick escaping and ```json blocks with action card types.
+    const ACTION_TYPES_PATTERN = 'invoice_posting|cash_flow_dashboard|compliance_alert|budget_alert|spending_time_series|anomaly_card|vendor_comparison|expense_approval'
     finalContent = finalContent
+      // Strip ```actions ... ``` fenced blocks
       .replace(/(?:\\*`){3,}actions[\s\S]*?(?:\\*`){3,}/g, '')
+      // Strip ```json blocks containing action card types
       .replace(/(?:\\*`){3,}(?:json)?\s*\n\s*\[\s*\{[\s\S]*?"type"\s*:\s*"(?:invoice_posting|cash_flow_dashboard|compliance_alert|budget_alert|spending_time_series|anomaly_card|vendor_comparison|expense_approval)"[\s\S]*?(?:\\*`){3,}/g, '')
+      // Strip unfenced raw JSON arrays containing action card types (LLM sometimes
+      // dumps [{"type": "invoice_posting", ...}] directly in the text without fencing)
+      .replace(new RegExp(`\\[\\s*\\{[\\s\\S]*?"type"\\s*:\\s*"(?:${ACTION_TYPES_PATTERN})"[\\s\\S]*?\\}\\s*\\]`, 'g'), '')
       .trim()
 
     // Deduplicate action cards: LLM-emitted cards take priority.
