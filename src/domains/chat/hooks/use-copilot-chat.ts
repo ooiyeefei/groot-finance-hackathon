@@ -87,6 +87,10 @@ export function useCopilotBridge(
   const activeConversationIdRef = useRef<string | undefined>(activeConversationId)
   activeConversationIdRef.current = activeConversationId
 
+  // Keep a ref to convexMessages so the sendMessage callback always reads the
+  // latest messages without needing convexMessages in its dependency array.
+  const convexMessagesRef = useRef<ChatMessage[]>([])
+
   // Per-conversation stream tracking — supports concurrent streams.
   // Each conversation can have its own active stream, abort controller, and accumulated data.
   interface StreamState {
@@ -110,6 +114,7 @@ export function useCopilotBridge(
   const { messages: convexMessages, isLoading: isLoadingMessages } = useMessages(
     activeConversationId
   )
+  convexMessagesRef.current = convexMessages
   const { createConversation: convexCreateConversation } = useCreateConversation(businessId)
   const { archiveConversation: convexArchiveConversation } = useArchiveConversation()
 
@@ -205,7 +210,9 @@ export function useCopilotBridge(
   // Supports concurrent streams — each conversation gets its own stream lifecycle.
   const handleSendMessage = useCallback(
     async (content: string) => {
-      let conversationId = activeConversationId
+      // Read from ref to always get the latest conversation ID,
+      // even if the callback hasn't been recreated yet after a switch.
+      let conversationId = activeConversationIdRef.current
 
       // Auto-create conversation if none active
       if (!conversationId) {
@@ -244,8 +251,8 @@ export function useCopilotBridge(
         content,
       })
 
-      // Build conversation history from Convex messages
-      const history = convexMessages.map((msg) => ({
+      // Build conversation history from Convex messages (read from ref for latest)
+      const history = convexMessagesRef.current.map((msg) => ({
         role: msg.role as 'user' | 'assistant',
         content: msg.content,
       }))
@@ -390,7 +397,7 @@ export function useCopilotBridge(
         }
       }
     },
-    [activeConversationId, handleCreateConversation, createMessage, convexMessages, language]
+    [handleCreateConversation, createMessage, language]
   )
 
   return {
