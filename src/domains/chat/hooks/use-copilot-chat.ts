@@ -399,10 +399,19 @@ export function useCopilotBridge(
         activeStreamsRef.current.delete(convId)
         // Only clear UI state if user is still viewing this conversation
         if (activeConversationIdRef.current === convId) {
-          setIsLoading(false)
-          setStreamingText('')
+          // Keep isLoading=true briefly so the streaming bubble stays visible
+          // while Convex real-time subscription delivers the persisted message.
+          // Without this delay, the bubble vanishes and there's a "flash of empty"
+          // before the message appears from the DB.
           setStreamingStatus('')
-          setStreamingActions([])
+          setTimeout(() => {
+            // Only clear if no NEW stream started for this conversation in the meantime
+            if (!activeStreamsRef.current.has(convId)) {
+              setIsLoading(false)
+              setStreamingText('')
+              setStreamingActions([])
+            }
+          }, 1500)
         }
       }
     },
