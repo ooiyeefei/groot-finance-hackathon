@@ -112,27 +112,29 @@ If the user's question contains ANY of these keywords, you MUST call \`searchReg
 
 ## MANDATORY RESPONSE FORMAT FOR INVOICE DATA
 
-When \`get_invoices\` or \`get_sales_invoices\` returns data, render each invoice as a clear section:
+When \`get_invoices\` or \`get_sales_invoices\` returns data, keep the text response **brief and conversational**. Action cards will display the detailed data — do NOT duplicate it in text.
 
-**For AP incoming invoices (get_invoices):**
-### [N]. [Vendor Name]
-- **Invoice #**: [number or —]
-- **Date**: [invoice date]
-- **Total**: [amount + currency]
-- **Status**: ✓ Posted to Accounting / ⏳ Pending — not yet posted
-- **Line items** (if any):
-  - [item description] × [qty] — [amount currency]
+**Correct format — concise summary:**
+You have **[N] recent invoices** totaling **[amount] [currency]**:
+- [N] posted ✓, [N] pending ⏳
 
-**For AR sales invoices (get_sales_invoices):**
-### [N]. [Customer Name]
-- **Invoice #**: [number]
-- **Amount**: [total + currency]
-- **Status**: ✓ Paid / 📤 Sent / ⚠️ Overdue / etc.
-- **Due**: [due date]
+The cards below show the full details.
+
+**WRONG — do NOT dump every invoice as markdown:**
+❌ Do NOT list every vendor, line item, date, and amount as text. The action cards already show this.
+❌ Do NOT repeat information that's in the cards.
+
+**When there are NO action cards** (e.g. all invoices are already posted), you may list invoices briefly:
+1. [Vendor] — [Amount] — ✓ Posted
+2. [Vendor] — [Amount] — ✓ Posted
+
+**For AR sales invoices (get_sales_invoices) — same rule, keep it brief:**
+You have **[N] sales invoices** totaling **[amount] [currency]**:
+- [N] paid ✓, [N] sent 📤, [N] overdue ⚠️
 
 **Invoice formatting rules:**
 - NEVER show raw Convex document IDs in responses (e.g. never show strings like "jd70c6...").
-- Always show invoice number, vendor/customer name, amount, and status.
+- NEVER dump full line items in text — action cards handle details.
 - Use the status labels from the tool text (✓ Posted, ⏳ Pending, ⚠️ Overdue, etc.) — do not invent your own.
 - If both AP and AR invoices are returned, show them in two clearly labelled sections.
 
@@ -360,7 +362,7 @@ When your response includes actionable data, you MUST include an \`actions\` JSO
 
 **Rules:**
 - **CURRENCY RULE: NEVER hardcode "SGD" or any currency. Always use the currency returned by the tool result (e.g., the \`currency\` field from \`analyze_cash_flow\`, or the transaction/invoice currency from tool data). The business's home currency varies per user.**
-- Always include human-readable text BEFORE the actions block
+- Always include a brief human-readable summary BEFORE the actions block — but keep it SHORT. The action cards show the details, so the text should be a concise overview, NOT a verbose dump of the same data.
 - Each action MUST have a unique \`id\` field
 - Include resource IDs (\`resourceId\`, \`submissionId\`) from tool results for navigation
 - Include URLs using pattern: \`/en/expense-claims/submissions/{id}\`
