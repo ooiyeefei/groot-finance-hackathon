@@ -7,12 +7,14 @@
  * Posts confirmed invoices to accounting_entries via Convex mutation.
  */
 
-import { useState } from 'react'
+import { useState, lazy, Suspense } from 'react'
 import { useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
-import { FileText, Check, Loader2, AlertTriangle, ExternalLink } from 'lucide-react'
+import { FileText, Check, Loader2, AlertTriangle, Eye } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { registerActionCard, type ActionCardProps } from './registry'
+
+const DocumentAnalysisModal = lazy(() => import('@/domains/invoices/components/document-analysis-modal'))
 
 interface InvoiceLineItem {
   description: string
@@ -42,6 +44,9 @@ function InvoicePostingCard({ action, isHistorical }: ActionCardProps) {
     data.status === 'posted' ? 'posted' : 'idle'
   )
   const [errorMsg, setErrorMsg] = useState('')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [invoiceDocument, setInvoiceDocument] = useState<any>(null)
+  const [documentLoading, setDocumentLoading] = useState(false)
 
   const createEntry = useMutation(api.functions.accountingEntries.create)
 
@@ -77,6 +82,25 @@ function InvoicePostingCard({ action, isHistorical }: ActionCardProps) {
     }
   }
 
+  const handleViewDocument = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    if (documentLoading) return
+    setDocumentLoading(true)
+    try {
+      const response = await fetch(`/api/v1/invoices/${data.invoiceId}`)
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success && result.data) {
+          setInvoiceDocument(result.data)
+        }
+      }
+    } catch {
+      // Silently fail — user can retry
+    } finally {
+      setDocumentLoading(false)
+    }
+  }
+
   if (!data?.invoiceId) return null
 
   const isResolved = cardState === 'posted' || (isHistorical && data.status === 'posted')
@@ -84,12 +108,10 @@ function InvoicePostingCard({ action, isHistorical }: ActionCardProps) {
 
   return (
     <div className="border border-border rounded-lg overflow-hidden bg-card">
-      {/* Header — clickable to navigate to invoices page */}
-      <a
-        href="/invoices"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="px-3 py-2 bg-primary/5 border-b border-border flex items-center gap-2 hover:bg-primary/10 transition-colors cursor-pointer"
+      {/* Header — clickable to open document analysis modal */}
+      <button
+        onClick={handleViewDocument}
+        className="w-full px-3 py-2 bg-primary/5 border-b border-border flex items-center gap-2 hover:bg-primary/10 transition-colors cursor-pointer"
       >
         <FileText className="w-3.5 h-3.5 text-primary flex-shrink-0" />
         <span className="text-xs font-medium text-foreground">Invoice Posting</span>
@@ -101,8 +123,12 @@ function InvoicePostingCard({ action, isHistorical }: ActionCardProps) {
             Posted
           </span>
         )}
-        <ExternalLink className="w-3 h-3 text-muted-foreground ml-auto flex-shrink-0" />
-      </a>
+        {documentLoading ? (
+          <Loader2 className="w-3 h-3 text-muted-foreground ml-auto flex-shrink-0 animate-spin" />
+        ) : (
+          <Eye className="w-3 h-3 text-muted-foreground ml-auto flex-shrink-0" />
+        )}
+      </button>
 
       {/* Details */}
       <div className="px-3 py-2.5">
@@ -213,6 +239,16 @@ function InvoicePostingCard({ action, isHistorical }: ActionCardProps) {
           </>
         )}
       </div>
+
+      {/* Document Analysis Modal */}
+      {invoiceDocument && (
+        <Suspense fallback={null}>
+          <DocumentAnalysisModal
+            document={invoiceDocument}
+            onClose={() => setInvoiceDocument(null)}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }
