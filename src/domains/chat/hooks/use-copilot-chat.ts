@@ -133,7 +133,6 @@ export function useCopilotBridge(
   // background and persist via server-side when done.
   const handleCreateConversation = useCallback(async () => {
     const newId = await convexCreateConversation(undefined, language)
-    console.log(`[ChatBridge] Created conversation ${newId}, activeStreams=${Array.from(activeStreamsRef.current.keys()).join(',')}`)
     setActiveConversationId(newId)
     // New conversation has no stream — clear UI
     setIsLoading(false)
@@ -150,7 +149,6 @@ export function useCopilotBridge(
   const handleSwitchConversation = useCallback(
     (conversationId: string) => {
       if (conversationId === activeConversationId) return
-      console.log(`[ChatBridge] Switching to ${conversationId}, activeStreams=${Array.from(activeStreamsRef.current.keys()).join(',')}`)
       setActiveConversationId(conversationId)
       setError(null)
 
@@ -216,8 +214,6 @@ export function useCopilotBridge(
       // even if the callback hasn't been recreated yet after a switch.
       let conversationId = activeConversationIdRef.current
 
-      console.log(`[ChatBridge] sendMessage called — convId=${conversationId}, activeStreams=${Array.from(activeStreamsRef.current.keys()).join(',')}`)
-
       // Auto-create conversation if none active
       if (!conversationId) {
         conversationId = await handleCreateConversation()
@@ -228,7 +224,6 @@ export function useCopilotBridge(
       // Abort any previous stream for THIS conversation only (re-sending in same chat)
       const existingStream = activeStreamsRef.current.get(convId)
       if (existingStream) {
-        console.log(`[ChatBridge] Aborting existing stream for SAME conversation ${convId}`)
         existingStream.controller.abort()
         activeStreamsRef.current.delete(convId)
       }
@@ -283,7 +278,6 @@ export function useCopilotBridge(
       }
 
       try {
-        console.log(`[ChatBridge] Starting fetch for ${convId}, signal aborted=${controller.signal.aborted}`)
         const response = await fetch('/api/copilotkit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -296,8 +290,6 @@ export function useCopilotBridge(
           }),
           signal: controller.signal,
         })
-        console.log(`[ChatBridge] Fetch response received for ${convId}: ${response.status}`)
-
         if (!response.ok) {
           const errorData = await response.json().catch(() => null)
           throw new Error(errorData?.error || `Request failed: ${response.status}`)
@@ -369,8 +361,6 @@ export function useCopilotBridge(
         }
       } catch (err) {
         if (timeoutId) clearTimeout(timeoutId)
-        console.log(`[ChatBridge] Stream error for ${convId}: ${(err as Error).name} — ${(err as Error).message}`)
-
         if ((err as Error).name === 'AbortError') {
           // User cancelled or re-sent in same conversation — persist partial content
           if (accumulatedText) {
@@ -395,7 +385,6 @@ export function useCopilotBridge(
         console.error('[ChatBridge] Stream error:', err)
       } finally {
         // Remove from active streams
-        console.log(`[ChatBridge] Finally block for ${convId} — viewing=${activeConversationIdRef.current}, remainingStreams=${Array.from(activeStreamsRef.current.keys()).join(',')}`)
         activeStreamsRef.current.delete(convId)
         // Only clear UI state if user is still viewing this conversation
         if (activeConversationIdRef.current === convId) {

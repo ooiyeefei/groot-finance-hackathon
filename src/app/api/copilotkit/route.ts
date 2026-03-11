@@ -172,7 +172,6 @@ export async function POST(req: NextRequest) {
         // Server-side persistence: save the assistant message to Convex
         // This guarantees the message is saved even if the client disconnects.
         let serverPersisted = false
-        console.log(`[Chat API] Server persist check: text=${accumulatedText.length}chars, convId=${conversationId}, hasClient=${!!convexClient}`)
         if (accumulatedText && conversationId && convexClient) {
           try {
             const metadata: Record<string, unknown> = {}
