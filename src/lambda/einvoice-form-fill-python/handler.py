@@ -1253,6 +1253,32 @@ def prefill_custom_dropdowns(page: Page, buyer: dict):
 
 # ── Receipt image upload ──────────────────────────────────
 
+def handle_confirmation_dialog(page: Page) -> bool:
+    """Click 'Yes, Submit!' or similar confirmation buttons that appear after form Submit.
+    Many merchant portals (e.g. 7-Eleven) show a SweetAlert/modal asking 'Do you want to submit?'
+    Returns True if a confirmation was found and clicked."""
+    try:
+        # Common confirmation button patterns (SweetAlert, Bootstrap modal, custom)
+        confirm_selectors = [
+            'button:has-text("Yes, Submit")',
+            'button:has-text("Yes, Confirm")',
+            'button:has-text("Confirm")',
+            '.swal2-confirm',
+            'button.swal2-confirm',
+            'button:has-text("Yes")',
+        ]
+        for sel in confirm_selectors:
+            btn = page.locator(sel)
+            if btn.count() > 0 and btn.first.is_visible():
+                btn.first.click(timeout=5000)
+                print(f"[Post-Submit] Clicked confirmation: {sel}")
+                time.sleep(3)
+                return True
+    except Exception as e:
+        print(f"[Post-Submit] Confirmation dialog handling failed: {e}")
+    return False
+
+
 def upload_receipt_image(page: Page, local_path: str, quiet: bool = False) -> bool:
     """Find file input on the page and upload the receipt image via Playwright.
     Handles both visible and hidden <input type="file"> elements.
@@ -2804,9 +2830,11 @@ def handler(event: dict, context=None) -> dict:
             if sub.count() > 0:
                 sub.click()
                 print("[Form Fill] Submitted (Playwright)")
-                time.sleep(5)
+                time.sleep(3)
+                handle_confirmation_dialog(page)
         else:
             time.sleep(3)  # CUA already submitted
+            handle_confirmation_dialog(page)
 
         # ── Post-CUA: Final upload safety net (normally handled by CUA loop interceptor) ──
         if receipt_image_local and not receipt_uploaded:
@@ -2828,7 +2856,8 @@ def handler(event: dict, context=None) -> dict:
                     if submit_btn.count() > 0 and submit_btn.is_visible():
                         submit_btn.click(timeout=5000)
                         print("[Post-CUA] Re-submitted after late receipt upload")
-                        time.sleep(5)
+                        time.sleep(3)
+                        handle_confirmation_dialog(page)
                 except Exception as e:
                     print(f"[Post-CUA] Re-submit failed: {e}")
 
@@ -2841,7 +2870,8 @@ def handler(event: dict, context=None) -> dict:
                 try:
                     submit_btn.click(timeout=5000)
                     print("[Form Fill] Re-submitted after post-CUA CAPTCHA solve")
-                    time.sleep(5)
+                    time.sleep(3)
+                    handle_confirmation_dialog(page)
                 except Exception:
                     pass
 

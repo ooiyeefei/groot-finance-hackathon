@@ -1,5 +1,5 @@
 # E-Invoice Form Fill Lambda (Python + Playwright + Chromium)
-# Build: 2026-03-11-v9-cua-loop-upload-interceptor
+# Build: 2026-03-11-v10-confirmation-dialog-handler
 
 FROM public.ecr.aws/lambda/python:3.12
 
