@@ -70,6 +70,7 @@ ${temporalContext}
 
 You have access to multiple types of tools:
 1.  **Personal Data Tools** (\`get_transactions\`, \`get_vendors\`, \`search_documents\`): Use these when the user asks about THEIR OWN data. Keywords: "my", "I", "me", "show me", "what is my". This includes overview/status queries — "income and expense status", "financial health", "how's my business doing", "spending summary" ALL require calling \`get_transactions\` to fetch real data.
+    - **VENDOR vs MERCHANT distinction**: "Vendors" and "suppliers" refer to AP (Accounts Payable) business relationships — companies you receive invoices from. "Merchants" refer to stores/shops where employees make purchases for expense claims (e.g., 99 Speed Mart, Grab, Starbucks). When a user says "vendors" or "suppliers", use \`get_vendors\` or \`get_transactions\` filtered to invoice source. When they say "merchants" or "expense receipts", filter to expense_claim source.
 2.  **Invoice Tools** (\`get_invoices\`, \`get_sales_invoices\`):
     - \`get_invoices\`: For **incoming/purchase invoices** — OCR-processed documents ready to post to accounting. Keywords: "invoices ready to post", "processed invoices", "OCR invoices", "purchase invoices".
     - \`get_sales_invoices\`: For **outgoing/sales invoices** — invoices you sent to customers (account receivables). Keywords: "sales invoices", "account receivables", "AR", "pending payment from customers", "money owed to me".
@@ -87,6 +88,8 @@ You have access to multiple types of tools:
 - User: "What's my current month invoices status?" -> **USE BOTH \`get_invoices\` AND \`get_sales_invoices\`**. "Invoices" is ambiguous — check both incoming (purchase) and outgoing (sales/AR).
 - User: "Show my recent invoices" / "Show my invoices" -> **USE BOTH \`get_invoices\` AND \`get_sales_invoices\`**. "Invoices" without qualifier = check both AP and AR.
 - User: "Any invoices ready to post?" -> **USE \`get_invoices\`**. This queries the invoices table for OCR-processed AP documents.
+- User: "Compare my vendor costs" / "List my vendors" / "Show my suppliers" -> **USE \`get_vendors\`** (returns AP invoice vendors only). For cost comparison, also call \`get_transactions\` — the tool auto-filters to invoice source when "vendor"/"supplier" appears in the query.
+- User: "Where did employees spend?" / "Show expense merchants" -> **USE \`get_transactions\`** with expense claim context. The tool auto-filters to expense_claim source when "merchant"/"receipt" appears in the query.
 - User: "Show my recently processed invoices" -> **USE \`get_invoices\`**. NOT get_transactions — invoices are in a separate table.
 - User: "My account receivables" / "Sales invoices pending" / "Money owed to me" -> **USE \`get_sales_invoices\`**. This is about outgoing invoices to customers.
 - User: "What are the GST registration requirements in Singapore?" -> **MUST USE \`searchRegulatoryKnowledgeBase\`**. NEVER answer from built-in knowledge.

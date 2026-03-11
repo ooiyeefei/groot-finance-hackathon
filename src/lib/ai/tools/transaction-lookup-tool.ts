@@ -558,8 +558,10 @@ export class TransactionLookupTool extends BaseTool {
     const queryLower = query.toLowerCase()
 
     // Map user-friendly terms to database values
-    const invoiceTerms = ['invoice', 'invoices', 'bill', 'bills', 'vendor invoice', 'supplier invoice']
-    const expenseTerms = ['expense', 'expenses', 'expense claim', 'expense claims', 'reimbursement', 'reimbursements', 'claim', 'claims']
+    // "vendor" and "supplier" map to invoices (AP) — these are business-to-business relationships
+    // "merchant" maps to expense claims — these are employee purchase receipts
+    const invoiceTerms = ['invoice', 'invoices', 'bill', 'bills', 'vendor invoice', 'supplier invoice', 'vendor', 'vendors', 'supplier', 'suppliers']
+    const expenseTerms = ['expense', 'expenses', 'expense claim', 'expense claims', 'reimbursement', 'reimbursements', 'claim', 'claims', 'merchant', 'merchants', 'receipt', 'receipts']
 
     // Check for expense-related terms first (more specific)
     const hasExpenseTerms = expenseTerms.some(term => queryLower.includes(term))

@@ -13,7 +13,7 @@ export class GetVendorsTool extends BaseTool {
   }
 
   getDescription(_modelType: ModelType = 'openai'): string {
-    return 'Get Unique Vendors List - Returns a complete list of unique vendor names from the user\'s transaction history. Use this tool when users ask for "list of vendors", "all my vendors", "what vendors do I have", or similar queries about unique vendor names. This tool provides a clean, deduplicated list of all vendors the user has transacted with.'
+    return 'Get Unique Vendors/Suppliers List - Returns a deduplicated list of vendor/supplier names from AP (Accounts Payable) invoices. Use this tool when users ask for "list of vendors", "all my vendors", "my suppliers", "what vendors do I have". This returns business-to-business vendors/suppliers only (from incoming invoices), NOT expense claim merchants. For expense claim merchants, use get_transactions with appropriate filters.'
   }
 
   getToolSchema(modelType: ModelType = 'openai'): OpenAIToolSchema {
@@ -51,9 +51,11 @@ export class GetVendorsTool extends BaseTool {
       }
 
       // ✅ MIGRATED: Use Convex instead of Supabase
+      // Default to "invoice" sourceDocumentType — vendors are AP suppliers (incoming invoices),
+      // NOT expense claim merchants (99 Speed Mart, Grab, etc.)
       const result = await this.convex.query(
         this.convexApi.functions.accountingEntries.getUniqueVendors,
-        { businessId: userContext.businessId }
+        { businessId: userContext.businessId, sourceDocumentType: 'invoice' }
       )
 
       if (!result || result.totalCount === 0) {

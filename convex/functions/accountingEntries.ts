@@ -1010,6 +1010,7 @@ export const softDelete = mutation({
 export const getUniqueVendors = query({
   args: {
     businessId: v.optional(v.string()),
+    sourceDocumentType: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -1055,9 +1056,15 @@ export const getUniqueVendors = query({
         .collect();
     }
 
-    // Filter soft-deleted and get unique vendor names
+    // Filter soft-deleted, optionally by source document type, and get unique vendor names
     const vendorNames = entries
-      .filter((e) => !e.deletedAt && e.vendorName && e.vendorName.trim())
+      .filter((e) => {
+        if (e.deletedAt) return false;
+        if (!e.vendorName || !e.vendorName.trim()) return false;
+        // Filter by sourceDocumentType if specified (e.g. "invoice" for AP vendors, "expense_claim" for merchants)
+        if (args.sourceDocumentType && e.sourceDocumentType !== args.sourceDocumentType) return false;
+        return true;
+      })
       .map((e) => e.vendorName!)
       .filter((name, index, self) => self.indexOf(name) === index)
       .sort();
