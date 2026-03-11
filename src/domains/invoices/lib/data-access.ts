@@ -403,7 +403,7 @@ export async function validateFileContent(file: File): Promise<{ isValid: boolea
  *
  * Pattern: {bucket}/invoices/{businessId}/{userId}/{convexId}/raw/{convexId}.{ext}
  */
-export async function createInvoice({ file, businessId }: CreateInvoiceRequest): Promise<Invoice> {
+export async function createInvoice({ file, businessId }: CreateInvoiceRequest): Promise<Invoice & { backgroundWork?: () => Promise<void> }> {
   const { client } = await getAuthenticatedConvex()
 
   if (!client) {
@@ -439,67 +439,75 @@ export async function createInvoice({ file, businessId }: CreateInvoiceRequest):
     fileName: file.name,
     fileType: file.type,
     fileSize: file.size,
-    status: 'uploading'  // Will update to 'pending' after upload
+    status: 'uploading'  // Will update to 'pending' after S3 upload completes in background
   })
 
   console.log(`[Invoice] Created invoice record: ${convexInvoiceId}`)
 
-  try {
-    // Step 2: Generate storage path using Convex ID
-    const fileExtension = file.name.split('.').pop() || 'unknown'
-    const filename = `${convexInvoiceId}.${fileExtension}`
-
-    const storagePath = generateStoragePath({
-      businessId,
-      userId: convexUserId,
-      documentType: 'invoice' as DocumentType,
-      stage: 'raw',
-      filename,
-      documentId: convexInvoiceId  // Use Convex ID for consistent paths
-    })
-
-    console.log(`[Invoice] Storage path: invoices/${storagePath}`)
-
-    // Step 3: Upload to AWS S3
-    const uploadResult = await uploadFile(
-      'invoices',
-      storagePath,
-      file,
-      getMimeType(file.name)
-    )
-
-    if (!uploadResult.success) {
-      console.error('[Storage] Upload failed:', uploadResult.error)
-      throw new Error(`Storage upload failed: ${uploadResult.error}`)
-    }
-
-    // Step 4: Update Convex record with storagePath and status
-    await updateDocument(convexInvoiceId, {
-      storage_path: storagePath,
-      status: 'pending'
-    })
-
-    console.log(`[Invoice] Updated invoice with storagePath: ${convexInvoiceId}`)
-
-    // Fetch the created invoice to return
-    const invoice = await client.query(api.functions.invoices.getById, { id: convexInvoiceId })
-    if (!invoice) {
-      throw new Error(`Failed to fetch created invoice: ${convexInvoiceId}`)
-    }
-
-    return mapConvexInvoiceToResponse(invoice)
-
-  } catch (error) {
-    // Clean up on any failure
-    console.error(`[Invoice] Error during upload flow for ${convexInvoiceId}:`, error)
+  // Return immediately — S3 upload runs in the background via after()
+  const backgroundWork = async () => {
     try {
-      await client.mutation(api.functions.invoices.softDelete, { id: convexInvoiceId })
-      console.log(`[Invoice] Cleaned up invoice record: ${convexInvoiceId}`)
-    } catch (cleanupError) {
-      console.error(`[Invoice] Failed to clean up invoice ${convexInvoiceId}:`, cleanupError)
+      // Generate storage path using Convex ID
+      const fileExtension = file.name.split('.').pop() || 'unknown'
+      const filename = `${convexInvoiceId}.${fileExtension}`
+
+      const storagePath = generateStoragePath({
+        businessId,
+        userId: convexUserId,
+        documentType: 'invoice' as DocumentType,
+        stage: 'raw',
+        filename,
+        documentId: convexInvoiceId
+      })
+
+      console.log(`[Background] Invoice storage path: invoices/${storagePath}`)
+
+      // Upload to AWS S3
+      const uploadResult = await uploadFile(
+        'invoices',
+        storagePath,
+        file,
+        getMimeType(file.name)
+      )
+
+      if (!uploadResult.success) {
+        console.error('[Background] Invoice S3 upload failed:', uploadResult.error)
+        // Mark as failed
+        await updateDocument(convexInvoiceId, {
+          status: 'failed'
+        })
+        return
+      }
+
+      // Update Convex record with storagePath and status
+      await updateDocument(convexInvoiceId, {
+        storage_path: storagePath,
+        status: 'pending'
+      })
+
+      console.log(`[Background] Invoice upload complete: ${convexInvoiceId}`)
+    } catch (error) {
+      console.error(`[Background] Invoice upload flow failed for ${convexInvoiceId}:`, error)
+      try {
+        await client.mutation(api.functions.invoices.softDelete, { id: convexInvoiceId })
+        console.log(`[Background] Cleaned up invoice record: ${convexInvoiceId}`)
+      } catch (cleanupError) {
+        console.error(`[Background] Failed to clean up invoice ${convexInvoiceId}:`, cleanupError)
+      }
     }
-    throw error
   }
+
+  // Return minimal response immediately with background work closure
+  return {
+    id: convexInvoiceId,
+    convex_id: convexInvoiceId,
+    file_name: file.name,
+    file_type: file.type,
+    file_size: file.size,
+    status: 'uploading',
+    created_at: new Date().toISOString(),
+    backgroundWork,
+  } as any
 }
 
 /**

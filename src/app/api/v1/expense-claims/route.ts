@@ -5,7 +5,7 @@
  */
 
 import { auth } from '@clerk/nextjs/server'
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createExpenseClaim, listExpenseClaims } from '@/domains/expense-claims/lib/data-access'
 import { CreateExpenseClaimRequest, ExpenseClaimListParams } from '@/domains/expense-claims/types'
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
@@ -225,12 +225,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Schedule S3 upload + Lambda processing to run AFTER response is sent
+    if (result.backgroundWork) {
+      after(result.backgroundWork)
+    }
+
     // Invalidate expense claims cache after successful creation
     apiCache.invalidate(userId, 'expense-claims')
 
     const responseData: any = {
       expense_claim: result.data,
-      expense_claim_id: result.data?.id,
+      expense_claim_id: (result.data as any)?._id || result.data?.id,
       processing_complete: !createRequest.file || createRequest.processing_mode === 'manual',
       message: createRequest.file
         ? `Receipt ${createRequest.processing_mode === 'ai' ? 'uploaded and AI processing initiated' : 'uploaded successfully'}`

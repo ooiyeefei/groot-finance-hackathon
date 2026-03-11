@@ -130,7 +130,7 @@ async function canEmployeeSubmit(
 export async function createExpenseClaim(
   userId: string,
   request: CreateExpenseClaimRequest
-): Promise<{ success: boolean; data?: ExpenseClaim; error?: string; task_id?: string }> {
+): Promise<{ success: boolean; data?: ExpenseClaim; error?: string; task_id?: string; backgroundWork?: () => Promise<void> }> {
   try {
     // Get Convex client
     const { client: convexClient } = await getAuthenticatedConvex()
@@ -138,9 +138,11 @@ export async function createExpenseClaim(
       return { success: false, error: 'Failed to get Convex client' }
     }
 
-    // Get user data and ensure profile
-    const userData = await getUserData(userId, convexClient)
-    const employeeProfile = await ensureUserProfile(userId)
+    // Parallelize independent lookups
+    const [userData, employeeProfile] = await Promise.all([
+      getUserData(userId, convexClient),
+      ensureUserProfile(userId),
+    ])
 
     if (!employeeProfile) {
       return { success: false, error: 'Failed to retrieve employee profile' }
@@ -390,148 +392,47 @@ export async function createExpenseClaim(
       } : {})
     })
 
-    // Get the created claim
-    const expenseClaim = await convexClient.query(api.functions.expenseClaims.getById, {
-      id: claimId
-    })
+    // For manual entry (no file), we're done — return immediately
+    if (!request.file || !documentId) {
+      const expenseClaim = await convexClient.query(api.functions.expenseClaims.getById, {
+        id: claimId
+      })
+      return {
+        success: true,
+        data: expenseClaim as any,
+      }
+    }
 
-    // Update with processing metadata
-    await convexClient.mutation(api.functions.expenseClaims.update, {
-      id: claimId,
-      processingMetadata: processingMetadata
-    })
-
-    // Handle file upload if present (using AWS S3)
-    if (request.file && documentId) {
-      // Generate storage path using Convex ID for consistent paths
-      // Pattern: expense_claims/{businessId}/{userId}/{claimId}/raw/{claimId}.{ext}
-      const storageBuilder = new StoragePathBuilder(
-        employeeProfile.business_id,
-        employeeProfile.user_id,
-        claimId
-      )
-      const fileExtension = request.file.name.split('.').pop() || 'unknown'
-      const filename = `${claimId}.${fileExtension}`
-      standardizedFilePath = storageBuilder.forDocument('expense_receipts' as DocumentType).raw(filename)
-
-      // Upload file to AWS S3
-      const uploadResult = await uploadFile(
-        'expense_claims',
-        standardizedFilePath,
-        request.file,
-        getMimeType(request.file.name)
-      )
-
-      if (!uploadResult.success) {
-        // Update record with failure status
-        await convexClient.mutation(api.functions.expenseClaims.updateStatus, {
-          id: claimId,
-          status: 'failed'
-        })
+    // For file uploads: return immediately with the claim ID.
+    // S3 upload + Lambda processing runs in the background via after().
+    const backgroundWork = async () => {
+      try {
+        // Set processing metadata first
         await convexClient.mutation(api.functions.expenseClaims.update, {
           id: claimId,
-          processingMetadata: {
-            ...processingMetadata,
-            status: 'upload_failed',
-            error_message: uploadResult.error || 'Upload failed',
-            error_timestamp: new Date().toISOString()
-          }
+          processingMetadata: processingMetadata
         })
 
-        return { success: false, error: 'Failed to upload file to storage' }
-      }
+        // Generate storage path using Convex ID
+        const storageBuilder = new StoragePathBuilder(
+          employeeProfile.business_id,
+          employeeProfile.user_id,
+          claimId
+        )
+        const fileExtension = request.file!.name.split('.').pop() || 'unknown'
+        const filename = `${claimId}.${fileExtension}`
+        const filePath = storageBuilder.forDocument('expense_receipts' as DocumentType).raw(filename)
 
-      // Update claim with successful upload
-      const newStatus = request.processing_mode === 'ai' ? 'processing' : 'draft'
-      await convexClient.mutation(api.functions.expenseClaims.updateStatus, {
-        id: claimId,
-        status: newStatus as any
-      })
-      await convexClient.mutation(api.functions.expenseClaims.update, {
-        id: claimId,
-        storagePath: standardizedFilePath,
-        processingMetadata: {
-          ...processingMetadata,
-          storage_path: standardizedFilePath,
-          upload_timestamp: new Date().toISOString(),
-          status: request.processing_mode === 'ai' ? 'analyzing' : 'draft'
-        }
-      })
+        // Upload file to AWS S3
+        const uploadResult = await uploadFile(
+          'expense_claims',
+          filePath,
+          request.file!,
+          getMimeType(request.file!.name)
+        )
 
-      // Trigger Lambda processing for AI mode
-      if (request.processing_mode === 'ai') {
-        try {
-          const fileType = request.file.type === 'application/pdf' ? 'pdf' : 'image'
-          console.log(`[Lambda Processing] Triggering document processor for expense claim: ${claimId} (${fileType})`)
-
-          // Fetch business + user details for e-invoice form fill (019-lhdn-einv-flow-2)
-          // Passed upfront so Lambda can trigger form fill without round-tripping to Convex
-          let businessDetails: { name: string; tin: string; brn: string; address: string; phone?: string; contactEmail?: string; [key: string]: any } | undefined
-          try {
-            const business = await convexClient.query(api.functions.businesses.getBusinessProfileByStringId, {
-              businessId: employeeProfile.business_id,
-            })
-            // Get user's full name from Clerk
-            const clerk = (await import('@clerk/nextjs/server')).default || await import('@clerk/nextjs/server')
-            const clerkClient = (clerk as any).clerkClient || clerk
-            const clerkInstance = typeof clerkClient === 'function' ? await clerkClient() : clerkClient
-            let userName = business?.name || 'User'
-            try {
-              const clerkUser = await clerkInstance.users.getUser(userId)
-              userName = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ') || userName
-            } catch { /* fallback to business name */ }
-
-            if (business?.lhdn_tin) {
-              businessDetails = {
-                name: business.name,
-                userName, // User's personal name for "Full Name" field
-                tin: business.lhdn_tin,
-                brn: business.business_registration_number || business.lhdn_tin,
-                // Structured address for state/city dropdowns
-                addressLine1: business.address_line1,
-                addressLine2: business.address_line2 || '',
-                city: business.city || '',
-                stateCode: business.state_code || '',
-                postalCode: business.postal_code || '',
-                countryCode: business.country_code || 'MY',
-                address: [business.address_line1, business.address_line2, business.city, business.state_code].filter(Boolean).join(', '),
-                phone: business.contact_phone || '+60132201176', // Default phone
-                contactEmail: business.contact_email || undefined,
-              }
-            }
-          } catch {
-            // Non-fatal: business details are optional (only needed for e-invoice)
-            console.log('[Lambda Processing] Could not fetch business details for e-invoice (non-fatal)')
-          }
-
-          const lambdaResult = await invokeDocumentProcessor({
-            documentId: claimId,
-            domain: 'expense_claims',
-            storagePath: standardizedFilePath,
-            fileType: fileType as 'pdf' | 'image',
-            userId: employeeProfile.user_id,
-            businessId: employeeProfile.business_id,
-            idempotencyKey: `expense-${claimId}-${Date.now()}`,
-            expectedDocumentType: 'receipt',
-            businessDetails,
-          })
-
-          await convexClient.mutation(api.functions.expenseClaims.update, {
-            id: claimId,
-            processingMetadata: {
-              ...processingMetadata,
-              lambda_execution_id: lambdaResult.executionId,
-              lambda_request_id: lambdaResult.requestId,
-              processing_timestamp: new Date().toISOString(),
-              processing_stage: 'lambda_invoked'
-            }
-          })
-
-          console.log(`[Lambda Processing] Lambda invoked successfully: ${lambdaResult.executionId}`)
-          triggerResult = { id: lambdaResult.executionId }
-
-        } catch (lambdaError) {
-          console.error('Failed to invoke Lambda:', lambdaError)
+        if (!uploadResult.success) {
+          console.error('[Background] S3 upload failed:', uploadResult.error)
           await convexClient.mutation(api.functions.expenseClaims.updateStatus, {
             id: claimId,
             status: 'failed'
@@ -540,19 +441,124 @@ export async function createExpenseClaim(
             id: claimId,
             processingMetadata: {
               ...processingMetadata,
-              status: 'failed',
-              error_message: 'Failed to invoke document processing Lambda',
+              status: 'upload_failed',
+              error_message: uploadResult.error || 'Upload failed',
               error_timestamp: new Date().toISOString()
             }
           })
+          return
         }
+
+        // Update claim with successful upload
+        const newStatus = request.processing_mode === 'ai' ? 'processing' : 'draft'
+        await convexClient.mutation(api.functions.expenseClaims.updateStatus, {
+          id: claimId,
+          status: newStatus as any
+        })
+        await convexClient.mutation(api.functions.expenseClaims.update, {
+          id: claimId,
+          storagePath: filePath,
+          processingMetadata: {
+            ...processingMetadata,
+            storage_path: filePath,
+            upload_timestamp: new Date().toISOString(),
+            status: request.processing_mode === 'ai' ? 'analyzing' : 'draft'
+          }
+        })
+
+        // Trigger Lambda processing for AI mode
+        if (request.processing_mode === 'ai') {
+          try {
+            const fileType = request.file!.type === 'application/pdf' ? 'pdf' : 'image'
+            console.log(`[Background] Triggering document processor for expense claim: ${claimId} (${fileType})`)
+
+            // Fetch business + user details for e-invoice form fill
+            let businessDetails: { name: string; tin: string; brn: string; address: string; phone?: string; contactEmail?: string; [key: string]: any } | undefined
+            try {
+              const business = await convexClient.query(api.functions.businesses.getBusinessProfileByStringId, {
+                businessId: employeeProfile.business_id,
+              })
+              const clerk = (await import('@clerk/nextjs/server')).default || await import('@clerk/nextjs/server')
+              const clerkClient = (clerk as any).clerkClient || clerk
+              const clerkInstance = typeof clerkClient === 'function' ? await clerkClient() : clerkClient
+              let userName = business?.name || 'User'
+              try {
+                const clerkUser = await clerkInstance.users.getUser(userId)
+                userName = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ') || userName
+              } catch { /* fallback to business name */ }
+
+              if (business?.lhdn_tin) {
+                businessDetails = {
+                  name: business.name,
+                  userName,
+                  tin: business.lhdn_tin,
+                  brn: business.business_registration_number || business.lhdn_tin,
+                  addressLine1: business.address_line1,
+                  addressLine2: business.address_line2 || '',
+                  city: business.city || '',
+                  stateCode: business.state_code || '',
+                  postalCode: business.postal_code || '',
+                  countryCode: business.country_code || 'MY',
+                  address: [business.address_line1, business.address_line2, business.city, business.state_code].filter(Boolean).join(', '),
+                  phone: business.contact_phone || '+60132201176',
+                  contactEmail: business.contact_email || undefined,
+                }
+              }
+            } catch {
+              console.log('[Background] Could not fetch business details for e-invoice (non-fatal)')
+            }
+
+            const lambdaResult = await invokeDocumentProcessor({
+              documentId: claimId,
+              domain: 'expense_claims',
+              storagePath: filePath,
+              fileType: fileType as 'pdf' | 'image',
+              userId: employeeProfile.user_id,
+              businessId: employeeProfile.business_id,
+              idempotencyKey: `expense-${claimId}-${Date.now()}`,
+              expectedDocumentType: 'receipt',
+              businessDetails,
+            })
+
+            await convexClient.mutation(api.functions.expenseClaims.update, {
+              id: claimId,
+              processingMetadata: {
+                ...processingMetadata,
+                lambda_execution_id: lambdaResult.executionId,
+                lambda_request_id: lambdaResult.requestId,
+                processing_timestamp: new Date().toISOString(),
+                processing_stage: 'lambda_invoked'
+              }
+            })
+
+            console.log(`[Background] Lambda invoked successfully: ${lambdaResult.executionId}`)
+          } catch (lambdaError) {
+            console.error('[Background] Failed to invoke Lambda:', lambdaError)
+            await convexClient.mutation(api.functions.expenseClaims.updateStatus, {
+              id: claimId,
+              status: 'failed'
+            })
+            await convexClient.mutation(api.functions.expenseClaims.update, {
+              id: claimId,
+              processingMetadata: {
+                ...processingMetadata,
+                status: 'failed',
+                error_message: 'Failed to invoke document processing Lambda',
+                error_timestamp: new Date().toISOString()
+              }
+            })
+          }
+        }
+      } catch (bgError) {
+        console.error('[Background] Expense claim background processing failed:', bgError)
       }
     }
 
+    // Return the claim ID immediately — background work runs via after()
     return {
       success: true,
-      data: expenseClaim as any,
-      task_id: triggerResult?.id
+      data: { _id: claimId, id: claimId } as any,
+      backgroundWork,
     }
 
   } catch (error) {

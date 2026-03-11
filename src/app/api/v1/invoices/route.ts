@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { getInvoices, createInvoice } from '@/domains/invoices/lib/data-access'
 import { rateLimiters } from '@/domains/security/lib/rate-limit'
 
@@ -84,9 +84,17 @@ export async function POST(request: NextRequest) {
 
     const invoice = await createInvoice({ file, businessId })
 
+    // Schedule S3 upload to run AFTER response is sent
+    if (invoice.backgroundWork) {
+      after(invoice.backgroundWork)
+    }
+
+    // Remove backgroundWork from response payload
+    const { backgroundWork: _, ...invoiceData } = invoice
+
     return NextResponse.json({
       success: true,
-      data: invoice
+      data: invoiceData
     }, { status: 201 })
 
   } catch (error) {
