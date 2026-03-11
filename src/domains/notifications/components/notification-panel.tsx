@@ -10,9 +10,10 @@ interface NotificationPanelProps {
   businessId: string
   open: boolean
   onOpenChange: (open: boolean) => void
+  onViewResource?: (resourceType: string, resourceId: string) => boolean
 }
 
-export function NotificationPanel({ businessId, open, onOpenChange }: NotificationPanelProps) {
+export function NotificationPanel({ businessId, open, onOpenChange, onViewResource }: NotificationPanelProps) {
   const {
     notifications,
     loading,
@@ -83,6 +84,7 @@ export function NotificationPanel({ businessId, open, onOpenChange }: Notificati
                   notification={notification}
                   onMarkAsRead={markAsRead}
                   onDismiss={dismiss}
+                  onViewResource={onViewResource}
                 />
               ))}
               {hasMore && (

@@ -12,11 +12,14 @@ interface NotificationItemProps {
     status: string
     title: string
     body: string
+    resourceType?: string
+    resourceId?: string
     resourceUrl?: string
     createdAt: number
   }
   onMarkAsRead: (id: string) => void
   onDismiss: (id: string) => void
+  onViewResource?: (resourceType: string, resourceId: string) => boolean
 }
 
 const TYPE_ICONS: Record<string, React.ElementType> = {
@@ -47,7 +50,7 @@ function getRelativeTime(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString()
 }
 
-export function NotificationItem({ notification, onMarkAsRead, onDismiss }: NotificationItemProps) {
+export function NotificationItem({ notification, onMarkAsRead, onDismiss, onViewResource }: NotificationItemProps) {
   const router = useRouter()
   const isUnread = notification.status === 'unread'
   const Icon = TYPE_ICONS[notification.type] || Lightbulb
@@ -56,6 +59,12 @@ export function NotificationItem({ notification, onMarkAsRead, onDismiss }: Noti
     if (isUnread) {
       onMarkAsRead(notification._id)
     }
+    // Intercept: open drawer overlay for supported resource types
+    if (onViewResource && notification.resourceType && notification.resourceId) {
+      const handled = onViewResource(notification.resourceType, notification.resourceId)
+      if (handled) return
+    }
+    // Fallback: navigate to resource URL
     if (notification.resourceUrl) {
       router.push(notification.resourceUrl)
     }
