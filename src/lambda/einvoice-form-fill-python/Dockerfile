@@ -1,5 +1,5 @@
 # E-Invoice Form Fill Lambda (Python + Playwright + Chromium)
-# Build: 2026-03-11-v7-tin-match-buyer-profile
+# Build: 2026-03-11-v8-post-cua-upload-resubmit
 
 FROM public.ecr.aws/lambda/python:3.12
 

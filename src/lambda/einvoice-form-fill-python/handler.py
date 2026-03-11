@@ -2797,7 +2797,27 @@ def handler(event: dict, context=None) -> dict:
         # ── Post-CUA: Upload receipt image if not done during pre-fill ──
         # (e.g. 7-Eleven: CUA navigates from dashboard to form, file input wasn't available during pre-fill)
         if receipt_image_local and not receipt_uploaded:
+            # Dismiss any error dialog first (e.g. "Please select and upload an image!")
+            try:
+                close_btn = page.locator('button:has-text("Close"), button:has-text("OK"), .swal2-confirm')
+                if close_btn.count() > 0 and close_btn.first.is_visible():
+                    close_btn.first.click(timeout=3000)
+                    print("[Post-CUA] Dismissed error dialog before upload")
+                    time.sleep(1)
+            except Exception:
+                pass
             receipt_uploaded = upload_receipt_image(page, receipt_image_local)
+            # Re-submit after late upload (CUA already tried and failed without image)
+            if receipt_uploaded:
+                time.sleep(2)
+                try:
+                    submit_btn = page.locator('button[type="submit"], button:has-text("Submit"), input[type="submit"]').first
+                    if submit_btn.count() > 0 and submit_btn.is_visible():
+                        submit_btn.click(timeout=5000)
+                        print("[Post-CUA] Re-submitted after late receipt upload")
+                        time.sleep(5)
+                except Exception as e:
+                    print(f"[Post-CUA] Re-submit failed: {e}")
 
         # ── Post-CUA: Solve any CAPTCHA (may have loaded lazily after scroll/CUA) ──
         captcha_ok = solve_captcha(page, url)
