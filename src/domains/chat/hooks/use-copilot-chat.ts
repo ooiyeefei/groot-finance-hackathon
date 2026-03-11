@@ -289,6 +289,12 @@ export function useCopilotBridge(
 
             case 'done':
               streamCompleted = true
+              console.log('[ChatBridge] Done event received:', {
+                serverPersisted: event.data?.serverPersisted,
+                accumulatedTextLength: accumulatedText.length,
+                conversationId,
+                isActiveStream: activeConversationIdRef.current === streamConversationRef.current,
+              })
               // Server already persisted the assistant message — skip client-side write
               if (event.data?.serverPersisted) {
                 serverPersisted = true
@@ -304,6 +310,12 @@ export function useCopilotBridge(
 
         // Persist the final assistant message to Convex (single write)
         // Skip if the server already persisted (prevents duplicate messages)
+        console.log('[ChatBridge] Post-stream persist check:', {
+          hasText: !!accumulatedText,
+          serverPersisted,
+          willPersistClient: !!accumulatedText && !serverPersisted,
+          conversationId,
+        })
         if (accumulatedText && !serverPersisted) {
           const metadata: Record<string, unknown> = {}
           if (accumulatedCitations.length > 0) {
@@ -347,6 +359,12 @@ export function useCopilotBridge(
         console.error('[ChatBridge] Stream error:', err)
       } finally {
         abortControllerRef.current = null
+        console.log('[ChatBridge] Finally block:', {
+          conversationId,
+          activeConversation: activeConversationIdRef.current,
+          streamConversation: streamConversationRef.current,
+          isStillViewing: activeConversationIdRef.current === streamConversationRef.current,
+        })
         // Only clear UI state if user is still viewing this conversation
         if (activeConversationIdRef.current === streamConversationRef.current) {
           setIsLoading(false)
