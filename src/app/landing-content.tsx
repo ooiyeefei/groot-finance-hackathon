@@ -417,7 +417,7 @@ export default function LandingContent({ country }: { country: string }) {
             <img src={FINANCE_ICON} alt="" width={20} height={20} className="w-5 h-5" />
           </div>
           <div className="flex items-center gap-3">
-            <a href="/reseller-program?t=groot2026" className="text-sm text-[#6B7280] hover:text-[#111111] transition-colors">Partners</a>
+            {!isNativePlatform() && (<a href="/reseller-program?t=groot2026" className="text-sm text-[#6B7280] hover:text-[#111111] transition-colors">Partners</a>)}
             <a href="/en/sign-in" className="btn-beam text-sm px-4 py-2 rounded-lg"><span className="btn-beam-text">Sign in</span></a>
           </div>
         </div>
