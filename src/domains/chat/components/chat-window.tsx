@@ -272,14 +272,14 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
 
         {/* Follow-up suggestion pills (horizontal, after last assistant message) */}
         {followUpSuggestions.length > 0 && !isLoading && (
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 scrollbar-thin">
+          <div className="flex flex-wrap items-center gap-2 pb-1 pt-1">
             <Sparkles className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
             {followUpSuggestions.map((text) => (
               <button
                 key={text}
                 onClick={() => { setUserScrolledUp(false); sendMessage(text) }}
                 className="text-xs px-3 py-1.5 rounded-full border border-primary/25 text-foreground
-                  hover:bg-primary/10 hover:border-primary/40 transition-colors whitespace-nowrap flex-shrink-0"
+                  hover:bg-primary/10 hover:border-primary/40 transition-colors"
               >
                 {text}
               </button>
