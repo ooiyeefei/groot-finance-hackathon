@@ -86,6 +86,12 @@ export function useCopilotBridge(
   const [error, setError] = useState<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
+  // Track which conversation the current stream belongs to, so we can
+  // suppress UI updates and avoid aborting when the user switches away.
+  const streamConversationRef = useRef<string | null>(null)
+  const activeConversationIdRef = useRef<string | undefined>(activeConversationId)
+  activeConversationIdRef.current = activeConversationId
+
   // Streaming state
   const [streamingText, setStreamingText] = useState('')
   const [streamingStatus, setStreamingStatus] = useState('')
@@ -113,12 +119,9 @@ export function useCopilotBridge(
   }, [activeConversationId, conversations])
 
   // Create a new conversation
+  // NOTE: We do NOT abort the in-flight stream here. The stream continues
+  // in the background and persists to the original conversation when done.
   const handleCreateConversation = useCallback(async () => {
-    // Abort any in-flight request from the previous conversation
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-      abortControllerRef.current = null
-    }
     const newId = await convexCreateConversation(undefined, language)
     setActiveConversationId(newId)
     setIsLoading(false)
@@ -130,14 +133,12 @@ export function useCopilotBridge(
   }, [convexCreateConversation, language])
 
   // Switch to an existing conversation
+  // NOTE: We do NOT abort the in-flight stream here. The stream continues
+  // in the background and persists to the original conversation when done.
+  // UI state is cleared so the new conversation starts fresh.
   const handleSwitchConversation = useCallback(
     (conversationId: string) => {
       if (conversationId === activeConversationId) return
-      // Abort any in-flight request from the previous conversation
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-        abortControllerRef.current = null
-      }
       setActiveConversationId(conversationId)
       setIsLoading(false)
       setStreamingText('')
@@ -188,6 +189,15 @@ export function useCopilotBridge(
       if (!conversationId) {
         conversationId = await handleCreateConversation()
       }
+
+      // Abort any previous in-flight stream (we're starting a new message)
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+        abortControllerRef.current = null
+      }
+
+      // Track which conversation this stream belongs to
+      streamConversationRef.current = conversationId!
 
       setIsLoading(true)
       setError(null)
@@ -254,19 +264,22 @@ export function useCopilotBridge(
         for await (const event of parseSSEStream(response)) {
           resetTimeout()
 
+          // Only update UI if user is still viewing the conversation this stream belongs to
+          const isActiveStream = activeConversationIdRef.current === streamConversationRef.current
+
           switch (event.event) {
             case 'status':
-              setStreamingStatus(event.data.phase)
+              if (isActiveStream) setStreamingStatus(event.data.phase)
               break
 
             case 'text':
               accumulatedText += event.data.token
-              setStreamingText(accumulatedText)
+              if (isActiveStream) setStreamingText(accumulatedText)
               break
 
             case 'action':
               accumulatedActions = [...accumulatedActions, event.data as ChatAction]
-              setStreamingActions(accumulatedActions)
+              if (isActiveStream) setStreamingActions(accumulatedActions)
               break
 
             case 'citation':
@@ -321,14 +334,21 @@ export function useCopilotBridge(
         }
 
         const errorMessage = err instanceof Error ? err.message : 'Failed to get response'
-        setError(errorMessage)
+        // Only show error if user is still viewing this conversation
+        if (activeConversationIdRef.current === streamConversationRef.current) {
+          setError(errorMessage)
+        }
         console.error('[ChatBridge] Stream error:', err)
       } finally {
         abortControllerRef.current = null
-        setIsLoading(false)
-        setStreamingText('')
-        setStreamingStatus('')
-        setStreamingActions([])
+        // Only clear UI state if user is still viewing this conversation
+        if (activeConversationIdRef.current === streamConversationRef.current) {
+          setIsLoading(false)
+          setStreamingText('')
+          setStreamingStatus('')
+          setStreamingActions([])
+        }
+        streamConversationRef.current = null
       }
     },
     [activeConversationId, handleCreateConversation, createMessage, convexMessages, language]
