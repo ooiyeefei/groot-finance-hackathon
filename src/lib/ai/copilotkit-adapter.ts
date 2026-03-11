@@ -623,20 +623,35 @@ interface ParsedTransaction {
   currency: string
   date: string
   category: string
+  transactionType: string // "Income" | "Expense" | "Cost of Goods Sold"
   month: string // "YYYY-MM" for grouping
+}
+
+// Known internal category ID patterns (e.g. "other_9gsnmr") — resolve to display name
+const CATEGORY_ID_REGEX = /^[a-z_]+_[a-z0-9]{4,}$/i
+
+function resolveCategoryName(raw: string): string {
+  if (!raw || raw === 'Uncategorized') return 'Uncategorized'
+  // If it looks like an internal ID (e.g. "other_9gsnmr"), extract the prefix as display name
+  if (CATEGORY_ID_REGEX.test(raw)) {
+    const prefix = raw.split('_')[0]
+    return prefix.charAt(0).toUpperCase() + prefix.slice(1)
+  }
+  return raw
 }
 
 /** Parse the formatted text output of get_transactions into structured data */
 function parseTransactionText(content: string): ParsedTransaction[] {
   const txns: ParsedTransaction[] = []
-  // Match each transaction block: "N. Description\n   Amount: ...\n   Date: ...\n   Category: ..."
-  const blockRegex = /\d+\.\s+.+?\n\s+Amount:\s+([\d,.]+)\s+(\w+).*?\n\s+Date:\s+(.+?)\n\s+Category:\s+(.+?)(?:\n|$)/g
+  // Match each transaction block including the Type field
+  const blockRegex = /\d+\.\s+.+?\n\s+Amount:\s+([\d,.]+)\s+(\w+).*?\n\s+Date:\s+(.+?)\n\s+Category:\s+(.+?)\n\s+Vendor:\s+.+?\n\s+Type:\s+(.+?)(?:\n|$)/g
   let match: RegExpExecArray | null
   while ((match = blockRegex.exec(content)) !== null) {
     const amount = parseFloat(match[1].replace(/,/g, ''))
     const currency = match[2]
     const dateStr = match[3].trim()
-    const category = match[4].trim()
+    const category = resolveCategoryName(match[4].trim())
+    const transactionType = match[5].trim()
 
     // Parse month from date like "Feb 05, 2026" or "Oct 31, 2025"
     const dateMatch = dateStr.match(/(\w{3})\s+\d{1,2},\s+(\d{4})/)
@@ -649,7 +664,7 @@ function parseTransactionText(content: string): ParsedTransaction[] {
       : 'unknown'
 
     if (!isNaN(amount) && amount > 0) {
-      txns.push({ amount, currency, date: dateStr, category, month })
+      txns.push({ amount, currency, date: dateStr, category, transactionType, month })
     }
   }
   return txns
@@ -657,22 +672,37 @@ function parseTransactionText(content: string): ParsedTransaction[] {
 
 /** Build a budget_alert card from parsed transactions (category spending breakdown) */
 function buildBudgetAlertFromTransactions(txns: ParsedTransaction[], content: string): ActionCard | null {
+  // CRITICAL: Only include expense and COGS transactions — never income/revenue
+  const expenseTxns = txns.filter(t =>
+    t.transactionType === 'Expense' || t.transactionType === 'Cost of Goods Sold'
+  )
+  if (expenseTxns.length === 0) return null
+
+  // Handle mixed currencies: group by currency, use the dominant one
+  const currencyCounts = new Map<string, number>()
+  for (const t of expenseTxns) {
+    currencyCounts.set(t.currency, (currencyCounts.get(t.currency) || 0) + 1)
+  }
+  // Use the most common currency; filter to only that currency for accurate totals
+  const dominantCurrency = [...currencyCounts.entries()]
+    .sort((a, b) => b[1] - a[1])[0][0]
+  const sameCurrencyTxns = expenseTxns.filter(t => t.currency === dominantCurrency)
+
   // Group by category
   const categoryMap = new Map<string, number>()
-  for (const t of txns) {
+  for (const t of sameCurrencyTxns) {
     categoryMap.set(t.category, (categoryMap.get(t.category) || 0) + t.amount)
   }
-  if (categoryMap.size < 2) return null
+  if (categoryMap.size < 1) return null
 
-  const currency = txns[0]?.currency || 'MYR'
-  const totalSpend = txns.reduce((s, t) => s + t.amount, 0)
-  const avgPerCategory = totalSpend / categoryMap.size
+  const totalSpend = sameCurrencyTxns.reduce((s, t) => s + t.amount, 0)
+  const avgPerCategory = categoryMap.size > 1 ? totalSpend / categoryMap.size : totalSpend
 
   type BudgetStatus = 'on_track' | 'above_average' | 'overspending'
   const categories = Array.from(categoryMap.entries())
     .sort((a, b) => b[1] - a[1])
     .map(([name, spend]) => {
-      const pct = (spend / avgPerCategory) * 100
+      const pct = categoryMap.size > 1 ? (spend / avgPerCategory) * 100 : 100
       const status: BudgetStatus = pct > 130 ? 'overspending'
         : pct > 100 ? 'above_average'
         : 'on_track'
@@ -690,8 +720,8 @@ function buildBudgetAlertFromTransactions(txns: ParsedTransaction[], content: st
     : overCount > 0 ? 'above_average'
     : 'on_track'
 
-  // Derive period from transaction dates
-  const months = [...new Set(txns.map(t => t.month))].sort()
+  // Derive period from expense transaction dates
+  const months = [...new Set(sameCurrencyTxns.map(t => t.month))].sort()
   const period = months.length === 1
     ? formatMonthLabel(months[0])
     : `${formatMonthLabel(months[0])} – ${formatMonthLabel(months[months.length - 1])}`
@@ -701,7 +731,7 @@ function buildBudgetAlertFromTransactions(txns: ParsedTransaction[], content: st
     id: `budget-auto-${hashCode(content.slice(0, 200))}`,
     data: {
       period,
-      currency,
+      currency: dominantCurrency,
       categories,
       totalCurrentSpend: totalSpend,
       totalAverageSpend: Math.round(avgPerCategory * categoryMap.size * 100) / 100,
@@ -712,9 +742,24 @@ function buildBudgetAlertFromTransactions(txns: ParsedTransaction[], content: st
 
 /** Build a spending_time_series card from parsed transactions (monthly totals) */
 function buildSpendingTimeSeriesFromTransactions(txns: ParsedTransaction[], content: string): ActionCard | null {
+  // Only include expense/COGS transactions for spending time series
+  const expenseTxns = txns.filter(t =>
+    t.transactionType === 'Expense' || t.transactionType === 'Cost of Goods Sold'
+  )
+  if (expenseTxns.length === 0) return null
+
+  // Use dominant currency for consistent totals
+  const currencyCounts = new Map<string, number>()
+  for (const t of expenseTxns) {
+    currencyCounts.set(t.currency, (currencyCounts.get(t.currency) || 0) + 1)
+  }
+  const dominantCurrency = [...currencyCounts.entries()]
+    .sort((a, b) => b[1] - a[1])[0][0]
+  const sameCurrencyTxns = expenseTxns.filter(t => t.currency === dominantCurrency)
+
   // Group by month
   const monthMap = new Map<string, Map<string, number>>()
-  for (const t of txns) {
+  for (const t of sameCurrencyTxns) {
     if (t.month === 'unknown') continue
     if (!monthMap.has(t.month)) monthMap.set(t.month, new Map())
     const cats = monthMap.get(t.month)!
@@ -724,7 +769,7 @@ function buildSpendingTimeSeriesFromTransactions(txns: ParsedTransaction[], cont
   const sortedMonths = [...monthMap.keys()].sort()
   if (sortedMonths.length < 2) return null
 
-  const currency = txns[0]?.currency || 'MYR'
+  const currency = dominantCurrency
 
   const periods = sortedMonths.map((month) => {
     const cats = monthMap.get(month)!

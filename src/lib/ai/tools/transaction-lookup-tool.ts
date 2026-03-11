@@ -1174,6 +1174,17 @@ Please clarify which type you'd like me to search, or say "both" to see all tran
     }
   }
 
+  /** Resolve internal category IDs (e.g. "other_9gsnmr") to display names */
+  private resolveCategoryDisplay(raw: string | undefined): string {
+    if (!raw) return ''
+    // Match internal ID patterns like "other_9gsnmr", "travel_abc123"
+    if (/^[a-z_]+_[a-z0-9]{4,}$/i.test(raw)) {
+      const prefix = raw.split('_')[0]
+      return prefix.charAt(0).toUpperCase() + prefix.slice(1)
+    }
+    return raw
+  }
+
   protected formatResultData(data: any[]): string {
     return data.map((transaction, index) => {
       // CRITICAL FIX: Display business date without timezone conversion
@@ -1189,7 +1200,7 @@ Please clarify which type you'd like me to search, or say "both" to see all tran
       return `${index + 1}. ${transaction.description || 'No description'}
    Amount: ${amount}${homeAmount}
    Date: ${date}
-   Category: ${transaction.category || 'Uncategorized'}
+   Category: ${this.resolveCategoryDisplay(transaction.category) || 'Uncategorized'}
    Vendor: ${transaction.vendor_name || 'Unknown'}
    Type: ${transaction.transaction_type || 'Unknown'}${docType}`
     }).join('\n\n')
