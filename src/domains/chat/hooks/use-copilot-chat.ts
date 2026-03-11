@@ -92,6 +92,12 @@ export function useCopilotBridge(
   const activeConversationIdRef = useRef<string | undefined>(activeConversationId)
   activeConversationIdRef.current = activeConversationId
 
+  // Keep a ref copy of accumulated text/actions so we can restore UI when
+  // the user navigates back to a conversation with an active stream.
+  const accumulatedTextRef = useRef('')
+  const accumulatedActionsRef = useRef<ChatAction[]>([])
+  const accumulatedStatusRef = useRef('')
+
   // Streaming state
   const [streamingText, setStreamingText] = useState('')
   const [streamingStatus, setStreamingStatus] = useState('')
@@ -132,19 +138,29 @@ export function useCopilotBridge(
     return newId
   }, [convexCreateConversation, language])
 
-  // Switch to an existing conversation
-  // NOTE: We do NOT abort the in-flight stream here. The stream continues
-  // in the background and persists to the original conversation when done.
-  // UI state is cleared so the new conversation starts fresh.
+  // Switch to an existing conversation.
+  // If the target conversation has an active stream, restore its UI state.
+  // Otherwise clear streaming state for a fresh view.
   const handleSwitchConversation = useCallback(
     (conversationId: string) => {
       if (conversationId === activeConversationId) return
       setActiveConversationId(conversationId)
-      setIsLoading(false)
-      setStreamingText('')
-      setStreamingStatus('')
-      setStreamingActions([])
       setError(null)
+
+      // Check if we're switching back to a conversation that's still streaming
+      if (streamConversationRef.current === conversationId) {
+        // Restore streaming UI state
+        setIsLoading(true)
+        setStreamingText(accumulatedTextRef.current)
+        setStreamingStatus(accumulatedStatusRef.current)
+        setStreamingActions(accumulatedActionsRef.current)
+      } else {
+        // Different conversation — clear streaming state
+        setIsLoading(false)
+        setStreamingText('')
+        setStreamingStatus('')
+        setStreamingActions([])
+      }
     },
     [activeConversationId]
   )
@@ -198,6 +214,9 @@ export function useCopilotBridge(
 
       // Track which conversation this stream belongs to
       streamConversationRef.current = conversationId!
+      accumulatedTextRef.current = ''
+      accumulatedActionsRef.current = []
+      accumulatedStatusRef.current = ''
 
       setIsLoading(true)
       setError(null)
@@ -270,16 +289,19 @@ export function useCopilotBridge(
 
           switch (event.event) {
             case 'status':
+              accumulatedStatusRef.current = event.data.phase
               if (isActiveStream) setStreamingStatus(event.data.phase)
               break
 
             case 'text':
               accumulatedText += event.data.token
+              accumulatedTextRef.current = accumulatedText
               if (isActiveStream) setStreamingText(accumulatedText)
               break
 
             case 'action':
               accumulatedActions = [...accumulatedActions, event.data as ChatAction]
+              accumulatedActionsRef.current = accumulatedActions
               if (isActiveStream) setStreamingActions(accumulatedActions)
               break
 
@@ -289,12 +311,6 @@ export function useCopilotBridge(
 
             case 'done':
               streamCompleted = true
-              console.log('[ChatBridge] Done event received:', {
-                serverPersisted: event.data?.serverPersisted,
-                accumulatedTextLength: accumulatedText.length,
-                conversationId,
-                isActiveStream: activeConversationIdRef.current === streamConversationRef.current,
-              })
               // Server already persisted the assistant message — skip client-side write
               if (event.data?.serverPersisted) {
                 serverPersisted = true
@@ -310,12 +326,6 @@ export function useCopilotBridge(
 
         // Persist the final assistant message to Convex (single write)
         // Skip if the server already persisted (prevents duplicate messages)
-        console.log('[ChatBridge] Post-stream persist check:', {
-          hasText: !!accumulatedText,
-          serverPersisted,
-          willPersistClient: !!accumulatedText && !serverPersisted,
-          conversationId,
-        })
         if (accumulatedText && !serverPersisted) {
           const metadata: Record<string, unknown> = {}
           if (accumulatedCitations.length > 0) {
@@ -359,12 +369,10 @@ export function useCopilotBridge(
         console.error('[ChatBridge] Stream error:', err)
       } finally {
         abortControllerRef.current = null
-        console.log('[ChatBridge] Finally block:', {
-          conversationId,
-          activeConversation: activeConversationIdRef.current,
-          streamConversation: streamConversationRef.current,
-          isStillViewing: activeConversationIdRef.current === streamConversationRef.current,
-        })
+        // Clear accumulated refs — stream is done
+        accumulatedTextRef.current = ''
+        accumulatedActionsRef.current = []
+        accumulatedStatusRef.current = ''
         // Only clear UI state if user is still viewing this conversation
         if (activeConversationIdRef.current === streamConversationRef.current) {
           setIsLoading(false)
