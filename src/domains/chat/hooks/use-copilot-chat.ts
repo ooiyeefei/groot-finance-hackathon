@@ -226,6 +226,7 @@ export function useCopilotBridge(
       let accumulatedActions: ChatAction[] = []
       let accumulatedCitations: CitationData[] = []
       let streamCompleted = false
+      let serverPersisted = false
 
       // Inactivity timeout
       let timeoutId: ReturnType<typeof setTimeout> | null = null
@@ -288,6 +289,10 @@ export function useCopilotBridge(
 
             case 'done':
               streamCompleted = true
+              // Server already persisted the assistant message — skip client-side write
+              if (event.data?.serverPersisted) {
+                serverPersisted = true
+              }
               break
 
             case 'error':
@@ -298,7 +303,8 @@ export function useCopilotBridge(
         if (timeoutId) clearTimeout(timeoutId)
 
         // Persist the final assistant message to Convex (single write)
-        if (accumulatedText) {
+        // Skip if the server already persisted (prevents duplicate messages)
+        if (accumulatedText && !serverPersisted) {
           const metadata: Record<string, unknown> = {}
           if (accumulatedCitations.length > 0) {
             metadata.citations = accumulatedCitations

@@ -31,7 +31,7 @@ export interface CitationEvent {
 
 export interface DoneEvent {
   event: 'done'
-  data: { totalTokens?: number }
+  data: { totalTokens?: number; serverPersisted?: boolean }
 }
 
 export interface ErrorEvent {

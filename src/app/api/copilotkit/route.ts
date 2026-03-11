@@ -105,7 +105,17 @@ export async function POST(req: NextRequest) {
     console.warn('[Usage Tracking] AI chat pre-flight failed, proceeding (fail-open):', usageError)
   }
 
-  // 6. Create SSE stream from the LangGraph agent
+  // 6. Get Convex client for server-side message persistence
+  let convexClient: Awaited<ReturnType<typeof getAuthenticatedConvex>>['client'] | null = null
+  try {
+    const { client } = await getAuthenticatedConvex()
+    convexClient = client
+  } catch {
+    // Non-fatal: server-side persistence disabled, client will persist
+    console.warn('[Chat API] Could not get Convex client for server persistence')
+  }
+
+  // 7. Create SSE stream from the LangGraph agent
   console.log(`[Chat API] Streaming agent for user ${userId}, business ${resolvedBusinessId}, conversation ${conversationId}`)
 
   const stream = new ReadableStream({
@@ -116,6 +126,11 @@ export async function POST(req: NextRequest) {
         const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
         controller.enqueue(encoder.encode(payload))
       }
+
+      // Accumulate the full response for server-side persistence
+      let accumulatedText = ''
+      let accumulatedActions: unknown[] = []
+      let accumulatedCitations: unknown[] = []
 
       try {
         // Emit an immediate status event so the client knows the stream is alive.
@@ -136,6 +151,15 @@ export async function POST(req: NextRequest) {
         })
 
         for await (const event of eventStream) {
+          // Accumulate for server-side persistence
+          if (event.event === 'text') {
+            accumulatedText += (event.data as { token: string }).token
+          } else if (event.event === 'action') {
+            accumulatedActions.push(event.data)
+          } else if (event.event === 'citation') {
+            accumulatedCitations = (event.data as { citations: unknown[] }).citations
+          }
+
           writeEvent(event.event, event.data)
         }
       } catch (error) {
@@ -145,6 +169,30 @@ export async function POST(req: NextRequest) {
           code: 'STREAM_ERROR',
         })
       } finally {
+        // Server-side persistence: save the assistant message to Convex
+        // This guarantees the message is saved even if the client disconnects.
+        let serverPersisted = false
+        if (accumulatedText && conversationId && convexClient) {
+          try {
+            const metadata: Record<string, unknown> = {}
+            if (accumulatedCitations.length > 0) metadata.citations = accumulatedCitations
+            if (accumulatedActions.length > 0) metadata.actions = accumulatedActions
+
+            await convexClient.mutation(api.functions.messages.create, {
+              conversationId,
+              role: 'assistant',
+              content: accumulatedText,
+              metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+            })
+            serverPersisted = true
+            console.log(`[Chat API] Server persisted assistant message for conversation ${conversationId}`)
+          } catch (persistError) {
+            console.error('[Chat API] Server-side persistence failed:', persistError)
+          }
+        }
+
+        // Signal to the client whether the server already persisted
+        writeEvent('done', { serverPersisted })
         controller.close()
       }
     },
