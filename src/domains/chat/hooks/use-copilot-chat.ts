@@ -84,19 +84,18 @@ export function useCopilotBridge(
   const [activeConversationId, setActiveConversationId] = useState<string | undefined>()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const abortControllerRef = useRef<AbortController | null>(null)
-
-  // Track which conversation the current stream belongs to, so we can
-  // suppress UI updates and avoid aborting when the user switches away.
-  const streamConversationRef = useRef<string | null>(null)
   const activeConversationIdRef = useRef<string | undefined>(activeConversationId)
   activeConversationIdRef.current = activeConversationId
 
-  // Keep a ref copy of accumulated text/actions so we can restore UI when
-  // the user navigates back to a conversation with an active stream.
-  const accumulatedTextRef = useRef('')
-  const accumulatedActionsRef = useRef<ChatAction[]>([])
-  const accumulatedStatusRef = useRef('')
+  // Per-conversation stream tracking — supports concurrent streams.
+  // Each conversation can have its own active stream, abort controller, and accumulated data.
+  interface StreamState {
+    controller: AbortController
+    text: string
+    actions: ChatAction[]
+    status: string
+  }
+  const activeStreamsRef = useRef<Map<string, StreamState>>(new Map())
 
   // Streaming state
   const [streamingText, setStreamingText] = useState('')
@@ -125,11 +124,12 @@ export function useCopilotBridge(
   }, [activeConversationId, conversations])
 
   // Create a new conversation
-  // NOTE: We do NOT abort the in-flight stream here. The stream continues
-  // in the background and persists to the original conversation when done.
+  // NOTE: We do NOT abort any in-flight stream. Streams continue in the
+  // background and persist via server-side when done.
   const handleCreateConversation = useCallback(async () => {
     const newId = await convexCreateConversation(undefined, language)
     setActiveConversationId(newId)
+    // New conversation has no stream — clear UI
     setIsLoading(false)
     setStreamingText('')
     setStreamingStatus('')
@@ -147,15 +147,16 @@ export function useCopilotBridge(
       setActiveConversationId(conversationId)
       setError(null)
 
-      // Check if we're switching back to a conversation that's still streaming
-      if (streamConversationRef.current === conversationId) {
-        // Restore streaming UI state
+      // Check if the target conversation has an active stream
+      const stream = activeStreamsRef.current.get(conversationId)
+      if (stream) {
+        // Restore streaming UI state from the active stream
         setIsLoading(true)
-        setStreamingText(accumulatedTextRef.current)
-        setStreamingStatus(accumulatedStatusRef.current)
-        setStreamingActions(accumulatedActionsRef.current)
+        setStreamingText(stream.text)
+        setStreamingStatus(stream.status)
+        setStreamingActions(stream.actions)
       } else {
-        // Different conversation — clear streaming state
+        // No active stream — clear streaming state
         setIsLoading(false)
         setStreamingText('')
         setStreamingStatus('')
@@ -186,17 +187,22 @@ export function useCopilotBridge(
     ]
   )
 
-  // Stop in-flight request
+  // Stop in-flight request for the currently viewed conversation
   const handleStopGeneration = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-      abortControllerRef.current = null
-      setIsLoading(false)
-      setStreamingStatus('')
+    const convId = activeConversationIdRef.current
+    if (convId) {
+      const stream = activeStreamsRef.current.get(convId)
+      if (stream) {
+        stream.controller.abort()
+        activeStreamsRef.current.delete(convId)
+        setIsLoading(false)
+        setStreamingStatus('')
+      }
     }
   }, [])
 
-  // Send message: persist user message, stream API response, persist final response
+  // Send message: persist user message, stream API response, persist final response.
+  // Supports concurrent streams — each conversation gets its own stream lifecycle.
   const handleSendMessage = useCallback(
     async (content: string) => {
       let conversationId = activeConversationId
@@ -206,17 +212,24 @@ export function useCopilotBridge(
         conversationId = await handleCreateConversation()
       }
 
-      // Abort any previous in-flight stream (we're starting a new message)
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-        abortControllerRef.current = null
+      const convId = conversationId!
+
+      // Abort any previous stream for THIS conversation only (re-sending in same chat)
+      const existingStream = activeStreamsRef.current.get(convId)
+      if (existingStream) {
+        existingStream.controller.abort()
+        activeStreamsRef.current.delete(convId)
       }
 
-      // Track which conversation this stream belongs to
-      streamConversationRef.current = conversationId!
-      accumulatedTextRef.current = ''
-      accumulatedActionsRef.current = []
-      accumulatedStatusRef.current = ''
+      // Register this stream in the active streams map
+      const controller = new AbortController()
+      const streamState: StreamState = {
+        controller,
+        text: '',
+        actions: [],
+        status: '',
+      }
+      activeStreamsRef.current.set(convId, streamState)
 
       setIsLoading(true)
       setError(null)
@@ -226,7 +239,7 @@ export function useCopilotBridge(
 
       // Persist user message to Convex immediately
       await createMessage({
-        conversationId: conversationId!,
+        conversationId: convId,
         role: 'user',
         content,
       })
@@ -236,10 +249,6 @@ export function useCopilotBridge(
         role: msg.role as 'user' | 'assistant',
         content: msg.content,
       }))
-
-      // Call the chat API with SSE streaming
-      const controller = new AbortController()
-      abortControllerRef.current = controller
 
       let accumulatedText = ''
       let accumulatedActions: ChatAction[] = []
@@ -253,7 +262,9 @@ export function useCopilotBridge(
         if (timeoutId) clearTimeout(timeoutId)
         timeoutId = setTimeout(() => {
           if (!streamCompleted) {
-            setError('Response timed out. Please try again.')
+            if (activeConversationIdRef.current === convId) {
+              setError('Response timed out. Please try again.')
+            }
             controller.abort()
           }
         }, STREAM_TIMEOUT_MS)
@@ -265,7 +276,7 @@ export function useCopilotBridge(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             message: content,
-            conversationId,
+            conversationId: convId,
             conversationHistory: history,
             language,
             businessId: businessIdRef.current,
@@ -284,25 +295,25 @@ export function useCopilotBridge(
         for await (const event of parseSSEStream(response)) {
           resetTimeout()
 
-          // Only update UI if user is still viewing the conversation this stream belongs to
-          const isActiveStream = activeConversationIdRef.current === streamConversationRef.current
+          // Only update UI if user is currently viewing THIS conversation
+          const isViewing = activeConversationIdRef.current === convId
 
           switch (event.event) {
             case 'status':
-              accumulatedStatusRef.current = event.data.phase
-              if (isActiveStream) setStreamingStatus(event.data.phase)
+              streamState.status = event.data.phase
+              if (isViewing) setStreamingStatus(event.data.phase)
               break
 
             case 'text':
               accumulatedText += event.data.token
-              accumulatedTextRef.current = accumulatedText
-              if (isActiveStream) setStreamingText(accumulatedText)
+              streamState.text = accumulatedText
+              if (isViewing) setStreamingText(accumulatedText)
               break
 
             case 'action':
               accumulatedActions = [...accumulatedActions, event.data as ChatAction]
-              accumulatedActionsRef.current = accumulatedActions
-              if (isActiveStream) setStreamingActions(accumulatedActions)
+              streamState.actions = accumulatedActions
+              if (isViewing) setStreamingActions(accumulatedActions)
               break
 
             case 'citation':
@@ -336,7 +347,7 @@ export function useCopilotBridge(
           }
 
           await createMessage({
-            conversationId: conversationId!,
+            conversationId: convId,
             role: 'assistant',
             content: accumulatedText,
             metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
@@ -346,10 +357,10 @@ export function useCopilotBridge(
         if (timeoutId) clearTimeout(timeoutId)
 
         if ((err as Error).name === 'AbortError') {
-          // User cancelled — persist partial content if available
+          // User cancelled or re-sent in same conversation — persist partial content
           if (accumulatedText) {
             await createMessage({
-              conversationId: conversationId!,
+              conversationId: convId,
               role: 'assistant',
               content: accumulatedText + '\n\n*[Response interrupted]*',
               metadata:
@@ -363,24 +374,20 @@ export function useCopilotBridge(
 
         const errorMessage = err instanceof Error ? err.message : 'Failed to get response'
         // Only show error if user is still viewing this conversation
-        if (activeConversationIdRef.current === streamConversationRef.current) {
+        if (activeConversationIdRef.current === convId) {
           setError(errorMessage)
         }
         console.error('[ChatBridge] Stream error:', err)
       } finally {
-        abortControllerRef.current = null
-        // Clear accumulated refs — stream is done
-        accumulatedTextRef.current = ''
-        accumulatedActionsRef.current = []
-        accumulatedStatusRef.current = ''
+        // Remove from active streams
+        activeStreamsRef.current.delete(convId)
         // Only clear UI state if user is still viewing this conversation
-        if (activeConversationIdRef.current === streamConversationRef.current) {
+        if (activeConversationIdRef.current === convId) {
           setIsLoading(false)
           setStreamingText('')
           setStreamingStatus('')
           setStreamingActions([])
         }
-        streamConversationRef.current = null
       }
     },
     [activeConversationId, handleCreateConversation, createMessage, convexMessages, language]
