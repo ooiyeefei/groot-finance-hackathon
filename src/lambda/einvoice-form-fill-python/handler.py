@@ -1253,16 +1253,18 @@ def prefill_custom_dropdowns(page: Page, buyer: dict):
 
 # ── Receipt image upload ──────────────────────────────────
 
-def upload_receipt_image(page: Page, local_path: str) -> bool:
+def upload_receipt_image(page: Page, local_path: str, quiet: bool = False) -> bool:
     """Find file input on the page and upload the receipt image via Playwright.
     Handles both visible and hidden <input type="file"> elements.
+    Called from pre-fill, CUA loop interceptor, and Tier 2B.
     Returns True if upload was performed."""
     try:
         # Find all file inputs (visible or hidden — many forms hide the real input behind a styled button)
         file_inputs = page.locator('input[type="file"]')
         count = file_inputs.count()
         if count == 0:
-            print("[Upload] No file input found on page")
+            if not quiet:
+                print("[Upload] No file input found on page")
             return False
 
         # Use the first file input (most forms have just one)
@@ -1272,7 +1274,8 @@ def upload_receipt_image(page: Page, local_path: str) -> bool:
         time.sleep(1)  # Wait for upload preview/processing
         return True
     except Exception as e:
-        print(f"[Upload] Failed: {e}")
+        if not quiet:
+            print(f"[Upload] Failed: {e}")
         return False
 
 
@@ -1838,8 +1841,10 @@ def run_99speedmart_flow(page: Page, buyer: dict, email_ref: str) -> bool:
 
 # ── Tier 2: Gemini CUA exploration ─────────────────────────
 
-def run_tier2(page: Page, buyer: dict, receipt: dict, receipt_image_b64: str | None = None, merchant_hints: str = "") -> int:
-    """CUA fills the form visually. Returns action count."""
+def run_tier2(page: Page, buyer: dict, receipt: dict, receipt_image_b64: str | None = None, merchant_hints: str = "", receipt_image_local: str | None = None) -> int:
+    """CUA fills the form visually. Returns action count.
+    receipt_image_local: local file path for auto-uploading via Playwright when file input appears."""
+    _receipt_uploaded = False  # Track upload state across CUA turns
     # Recon: Gemini Flash scouts the full page
     recon = ""
     try:
@@ -1961,6 +1966,11 @@ TASK:
             except Exception as e:
                 print(f"[CUA]   Error: {e}")
 
+            # Auto-upload interceptor: after each action, check if file input appeared
+            if receipt_image_local and not _receipt_uploaded:
+                if upload_receipt_image(page, receipt_image_local, quiet=True):
+                    _receipt_uploaded = True
+
             new_shot = base64.b64encode(page.screenshot(type="png")).decode()
             resp_data: dict[str, Any] = {"url": page.url}
             if safety:
@@ -1976,10 +1986,14 @@ TASK:
 
 # ── Tier 2B: Gemini Flash multi-pass fill (when CUA rate-limited) ──
 
-def run_tier2_flash(page: Page, buyer: dict, receipt: dict) -> int:
+def run_tier2_flash(page: Page, buyer: dict, receipt: dict, receipt_image_local: str | None = None) -> int:
     """Fallback: Gemini Flash identifies empty fields from screenshot, then fills via Playwright.
     Two-pass: 1) recon screenshot → Flash maps buyer details to fields, 2) Playwright fills."""
     print("[Tier 2B] Gemini Flash fallback — CUA rate-limited")
+
+    # Auto-upload receipt image if file input exists on the form
+    if receipt_image_local:
+        upload_receipt_image(page, receipt_image_local)
 
     full_b64 = base64.b64encode(page.screenshot(type="png", full_page=True)).decode()
 
@@ -2739,7 +2753,7 @@ def handler(event: dict, context=None) -> dict:
         # ── Tier 2: CUA exploration (with merchant-specific hints) ──
         _run_state["tier"] = "tier2"
         try:
-            actions = run_tier2(page, buyer, receipt, receipt_image_b64, merchant_hints=merchant_hints)
+            actions = run_tier2(page, buyer, receipt, receipt_image_b64, merchant_hints=merchant_hints, receipt_image_local=receipt_image_local)
         except Exception as tier2_err:
             if "429" in str(tier2_err):
                 if BU_LAMBDA_ARN:
@@ -2767,7 +2781,7 @@ def handler(event: dict, context=None) -> dict:
                 else:
                     # No browser-use Lambda configured — fall back to Flash
                     print(f"[Form Fill] CUA rate-limited, Flash fallback: {tier2_err}")
-                    actions = run_tier2_flash(page, buyer, receipt)
+                    actions = run_tier2_flash(page, buyer, receipt, receipt_image_local=receipt_image_local)
             else:
                 raise
 
@@ -2794,8 +2808,7 @@ def handler(event: dict, context=None) -> dict:
         else:
             time.sleep(3)  # CUA already submitted
 
-        # ── Post-CUA: Upload receipt image if not done during pre-fill ──
-        # (e.g. 7-Eleven: CUA navigates from dashboard to form, file input wasn't available during pre-fill)
+        # ── Post-CUA: Final upload safety net (normally handled by CUA loop interceptor) ──
         if receipt_image_local and not receipt_uploaded:
             # Dismiss any error dialog first (e.g. "Please select and upload an image!")
             try:
