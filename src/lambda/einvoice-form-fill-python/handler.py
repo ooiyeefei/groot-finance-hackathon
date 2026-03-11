@@ -1884,6 +1884,12 @@ RECEIPT DATA (use for receipt/bill/store fields):
 
 {f"MERCHANT-SPECIFIC INSTRUCTIONS (learned from previous submissions):\\n{merchant_hints}" if merchant_hints else ""}
 
+BUYER PROFILE SELECTION (CRITICAL — saves 5+ minutes):
+- If the form has a "Select Buyer" dropdown or "Buyer Profile" list, FIRST look for an EXISTING profile matching "{buyer["name"]}".
+- If found: SELECT it (click/choose it). Do NOT create a new profile. Skip straight to filling receipt details.
+- If NOT found: Only then click "New" / "Add" to create a new buyer profile with the BUYER DETAILS above.
+- After selecting or creating the buyer profile, proceed to fill the receipt/form fields.
+
 TASK:
 1. If the form asks for Store Code / Shop Number, use the Store Code from RECEIPT DATA.
 2. Fill Bill Number / Receipt Number with the Tax Invoice No from RECEIPT DATA.
@@ -2685,7 +2691,8 @@ def handler(event: dict, context=None) -> dict:
                 f"\n- CRITICAL: For the buyer EMAIL field, you MUST use: {buyer['email']}"
                 f"  Do NOT use the login email ({merchant_creds['email']}). They are different."
                 "  If the email field is pre-filled with the login email, CLEAR it and type the correct buyer email."
-                "\n- Fill all buyer detail fields, then submit."
+                f"\n- BUYER PROFILE: If the form has a buyer profile list/dropdown, look for '{buyer['name']}'. If it exists, SELECT it — do NOT create a new one. Only create if '{buyer['name']}' is NOT in the list."
+                "\n- Fill all receipt detail fields, then submit."
                 "\n- Do NOT try to log in again."
             )
 

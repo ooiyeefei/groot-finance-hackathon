@@ -1,5 +1,5 @@
 # E-Invoice Form Fill Lambda (Python + Playwright + Chromium)
-# Build: 2026-03-10-v5-receipt-upload
+# Build: 2026-03-11-v6-buyer-profile-reuse
 
 FROM public.ecr.aws/lambda/python:3.12
 
