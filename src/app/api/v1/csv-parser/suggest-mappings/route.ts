@@ -12,6 +12,9 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   SALES_STATEMENT_FIELDS,
   BANK_STATEMENT_FIELDS,
+  PURCHASE_ORDER_FIELDS,
+  GRN_FIELDS,
+  getSchemaFields,
 } from "@/lib/csv-parser/lib/schema-definitions";
 import {
   matchByAlias,
@@ -167,21 +170,25 @@ export async function POST(request: NextRequest) {
   }
 }
 
+function formatFieldsForPrompt(fields: import("@/lib/csv-parser/types").SchemaField[]): string {
+  return fields.map(
+    (f) =>
+      `  - ${f.name} (${f.label}): ${f.type}, ${f.required ? "REQUIRED" : "optional"}. Common names: ${f.aliases.join(", ")}`
+  ).join("\n");
+}
+
+const SCHEMA_TYPE_LABELS: Record<string, string> = {
+  sales_statement: "Sales Statement",
+  bank_statement: "Bank Statement",
+  purchase_order: "Purchase Order",
+  goods_received_note: "Goods Received Note",
+};
+
 function buildMappingPrompt(
   headers: string[],
   sampleRows: Record<string, string>[],
   schemaType: SchemaType | "auto"
 ): string {
-  const salesFields = SALES_STATEMENT_FIELDS.map(
-    (f) =>
-      `  - ${f.name} (${f.label}): ${f.type}, ${f.required ? "REQUIRED" : "optional"}. Common names: ${f.aliases.join(", ")}`
-  ).join("\n");
-
-  const bankFields = BANK_STATEMENT_FIELDS.map(
-    (f) =>
-      `  - ${f.name} (${f.label}): ${f.type}, ${f.required ? "REQUIRED" : "optional"}. Common names: ${f.aliases.join(", ")}`
-  ).join("\n");
-
   const sampleData = sampleRows
     .slice(0, 3)
     .map((row, i) => `Row ${i + 1}: ${JSON.stringify(row)}`)
@@ -189,21 +196,28 @@ function buildMappingPrompt(
 
   let schemaInstruction: string;
   if (schemaType === "auto") {
-    schemaInstruction = `First, determine if this is a Sales Statement or Bank Statement based on the headers and data.
+    const allSchemas = [
+      { type: "sales_statement", fields: SALES_STATEMENT_FIELDS },
+      { type: "bank_statement", fields: BANK_STATEMENT_FIELDS },
+      { type: "purchase_order", fields: PURCHASE_ORDER_FIELDS },
+      { type: "goods_received_note", fields: GRN_FIELDS },
+    ];
+    const schemaSections = allSchemas.map(
+      (s) => `${SCHEMA_TYPE_LABELS[s.type]} fields:\n${formatFieldsForPrompt(s.fields)}`
+    ).join("\n\n");
 
-Sales Statement fields:
-${salesFields}
+    schemaInstruction = `First, determine which schema type best matches the data: ${Object.keys(SCHEMA_TYPE_LABELS).join(", ")}.
 
-Bank Statement fields:
-${bankFields}`;
+${schemaSections}`;
   } else {
-    const fields =
-      schemaType === "sales_statement" ? salesFields : bankFields;
-    schemaInstruction = `This is a ${schemaType === "sales_statement" ? "Sales Statement" : "Bank Statement"}.
+    const fields = getSchemaFields(schemaType);
+    schemaInstruction = `This is a ${SCHEMA_TYPE_LABELS[schemaType] ?? schemaType}.
 
 Target fields:
-${fields}`;
+${formatFieldsForPrompt(fields)}`;
   }
+
+  const validTypes = Object.keys(SCHEMA_TYPE_LABELS).map((t) => `"${t}"`).join(" or ");
 
   return `Analyze these CSV column headers and sample data, then map each column to the most appropriate standard field.
 
@@ -216,7 +230,7 @@ ${schemaInstruction}
 
 Respond with ONLY this JSON structure:
 {
-  "detectedSchemaType": "sales_statement" or "bank_statement",
+  "detectedSchemaType": ${validTypes},
   "schemaConfidence": 0.0 to 1.0,
   "mappings": [
     {
@@ -257,10 +271,10 @@ function parseGeminiResponse(
 
     const parsed = JSON.parse(jsonStr);
 
-    const detectedSchemaType: SchemaType =
-      parsed.detectedSchemaType === "bank_statement"
-        ? "bank_statement"
-        : "sales_statement";
+    const validTypes: SchemaType[] = ["sales_statement", "bank_statement", "purchase_order", "goods_received_note"];
+    const detectedSchemaType: SchemaType = validTypes.includes(parsed.detectedSchemaType)
+      ? parsed.detectedSchemaType
+      : "sales_statement";
 
     const schemaConfidence = Math.max(
       0,

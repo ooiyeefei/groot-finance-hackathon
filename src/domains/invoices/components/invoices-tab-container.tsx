@@ -12,6 +12,8 @@ import {
   TrendingUp,
   ArrowRightLeft,
   Loader2,
+  ClipboardList,
+  Link2,
 } from 'lucide-react'
 import DocumentsContainer from './documents-container'
 
@@ -42,14 +44,24 @@ const VendorManager = lazy(
 const PriceIntelligence = lazy(
   () => import('@/domains/payables/components/price-intelligence')
 )
+const PurchaseOrdersTab = lazy(
+  () => import('@/domains/payables/components/purchase-orders-tab')
+)
+const GoodsReceivedTab = lazy(
+  () => import('@/domains/payables/components/goods-received-tab')
+)
+const MatchingTab = lazy(
+  () => import('@/domains/payables/components/matching-tab')
+)
 
 // --- Types ---
 type TopLevelTab = 'ar' | 'ap'
 type ARSubTab = 'dashboard' | 'sales' | 'debtors' | 'catalog' | 'reconciliation'
-type APSubTab = 'dashboard' | 'incoming' | 'vendors' | 'prices'
+type APSubTab = 'dashboard' | 'incoming' | 'vendors' | 'prices' | 'purchase-orders' | 'goods-received' | 'matching'
 
 const AR_SUB_TABS: readonly ARSubTab[] = ['dashboard', 'sales', 'debtors', 'catalog', 'reconciliation']
-const AP_SUB_TABS: readonly APSubTab[] = ['dashboard', 'incoming', 'vendors', 'prices']
+const AP_SUB_TABS: readonly APSubTab[] = ['dashboard', 'incoming', 'vendors', 'prices', 'purchase-orders', 'goods-received', 'matching']
+
 
 // --- Hash routing ---
 function parseHash(): { topLevel: TopLevelTab; subTab: string } {
@@ -219,6 +231,18 @@ export default function InvoicesTabContainer() {
                 <TrendingUp className="h-4 w-4" />
                 Price Intelligence
               </TabsTrigger>
+              <TabsTrigger value="purchase-orders" className={subTriggerClassName}>
+                <ClipboardList className="h-4 w-4" />
+                Purchase Orders
+              </TabsTrigger>
+              <TabsTrigger value="goods-received" className={subTriggerClassName}>
+                <Package className="h-4 w-4" />
+                Goods Received
+              </TabsTrigger>
+              <TabsTrigger value="matching" className={subTriggerClassName}>
+                <Link2 className="h-4 w-4" />
+                Matching
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="dashboard" className="mt-4">
@@ -240,6 +264,24 @@ export default function InvoicesTabContainer() {
             <TabsContent value="prices" className="mt-4">
               <Suspense fallback={<TabLoading />}>
                 <PriceIntelligence />
+              </Suspense>
+            </TabsContent>
+
+            <TabsContent value="purchase-orders" className="mt-4">
+              <Suspense fallback={<TabLoading />}>
+                <PurchaseOrdersTab />
+              </Suspense>
+            </TabsContent>
+
+            <TabsContent value="goods-received" className="mt-4">
+              <Suspense fallback={<TabLoading />}>
+                <GoodsReceivedTab />
+              </Suspense>
+            </TabsContent>
+
+            <TabsContent value="matching" className="mt-4">
+              <Suspense fallback={<TabLoading />}>
+                <MatchingTab />
               </Suspense>
             </TabsContent>
           </Tabs>

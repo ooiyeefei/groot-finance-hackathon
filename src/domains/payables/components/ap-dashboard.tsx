@@ -14,6 +14,7 @@ import SpendTrend from './spend-analytics/spend-trend'
 import { useVendorAging } from '../hooks/use-vendor-aging'
 import { useUpcomingPayments } from '../hooks/use-upcoming-payments'
 import { useSpendAnalytics } from '../hooks/use-spend-analytics'
+import MatchingSummary from './matching-summary'
 
 export default function APDashboard() {
   const { businessId } = useActiveBusiness()
@@ -71,6 +72,9 @@ export default function APDashboard() {
         isLoading={aging.isLoading}
         currency={currency}
       />
+
+      {/* 3-Way Matching Summary */}
+      <MatchingSummary />
 
       {/* Vendor Aging Table - Full width */}
       <VendorAgingTable

@@ -9,6 +9,8 @@ import type { SchemaType, SchemaField } from "../types";
 import {
   SALES_STATEMENT_FIELDS,
   BANK_STATEMENT_FIELDS,
+  PURCHASE_ORDER_FIELDS,
+  GRN_FIELDS,
 } from "./schema-definitions";
 
 interface AliasMatch {
@@ -155,24 +157,25 @@ function matchAgainstSchema(
  * picking the best fit. Returns unmatched headers for AI fallback.
  */
 export function matchByAlias(headers: string[]): AliasMatchResult {
-  const salesResult = matchAgainstSchema(headers, SALES_STATEMENT_FIELDS);
-  const bankResult = matchAgainstSchema(headers, BANK_STATEMENT_FIELDS);
+  const candidates: Array<{ type: SchemaType; result: ReturnType<typeof matchAgainstSchema> }> = [
+    { type: "sales_statement", result: matchAgainstSchema(headers, SALES_STATEMENT_FIELDS) },
+    { type: "bank_statement", result: matchAgainstSchema(headers, BANK_STATEMENT_FIELDS) },
+    { type: "purchase_order", result: matchAgainstSchema(headers, PURCHASE_ORDER_FIELDS) },
+    { type: "goods_received_note", result: matchAgainstSchema(headers, GRN_FIELDS) },
+  ];
 
-  // Pick the schema with the higher score
-  const isSales = salesResult.schemaScore >= bankResult.schemaScore;
-  const bestResult = isSales ? salesResult : bankResult;
-  const detectedSchemaType: SchemaType = isSales
-    ? "sales_statement"
-    : "bank_statement";
+  // Pick the schema with the highest score
+  candidates.sort((a, b) => b.result.schemaScore - a.result.schemaScore);
+  const best = candidates[0];
 
-  const unmatchedHeaders = bestResult.mappings
+  const unmatchedHeaders = best.result.mappings
     .filter((m) => m.targetField === "unmapped")
     .map((m) => m.sourceHeader);
 
   return {
-    detectedSchemaType,
-    schemaConfidence: bestResult.schemaScore,
-    mappings: bestResult.mappings,
+    detectedSchemaType: best.type,
+    schemaConfidence: best.result.schemaScore,
+    mappings: best.result.mappings,
     unmatchedHeaders,
   };
 }
@@ -182,10 +185,13 @@ export function matchByAlias(headers: string[]): AliasMatchResult {
  * Criteria: all required fields mapped AND >= 50% overall coverage.
  */
 export function isAliasMatchSufficient(result: AliasMatchResult): boolean {
-  const fields =
-    result.detectedSchemaType === "sales_statement"
-      ? SALES_STATEMENT_FIELDS
-      : BANK_STATEMENT_FIELDS;
+  const schemaMap: Record<SchemaType, SchemaField[]> = {
+    sales_statement: SALES_STATEMENT_FIELDS,
+    bank_statement: BANK_STATEMENT_FIELDS,
+    purchase_order: PURCHASE_ORDER_FIELDS,
+    goods_received_note: GRN_FIELDS,
+  };
+  const fields = schemaMap[result.detectedSchemaType] ?? BANK_STATEMENT_FIELDS;
   const requiredFields = fields.filter((f) => f.required);
 
   const mappedRequired = requiredFields.filter((rf) =>

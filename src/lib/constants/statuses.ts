@@ -569,7 +569,8 @@ export type OvertimeCalculationBasis = typeof OVERTIME_CALCULATION_BASIS[keyof t
 export const OVERTIME_CALCULATION_BASIS_VALUES = Object.values(OVERTIME_CALCULATION_BASIS);
 
 // ============================================
-// SALES ORDER MATCH STATUS
+// ============================================
+// SALES ORDER MATCH STATUS (AR Reconciliation)
 // ============================================
 export const SALES_ORDER_MATCH_STATUSES = {
   UNMATCHED: "unmatched",
@@ -604,16 +605,89 @@ export const SALES_ORDER_PERIOD_STATUSES = {
 
 export type SalesOrderPeriodStatus = typeof SALES_ORDER_PERIOD_STATUSES[keyof typeof SALES_ORDER_PERIOD_STATUSES];
 export const SALES_ORDER_PERIOD_STATUS_VALUES = Object.values(SALES_ORDER_PERIOD_STATUSES);
+// PURCHASE ORDER STATUSES (021-ap-3-way)
+// ============================================
 
-// ============================================
-// FEE CATEGORY TYPES (Platform fee breakdown)
-// ============================================
-export const FEE_CATEGORIES = {
-  COMMISSION: "commission",
-  SHIPPING: "shipping",
-  MARKETING: "marketing",
-  REFUND: "refund",
-  OTHER: "other",
+export const PURCHASE_ORDER_STATUSES = {
+  DRAFT: "draft",
+  ISSUED: "issued",
+  PARTIALLY_RECEIVED: "partially_received",
+  FULLY_RECEIVED: "fully_received",
+  INVOICED: "invoiced",
+  CLOSED: "closed",
+  CANCELLED: "cancelled",
 } as const;
 
-export type FeeCategory = typeof FEE_CATEGORIES[keyof typeof FEE_CATEGORIES];
+export type PurchaseOrderStatus = typeof PURCHASE_ORDER_STATUSES[keyof typeof PURCHASE_ORDER_STATUSES];
+export const PURCHASE_ORDER_STATUS_VALUES = Object.values(PURCHASE_ORDER_STATUSES);
+
+// ============================================
+// PO MATCH STATUSES (021-ap-3-way)
+// ============================================
+
+export const PO_MATCH_STATUSES = {
+  AUTO_APPROVED: "auto_approved",
+  PENDING_REVIEW: "pending_review",
+  APPROVED: "approved",
+  DISPUTED: "disputed",
+  ON_HOLD: "on_hold",
+} as const;
+
+export type PoMatchStatus = typeof PO_MATCH_STATUSES[keyof typeof PO_MATCH_STATUSES];
+export const PO_MATCH_STATUS_VALUES = Object.values(PO_MATCH_STATUSES);
+
+// ============================================
+// PO MATCH TYPES (021-ap-3-way)
+// ============================================
+
+export const PO_MATCH_TYPES = {
+  TWO_WAY: "two_way",
+  THREE_WAY: "three_way",
+} as const;
+
+export type PoMatchType = typeof PO_MATCH_TYPES[keyof typeof PO_MATCH_TYPES];
+export const PO_MATCH_TYPE_VALUES = Object.values(PO_MATCH_TYPES);
+
+// ============================================
+// MATCH METHOD TYPES (021-ap-3-way)
+// ============================================
+
+export const MATCH_METHODS = {
+  EXACT_CODE: "exact_code",
+  FUZZY_DESCRIPTION: "fuzzy_description",
+  AMOUNT_FALLBACK: "amount_fallback",
+  MANUAL: "manual",
+} as const;
+
+export type MatchMethod = typeof MATCH_METHODS[keyof typeof MATCH_METHODS];
+export const MATCH_METHOD_VALUES = Object.values(MATCH_METHODS);
+
+// ============================================
+// VARIANCE TYPES (021-ap-3-way)
+// ============================================
+
+export const VARIANCE_TYPES = {
+  QUANTITY_OVER_INVOICED: "quantity_over_invoiced",
+  QUANTITY_UNDER_INVOICED: "quantity_under_invoiced",
+  PRICE_HIGHER: "price_higher",
+  PRICE_LOWER: "price_lower",
+  OVER_RECEIVED: "over_received",
+  MISSING_GRN: "missing_grn",
+  CURRENCY_MISMATCH: "currency_mismatch",
+} as const;
+
+export type VarianceType = typeof VARIANCE_TYPES[keyof typeof VARIANCE_TYPES];
+export const VARIANCE_TYPE_VALUES = Object.values(VARIANCE_TYPES);
+
+// ============================================
+// GRN LINE ITEM CONDITION (021-ap-3-way)
+// ============================================
+
+export const GRN_LINE_CONDITIONS = {
+  GOOD: "good",
+  DAMAGED: "damaged",
+  REJECTED: "rejected",
+} as const;
+
+export type GrnLineCondition = typeof GRN_LINE_CONDITIONS[keyof typeof GRN_LINE_CONDITIONS];
+export const GRN_LINE_CONDITION_VALUES = Object.values(GRN_LINE_CONDITIONS);

@@ -140,71 +140,19 @@ export const INVOICE_FIELDS: FieldDefinition[] = [
 ];
 
 // ============================================
-// MASTER DATA FIELDS (Vendor, Customer, CoA)
+// MASTER DATA FIELDS
 // ============================================
 
 export const MASTER_DATA_FIELDS: FieldDefinition[] = [
-  // Vendor/Customer shared fields
-  { id: "entityCode", label: "Code", type: "text" },
-  { id: "entityName", label: "Name", type: "text" },
-  { id: "entityName2", label: "Name 2", type: "text" },
-  { id: "registerNo", label: "Registration No / TIN", type: "text" },
-  { id: "tin", label: "TIN", type: "text" },
-  { id: "idType", label: "ID Type", type: "text" },
-
-  // Address fields
-  { id: "address1", label: "Address Line 1", type: "text" },
-  { id: "address2", label: "Address Line 2", type: "text" },
-  { id: "address3", label: "Address Line 3", type: "text" },
-  { id: "address4", label: "Address Line 4", type: "text" },
-  { id: "city", label: "City", type: "text" },
-  { id: "postalCode", label: "Postal Code", type: "text" },
-  { id: "state", label: "State", type: "text" },
-  { id: "countryCode", label: "Country Code", type: "text" },
-
-  // Contact fields
-  { id: "contactPerson", label: "Contact Person", type: "text" },
-  { id: "contactPersonPosition", label: "Contact Position", type: "text" },
-  { id: "phone1", label: "Phone 1", type: "text" },
-  { id: "phone2", label: "Phone 2", type: "text" },
-  { id: "fax1", label: "Fax 1", type: "text" },
-  { id: "fax2", label: "Fax 2", type: "text" },
-  { id: "email1", label: "Email 1", type: "text" },
-  { id: "email2", label: "Email 2", type: "text" },
-  { id: "homePage", label: "Website", type: "text" },
-
-  // Business details
-  { id: "businessNature", label: "Business Nature", type: "text" },
-  { id: "suspended", label: "Suspended", type: "text" },
-  { id: "controlAccountCode", label: "Control Account", type: "text" },
-  { id: "areaCode", label: "Area Code", type: "text" },
-  { id: "categoryCode", label: "Category Code", type: "text" },
-  { id: "groupCode", label: "Group Code", type: "text" },
-  { id: "termCode", label: "Term Code", type: "text" },
-  { id: "staffCode", label: "Staff Code", type: "text" },
-  { id: "currencyCode", label: "Currency Code", type: "text" },
-
-  // Vendor-specific fields (also used as vendorName for creditor code)
-  { id: "vendorName", label: "Vendor Code", type: "text" },
-  { id: "vendorFullName", label: "Vendor Full Name", type: "text" },
-  { id: "vendorName2", label: "Vendor Name 2", type: "text" },
-
-  // Chart of Accounts fields
-  { id: "glCode", label: "GL Account Code", type: "text" },
-  { id: "categoryName", label: "Account Name", type: "text" },
-  { id: "accountType", label: "Account Type", type: "text" },
-  { id: "drCr", label: "Dr/Cr", type: "text" },
-
-  // Stock Item fields
-  { id: "itemCode", label: "Item Code", type: "text" },
+  // Common entity fields
+  { id: "code", label: "Code/ID", type: "text" },
+  { id: "name", label: "Name", type: "text" },
   { id: "description", label: "Description", type: "text" },
-  { id: "unitMeasurement", label: "Unit of Measurement", type: "text" },
-  { id: "taxCode", label: "Tax Code", type: "text" },
-  { id: "refCost", label: "Reference Cost", type: "number" },
-  { id: "refPrice", label: "Reference Price", type: "number" },
-
-  // Cost Centre fields
-  { id: "costCentreCode", label: "Cost Centre Code", type: "text" },
+  { id: "status", label: "Status", type: "text" },
+  { id: "category", label: "Category", type: "text" },
+  { id: "parentCode", label: "Parent Code", type: "text" },
+  { id: "createdAt", label: "Created Date", type: "date" },
+  { id: "updatedAt", label: "Updated Date", type: "date" },
 ];
 
 // ============================================
@@ -216,7 +164,7 @@ const FIELDS_BY_MODULE: Record<ExportModule, FieldDefinition[]> = {
   invoice: INVOICE_FIELDS,
   leave: LEAVE_FIELDS,
   accounting: ACCOUNTING_FIELDS,
-  "master-data": MASTER_DATA_FIELDS,
+  'master-data': MASTER_DATA_FIELDS,
 };
 
 export function getFieldsByModule(module: ExportModule): FieldDefinition[] {

@@ -298,6 +298,7 @@ After making changes to any system (e-invoice, expense claims, chat, etc.), **al
 - TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, React 19.1.2, Convex 1.31.3, papaparse (CSV), xlsx/SheetJS (Excel), Clerk 6.30.0 (001-csv-parser)
 - Convex (csv_import_templates table). No file storage — files parsed in browser memory. (001-csv-parser)
 - Convex (new `sales_orders` table, real-time subscriptions) (001-ar-reconciliation)
+- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, React 19.1.2, Convex 1.31.3, Clerk 6.30.0, lucide-react, Radix UI (021-ap-3-way)
 
 ## Recent Changes
 - 001-category-3-mcp: Added MCP Server with API key management

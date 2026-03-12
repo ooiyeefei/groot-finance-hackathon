@@ -52,6 +52,12 @@ import {
   SALES_ORDER_MATCH_STATUS_VALUES,
   SALES_ORDER_MATCH_METHOD_VALUES,
   SALES_ORDER_PERIOD_STATUS_VALUES,
+  PURCHASE_ORDER_STATUS_VALUES,
+  PO_MATCH_STATUS_VALUES,
+  PO_MATCH_TYPE_VALUES,
+  MATCH_METHOD_VALUES,
+  VARIANCE_TYPE_VALUES,
+  GRN_LINE_CONDITION_VALUES,
 } from "../../src/lib/constants/statuses";
 
 // ============================================
@@ -334,6 +340,7 @@ export const payrollAdjustmentTypeValidator = literalUnion(PAYROLL_ADJUSTMENT_TY
 export const overtimeCalculationBasisValidator = literalUnion(OVERTIME_CALCULATION_BASIS_VALUES);
 
 // ============================================
+// ============================================
 // SALES ORDER VALIDATORS (AR Reconciliation)
 // ============================================
 
@@ -354,3 +361,43 @@ export const salesOrderMatchMethodValidator = literalUnion(SALES_ORDER_MATCH_MET
  * Lifecycle: open → closed/disputed
  */
 export const salesOrderPeriodStatusValidator = literalUnion(SALES_ORDER_PERIOD_STATUS_VALUES);
+
+// ============================================
+// AP 3-WAY MATCHING VALIDATORS (021-ap-3-way)
+// ============================================
+
+/**
+ * Purchase order status validator
+ * Lifecycle: draft → issued → partially_received → fully_received → invoiced → closed
+ */
+export const purchaseOrderStatusValidator = literalUnion(PURCHASE_ORDER_STATUS_VALUES);
+
+/**
+ * PO match status validator
+ * Lifecycle: auto_approved / pending_review → approved / disputed / on_hold
+ */
+export const poMatchStatusValidator = literalUnion(PO_MATCH_STATUS_VALUES);
+
+/**
+ * PO match type validator
+ * two_way (PO + Invoice) or three_way (PO + Invoice + GRN)
+ */
+export const poMatchTypeValidator = literalUnion(PO_MATCH_TYPE_VALUES);
+
+/**
+ * Match method validator
+ * How line items were paired: exact_code, fuzzy_description, amount_fallback, manual
+ */
+export const matchMethodValidator = literalUnion(MATCH_METHOD_VALUES);
+
+/**
+ * Variance type validator
+ * Types of discrepancies detected during matching
+ */
+export const varianceTypeValidator = literalUnion(VARIANCE_TYPE_VALUES);
+
+/**
+ * GRN line item condition validator
+ * good, damaged, or rejected
+ */
+export const grnLineConditionValidator = literalUnion(GRN_LINE_CONDITION_VALUES);

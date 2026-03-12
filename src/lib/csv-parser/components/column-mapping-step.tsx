@@ -86,29 +86,26 @@ export function ColumnMappingStep({
       {/* Schema type selector */}
       <div className="flex items-center gap-3">
         <span className="text-sm text-muted-foreground">Schema type:</span>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              schemaType === "sales_statement"
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => onSchemaTypeChange("sales_statement")}
-          >
-            Sales Statement
-          </button>
-          <button
-            type="button"
-            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              schemaType === "bank_statement"
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => onSchemaTypeChange("bank_statement")}
-          >
-            Bank Statement
-          </button>
+        <div className="flex gap-2 flex-wrap">
+          {([
+            { value: "sales_statement" as const, label: "Sales Statement" },
+            { value: "bank_statement" as const, label: "Bank Statement" },
+            { value: "purchase_order" as const, label: "Purchase Order" },
+            { value: "goods_received_note" as const, label: "Goods Received" },
+          ]).map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                schemaType === opt.value
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => onSchemaTypeChange(opt.value)}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
       </div>
 

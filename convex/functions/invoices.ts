@@ -9,9 +9,10 @@
  */
 
 import { v } from "convex/values";
-import { query, mutation } from "../_generated/server";
+import { query, mutation, internalMutation, internalQuery } from "../_generated/server";
 import { Id } from "../_generated/dataModel";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
+import { internal } from "../_generated/api";
 
 // Helper: require finance admin role (owner/finance_admin/manager)
 async function requireFinanceAdminForInvoices(
@@ -697,6 +698,27 @@ export const updateStatus = mutation({
 
       case "completed":
         updateData.processedAt = now;
+
+        // Trigger auto-matching if invoice has a PO reference
+        const extracted = (invoice as any).extractedData as any;
+        if (extracted) {
+          const purchaseOrderRef =
+            extracted.purchase_order_number?.value ??
+            extracted.purchase_order_number ??
+            extracted.purchaseOrderNumber ??
+            extracted.po_number ??
+            extracted.poNumber ??
+            extracted.po_ref ??
+            extracted.purchaseOrderRef ??
+            null;
+
+          if (purchaseOrderRef && typeof purchaseOrderRef === "string" && purchaseOrderRef.trim() !== "") {
+            // Schedule async auto-match
+            await ctx.scheduler.runAfter(0, internal.functions.poMatches.tryAutoMatchInternal, {
+              invoiceId: invoice._id,
+            });
+          }
+        }
         break;
 
       case "failed":
@@ -882,9 +904,6 @@ export const retryProcessing = mutation({
 // INTERNAL MUTATIONS (for Trigger.dev tasks)
 // These bypass user auth - only call from trusted backend
 // ============================================
-
-import { internalMutation, internalQuery } from "../_generated/server";
-import { internal } from "../_generated/api";
 
 /**
  * Internal: Get invoice by ID (no auth required)

@@ -311,10 +311,279 @@ export const BANK_STATEMENT_FIELDS: SchemaField[] = [
   },
 ];
 
+export const PURCHASE_ORDER_FIELDS: SchemaField[] = [
+  {
+    name: "poNumber",
+    label: "PO Number",
+    type: "string",
+    required: true,
+    aliases: [
+      "po number",
+      "po no",
+      "po #",
+      "purchase order",
+      "order number",
+    ],
+  },
+  {
+    name: "poDate",
+    label: "PO Date",
+    type: "date",
+    required: false,
+    aliases: [
+      "po date",
+      "order date",
+      "date",
+      "created date",
+    ],
+  },
+  {
+    name: "vendorName",
+    label: "Vendor Name",
+    type: "string",
+    required: true,
+    aliases: [
+      "vendor",
+      "supplier",
+      "vendor name",
+      "supplier name",
+    ],
+  },
+  {
+    name: "deliveryDate",
+    label: "Delivery Date",
+    type: "date",
+    required: false,
+    aliases: [
+      "delivery date",
+      "required date",
+      "expected date",
+      "due date",
+    ],
+  },
+  {
+    name: "lineDescription",
+    label: "Line Description",
+    type: "string",
+    required: true,
+    aliases: [
+      "description",
+      "item",
+      "item description",
+      "product",
+      "line description",
+    ],
+  },
+  {
+    name: "itemCode",
+    label: "Item Code",
+    type: "string",
+    required: false,
+    aliases: [
+      "item code",
+      "sku",
+      "product code",
+      "part number",
+      "material code",
+    ],
+  },
+  {
+    name: "quantity",
+    label: "Quantity",
+    type: "number",
+    required: true,
+    aliases: [
+      "qty",
+      "quantity",
+      "ordered qty",
+      "order quantity",
+    ],
+  },
+  {
+    name: "unitPrice",
+    label: "Unit Price",
+    type: "number",
+    required: true,
+    aliases: [
+      "unit price",
+      "price",
+      "rate",
+      "cost",
+    ],
+  },
+  {
+    name: "totalAmount",
+    label: "Total Amount",
+    type: "number",
+    required: false,
+    aliases: [
+      "total",
+      "amount",
+      "line total",
+      "extended amount",
+    ],
+  },
+  {
+    name: "currency",
+    label: "Currency",
+    type: "string",
+    required: false,
+    aliases: ["currency", "ccy", "currency code"],
+  },
+  {
+    name: "unitMeasurement",
+    label: "Unit of Measure",
+    type: "string",
+    required: false,
+    aliases: [
+      "uom",
+      "unit",
+      "unit of measure",
+      "measure",
+    ],
+  },
+];
+
+export const GRN_FIELDS: SchemaField[] = [
+  {
+    name: "grnNumber",
+    label: "GRN Number",
+    type: "string",
+    required: true,
+    aliases: [
+      "grn number",
+      "grn no",
+      "grn #",
+      "delivery note",
+      "dn number",
+      "receipt number",
+    ],
+  },
+  {
+    name: "grnDate",
+    label: "GRN Date",
+    type: "date",
+    required: false,
+    aliases: [
+      "grn date",
+      "receipt date",
+      "delivery date",
+      "received date",
+      "date",
+    ],
+  },
+  {
+    name: "vendorName",
+    label: "Vendor Name",
+    type: "string",
+    required: true,
+    aliases: [
+      "vendor",
+      "supplier",
+      "vendor name",
+      "supplier name",
+    ],
+  },
+  {
+    name: "poNumber",
+    label: "PO Number",
+    type: "string",
+    required: false,
+    aliases: [
+      "po number",
+      "po no",
+      "po reference",
+      "purchase order",
+    ],
+  },
+  {
+    name: "lineDescription",
+    label: "Line Description",
+    type: "string",
+    required: true,
+    aliases: [
+      "description",
+      "item",
+      "item description",
+      "product",
+    ],
+  },
+  {
+    name: "itemCode",
+    label: "Item Code",
+    type: "string",
+    required: false,
+    aliases: [
+      "item code",
+      "sku",
+      "product code",
+      "part number",
+    ],
+  },
+  {
+    name: "quantityOrdered",
+    label: "Quantity Ordered",
+    type: "number",
+    required: false,
+    aliases: [
+      "qty ordered",
+      "ordered",
+      "order qty",
+      "po qty",
+    ],
+  },
+  {
+    name: "quantityReceived",
+    label: "Quantity Received",
+    type: "number",
+    required: true,
+    aliases: [
+      "qty received",
+      "received",
+      "received qty",
+      "actual qty",
+      "delivered qty",
+    ],
+  },
+  {
+    name: "quantityRejected",
+    label: "Quantity Rejected",
+    type: "number",
+    required: false,
+    aliases: [
+      "qty rejected",
+      "rejected",
+      "reject qty",
+      "damaged qty",
+    ],
+  },
+  {
+    name: "condition",
+    label: "Condition",
+    type: "string",
+    required: false,
+    aliases: [
+      "condition",
+      "status",
+      "quality",
+      "inspection result",
+    ],
+  },
+];
+
 export function getSchemaFields(schemaType: SchemaType): SchemaField[] {
-  return schemaType === "sales_statement"
-    ? SALES_STATEMENT_FIELDS
-    : BANK_STATEMENT_FIELDS;
+  switch (schemaType) {
+    case "sales_statement":
+      return SALES_STATEMENT_FIELDS;
+    case "bank_statement":
+      return BANK_STATEMENT_FIELDS;
+    case "purchase_order":
+      return PURCHASE_ORDER_FIELDS;
+    case "goods_received_note":
+      return GRN_FIELDS;
+    default:
+      return BANK_STATEMENT_FIELDS;
+  }
 }
 
 export function getRequiredFields(schemaType: SchemaType): SchemaField[] {

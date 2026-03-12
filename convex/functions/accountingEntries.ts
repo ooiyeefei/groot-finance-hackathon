@@ -501,6 +501,10 @@ export const create = mutation({
         })
       )
     ),
+    // AP 3-Way Matching: link to purchase order
+    purchaseOrderId: v.optional(v.id("purchase_orders")),
+    // Skip match gating (e.g., marked "no match required" by admin)
+    noMatchRequired: v.optional(v.boolean()),
   },
   handler: async (ctx, args): Promise<Id<"accounting_entries">> => {
     const identity = await ctx.auth.getUserIdentity();
@@ -550,6 +554,55 @@ export const create = mutation({
       }
     }
 
+    // ============================================
+    // AP 3-Way Match Gating (021-ap-3-way)
+    // If the source invoice has a linked PO, require an approved match
+    // before allowing the payable to be created.
+    // ============================================
+    let matchGated = false;
+    let resolvedPurchaseOrderId = args.purchaseOrderId;
+
+    // If purchaseOrderId not passed directly, check the source invoice
+    if (!resolvedPurchaseOrderId && args.sourceDocumentType === "invoice" && args.sourceRecordId) {
+      const sourceInvoice = await ctx.db.get(args.sourceRecordId as Id<"invoices">);
+      if (sourceInvoice) {
+        const extractedData = (sourceInvoice as any).extractedData as any;
+        // Check if extracted data references a PO number, and look for a linked PO match
+        if (extractedData?.purchaseOrderId) {
+          resolvedPurchaseOrderId = extractedData.purchaseOrderId;
+        }
+      }
+    }
+
+    if (resolvedPurchaseOrderId && !args.noMatchRequired) {
+      matchGated = true;
+
+      // Look for an approved match for this PO + invoice combination
+      const matchesForPO = await ctx.db
+        .query("po_matches")
+        .withIndex("by_purchaseOrderId", (q: any) =>
+          q.eq("purchaseOrderId", resolvedPurchaseOrderId!)
+        )
+        .collect();
+
+      // Filter for matches linked to this specific invoice (if we have a sourceRecordId)
+      const relevantMatches = args.sourceRecordId
+        ? matchesForPO.filter(
+            (m: any) => m.invoiceId === args.sourceRecordId
+          )
+        : matchesForPO;
+
+      const hasApprovedMatch = relevantMatches.some(
+        (m: any) => m.status === "approved" || m.status === "auto_approved"
+      );
+
+      if (!hasApprovedMatch) {
+        throw new Error(
+          "This invoice is linked to a PO and requires an approved match before creating a payable. Please complete the matching process first."
+        );
+      }
+    }
+
     const now = Date.now();
     const entryId = await ctx.db.insert("accounting_entries", {
       businessId: args.businessId,
@@ -579,6 +632,9 @@ export const create = mutation({
       processingMetadata: args.processingMetadata,
       documentMetadata: args.documentMetadata,
       lineItems: args.lineItems,
+      // AP 3-Way Matching fields
+      purchaseOrderId: resolvedPurchaseOrderId,
+      matchGated: matchGated || undefined,
       updatedAt: now,
     });
 
