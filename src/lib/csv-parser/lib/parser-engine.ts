@@ -68,11 +68,25 @@ async function parseCsvFile(
     header: true,
     skipEmptyLines: true,
     preview: maxSample,
+    delimiter: "", // Auto-detect (empty string triggers auto-detection)
+    delimitersToGuess: [',', '\t', '|', ';'], // Try these delimiters in order
   });
+
+  // Debug: Log detected delimiter and field count
+  console.log('[CSV Parser] Detected delimiter:', result.meta.delimiter);
+  console.log('[CSV Parser] Field count:', result.meta.fields?.length);
+  console.log('[CSV Parser] Fields:', result.meta.fields);
 
   if (!result.meta.fields || result.meta.fields.length === 0) {
     throw new Error(
       "Could not detect column headers. The file may be empty or incorrectly formatted."
+    );
+  }
+
+  // If only 1 field detected but it contains commas, the delimiter detection failed
+  if (result.meta.fields.length === 1 && result.meta.fields[0].includes(',')) {
+    throw new Error(
+      "Delimiter detection failed. The file appears to have comma-separated values but they were not parsed correctly. Please ensure the file is a valid CSV with comma delimiters."
     );
   }
 
