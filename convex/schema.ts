@@ -2399,6 +2399,211 @@ export default defineSchema({
     .index("by_businessId_orderReference", ["businessId", "orderReference"])
     .index("by_businessId_periodStatus", ["businessId", "periodStatus"]),
 
+  bank_accounts: defineTable({
+    businessId: v.id("businesses"),
+    bankName: v.string(),
+    accountNumber: v.string(),
+    accountNumberLast4: v.string(),
+    currency: v.string(),
+    nickname: v.optional(v.string()),
+    status: bankAccountStatusValidator,
+    lastImportDate: v.optional(v.string()),
+    transactionCount: v.number(),
+    createdBy: v.id("users"),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_status", ["businessId", "status"]),
+
+  bank_transactions: defineTable({
+    businessId: v.id("businesses"),
+    bankAccountId: v.id("bank_accounts"),
+    importSessionId: v.id("bank_import_sessions"),
+    transactionDate: v.string(),
+    description: v.string(),
+    debitAmount: v.optional(v.number()),
+    creditAmount: v.optional(v.number()),
+    balance: v.optional(v.number()),
+    reference: v.optional(v.string()),
+    transactionType: v.optional(v.string()),
+    amount: v.number(),
+    direction: bankTransactionDirectionValidator,
+    deduplicationHash: v.string(),
+    reconciliationStatus: reconciliationStatusValidator,
+    category: v.optional(bankTransactionCategoryValidator),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_bankAccountId", ["bankAccountId"])
+    .index("by_importSessionId", ["importSessionId"])
+    .index("by_bankAccountId_status", ["bankAccountId", "reconciliationStatus"])
+    .index("by_deduplicationHash", ["deduplicationHash"])
+    .index("by_bankAccountId_date", ["bankAccountId", "transactionDate"]),
+
+  bank_import_sessions: defineTable({
+    businessId: v.id("businesses"),
+    bankAccountId: v.id("bank_accounts"),
+    fileName: v.string(),
+    rowCount: v.number(),
+    duplicatesSkipped: v.number(),
+    dateRange: v.object({
+      from: v.string(),
+      to: v.string(),
+    }),
+    importedBy: v.id("users"),
+    importedAt: v.number(),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_bankAccountId", ["bankAccountId"]),
+
+  reconciliation_matches: defineTable({
+    businessId: v.id("businesses"),
+    bankTransactionId: v.id("bank_transactions"),
+    accountingEntryId: v.id("accounting_entries"),
+    matchType: matchTypeValidator,
+    confidenceScore: v.number(),
+    confidenceLevel: confidenceLevelValidator,
+    matchReason: v.string(),
+    status: matchStatusValidator,
+    confirmedBy: v.optional(v.id("users")),
+    confirmedAt: v.optional(v.number()),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_bankTransactionId", ["bankTransactionId"])
+    .index("by_accountingEntryId", ["accountingEntryId"])
+    .index("by_bankTransactionId_status", ["bankTransactionId", "status"]),
+
+
+  purchase_orders: defineTable({
+    businessId: v.id("businesses"),
+    vendorId: v.id("vendors"),
+    poNumber: v.string(),
+    poDate: v.string(),                          // ISO date
+    requiredDeliveryDate: v.optional(v.string()), // Expected delivery date
+    status: purchaseOrderStatusValidator,
+
+    // Embedded line items
+    lineItems: v.array(v.object({
+      itemCode: v.optional(v.string()),
+      description: v.string(),
+      quantity: v.number(),
+      unitPrice: v.number(),
+      totalAmount: v.number(),
+      currency: v.string(),
+      unitMeasurement: v.optional(v.string()),
+      receivedQuantity: v.optional(v.number()),   // Cumulative received (updated from GRNs)
+      invoicedQuantity: v.optional(v.number()),   // Cumulative invoiced (updated from matches)
+    })),
+
+    totalAmount: v.number(),
+    currency: v.string(),
+    notes: v.optional(v.string()),
+    sourceDocumentId: v.optional(v.id("_storage")),
+    sourceInvoiceId: v.optional(v.id("invoices")),
+
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_status", ["businessId", "status"])
+    .index("by_businessId_vendorId", ["businessId", "vendorId"])
+    .index("by_businessId_poNumber", ["businessId", "poNumber"]),
+
+  goods_received_notes: defineTable({
+    businessId: v.id("businesses"),
+    vendorId: v.id("vendors"),
+    grnNumber: v.string(),
+    purchaseOrderId: v.optional(v.id("purchase_orders")),
+    grnDate: v.string(),                          // ISO date
+    receivedBy: v.optional(v.id("users")),
+
+    // Embedded line items
+    lineItems: v.array(v.object({
+      poLineItemIndex: v.optional(v.number()),
+      itemCode: v.optional(v.string()),
+      description: v.string(),
+      quantityOrdered: v.optional(v.number()),    // From PO (for reference)
+      quantityReceived: v.number(),
+      quantityRejected: v.optional(v.number()),
+      condition: v.optional(grnLineConditionValidator),
+      notes: v.optional(v.string()),
+    })),
+
+    sourceDocumentId: v.optional(v.id("_storage")),
+    sourceInvoiceId: v.optional(v.id("invoices")),
+    notes: v.optional(v.string()),
+
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_purchaseOrderId", ["purchaseOrderId"])
+    .index("by_businessId_vendorId", ["businessId", "vendorId"]),
+
+  po_matches: defineTable({
+    businessId: v.id("businesses"),
+    purchaseOrderId: v.id("purchase_orders"),
+    accountingEntryId: v.optional(v.id("accounting_entries")),
+    invoiceId: v.optional(v.id("invoices")),
+    grnIds: v.optional(v.array(v.id("goods_received_notes"))),
+    matchType: poMatchTypeValidator,
+    status: poMatchStatusValidator,
+
+    // Embedded line item pairings
+    lineItemPairings: v.array(v.object({
+      poLineIndex: v.number(),
+      invoiceLineIndex: v.optional(v.number()),
+      grnLineIndex: v.optional(v.number()),
+      matchConfidence: v.number(),                // 0-1 confidence score
+      matchMethod: matchMethodValidator,
+      poQuantity: v.number(),
+      grnQuantity: v.optional(v.number()),
+      invoiceQuantity: v.optional(v.number()),
+      poUnitPrice: v.number(),
+      invoiceUnitPrice: v.optional(v.number()),
+      variances: v.optional(v.array(v.object({
+        type: varianceTypeValidator,
+        expectedValue: v.number(),
+        actualValue: v.number(),
+        absoluteDifference: v.number(),
+        percentageDifference: v.number(),
+        exceedsTolerance: v.boolean(),
+      }))),
+    })),
+
+    // Aggregated variance summary
+    overallVarianceSummary: v.optional(v.object({
+      totalVariances: v.number(),
+      exceedsToleranceCount: v.number(),
+      maxPriceVariancePercent: v.optional(v.number()),
+      maxQuantityVariancePercent: v.optional(v.number()),
+    })),
+
+    reviewedBy: v.optional(v.id("users")),
+    reviewNotes: v.optional(v.string()),
+    reviewedAt: v.optional(v.number()),
+
+    createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_status", ["businessId", "status"])
+    .index("by_purchaseOrderId", ["purchaseOrderId"])
+    .index("by_invoiceId", ["invoiceId"]),
+
+  matching_settings: defineTable({
+    businessId: v.id("businesses"),
+    quantityTolerancePercent: v.number(),         // Default: 10
+    priceTolerancePercent: v.number(),             // Default: 5
+    poNumberPrefix: v.string(),                    // Default: "PO"
+    grnNumberPrefix: v.string(),                   // Default: "GRN"
+    autoMatchEnabled: v.boolean(),                 // Default: true
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"]),
+
   deletion_data_exports: defineTable({
     businessId: v.id("businesses"),
     deletedUserEmail: v.string(),
