@@ -897,10 +897,10 @@ export default function ARReconciliation() {
                 {/* Reconcile line items button (when matched and has line items) */}
                 {selectedOrder.matchedInvoiceId && (selectedOrder as any).lineItems?.length > 0 && (
                   <Button
-                    variant="outline"
+                    variant="default"
                     size="sm"
                     onClick={() => handleReconcileLineItems(selectedOrder._id)}
-                    className="text-xs"
+                    className="text-xs bg-primary hover:bg-primary/90 text-primary-foreground"
                   >
                     <Columns2 className="h-3 w-3 mr-1" />
                     Reconcile Line Items
@@ -909,9 +909,10 @@ export default function ARReconciliation() {
 
                 {(selectedOrder.matchStatus === 'matched' || selectedOrder.matchStatus === 'variance') && (
                   <Button
-                    variant="outline"
+                    variant="destructive"
                     size="sm"
                     onClick={() => handleUnmatch(selectedOrder._id)}
+                    className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                   >
                     Unmatch
                   </Button>
@@ -920,23 +921,26 @@ export default function ARReconciliation() {
 
               {/* Manual Match (for unmatched/conflict orders) */}
               {(selectedOrder.matchStatus === 'unmatched' || selectedOrder.matchStatus === 'conflict') && (
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Select an invoice to match:</p>
-                  <div className="max-h-48 overflow-y-auto space-y-1">
+                <div className="space-y-3 pt-4 border-t border-border">
+                  <p className="text-sm font-medium text-foreground">Select an invoice to match:</p>
+                  <div className="max-h-64 overflow-y-auto space-y-2">
                     {invoices
                       .filter((inv) => inv.status !== 'void' && inv.status !== 'draft')
                       .slice(0, 20)
                       .map((inv) => (
-                        <button
+                        <Button
                           key={inv._id}
-                          className="w-full text-left px-3 py-2 rounded-md hover:bg-muted text-sm transition-colors"
+                          variant="outline"
+                          className="w-full justify-start h-auto py-3 px-4 hover:bg-primary/10 hover:border-primary/50"
                           onClick={() => handleManualMatch(selectedOrder._id, inv._id)}
                         >
-                          <span className="font-mono text-foreground">{inv.invoiceNumber}</span>
-                          <span className="text-muted-foreground ml-2">
-                            {formatCurrency(inv.totalAmount, inv.currency)} · {inv.invoiceDate}
-                          </span>
-                        </button>
+                          <div className="flex flex-col items-start text-left w-full">
+                            <span className="font-mono text-sm font-medium text-foreground">{inv.invoiceNumber}</span>
+                            <span className="text-xs text-muted-foreground mt-0.5">
+                              {formatCurrency(inv.totalAmount, inv.currency)} · {inv.invoiceDate}
+                            </span>
+                          </div>
+                        </Button>
                       ))}
                   </div>
                 </div>
