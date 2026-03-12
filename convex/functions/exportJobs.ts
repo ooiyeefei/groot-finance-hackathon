@@ -2,9 +2,9 @@
  * Export Jobs Functions - Convex queries, mutations, and actions
  *
  * Handles:
- * - Previewing export data (all 4 modules)
+ * - Previewing export data (all 5 modules)
  * - Executing exports (manual and scheduled)
- * - Data retrieval and enrichment for expense, invoice, leave, accounting modules
+ * - Data retrieval and enrichment for expense, invoice, leave, accounting, master-data modules
  */
 
 import { v } from "convex/values";
@@ -374,12 +374,23 @@ const FIELD_DEFS: Record<string, { id: string; label: string; type: string }[]> 
 
 // Master data template IDs that need special data sourcing
 const MASTER_DATA_TEMPLATES: Record<string, string> = {
+  // Existing Master Accounting templates
   "master-accounting-creditor": "vendors",
   "master-accounting-debtor": "customers",
   "master-accounting-chart-of-account": "categories",
   "master-accounting-stock-item": "stock_items",
   "master-accounting-category": "category_names",
   "master-accounting-cost-centre": "cost_centres",
+  // New ERP-specific master data templates (same underlying data sources)
+  "sql-accounting-creditor": "vendors",
+  "sql-accounting-debtor": "customers",
+  "sql-accounting-coa": "categories",
+  "autocount-supplier": "vendors",
+  "autocount-customer": "customers",
+  "autocount-coa": "categories",
+  "myob-supplier": "vendors",
+  "myob-customer": "customers",
+  "myob-coa": "categories",
 };
 
 // Templates that need special filtering on existing module data
@@ -443,6 +454,10 @@ async function getRecordsByModule(
       return getAccountingRecords(ctx, businessId, userId, role, filters);
     case "invoice":
       return getInvoiceRecords(ctx, businessId, userId, role, filters);
+    case "master-data":
+      // Master data module always routes through MASTER_DATA_TEMPLATES lookup
+      // If we get here without a prebuiltId match, return empty
+      return [];
     default:
       return [];
   }
@@ -831,6 +846,9 @@ async function enrichByModule(
       return enrichAccountingRecords(ctx, records);
     case "invoice":
       return enrichInvoiceRecords(ctx, records);
+    case "master-data":
+      // Master data records are already flat and enriched from getMasterDataRecords
+      return records;
     default:
       return records;
   }

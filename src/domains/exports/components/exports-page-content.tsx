@@ -60,6 +60,7 @@ const MODULE_LABELS: Record<string, string> = {
   invoice: 'Invoices',
   leave: 'Leave Records',
   accounting: 'Accounting Records',
+  'master-data': 'Master Data',
 };
 
 export default function ExportsPageContent() {
