@@ -2412,18 +2412,4 @@ export default defineSchema({
     .index("by_downloadToken", ["downloadToken"])
     .index("by_businessId", ["businessId"]),
 
-  // ============================================
-  purchaseOrderStatusValidator,
-  poMatchStatusValidator,
-  poMatchTypeValidator,
-  matchMethodValidator,
-  varianceTypeValidator,
-  grnLineConditionValidator,
-  bankAccountStatusValidator,
-  bankTransactionDirectionValidator,
-  reconciliationStatusValidator,
-  bankTransactionCategoryValidator,
-  matchTypeValidator,
-  matchStatusValidator,
-  confidenceLevelValidator,
 });

@@ -681,6 +681,18 @@ export const GRN_LINE_CONDITIONS = {
 
 export type GrnLineCondition = typeof GRN_LINE_CONDITIONS[keyof typeof GRN_LINE_CONDITIONS];
 export const GRN_LINE_CONDITION_VALUES = Object.values(GRN_LINE_CONDITIONS);
+
+// ============================================
+// FEE CATEGORY TYPES (Platform fee breakdown)
+// ============================================
+export const FEE_CATEGORIES = {
+  COMMISSION: "commission",
+  SHIPPING: "shipping",
+  MARKETING: "marketing",
+  REFUND: "refund",
+  OTHER: "other",
+} as const;
+
 export type FeeCategory = typeof FEE_CATEGORIES[keyof typeof FEE_CATEGORIES];
 
 // BANK ACCOUNT STATUSES (021-bank-statement-import-recon)
@@ -757,4 +769,4 @@ export const CONFIDENCE_LEVELS = {
 } as const;
 
 export type ConfidenceLevel = typeof CONFIDENCE_LEVELS[keyof typeof CONFIDENCE_LEVELS];
-export const CONFIDENCE_LEVEL_VALUES = Object.values(CONFIDENCE_LEVELS);: bank statement import & reconciliation with smart matching)
+export const CONFIDENCE_LEVEL_VALUES = Object.values(CONFIDENCE_LEVELS);

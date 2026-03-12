@@ -369,35 +369,18 @@ export const salesOrderMatchMethodValidator = literalUnion(SALES_ORDER_MATCH_MET
  */
 export const salesOrderPeriodStatusValidator = literalUnion(SALES_ORDER_PERIOD_STATUS_VALUES);
 
-// ============================================
-// SALES ORDER VALIDATORS (AR Reconciliation)
-// ============================================
 
-/**
- * Sales order match status validator
- * Lifecycle: unmatched → matched/partial/variance/conflict
- */
-export const salesOrderMatchStatusValidator = literalUnion(SALES_ORDER_MATCH_STATUS_VALUES);
-
-/**
- * Sales order match method validator
- * How the match was determined: exact_reference, fuzzy, manual
- */
-export const salesOrderMatchMethodValidator = literalUnion(SALES_ORDER_MATCH_METHOD_VALUES);
-
-/**
- * Sales order period status validator
- * Lifecycle: open → closed/disputed
- */
-export const salesOrderPeriodStatusValidator = literalUnion(SALES_ORDER_PERIOD_STATUS_VALUES);
 
 // ============================================
 // AP 3-WAY MATCHING VALIDATORS (021-ap-3-way)
 // ============================================
 
-export const apMatchStatusValidator = literalUnion(AP_MATCH_STATUS_VALUES);
-export const apVarianceTypeValidator = literalUnion(AP_VARIANCE_TYPE_VALUES);
-export const grnStatusValidator = literalUnion(GRN_STATUS_VALUES);
+export const purchaseOrderStatusValidator = literalUnion(PURCHASE_ORDER_STATUS_VALUES);
+export const poMatchStatusValidator = literalUnion(PO_MATCH_STATUS_VALUES);
+export const poMatchTypeValidator = literalUnion(PO_MATCH_TYPE_VALUES);
+export const matchMethodValidator = literalUnion(MATCH_METHOD_VALUES);
+export const varianceTypeValidator = literalUnion(VARIANCE_TYPE_VALUES);
+export const grnLineConditionValidator = literalUnion(GRN_LINE_CONDITION_VALUES);
 
 // ============================================
 // BANK RECONCILIATION VALIDATORS (021-bank-statement-import-recon)
@@ -409,4 +392,4 @@ export const reconciliationStatusValidator = literalUnion(RECONCILIATION_STATUS_
 export const bankTransactionCategoryValidator = literalUnion(BANK_TRANSACTION_CATEGORY_VALUES);
 export const matchTypeValidator = literalUnion(MATCH_TYPE_VALUES);
 export const matchStatusValidator = literalUnion(MATCH_STATUS_VALUES);
-export const confidenceLevelValidator = literalUnion(CONFIDENCE_LEVEL_VALUES);: bank statement import & reconciliation with smart matching)
+export const confidenceLevelValidator = literalUnion(CONFIDENCE_LEVEL_VALUES);
