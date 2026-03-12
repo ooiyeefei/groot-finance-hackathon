@@ -1,0 +1,5 @@
+Order Reference,Order Date,Customer Name,Product Name,Product Code,Quantity,Unit Price,Gross Amount,Platform Fee,Net Amount,Currency,Payment Method,Commission Fee,Shipping Fee,Marketing Fee,Refund Amount
+INV-2026-042,2026-03-09,test yf,Premium Service Package,PKG-001,1,79.00,79.00,3.95,75.05,SGD,Credit Card,2.37,1.18,0.40,0.00
+INV-2026-040,2026-03-01,Folk Dreams Marketing Sdn Bhd,Business Consulting,CONS-001,12,240.00,2880.00,144.00,2736.00,MYR,Bank Transfer,86.40,43.20,14.40,0.00
+INV-2026-038,2026-02-16,test,Basic Service,SVC-002,1,79.00,79.00,3.95,75.05,MYR,Credit Card,2.37,1.18,0.40,0.00
+INV-2026-039,2026-02-16,test yf,Starter Package,PKG-002,1,15.00,15.00,0.75,14.25,SGD,PayPal,0.45,0.23,0.07,0.00

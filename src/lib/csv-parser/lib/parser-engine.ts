@@ -64,7 +64,7 @@ async function parseCsvFile(
   const text = await file.text();
   const maxSample = options.maxSampleRows ?? SAMPLE_ROW_COUNT;
 
-  const result = Papa.parse(text, {
+  let result = Papa.parse(text, {
     header: true,
     skipEmptyLines: true,
     preview: maxSample,
@@ -83,11 +83,42 @@ async function parseCsvFile(
     );
   }
 
-  // If only 1 field detected but it contains commas, the delimiter detection failed
+  // If only 1 field detected but it contains commas, try to recover
   if (result.meta.fields.length === 1 && result.meta.fields[0].includes(',')) {
-    throw new Error(
-      "Delimiter detection failed. The file appears to have comma-separated values but they were not parsed correctly. Please ensure the file is a valid CSV with comma delimiters."
-    );
+    const firstField = result.meta.fields[0];
+    const commaCount = (firstField.match(/,/g) || []).length;
+
+    // If there are many commas, this might be Google Sheets copy/paste issue
+    // Try forcing comma delimiter
+    if (commaCount > 5) {
+      console.log('[CSV Parser] Detected single column with many commas, trying to force comma delimiter...');
+
+      const retryResult = Papa.parse(text, {
+        header: true,
+        skipEmptyLines: true,
+        preview: maxSample,
+        delimiter: ',', // Force comma delimiter
+        quoteChar: '"',
+        escapeChar: '"',
+      });
+
+      // If retry gives us more columns, use it
+      if (retryResult.meta.fields && retryResult.meta.fields.length > 1) {
+        console.log('[CSV Parser] Retry successful! Field count:', retryResult.meta.fields.length);
+        result = retryResult; // Use the retry result
+      } else {
+        throw new Error(
+          `CSV format error: All data appears in one column (${commaCount} commas detected). ` +
+          `This usually happens when copy/pasting CSV text into Google Sheets. ` +
+          `To fix: In Google Sheets, use "File > Import > Upload" instead of copy/paste, ` +
+          `or download the original CSV file directly without modifying it.`
+        );
+      }
+    } else {
+      throw new Error(
+        "Delimiter detection failed. The file appears to have comma-separated values but they were not parsed correctly. Please ensure the file is a valid CSV with comma delimiters."
+      );
+    }
   }
 
   // Count total rows (parse without preview for count only)
@@ -108,7 +139,13 @@ async function parseCsvFile(
     throw new Error("File contains no data rows.");
   }
 
-  const headers = result.meta.fields;
+  const headers = result.meta.fields || [];
+
+  // Final validation (should never happen due to earlier checks, but TypeScript needs this)
+  if (headers.length === 0) {
+    throw new Error("No column headers found in CSV file.");
+  }
+
   const sampleRows = (result.data as Record<string, string>[]).map((row) => {
     const sanitized: Record<string, string> = {};
     for (const [key, value] of Object.entries(row)) {
