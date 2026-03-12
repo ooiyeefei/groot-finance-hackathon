@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import {
   Upload,
+  ExternalLink,
   CheckCircle,
   XCircle,
   AlertTriangle,
@@ -17,6 +18,8 @@ import {
   ChevronDown,
   Columns2,
   Info,
+  HelpCircle,
+  AlertCircle as AlertCircleIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -28,6 +31,12 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { CsvImportModal } from '@/lib/csv-parser/components/csv-import-modal'
 import type { CsvImportResult, MappedRow } from '@/lib/csv-parser/types'
 import { useActiveBusiness } from '@/contexts/business-context'
@@ -39,15 +48,24 @@ import {
 } from '../hooks/use-reconciliation'
 import { useSalesInvoices } from '../hooks/use-sales-invoices'
 import { formatCurrency } from '@/lib/utils/format-number'
+import { useRouter } from 'next/navigation'
 import type { Id } from '../../../../convex/_generated/dataModel'
 
 // Match status badge config
-const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; color?: string }> = {
-  matched: { label: 'Matched', variant: 'default', color: 'text-emerald-500' },
-  unmatched: { label: 'Unmatched', variant: 'destructive' },
-  variance: { label: 'Variance', variant: 'secondary', color: 'text-amber-500' },
-  partial: { label: 'Partial', variant: 'outline', color: 'text-orange-500' },
-  conflict: { label: 'Conflict', variant: 'destructive' },
+const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; bgColor: string; textColor: string }> = {
+  matched: { label: 'Matched', variant: 'default', bgColor: 'bg-emerald-500/10', textColor: 'text-emerald-600 dark:text-emerald-400' },
+  unmatched: { label: 'Unmatched', variant: 'destructive', bgColor: 'bg-red-500/10', textColor: 'text-red-600 dark:text-red-400' },
+  variance: { label: 'Variance', variant: 'secondary', bgColor: 'bg-amber-500/10', textColor: 'text-amber-600 dark:text-amber-400' },
+  partial: { label: 'Partial', variant: 'outline', bgColor: 'bg-orange-500/10', textColor: 'text-orange-600 dark:text-orange-400' },
+  conflict: { label: 'Conflict', variant: 'destructive', bgColor: 'bg-red-500/10', textColor: 'text-red-600 dark:text-red-400' },
+}
+
+// Match method badge config
+const methodConfig: Record<string, { label: string; bgColor: string; textColor: string }> = {
+  exact_reference: { label: 'exact reference', bgColor: 'bg-blue-500/10', textColor: 'text-blue-600 dark:text-blue-400' },
+  fuzzy: { label: 'fuzzy match', bgColor: 'bg-purple-500/10', textColor: 'text-purple-600 dark:text-purple-400' },
+  manual: { label: 'manual', bgColor: 'bg-gray-500/10', textColor: 'text-gray-600 dark:text-gray-400' },
+  line_item: { label: 'line items', bgColor: 'bg-indigo-500/10', textColor: 'text-indigo-600 dark:text-indigo-400' },
 }
 
 // Period presets
@@ -96,6 +114,7 @@ function VarianceSeverityBadge({ severity }: { severity: string }) {
 
 export default function ARReconciliation() {
   const { businessId } = useActiveBusiness()
+  const router = useRouter()
   const [csvImportOpen, setCsvImportOpen] = useState(false)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -344,6 +363,26 @@ export default function ARReconciliation() {
 
   return (
     <div className="space-y-6">
+      {/* Help Banner */}
+      <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-4">
+        <div className="flex items-start gap-3">
+          <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+          <div className="flex-1 text-sm">
+            <p className="font-medium text-blue-900 dark:text-blue-100 mb-1">
+              AR Reconciliation Workflow
+            </p>
+            <p className="text-blue-700 dark:text-blue-300 mb-2">
+              <strong>Import behavior:</strong> Each import replaces existing data for the same order references.
+              This ensures you always have the latest version from your platform.
+            </p>
+            <p className="text-blue-700 dark:text-blue-300">
+              <strong>Standard workflow:</strong> Import → Review matches → Reconcile line items →
+              Close period → Export to accounting system (Xero, QuickBooks, etc.)
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -642,7 +681,7 @@ export default function ARReconciliation() {
                           </span>
                         </td>
                         <td className="py-2.5">
-                          <Badge variant={config.variant} className="text-xs">
+                          <Badge className={`text-xs ${config.bgColor} ${config.textColor} border-0`}>
                             {config.label}
                           </Badge>
                         </td>
@@ -777,9 +816,21 @@ export default function ARReconciliation() {
                     Matched Invoice
                   </h3>
                   {matchedInvoice ? (
-                    <div className="bg-muted/30 rounded-lg p-3 space-y-2 text-sm">
+                    <div className="bg-muted/30 rounded-lg p-3 space-y-2 text-sm relative">
+                      {/* Open Invoice Link */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="absolute top-2 right-2 h-7 w-7 p-0"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          router.push(`/en/invoices/${matchedInvoice._id}`)
+                        }}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Button>
                       <div>
-                        <span className="text-muted-foreground text-xs">Invoice #</span>
+                        <span className="text-muted-foreground text-xs">Invoice # (click icon to open)</span>
                         <p className="font-mono text-foreground">{matchedInvoice.invoiceNumber}</p>
                       </div>
                       <div>
@@ -883,12 +934,12 @@ export default function ARReconciliation() {
 
               {/* Actions */}
               <div className="flex flex-wrap gap-2 pt-4 border-t border-border">
-                <Badge variant="outline" className="text-xs">
+                <Badge className={`text-xs ${statusConfig[selectedOrder.matchStatus]?.bgColor ?? 'bg-muted'} ${statusConfig[selectedOrder.matchStatus]?.textColor ?? 'text-foreground'} border-0`}>
                   {statusConfig[selectedOrder.matchStatus]?.label ?? selectedOrder.matchStatus}
                 </Badge>
                 {selectedOrder.matchMethod && (
-                  <Badge variant="outline" className="text-xs text-muted-foreground">
-                    via {selectedOrder.matchMethod}
+                  <Badge className={`text-xs ${methodConfig[selectedOrder.matchMethod]?.bgColor ?? 'bg-muted'} ${methodConfig[selectedOrder.matchMethod]?.textColor ?? 'text-muted-foreground'} border-0`}>
+                    via {methodConfig[selectedOrder.matchMethod]?.label ?? selectedOrder.matchMethod}
                   </Badge>
                 )}
 
@@ -896,15 +947,34 @@ export default function ARReconciliation() {
 
                 {/* Reconcile line items button (when matched and has line items) */}
                 {selectedOrder.matchedInvoiceId && (selectedOrder as any).lineItems?.length > 0 && (
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => handleReconcileLineItems(selectedOrder._id)}
-                    className="text-xs bg-primary hover:bg-primary/90 text-primary-foreground"
-                  >
-                    <Columns2 className="h-3 w-3 mr-1" />
-                    Reconcile Line Items
-                  </Button>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => handleReconcileLineItems(selectedOrder._id)}
+                          className="text-xs bg-primary hover:bg-primary/90 text-primary-foreground"
+                        >
+                          <Columns2 className="h-3 w-3 mr-1" />
+                          Reconcile Line Items
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <div className="space-y-1">
+                          <p className="font-medium">Deep line-by-line comparison</p>
+                          <p className="text-xs">
+                            Compares quantity, unit price, and total for each product.
+                            May change status to &quot;partial&quot; if discrepancies are found (e.g., missing items, quantity mismatches).
+                          </p>
+                          <p className="text-xs text-amber-400 flex items-center gap-1 mt-2">
+                            <AlertCircleIcon className="h-3 w-3" />
+                            This provides more accurate reconciliation than header-level matching
+                          </p>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
 
                 {(selectedOrder.matchStatus === 'matched' || selectedOrder.matchStatus === 'variance') && (
