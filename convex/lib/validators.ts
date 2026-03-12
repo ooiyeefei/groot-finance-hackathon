@@ -58,6 +58,13 @@ import {
   MATCH_METHOD_VALUES,
   VARIANCE_TYPE_VALUES,
   GRN_LINE_CONDITION_VALUES,
+  BANK_ACCOUNT_STATUS_VALUES,
+  BANK_TRANSACTION_DIRECTION_VALUES,
+  RECONCILIATION_STATUS_VALUES,
+  BANK_TRANSACTION_CATEGORY_VALUES,
+  MATCH_TYPE_VALUES,
+  MATCH_STATUS_VALUES,
+  CONFIDENCE_LEVEL_VALUES,
 } from "../../src/lib/constants/statuses";
 
 // ============================================
@@ -363,41 +370,43 @@ export const salesOrderMatchMethodValidator = literalUnion(SALES_ORDER_MATCH_MET
 export const salesOrderPeriodStatusValidator = literalUnion(SALES_ORDER_PERIOD_STATUS_VALUES);
 
 // ============================================
-// AP 3-WAY MATCHING VALIDATORS (021-ap-3-way)
+// SALES ORDER VALIDATORS (AR Reconciliation)
 // ============================================
 
 /**
- * Purchase order status validator
- * Lifecycle: draft → issued → partially_received → fully_received → invoiced → closed
+ * Sales order match status validator
+ * Lifecycle: unmatched → matched/partial/variance/conflict
  */
-export const purchaseOrderStatusValidator = literalUnion(PURCHASE_ORDER_STATUS_VALUES);
+export const salesOrderMatchStatusValidator = literalUnion(SALES_ORDER_MATCH_STATUS_VALUES);
 
 /**
- * PO match status validator
- * Lifecycle: auto_approved / pending_review → approved / disputed / on_hold
+ * Sales order match method validator
+ * How the match was determined: exact_reference, fuzzy, manual
  */
-export const poMatchStatusValidator = literalUnion(PO_MATCH_STATUS_VALUES);
+export const salesOrderMatchMethodValidator = literalUnion(SALES_ORDER_MATCH_METHOD_VALUES);
 
 /**
- * PO match type validator
- * two_way (PO + Invoice) or three_way (PO + Invoice + GRN)
+ * Sales order period status validator
+ * Lifecycle: open → closed/disputed
  */
-export const poMatchTypeValidator = literalUnion(PO_MATCH_TYPE_VALUES);
+export const salesOrderPeriodStatusValidator = literalUnion(SALES_ORDER_PERIOD_STATUS_VALUES);
 
-/**
- * Match method validator
- * How line items were paired: exact_code, fuzzy_description, amount_fallback, manual
- */
-export const matchMethodValidator = literalUnion(MATCH_METHOD_VALUES);
+// ============================================
+// AP 3-WAY MATCHING VALIDATORS (021-ap-3-way)
+// ============================================
 
-/**
- * Variance type validator
- * Types of discrepancies detected during matching
- */
-export const varianceTypeValidator = literalUnion(VARIANCE_TYPE_VALUES);
+export const apMatchStatusValidator = literalUnion(AP_MATCH_STATUS_VALUES);
+export const apVarianceTypeValidator = literalUnion(AP_VARIANCE_TYPE_VALUES);
+export const grnStatusValidator = literalUnion(GRN_STATUS_VALUES);
 
-/**
- * GRN line item condition validator
- * good, damaged, or rejected
- */
-export const grnLineConditionValidator = literalUnion(GRN_LINE_CONDITION_VALUES);
+// ============================================
+// BANK RECONCILIATION VALIDATORS (021-bank-statement-import-recon)
+// ============================================
+
+export const bankAccountStatusValidator = literalUnion(BANK_ACCOUNT_STATUS_VALUES);
+export const bankTransactionDirectionValidator = literalUnion(BANK_TRANSACTION_DIRECTION_VALUES);
+export const reconciliationStatusValidator = literalUnion(RECONCILIATION_STATUS_VALUES);
+export const bankTransactionCategoryValidator = literalUnion(BANK_TRANSACTION_CATEGORY_VALUES);
+export const matchTypeValidator = literalUnion(MATCH_TYPE_VALUES);
+export const matchStatusValidator = literalUnion(MATCH_STATUS_VALUES);
+export const confidenceLevelValidator = literalUnion(CONFIDENCE_LEVEL_VALUES);: bank statement import & reconciliation with smart matching)

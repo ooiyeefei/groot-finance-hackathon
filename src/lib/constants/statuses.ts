@@ -621,9 +621,7 @@ export const PURCHASE_ORDER_STATUSES = {
 export type PurchaseOrderStatus = typeof PURCHASE_ORDER_STATUSES[keyof typeof PURCHASE_ORDER_STATUSES];
 export const PURCHASE_ORDER_STATUS_VALUES = Object.values(PURCHASE_ORDER_STATUSES);
 
-// ============================================
 // PO MATCH STATUSES (021-ap-3-way)
-// ============================================
 
 export const PO_MATCH_STATUSES = {
   AUTO_APPROVED: "auto_approved",
@@ -636,9 +634,7 @@ export const PO_MATCH_STATUSES = {
 export type PoMatchStatus = typeof PO_MATCH_STATUSES[keyof typeof PO_MATCH_STATUSES];
 export const PO_MATCH_STATUS_VALUES = Object.values(PO_MATCH_STATUSES);
 
-// ============================================
 // PO MATCH TYPES (021-ap-3-way)
-// ============================================
 
 export const PO_MATCH_TYPES = {
   TWO_WAY: "two_way",
@@ -648,9 +644,7 @@ export const PO_MATCH_TYPES = {
 export type PoMatchType = typeof PO_MATCH_TYPES[keyof typeof PO_MATCH_TYPES];
 export const PO_MATCH_TYPE_VALUES = Object.values(PO_MATCH_TYPES);
 
-// ============================================
 // MATCH METHOD TYPES (021-ap-3-way)
-// ============================================
 
 export const MATCH_METHODS = {
   EXACT_CODE: "exact_code",
@@ -662,9 +656,7 @@ export const MATCH_METHODS = {
 export type MatchMethod = typeof MATCH_METHODS[keyof typeof MATCH_METHODS];
 export const MATCH_METHOD_VALUES = Object.values(MATCH_METHODS);
 
-// ============================================
 // VARIANCE TYPES (021-ap-3-way)
-// ============================================
 
 export const VARIANCE_TYPES = {
   QUANTITY_OVER_INVOICED: "quantity_over_invoiced",
@@ -679,9 +671,7 @@ export const VARIANCE_TYPES = {
 export type VarianceType = typeof VARIANCE_TYPES[keyof typeof VARIANCE_TYPES];
 export const VARIANCE_TYPE_VALUES = Object.values(VARIANCE_TYPES);
 
-// ============================================
 // GRN LINE ITEM CONDITION (021-ap-3-way)
-// ============================================
 
 export const GRN_LINE_CONDITIONS = {
   GOOD: "good",
@@ -691,3 +681,80 @@ export const GRN_LINE_CONDITIONS = {
 
 export type GrnLineCondition = typeof GRN_LINE_CONDITIONS[keyof typeof GRN_LINE_CONDITIONS];
 export const GRN_LINE_CONDITION_VALUES = Object.values(GRN_LINE_CONDITIONS);
+export type FeeCategory = typeof FEE_CATEGORIES[keyof typeof FEE_CATEGORIES];
+
+// BANK ACCOUNT STATUSES (021-bank-statement-import-recon)
+
+export const BANK_ACCOUNT_STATUSES = {
+  ACTIVE: "active",
+  INACTIVE: "inactive",
+} as const;
+
+export type BankAccountStatus = typeof BANK_ACCOUNT_STATUSES[keyof typeof BANK_ACCOUNT_STATUSES];
+export const BANK_ACCOUNT_STATUS_VALUES = Object.values(BANK_ACCOUNT_STATUSES);
+
+// BANK TRANSACTION DIRECTION (021-bank-statement-import-recon)
+
+export const BANK_TRANSACTION_DIRECTIONS = {
+  CREDIT: "credit",
+  DEBIT: "debit",
+} as const;
+
+export type BankTransactionDirection = typeof BANK_TRANSACTION_DIRECTIONS[keyof typeof BANK_TRANSACTION_DIRECTIONS];
+export const BANK_TRANSACTION_DIRECTION_VALUES = Object.values(BANK_TRANSACTION_DIRECTIONS);
+
+// BANK TRANSACTION RECONCILIATION STATUSES (021-bank-statement-import-recon)
+
+export const RECONCILIATION_STATUSES = {
+  UNMATCHED: "unmatched",
+  SUGGESTED: "suggested",
+  RECONCILED: "reconciled",
+  CATEGORIZED: "categorized",
+} as const;
+
+export type ReconciliationStatus = typeof RECONCILIATION_STATUSES[keyof typeof RECONCILIATION_STATUSES];
+export const RECONCILIATION_STATUS_VALUES = Object.values(RECONCILIATION_STATUSES);
+
+// BANK TRANSACTION CATEGORIES (021-bank-statement-import-recon)
+
+export const BANK_TRANSACTION_CATEGORIES = {
+  BANK_CHARGES: "bank_charges",
+  INTEREST: "interest",
+  NON_BUSINESS: "non_business",
+  OTHER: "other",
+} as const;
+
+export type BankTransactionCategory = typeof BANK_TRANSACTION_CATEGORIES[keyof typeof BANK_TRANSACTION_CATEGORIES];
+export const BANK_TRANSACTION_CATEGORY_VALUES = Object.values(BANK_TRANSACTION_CATEGORIES);
+
+// RECONCILIATION MATCH TYPES (021-bank-statement-import-recon)
+
+export const MATCH_TYPES = {
+  AUTO: "auto",
+  MANUAL: "manual",
+} as const;
+
+export type MatchType = typeof MATCH_TYPES[keyof typeof MATCH_TYPES];
+export const MATCH_TYPE_VALUES = Object.values(MATCH_TYPES);
+
+// RECONCILIATION MATCH STATUSES (021-bank-statement-import-recon)
+
+export const MATCH_STATUSES = {
+  SUGGESTED: "suggested",
+  CONFIRMED: "confirmed",
+  REJECTED: "rejected",
+} as const;
+
+export type MatchStatus = typeof MATCH_STATUSES[keyof typeof MATCH_STATUSES];
+export const MATCH_STATUS_VALUES = Object.values(MATCH_STATUSES);
+
+// CONFIDENCE LEVELS (021-bank-statement-import-recon)
+
+export const CONFIDENCE_LEVELS = {
+  HIGH: "high",
+  MEDIUM: "medium",
+  LOW: "low",
+} as const;
+
+export type ConfidenceLevel = typeof CONFIDENCE_LEVELS[keyof typeof CONFIDENCE_LEVELS];
+export const CONFIDENCE_LEVEL_VALUES = Object.values(CONFIDENCE_LEVELS);: bank statement import & reconciliation with smart matching)

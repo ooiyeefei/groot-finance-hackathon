@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import Sidebar from '@/components/ui/sidebar'
@@ -12,9 +12,22 @@ import AccountingEntryDetailModal from '@/domains/accounting-entries/components/
 import DocumentAnalysisModal from '@/domains/invoices/components/document-analysis-modal'
 import { useAccountingEntries } from '@/domains/accounting-entries/hooks/use-accounting-entries'
 import type { AccountingEntry } from '@/domains/accounting-entries/lib/data-access'
-import { Plus } from 'lucide-react'
+import { Plus, Loader2, FileText, Landmark } from 'lucide-react'
 import { ClientProviders } from '@/components/providers/client-providers'
 import { useActiveBusiness } from '@/contexts/business-context'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+
+const BankReconTab = lazy(
+  () => import('@/domains/accounting-entries/components/bank-recon/bank-recon-tab')
+)
+
+type AccountingTab = 'records' | 'bank-recon'
+
+const TabLoading = () => (
+  <div className="flex items-center justify-center py-24">
+    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+  </div>
+)
 
 /**
  * Props for AccountingEntriesClient
@@ -186,6 +199,33 @@ export default function AccountingEntriesClient({
     }
   }, [highlightId, highlightProcessed])
 
+  // Tab state with hash routing
+  const [activeTab, setActiveTab] = useState<AccountingTab>(() => {
+    if (typeof window === 'undefined') return 'records'
+    const hash = window.location.hash.replace('#', '')
+    return hash === 'bank-recon' ? 'bank-recon' : 'records'
+  })
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const hash = window.location.hash.replace('#', '')
+      setActiveTab(hash === 'bank-recon' ? 'bank-recon' : 'records')
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+
+  const handleTabChange = useCallback((value: string) => {
+    const tab = value as AccountingTab
+    setActiveTab(tab)
+    window.history.replaceState(null, '', `#${tab}`)
+  }, [])
+
+  const topTriggerClassName =
+    'px-4 py-2 text-sm font-medium rounded-lg transition-colors ' +
+    'data-[state=active]:bg-primary data-[state=active]:text-primary-foreground ' +
+    'data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:text-foreground'
+
   return (
     <ClientProviders>
       <div className="flex h-screen bg-background">
@@ -196,9 +236,12 @@ export default function AccountingEntriesClient({
         <div className="flex-1 flex flex-col min-w-0">
           {/* Header */}
           <HeaderWithUser
-            title="Accounting Records"
-            subtitle="View and manage your financial transactions across multiple currencies"
-            actions={
+            title="Accounting"
+            subtitle={activeTab === 'records'
+              ? 'View and manage your financial transactions across multiple currencies'
+              : 'Import bank statements and reconcile against accounting records'
+            }
+            actions={activeTab === 'records' ? (
               <button
                 onClick={() => setShowCreateModal(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-primary hover:bg-primary/90 text-primary-foreground transition-colors"
@@ -206,21 +249,42 @@ export default function AccountingEntriesClient({
                 <Plus className="w-4 h-4" />
                 Add Transaction
               </button>
-            }
+            ) : undefined}
           />
 
-          {/* Main Content Area */}
-          <main className="flex-1 overflow-auto p-6">
-            <AccountingEntriesList
-              transactions={accountingEntries}
-              isLoading={loading}
-              error={null}
-              onRefresh={refreshAccountingEntries}
-              onView={setViewingTransaction}
-              onEdit={setEditingTransaction}
-              onDelete={handleDeleteAccountingEntry}
-            />
-          </main>
+          {/* Tab Navigation */}
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="flex-1 flex flex-col min-h-0">
+            <div className="border-b border-border px-6 pt-2">
+              <TabsList className="bg-transparent gap-1 p-0">
+                <TabsTrigger value="records" className={topTriggerClassName}>
+                  <FileText className="w-4 h-4 mr-1.5" />
+                  Records
+                </TabsTrigger>
+                <TabsTrigger value="bank-recon" className={topTriggerClassName}>
+                  <Landmark className="w-4 h-4 mr-1.5" />
+                  Bank Reconciliation
+                </TabsTrigger>
+              </TabsList>
+            </div>
+
+            <TabsContent value="records" className="flex-1 overflow-auto p-6 mt-0">
+              <AccountingEntriesList
+                transactions={accountingEntries}
+                isLoading={loading}
+                error={null}
+                onRefresh={refreshAccountingEntries}
+                onView={setViewingTransaction}
+                onEdit={setEditingTransaction}
+                onDelete={handleDeleteAccountingEntry}
+              />
+            </TabsContent>
+
+            <TabsContent value="bank-recon" className="flex-1 overflow-auto mt-0">
+              <Suspense fallback={<TabLoading />}>
+                <BankReconTab />
+              </Suspense>
+            </TabsContent>
+          </Tabs>
         </div>
 
         {/* Modals */}
