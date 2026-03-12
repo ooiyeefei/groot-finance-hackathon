@@ -583,31 +583,6 @@ export const create = mutation({
     });
 
     // ============================================
-    // PHASE 2: Line items table population
-    // Insert line items into normalized line_items table
-    // This ensures invoice line items are properly indexed
-    // ============================================
-    if (args.lineItems && args.lineItems.length > 0) {
-      for (const item of args.lineItems) {
-        await ctx.db.insert("line_items", {
-          accountingEntryId: entryId,
-          itemDescription: item.itemDescription,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          totalAmount: item.totalAmount,
-          currency: item.currency,
-          taxAmount: item.taxAmount,
-          taxRate: item.taxRate,
-          lineOrder: item.lineOrder,
-          itemCode: item.itemCode,
-          unitMeasurement: item.unitMeasurement,
-          updatedAt: now,
-        });
-      }
-      console.log(`[Convex] Inserted ${args.lineItems.length} records into line_items table for accounting entry ${entryId}`);
-    }
-
-    // ============================================
     // PHASE 2: Vendor activation
     // Link vendor to accounting entry and promote from prospective to active
     // ============================================

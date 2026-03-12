@@ -1041,30 +1041,26 @@ async function enrichExpenseRecords(
           ? await ctx.db.get(record.approvedBy)
           : null;
 
-      // Fetch line items via accountingEntryId → line_items table
+      // Fetch line items from embedded accounting_entries.lineItems array
       let lineItems: any[] = [];
       if (record.accountingEntryId) {
-        const items = await ctx.db
-          .query("line_items")
-          .withIndex("by_accountingEntryId", (q: any) =>
-            q.eq("accountingEntryId", record.accountingEntryId)
-          )
-          .collect();
-        lineItems = items
-          .filter((item: any) => !item.deletedAt)
-          .sort((a: any, b: any) => (a.lineOrder ?? 0) - (b.lineOrder ?? 0))
-          .map((item: any) => ({
-            description: item.itemDescription || "",
-            quantity: item.quantity || 1,
-            unitPrice: item.unitPrice || 0,
-            totalAmount: item.totalAmount || 0,
-            currency: item.currency || "",
-            taxAmount: item.taxAmount || 0,
-            taxRate: item.taxRate || 0,
-            itemCode: item.itemCode || record.expenseCategory || "",
-            taxCode: item.taxRate && item.taxRate > 0 ? "TX" : "",
-            unitMeasurement: item.unitMeasurement || "",
-          }));
+        const accountingEntry = await ctx.db.get(record.accountingEntryId);
+        if (accountingEntry?.lineItems) {
+          lineItems = accountingEntry.lineItems
+            .sort((a: any, b: any) => (a.lineOrder ?? 0) - (b.lineOrder ?? 0))
+            .map((item: any) => ({
+              description: item.itemDescription || "",
+              quantity: item.quantity || 1,
+              unitPrice: item.unitPrice || 0,
+              totalAmount: item.totalAmount || 0,
+              currency: item.currency || "",
+              taxAmount: item.taxAmount || 0,
+              taxRate: item.taxRate || 0,
+              itemCode: item.itemCode || record.expenseCategory || "",
+              taxCode: item.taxRate && item.taxRate > 0 ? "TX" : "",
+              unitMeasurement: item.unitMeasurement || "",
+            }));
+        }
       }
 
       // If no line items found, synthesize one from the claim header

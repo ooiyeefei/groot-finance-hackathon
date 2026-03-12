@@ -587,7 +587,33 @@ export const SALES_ORDER_MATCH_STATUS_VALUES = Object.values(SALES_ORDER_MATCH_S
 export const SALES_ORDER_MATCH_METHODS = {
   EXACT_REFERENCE: "exact_reference",
   FUZZY: "fuzzy",
+  LINE_ITEM: "line_item",
   MANUAL: "manual",
 } as const;
 
 export const SALES_ORDER_MATCH_METHOD_VALUES = Object.values(SALES_ORDER_MATCH_METHODS);
+
+// ============================================
+// SALES ORDER PERIOD STATUS
+// ============================================
+export const SALES_ORDER_PERIOD_STATUSES = {
+  OPEN: "open",
+  CLOSED: "closed",
+  DISPUTED: "disputed",
+} as const;
+
+export type SalesOrderPeriodStatus = typeof SALES_ORDER_PERIOD_STATUSES[keyof typeof SALES_ORDER_PERIOD_STATUSES];
+export const SALES_ORDER_PERIOD_STATUS_VALUES = Object.values(SALES_ORDER_PERIOD_STATUSES);
+
+// ============================================
+// FEE CATEGORY TYPES (Platform fee breakdown)
+// ============================================
+export const FEE_CATEGORIES = {
+  COMMISSION: "commission",
+  SHIPPING: "shipping",
+  MARKETING: "marketing",
+  REFUND: "refund",
+  OTHER: "other",
+} as const;
+
+export type FeeCategory = typeof FEE_CATEGORIES[keyof typeof FEE_CATEGORIES];
