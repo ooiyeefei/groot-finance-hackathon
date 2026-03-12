@@ -95,7 +95,8 @@ export function FileUploadStep({
         {isLoading ? (
           <div className="flex flex-col items-center gap-3">
             <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent" />
-            <p className="text-muted-foreground text-sm">Parsing file...</p>
+            <p className="text-muted-foreground text-sm font-medium">Processing file...</p>
+            <p className="text-muted-foreground text-xs">Analyzing columns and mapping fields</p>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-3">

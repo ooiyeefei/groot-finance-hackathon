@@ -45,6 +45,7 @@ export function CsvImportModal({
   const [isSaving, setIsSaving] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [showTemplateManager, setShowTemplateManager] = useState(false);
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
 
   const { businessId: activeBusinessId } = useActiveBusiness();
   const businessId = businessIdProp || activeBusinessId || undefined;
@@ -69,41 +70,46 @@ export function CsvImportModal({
   // Step 1: File parsed → check for template match → go to mapping
   const handleFileParsed = useCallback(
     async (file: File, info: ParsedFileInfo) => {
-      session.setFileInfo(file, info);
+      setIsProcessingFile(true);
+      try {
+        session.setFileInfo(file, info);
 
-      // Check for existing template
-      const fingerprint = await generateFingerprint(info.headers);
-      const matchedTemplate = await templates.findByFingerprint(fingerprint);
+        // Check for existing template
+        const fingerprint = await generateFingerprint(info.headers);
+        const matchedTemplate = await templates.findByFingerprint(fingerprint);
 
-      if (matchedTemplate) {
-        // Auto-apply template — ensure confidence defaults to 1 for template mappings
-        const templateMappings = matchedTemplate.columnMappings.map((m) => ({
-          ...m,
-          confidence: m.confidence ?? 1,
-        }));
-        session.setMappings(
-          templateMappings,
-          matchedTemplate.schemaType as SchemaType,
-          matchedTemplate._id,
-          matchedTemplate.name
+        if (matchedTemplate) {
+          // Auto-apply template — ensure confidence defaults to 1 for template mappings
+          const templateMappings = matchedTemplate.columnMappings.map((m) => ({
+            ...m,
+            confidence: m.confidence ?? 1,
+          }));
+          session.setMappings(
+            templateMappings,
+            matchedTemplate.schemaType as SchemaType,
+            matchedTemplate._id,
+            matchedTemplate.name
+          );
+          templates.touchLastUsed(matchedTemplate._id);
+          setCurrentStep(1);
+          return;
+        }
+
+        // No template match → get AI suggestions
+        const suggestion = await aiMapping.fetchSuggestions(
+          info.headers,
+          info.sampleRows,
+          initialSchemaType
         );
-        templates.touchLastUsed(matchedTemplate._id);
+
+        if (suggestion) {
+          const mappings = suggestionsToMappings(suggestion);
+          session.setMappings(mappings, suggestion.detectedSchemaType);
+        }
         setCurrentStep(1);
-        return;
+      } finally {
+        setIsProcessingFile(false);
       }
-
-      // No template match → get AI suggestions
-      const suggestion = await aiMapping.fetchSuggestions(
-        info.headers,
-        info.sampleRows,
-        initialSchemaType
-      );
-
-      if (suggestion) {
-        const mappings = suggestionsToMappings(suggestion);
-        session.setMappings(mappings, suggestion.detectedSchemaType);
-      }
-      setCurrentStep(1);
     },
     [session, aiMapping, templates, initialSchemaType]
   );
@@ -256,7 +262,7 @@ export function CsvImportModal({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="sm:max-w-2xl w-full overflow-y-auto">
+      <SheetContent side="right" className="sm:max-w-2xl w-full overflow-y-auto" showCloseButton={false}>
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-border">
           <div>
@@ -342,7 +348,7 @@ export function CsvImportModal({
             <FileUploadStep
               onFileParsed={handleFileParsed}
               parseFile={parser.parseUploadedFile}
-              isLoading={parser.isLoading}
+              isLoading={parser.isLoading || isProcessingFile}
               error={parser.error}
               onManageTemplates={() => setShowTemplateManager(true)}
             />
