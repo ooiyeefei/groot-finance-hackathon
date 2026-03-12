@@ -49,6 +49,7 @@ import {
 import { useSalesInvoices } from '../hooks/use-sales-invoices'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { useRouter } from 'next/navigation'
+import { useToast } from '@/components/ui/toast'
 import type { Id } from '../../../../convex/_generated/dataModel'
 
 // Match status badge config
@@ -115,6 +116,7 @@ function VarianceSeverityBadge({ severity }: { severity: string }) {
 export default function ARReconciliation() {
   const { businessId } = useActiveBusiness()
   const router = useRouter()
+  const { addToast } = useToast()
   const [csvImportOpen, setCsvImportOpen] = useState(false)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -252,7 +254,7 @@ export default function ARReconciliation() {
             refundAmount: row.refundAmount != null ? Number(row.refundAmount) : undefined,
           }))
 
-        await importBatch({
+        const importResult = await importBatch({
           businessId: businessId as Id<"businesses">,
           orders: orderData,
           sourcePlatform: platform,
@@ -265,14 +267,37 @@ export default function ARReconciliation() {
           importBatchId: batchId,
         })
 
+        // Show success/warning toast based on import result
+        if (importResult.duplicatesSkipped > 0) {
+          addToast({
+            type: 'warning',
+            title: `Imported ${importResult.imported} orders`,
+            description: `Skipped ${importResult.duplicatesSkipped} existing orders. To update existing data, delete old orders first then re-import.`,
+            duration: 8000,
+          })
+        } else {
+          addToast({
+            type: 'success',
+            title: `Successfully imported ${importResult.imported} orders`,
+            description: 'Running automatic matching against invoices...',
+            duration: 5000,
+          })
+        }
+
         setCsvImportOpen(false)
       } catch (error) {
         console.error('Import failed:', error)
+        addToast({
+          type: 'error',
+          title: 'Import failed',
+          description: error instanceof Error ? error.message : 'An unexpected error occurred',
+          duration: 7000,
+        })
       } finally {
         setIsImporting(false)
       }
     },
-    [businessId, importBatch, runMatching]
+    [businessId, importBatch, runMatching, addToast]
   )
 
   const handleManualMatch = useCallback(
