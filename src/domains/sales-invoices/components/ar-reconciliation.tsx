@@ -372,8 +372,8 @@ export default function ARReconciliation() {
               AR Reconciliation Workflow
             </p>
             <p className="text-blue-700 dark:text-blue-300 mb-2">
-              <strong>Import behavior:</strong> Each import replaces existing data for the same order references.
-              This ensures you always have the latest version from your platform.
+              <strong>Import behavior:</strong> New orders are appended. Existing order references are skipped (not replaced).
+              To update existing orders, delete them first before re-importing.
             </p>
             <p className="text-blue-700 dark:text-blue-300">
               <strong>Standard workflow:</strong> Import → Review matches → Reconcile line items →
