@@ -126,6 +126,7 @@ export default function ARReconciliation() {
   const [isClosingPeriod, setIsClosingPeriod] = useState(false)
   const [showPeriodPresets, setShowPeriodPresets] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [isReconcilingLineItems, setIsReconcilingLineItems] = useState(false)
 
   const { summary, isLoading: summaryLoading } = useReconciliationSummary({
     dateFrom: dateFrom || undefined,
@@ -333,15 +334,53 @@ export default function ARReconciliation() {
 
   const handleReconcileLineItems = useCallback(
     async (orderId: string) => {
+      setIsReconcilingLineItems(true)
       try {
-        await reconcileLineItems({
+        const result = await reconcileLineItems({
           orderId: orderId as Id<"sales_orders">,
         })
+
+        // Show feedback based on result
+        if (result.variances && result.variances.length > 0) {
+          const errorCount = result.variances.filter(v => v.severity === 'error').length
+          const warningCount = result.variances.filter(v => v.severity === 'warning').length
+
+          if (errorCount > 0) {
+            addToast({
+              type: 'warning',
+              title: 'Line item discrepancies found',
+              description: `Found ${errorCount} error${errorCount > 1 ? 's' : ''} and ${warningCount} warning${warningCount > 1 ? 's' : ''}. Status changed to "${result.status}". Review variance details below.`,
+              duration: 7000,
+            })
+          } else {
+            addToast({
+              type: 'info',
+              title: 'Line item reconciliation complete',
+              description: `Found ${warningCount} minor variance${warningCount > 1 ? 's' : ''}. Status: "${result.status}".`,
+              duration: 5000,
+            })
+          }
+        } else {
+          addToast({
+            type: 'success',
+            title: 'Line items match perfectly',
+            description: 'All quantities, prices, and totals align between order and invoice.',
+            duration: 5000,
+          })
+        }
       } catch (error) {
         console.error('Line item reconciliation failed:', error)
+        addToast({
+          type: 'error',
+          title: 'Reconciliation failed',
+          description: error instanceof Error ? error.message : 'Failed to reconcile line items',
+          duration: 7000,
+        })
+      } finally {
+        setIsReconcilingLineItems(false)
       }
     },
-    [reconcileLineItems]
+    [reconcileLineItems, addToast]
   )
 
   const handleClosePeriod = useCallback(
@@ -849,7 +888,7 @@ export default function ARReconciliation() {
                         className="absolute top-2 right-2 h-7 w-7 p-0"
                         onClick={(e) => {
                           e.stopPropagation()
-                          router.push(`/en/invoices/${matchedInvoice._id}`)
+                          router.push(`/en/sales-invoices/${matchedInvoice._id}`)
                         }}
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
@@ -979,10 +1018,15 @@ export default function ARReconciliation() {
                           variant="default"
                           size="sm"
                           onClick={() => handleReconcileLineItems(selectedOrder._id)}
+                          disabled={isReconcilingLineItems}
                           className="text-xs bg-primary hover:bg-primary/90 text-primary-foreground"
                         >
-                          <Columns2 className="h-3 w-3 mr-1" />
-                          Reconcile Line Items
+                          {isReconcilingLineItems ? (
+                            <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                          ) : (
+                            <Columns2 className="h-3 w-3 mr-1" />
+                          )}
+                          {isReconcilingLineItems ? 'Reconciling...' : 'Reconcile Line Items'}
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs">
