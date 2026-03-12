@@ -49,6 +49,8 @@ import {
   PAY_PERIOD_FREQUENCY_VALUES,
   PAYROLL_ADJUSTMENT_TYPE_VALUES,
   OVERTIME_CALCULATION_BASIS_VALUES,
+  SALES_ORDER_MATCH_STATUS_VALUES,
+  SALES_ORDER_MATCH_METHOD_VALUES,
 } from "../../src/lib/constants/statuses";
 
 // ============================================
@@ -323,3 +325,19 @@ export const payrollAdjustmentTypeValidator = literalUnion(PAYROLL_ADJUSTMENT_TY
  * daily, weekly, or both
  */
 export const overtimeCalculationBasisValidator = literalUnion(OVERTIME_CALCULATION_BASIS_VALUES);
+
+// ============================================
+// SALES ORDER VALIDATORS (AR Reconciliation)
+// ============================================
+
+/**
+ * Sales order match status validator
+ * Lifecycle: unmatched → matched/partial/variance/conflict
+ */
+export const salesOrderMatchStatusValidator = literalUnion(SALES_ORDER_MATCH_STATUS_VALUES);
+
+/**
+ * Sales order match method validator
+ * How the match was determined: exact_reference, fuzzy, manual
+ */
+export const salesOrderMatchMethodValidator = literalUnion(SALES_ORDER_MATCH_METHOD_VALUES);

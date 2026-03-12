@@ -566,3 +566,27 @@ export const OVERTIME_CALCULATION_BASIS = {
 
 export type OvertimeCalculationBasis = typeof OVERTIME_CALCULATION_BASIS[keyof typeof OVERTIME_CALCULATION_BASIS];
 export const OVERTIME_CALCULATION_BASIS_VALUES = Object.values(OVERTIME_CALCULATION_BASIS);
+
+// ============================================
+// SALES ORDER MATCH STATUS
+// ============================================
+export const SALES_ORDER_MATCH_STATUSES = {
+  UNMATCHED: "unmatched",
+  MATCHED: "matched",
+  PARTIAL: "partial",
+  VARIANCE: "variance",
+  CONFLICT: "conflict",
+} as const;
+
+export const SALES_ORDER_MATCH_STATUS_VALUES = Object.values(SALES_ORDER_MATCH_STATUSES);
+
+// ============================================
+// SALES ORDER MATCH METHOD
+// ============================================
+export const SALES_ORDER_MATCH_METHODS = {
+  EXACT_REFERENCE: "exact_reference",
+  FUZZY: "fuzzy",
+  MANUAL: "manual",
+} as const;
+
+export const SALES_ORDER_MATCH_METHOD_VALUES = Object.values(SALES_ORDER_MATCH_METHODS);
