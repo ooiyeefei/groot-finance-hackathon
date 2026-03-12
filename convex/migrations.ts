@@ -231,44 +231,8 @@ export const insertAccountingEntry = mutation({
 // ============================================
 // LINE ITEM MIGRATIONS
 // ============================================
-
-export const insertLineItem = mutation({
-  args: {
-    legacyId: v.string(),
-    accountingEntryId: v.id("accounting_entries"),
-    itemDescription: v.string(),
-    quantity: v.number(),
-    unitPrice: v.number(),
-    totalAmount: v.number(),
-    currency: v.string(),
-    taxAmount: v.optional(v.number()),
-    taxRate: v.optional(v.number()),
-    discountAmount: v.optional(v.number()),
-    lineOrder: v.optional(v.number()),
-    itemCode: v.optional(v.string()),
-    unitMeasurement: v.optional(v.string()),
-    deletedAt: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    return await ctx.db.insert("line_items", {
-      legacyId: args.legacyId,
-      accountingEntryId: args.accountingEntryId,
-      itemDescription: args.itemDescription,
-      quantity: args.quantity,
-      unitPrice: args.unitPrice,
-      totalAmount: args.totalAmount,
-      currency: args.currency,
-      taxAmount: args.taxAmount,
-      taxRate: args.taxRate,
-      discountAmount: args.discountAmount,
-      lineOrder: args.lineOrder || 1,
-      itemCode: args.itemCode,
-      unitMeasurement: args.unitMeasurement,
-      deletedAt: args.deletedAt,
-      updatedAt: Date.now(),
-    });
-  },
-});
+// REMOVED: insertLineItem migration (one-time historical migration, already executed)
+// Line items are now embedded in accounting_entries.lineItems[] array
 
 // ============================================
 // INVOICE MIGRATIONS

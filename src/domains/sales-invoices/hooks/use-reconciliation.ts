@@ -76,16 +76,51 @@ export function useSalesOrders(options?: {
 }
 
 /**
+ * Hook for export data query
+ */
+export function useExportData(options?: {
+  dateFrom?: string
+  dateTo?: string
+  matchStatus?: string
+  enabled?: boolean
+}) {
+  const { businessId } = useActiveBusiness()
+
+  const result = useQuery(
+    api.functions.salesOrders.getExportData,
+    businessId && options?.enabled !== false
+      ? {
+          businessId: businessId as Id<"businesses">,
+          dateFrom: options?.dateFrom,
+          dateTo: options?.dateTo,
+          matchStatus: options?.matchStatus,
+        }
+      : "skip"
+  )
+
+  return {
+    exportData: result?.orders ?? [],
+    isLoading: result === undefined,
+  }
+}
+
+/**
  * Hook for reconciliation mutations
  */
 export function useReconciliationMutations() {
   const importBatch = useMutation(api.functions.salesOrders.importBatch)
   const runMatching = useMutation(api.functions.salesOrders.runMatching)
   const updateMatchStatus = useMutation(api.functions.salesOrders.updateMatchStatus)
+  const reconcileLineItems = useMutation(api.functions.salesOrders.reconcileLineItems)
+  const closePeriod = useMutation(api.functions.salesOrders.closePeriod)
+  const reopenPeriod = useMutation(api.functions.salesOrders.reopenPeriod)
 
   return {
     importBatch,
     runMatching,
     updateMatchStatus,
+    reconcileLineItems,
+    closePeriod,
+    reopenPeriod,
   }
 }

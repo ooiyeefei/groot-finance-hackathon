@@ -4,7 +4,7 @@
  */
 
 // Document type classification
-export type DocumentType = 
+export type DocumentType =
   | 'invoice'           // Business invoices with line items
   | 'receipt'           // Simple receipts (retail, restaurant, etc.)
   | 'bill'              // Utility bills, service bills
@@ -13,6 +13,7 @@ export type DocumentType =
   | 'delivery_note'     // Delivery receipts, shipping docs
   | 'credit_note'       // Credit notes, refunds
   | 'ride_receipt'      // Grab, Uber, transport receipts
+  | 'sales_statement'   // Platform sales statement / marketplace settlement report
   | 'unknown'           // Fallback for unrecognized formats
 
 // Industry context for format-specific extraction
@@ -24,6 +25,7 @@ export type IndustryContext =
   | 'services'          // Professional services
   | 'transport'         // Logistics, shipping
   | 'utilities'         // Energy, water, telecoms
+  | 'ecommerce'         // E-commerce platforms, marketplaces
   | 'general'           // Generic business expense
 
 // Confidence levels for extraction quality
@@ -322,6 +324,26 @@ export const DOCUMENT_SCHEMAS: Record<DocumentType, DocumentSchema> = {
       has_unit_prices: true,
       has_tax_breakdown: true,
       has_discounts: false
+    },
+    extraction_rules: {
+      currency_detection: 'strict',
+      date_formats: ['YYYY-MM-DD', 'DD/MM/YYYY'],
+      amount_validation: 'sum_validation',
+      line_item_parsing: 'structured'
+    }
+  },
+
+  sales_statement: {
+    document_type: 'sales_statement',
+    industry_context: 'ecommerce',
+    required_fields: ['vendor_name', 'total_amount', 'currency', 'transaction_date'],
+    optional_fields: ['platform_name', 'settlement_period', 'commission_total', 'shipping_total', 'net_payout'],
+    line_item_structure: {
+      has_item_codes: true,
+      has_quantities: true,
+      has_unit_prices: true,
+      has_tax_breakdown: false,
+      has_discounts: true
     },
     extraction_rules: {
       currency_detection: 'strict',

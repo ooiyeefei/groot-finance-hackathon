@@ -51,6 +51,7 @@ import {
   OVERTIME_CALCULATION_BASIS_VALUES,
   SALES_ORDER_MATCH_STATUS_VALUES,
   SALES_ORDER_MATCH_METHOD_VALUES,
+  SALES_ORDER_PERIOD_STATUS_VALUES,
 } from "../../src/lib/constants/statuses";
 
 // ============================================
@@ -341,3 +342,9 @@ export const salesOrderMatchStatusValidator = literalUnion(SALES_ORDER_MATCH_STA
  * How the match was determined: exact_reference, fuzzy, manual
  */
 export const salesOrderMatchMethodValidator = literalUnion(SALES_ORDER_MATCH_METHOD_VALUES);
+
+/**
+ * Sales order period status validator
+ * Lifecycle: open → closed/disputed
+ */
+export const salesOrderPeriodStatusValidator = literalUnion(SALES_ORDER_PERIOD_STATUS_VALUES);

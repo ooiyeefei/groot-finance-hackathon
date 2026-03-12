@@ -156,6 +156,60 @@ export const SALES_STATEMENT_FIELDS: SchemaField[] = [
       "payment mode",
     ],
   },
+  {
+    name: "commissionFee",
+    label: "Commission Fee",
+    type: "number",
+    required: false,
+    aliases: [
+      "commission",
+      "commission fee",
+      "seller commission",
+      "marketplace commission",
+      "referral fee",
+    ],
+  },
+  {
+    name: "shippingFee",
+    label: "Shipping Fee",
+    type: "number",
+    required: false,
+    aliases: [
+      "shipping",
+      "shipping fee",
+      "delivery fee",
+      "postage",
+      "freight",
+      "shipping cost",
+    ],
+  },
+  {
+    name: "marketingFee",
+    label: "Marketing Fee",
+    type: "number",
+    required: false,
+    aliases: [
+      "marketing",
+      "marketing fee",
+      "ads fee",
+      "advertising",
+      "promo fee",
+      "sponsored fee",
+    ],
+  },
+  {
+    name: "refundAmount",
+    label: "Refund Amount",
+    type: "number",
+    required: false,
+    aliases: [
+      "refund",
+      "refund amount",
+      "return amount",
+      "credit back",
+      "reimbursement",
+    ],
+  },
 ];
 
 export const BANK_STATEMENT_FIELDS: SchemaField[] = [

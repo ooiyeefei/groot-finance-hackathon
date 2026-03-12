@@ -43,6 +43,7 @@ import {
   overtimeCalculationBasisValidator,
   salesOrderMatchStatusValidator,
   salesOrderMatchMethodValidator,
+  salesOrderPeriodStatusValidator,
 } from "./lib/validators";
 
 export default defineSchema({
@@ -364,27 +365,6 @@ export default defineSchema({
     .index("by_legacyId", ["legacyId"])
     .index("by_businessId_dueDate", ["businessId", "dueDate"])
     .index("by_businessId_vendorId_status", ["businessId", "vendorId", "status"]),
-
-  // Line Items table (for migration - will be embedded later)
-  line_items: defineTable({
-    legacyId: v.optional(v.string()),
-    accountingEntryId: v.id("accounting_entries"),
-    itemDescription: v.string(),
-    quantity: v.number(),
-    unitPrice: v.number(),
-    totalAmount: v.number(),
-    currency: v.string(),
-    taxAmount: v.optional(v.number()),
-    taxRate: v.optional(v.number()),
-    discountAmount: v.optional(v.number()),
-    lineOrder: v.optional(v.number()),
-    itemCode: v.optional(v.string()),
-    unitMeasurement: v.optional(v.string()),
-    deletedAt: v.optional(v.number()),
-    updatedAt: v.optional(v.number()),
-  })
-    .index("by_accountingEntryId", ["accountingEntryId"])
-    .index("by_legacyId", ["legacyId"]),
 
   // ============================================
   // EXPENSE CLAIMS DOMAIN
@@ -2331,21 +2311,65 @@ export default defineSchema({
     orderReference: v.string(),
     orderDate: v.string(),
     customerName: v.optional(v.string()),
+
+    // Top-level product fields (for single-item orders or summary)
     productName: v.optional(v.string()),
     productCode: v.optional(v.string()),
     quantity: v.optional(v.number()),
     unitPrice: v.optional(v.number()),
+
+    // Embedded line items (for multi-item orders from CSV)
+    lineItems: v.optional(v.array(v.object({
+      lineOrder: v.number(),
+      productName: v.optional(v.string()),
+      productCode: v.optional(v.string()),
+      quantity: v.number(),
+      unitPrice: v.number(),
+      totalAmount: v.number(),
+      description: v.optional(v.string()),
+    }))),
+
+    // Amounts
     grossAmount: v.number(),
     platformFee: v.optional(v.number()),
     netAmount: v.optional(v.number()),
     currency: v.string(),
     paymentMethod: v.optional(v.string()),
+
+    // Fee breakdown (commission, shipping, marketing, refund, other)
+    feeBreakdown: v.optional(v.object({
+      commissionFee: v.optional(v.number()),
+      shippingFee: v.optional(v.number()),
+      marketingFee: v.optional(v.number()),
+      refundAmount: v.optional(v.number()),
+      otherFee: v.optional(v.number()),
+    })),
+
+    // Matching
     matchStatus: salesOrderMatchStatusValidator,
     matchedInvoiceId: v.optional(v.id("sales_invoices")),
     matchConfidence: v.optional(v.number()),
     matchMethod: v.optional(salesOrderMatchMethodValidator),
     varianceAmount: v.optional(v.number()),
     varianceReason: v.optional(v.string()),
+
+    // Structured variance details (replaces free-text varianceReason for rich display)
+    matchVariances: v.optional(v.array(v.object({
+      field: v.string(),           // e.g. "grossAmount", "quantity", "productName"
+      orderValue: v.string(),      // stringified for uniform display
+      invoiceValue: v.string(),
+      difference: v.optional(v.number()), // numeric diff for amounts
+      severity: v.union(v.literal("info"), v.literal("warning"), v.literal("error")),
+    }))),
+
+    // Period-based reconciliation
+    periodStatus: v.optional(salesOrderPeriodStatusValidator),
+    periodClosedAt: v.optional(v.number()),
+    periodClosedBy: v.optional(v.string()),
+
+    // Document linkage
+    sourceDocumentId: v.optional(v.id("invoices")),
+
     isRefund: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -2354,7 +2378,8 @@ export default defineSchema({
     .index("by_businessId_matchStatus", ["businessId", "matchStatus"])
     .index("by_businessId_orderDate", ["businessId", "orderDate"])
     .index("by_businessId_importBatchId", ["businessId", "importBatchId"])
-    .index("by_businessId_orderReference", ["businessId", "orderReference"]),
+    .index("by_businessId_orderReference", ["businessId", "orderReference"])
+    .index("by_businessId_periodStatus", ["businessId", "periodStatus"]),
 
   deletion_data_exports: defineTable({
     businessId: v.id("businesses"),

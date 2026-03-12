@@ -799,26 +799,6 @@ async function approveOneClaim(
     businessId: claim.businessId,
   });
 
-  // Insert normalized line items
-  if (lineItems.length > 0) {
-    for (const item of lineItems) {
-      await ctx.db.insert("line_items", {
-        accountingEntryId,
-        itemDescription: item.itemDescription,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        totalAmount: item.totalAmount,
-        currency: item.currency,
-        taxAmount: item.taxAmount,
-        taxRate: item.taxRate,
-        lineOrder: item.lineOrder,
-        itemCode: item.itemCode,
-        unitMeasurement: item.unitMeasurement,
-        updatedAt: now,
-      });
-    }
-  }
-
   // Vendor linking (expense claims) — link accounting entry to vendor record if found,
   // but do NOT promote expense claim merchants to "active" vendor status.
   // Active vendors should only come from actual AP supplier invoices, not employee receipts.

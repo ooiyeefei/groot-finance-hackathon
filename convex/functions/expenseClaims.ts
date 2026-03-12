@@ -1203,30 +1203,6 @@ export const updateStatus = mutation({
           console.log(`[Convex] Created accounting entry ${accountingEntryId} for approved expense claim ${claim._id} with ${lineItems.length} line items`);
 
           // ============================================
-          // PHASE 2: Line items table population
-          // Insert line items into normalized line_items table
-          // ============================================
-          if (lineItems.length > 0) {
-            for (const item of lineItems) {
-              await ctx.db.insert("line_items", {
-                accountingEntryId: accountingEntryId,
-                itemDescription: item.itemDescription,
-                quantity: item.quantity,
-                unitPrice: item.unitPrice,
-                totalAmount: item.totalAmount,
-                currency: item.currency,
-                taxAmount: item.taxAmount,
-                taxRate: item.taxRate,
-                lineOrder: item.lineOrder,
-                itemCode: item.itemCode,
-                unitMeasurement: item.unitMeasurement,
-                updatedAt: now,
-              });
-            }
-            console.log(`[Convex] Inserted ${lineItems.length} records into line_items table for accounting entry ${accountingEntryId}`);
-          }
-
-          // ============================================
           // PHASE 2: Vendor activation
           // Link vendor to accounting entry and promote from prospective to active
           // ============================================

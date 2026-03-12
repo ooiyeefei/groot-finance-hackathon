@@ -251,7 +251,8 @@ class DocumentClassifier:
             # Note: ic, payslip, and application_form removed - legacy application types no longer supported
             type_descriptions = {
                 "invoice": "Business invoice with itemized list, vendor details, total amount, and payment terms. Extract vendor info, amounts, dates, and items.",
-                "receipt": "Purchase receipt, restaurant bill, taxi receipt, or retail transaction receipt. Extract vendor name, amount, date, and purchased items. Includes both printed and digital receipts."
+                "receipt": "Purchase receipt, restaurant bill, taxi receipt, or retail transaction receipt. Extract vendor name, amount, date, and purchased items. Includes both printed and digital receipts.",
+                "sales_statement": "Platform sales statement or marketplace settlement report listing multiple orders/transactions with fees, commissions, and net payouts. Common from e-commerce platforms like Shopee, Lazada, Grab, TikTok Shop."
             }
 
             supported_types = []

@@ -243,7 +243,7 @@ export async function GET(
     const { documentType } = await params
 
     // Validate document type
-    const validTypes = ['invoice', 'receipt', 'bill', 'statement', 'contract', 'other']
+    const validTypes = ['invoice', 'receipt', 'bill', 'statement', 'sales_statement', 'contract', 'other']
     if (!validTypes.includes(documentType)) {
       return NextResponse.json({
         success: false,
