@@ -81,7 +81,7 @@ export const list = query({
     const enrichedSchedules = await Promise.all(
       schedules.map(async (schedule) => {
         let templateName = "Unknown Template";
-        let module: "expense" | "invoice" | "leave" | "accounting" = "expense";
+        let module: "expense" | "invoice" | "leave" | "accounting" | "master-data" = "expense";
 
         if (schedule.templateId) {
           const template = await ctx.db.get(schedule.templateId);
@@ -93,11 +93,14 @@ export const list = query({
           // Pre-built template name will be resolved on frontend
           // Module is inferred from prebuiltId prefix
           templateName = schedule.prebuiltTemplateId;
-          if (schedule.prebuiltTemplateId.includes("-leave")) {
+          const pid = schedule.prebuiltTemplateId;
+          if (pid.includes("-creditor") || pid.includes("-debtor") || pid.includes("-coa") || pid.includes("-supplier") || pid.includes("-customer") || pid.includes("-chart-of-account") || pid.includes("-stock-item") || pid.includes("-category") || pid.includes("-cost-centre")) {
+            module = "master-data";
+          } else if (pid.includes("-leave")) {
             module = "leave";
-          } else if (schedule.prebuiltTemplateId.includes("-accounting") || schedule.prebuiltTemplateId.includes("-journal") || schedule.prebuiltTemplateId.startsWith("sql-accounting-gl")) {
+          } else if (pid.includes("-accounting") || pid.includes("-journal") || pid.startsWith("sql-accounting-gl")) {
             module = "accounting";
-          } else if (schedule.prebuiltTemplateId.includes("-invoice") || schedule.prebuiltTemplateId.startsWith("sql-accounting-a")) {
+          } else if (pid.includes("-invoice") || pid.startsWith("sql-accounting-a")) {
             module = "invoice";
           } else {
             module = "expense";
@@ -493,7 +496,7 @@ export const runScheduledExports = internalMutation({
     for (const schedule of dueSchedules) {
       try {
         // Get module from template
-        let module: "expense" | "invoice" | "leave" | "accounting" = "expense";
+        let module: "expense" | "invoice" | "leave" | "accounting" | "master-data" = "expense";
         let templateName = "Scheduled Export";
         if (schedule.templateId) {
           const template = await ctx.db.get(schedule.templateId);

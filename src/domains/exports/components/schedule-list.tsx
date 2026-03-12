@@ -17,12 +17,13 @@ const MODULE_LABELS: Record<string, string> = {
   invoice: 'Invoices',
   leave: 'Leave Records',
   accounting: 'Accounting Records',
+  'master-data': 'Master Data',
 };
 
 interface ScheduleItem {
   _id: Id<'export_schedules'>;
   templateName: string;
-  module: 'expense' | 'invoice' | 'leave' | 'accounting';
+  module: 'expense' | 'invoice' | 'leave' | 'accounting' | 'master-data';
   frequency: ExportFrequency;
   hourUtc: number;
   minuteUtc?: number;

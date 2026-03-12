@@ -7,7 +7,7 @@
  */
 
 import { cn } from '@/lib/utils';
-import { Receipt, Calendar, FileText, BookOpen } from 'lucide-react';
+import { Receipt, Calendar, FileText, BookOpen, Database } from 'lucide-react';
 import type { ExportModule } from '../types';
 
 interface ModuleSelectorProps {
@@ -41,11 +41,17 @@ const MODULES: { id: ExportModule; name: string; description: string; icon: type
     description: 'Export posted journal entries',
     icon: BookOpen,
   },
+  {
+    id: 'master-data',
+    name: 'Master Data',
+    description: 'Export vendors, customers, chart of accounts, and more',
+    icon: Database,
+  },
 ];
 
 export function ModuleSelector({ value, onChange, disabled }: ModuleSelectorProps) {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
       {MODULES.map((module) => {
         const Icon = module.icon;
         const isSelected = value === module.id;

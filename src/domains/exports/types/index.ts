@@ -11,7 +11,7 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 // COMMON TYPES
 // ============================================
 
-export type ExportModule = "expense" | "invoice" | "leave" | "accounting";
+export type ExportModule = "expense" | "invoice" | "leave" | "accounting" | "master-data";
 export type ExportFormatType = "flat" | "hierarchical";
 export type ExportTemplateType = "custom" | "cloned";
 export type ExportFrequency = "daily" | "weekly" | "monthly";

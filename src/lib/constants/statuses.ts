@@ -333,6 +333,7 @@ export const EXPORT_MODULES = {
   INVOICE: "invoice",
   LEAVE: "leave",
   ACCOUNTING: "accounting",
+  MASTER_DATA: "master-data",
 } as const;
 
 export type ExportModule = typeof EXPORT_MODULES[keyof typeof EXPORT_MODULES];

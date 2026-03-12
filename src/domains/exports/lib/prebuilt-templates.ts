@@ -1,7 +1,7 @@
 /**
  * Pre-built Export Templates
  *
- * Templates for all 4 export modules using the unified export engine.
+ * Templates for all 5 export modules using the unified export engine.
  * Supports both flat CSV and hierarchical MASTER/DETAIL formats.
  */
 
@@ -16,7 +16,7 @@ const SQL_PAYROLL_EXPENSE: PrebuiltTemplate = {
   name: "SQL Payroll",
   description: "Export expense claims for SQL Payroll import (Malaysia)",
   module: "expense",
-  version: "1.0.0",
+  version: "1.1.0",
   targetSystem: "sql-payroll",
   formatType: "flat",
   delimiter: ",",
@@ -33,6 +33,9 @@ const SQL_PAYROLL_EXPENSE: PrebuiltTemplate = {
     { sourceField: "description", targetColumn: "DESCRIPTION", order: 7 },
     { sourceField: "status", targetColumn: "STATUS", order: 8 },
     { sourceField: "approvedAt", targetColumn: "APPROVED_DATE", order: 9, dateFormat: "DD/MM/YYYY" },
+    { sourceField: "vendorName", targetColumn: "VENDOR", order: 10 },
+    { sourceField: "referenceNumber", targetColumn: "CLAIM_REF", order: 11 },
+    { sourceField: "homeCurrencyAmount", targetColumn: "TAX_AMOUNT", order: 12, decimalPlaces: 2 },
   ],
 };
 
@@ -84,7 +87,7 @@ const BRIOHR_EXPENSE: PrebuiltTemplate = {
   name: "BrioHR",
   description: "Export expense claims for BrioHR import (MY/SG)",
   module: "expense",
-  version: "1.0.0",
+  version: "1.1.0",
   targetSystem: "briohr",
   formatType: "flat",
   delimiter: ",",
@@ -92,12 +95,18 @@ const BRIOHR_EXPENSE: PrebuiltTemplate = {
   defaultDateFormat: "YYYY-MM-DD",
   defaultDecimalPlaces: 2,
   fieldMappings: [
-    { sourceField: "employee.email", targetColumn: "Email", order: 1 },
-    { sourceField: "transactionDate", targetColumn: "ClaimDate", order: 2, dateFormat: "YYYY-MM-DD" },
-    { sourceField: "totalAmount", targetColumn: "Amount", order: 3, decimalPlaces: 2 },
-    { sourceField: "currency", targetColumn: "Currency", order: 4 },
-    { sourceField: "expenseCategory", targetColumn: "Category", order: 5 },
-    { sourceField: "description", targetColumn: "Description", order: 6 },
+    { sourceField: "employee.name", targetColumn: "EmployeeName", order: 1 },
+    { sourceField: "employee.employeeId", targetColumn: "EmployeeID", order: 2 },
+    { sourceField: "employee.email", targetColumn: "Email", order: 3 },
+    { sourceField: "transactionDate", targetColumn: "ClaimDate", order: 4, dateFormat: "YYYY-MM-DD" },
+    { sourceField: "vendorName", targetColumn: "Vendor", order: 5 },
+    { sourceField: "totalAmount", targetColumn: "Amount", order: 6, decimalPlaces: 2 },
+    { sourceField: "currency", targetColumn: "Currency", order: 7 },
+    { sourceField: "expenseCategory", targetColumn: "Category", order: 8 },
+    { sourceField: "description", targetColumn: "Description", order: 9 },
+    { sourceField: "referenceNumber", targetColumn: "ClaimRef", order: 10 },
+    { sourceField: "status", targetColumn: "Status", order: 11 },
+    { sourceField: "approvedAt", targetColumn: "ApprovedDate", order: 12, dateFormat: "YYYY-MM-DD" },
   ],
 };
 
@@ -106,7 +115,7 @@ const KAKITANGAN_EXPENSE: PrebuiltTemplate = {
   name: "Kakitangan",
   description: "Export expense claims for Kakitangan import (Malaysia)",
   module: "expense",
-  version: "1.0.0",
+  version: "1.1.0",
   targetSystem: "kakitangan",
   formatType: "flat",
   delimiter: ",",
@@ -114,11 +123,16 @@ const KAKITANGAN_EXPENSE: PrebuiltTemplate = {
   defaultDateFormat: "DD-MM-YYYY",
   defaultDecimalPlaces: 2,
   fieldMappings: [
-    { sourceField: "employee.employeeId", targetColumn: "StaffID", order: 1 },
-    { sourceField: "transactionDate", targetColumn: "Date", order: 2, dateFormat: "DD-MM-YYYY" },
-    { sourceField: "totalAmount", targetColumn: "Amount", order: 3, decimalPlaces: 2 },
-    { sourceField: "expenseCategory", targetColumn: "Type", order: 4 },
-    { sourceField: "description", targetColumn: "Remarks", order: 5 },
+    { sourceField: "employee.name", targetColumn: "StaffName", order: 1 },
+    { sourceField: "employee.employeeId", targetColumn: "StaffID", order: 2 },
+    { sourceField: "employee.email", targetColumn: "Email", order: 3 },
+    { sourceField: "transactionDate", targetColumn: "Date", order: 4, dateFormat: "DD-MM-YYYY" },
+    { sourceField: "vendorName", targetColumn: "Vendor", order: 5 },
+    { sourceField: "totalAmount", targetColumn: "Amount", order: 6, decimalPlaces: 2 },
+    { sourceField: "currency", targetColumn: "Currency", order: 7 },
+    { sourceField: "expenseCategory", targetColumn: "Type", order: 8 },
+    { sourceField: "description", targetColumn: "Remarks", order: 9 },
+    { sourceField: "status", targetColumn: "Status", order: 10 },
   ],
 };
 
@@ -186,7 +200,7 @@ const BRIOHR_LEAVE: PrebuiltTemplate = {
   name: "BrioHR",
   description: "Export leave records for BrioHR import (MY/SG)",
   module: "leave",
-  version: "1.0.0",
+  version: "1.1.0",
   targetSystem: "briohr",
   formatType: "flat",
   delimiter: ",",
@@ -194,13 +208,14 @@ const BRIOHR_LEAVE: PrebuiltTemplate = {
   defaultDateFormat: "YYYY-MM-DD",
   defaultDecimalPlaces: 1,
   fieldMappings: [
-    { sourceField: "employee.email", targetColumn: "Email", order: 1 },
-    { sourceField: "leaveType.name", targetColumn: "LeaveType", order: 2 },
-    { sourceField: "startDate", targetColumn: "StartDate", order: 3, dateFormat: "YYYY-MM-DD" },
-    { sourceField: "endDate", targetColumn: "EndDate", order: 4, dateFormat: "YYYY-MM-DD" },
-    { sourceField: "totalDays", targetColumn: "Days", order: 5, decimalPlaces: 1 },
-    { sourceField: "notes", targetColumn: "Reason", order: 6 },
-    { sourceField: "status", targetColumn: "Status", order: 7 },
+    { sourceField: "employee.name", targetColumn: "EmployeeName", order: 1 },
+    { sourceField: "employee.email", targetColumn: "Email", order: 2 },
+    { sourceField: "leaveType.name", targetColumn: "LeaveType", order: 3 },
+    { sourceField: "startDate", targetColumn: "StartDate", order: 4, dateFormat: "YYYY-MM-DD" },
+    { sourceField: "endDate", targetColumn: "EndDate", order: 5, dateFormat: "YYYY-MM-DD" },
+    { sourceField: "totalDays", targetColumn: "Days", order: 6, decimalPlaces: 1 },
+    { sourceField: "notes", targetColumn: "Reason", order: 7 },
+    { sourceField: "status", targetColumn: "Status", order: 8 },
   ],
 };
 
@@ -209,7 +224,7 @@ const KAKITANGAN_LEAVE: PrebuiltTemplate = {
   name: "Kakitangan",
   description: "Export leave records for Kakitangan import (Malaysia)",
   module: "leave",
-  version: "1.0.0",
+  version: "1.1.0",
   targetSystem: "kakitangan",
   formatType: "flat",
   delimiter: ",",
@@ -217,12 +232,14 @@ const KAKITANGAN_LEAVE: PrebuiltTemplate = {
   defaultDateFormat: "DD-MM-YYYY",
   defaultDecimalPlaces: 1,
   fieldMappings: [
-    { sourceField: "employee.employeeId", targetColumn: "StaffID", order: 1 },
-    { sourceField: "leaveType.code", targetColumn: "LeaveCode", order: 2 },
-    { sourceField: "startDate", targetColumn: "FromDate", order: 3, dateFormat: "DD-MM-YYYY" },
-    { sourceField: "endDate", targetColumn: "ToDate", order: 4, dateFormat: "DD-MM-YYYY" },
-    { sourceField: "totalDays", targetColumn: "Days", order: 5, decimalPlaces: 1 },
-    { sourceField: "notes", targetColumn: "Remarks", order: 6 },
+    { sourceField: "employee.name", targetColumn: "StaffName", order: 1 },
+    { sourceField: "employee.employeeId", targetColumn: "StaffID", order: 2 },
+    { sourceField: "leaveType.code", targetColumn: "LeaveCode", order: 3 },
+    { sourceField: "startDate", targetColumn: "FromDate", order: 4, dateFormat: "DD-MM-YYYY" },
+    { sourceField: "endDate", targetColumn: "ToDate", order: 5, dateFormat: "DD-MM-YYYY" },
+    { sourceField: "totalDays", targetColumn: "Days", order: 6, decimalPlaces: 1 },
+    { sourceField: "notes", targetColumn: "Remarks", order: 7 },
+    { sourceField: "status", targetColumn: "Status", order: 8 },
   ],
 };
 
@@ -953,7 +970,7 @@ const MASTER_ACCOUNTING_CHART_OF_ACCOUNT: PrebuiltTemplate = {
   name: "Master Accounting (Chart of Account)",
   description:
     "Export expense/COGS categories as Chart of Account for Master Accounting import",
-  module: "accounting",
+  module: "master-data",
   version: "1.0.0",
   targetSystem: "master-accounting",
   formatType: "flat",
@@ -988,7 +1005,7 @@ const MASTER_ACCOUNTING_CREDITOR: PrebuiltTemplate = {
   name: "Master Accounting (Creditor/Supplier)",
   description:
     "Export vendors/suppliers for Master Accounting master file import",
-  module: "expense",
+  module: "master-data",
   version: "1.0.0",
   targetSystem: "master-accounting",
   formatType: "flat",
@@ -1059,7 +1076,7 @@ const MASTER_ACCOUNTING_DEBTOR: PrebuiltTemplate = {
   name: "Master Accounting (Debtor/Customer)",
   description:
     "Export customers for Master Accounting master file import",
-  module: "invoice",
+  module: "master-data",
   version: "1.0.0",
   targetSystem: "master-accounting",
   formatType: "flat",
@@ -1545,7 +1562,7 @@ const MASTER_ACCOUNTING_STOCK_ITEM: PrebuiltTemplate = {
   name: "Master Accounting (Stock Item)",
   description:
     "Export product catalog as Stock Item master data for Master Accounting import",
-  module: "invoice",
+  module: "master-data",
   version: "1.0.0",
   targetSystem: "master-accounting",
   formatType: "flat",
@@ -1596,7 +1613,7 @@ const MASTER_ACCOUNTING_CATEGORY: PrebuiltTemplate = {
   name: "Master Accounting (Category)",
   description:
     "Export product categories from catalog items as Category master data for Master Accounting import",
-  module: "invoice",
+  module: "master-data",
   version: "1.0.0",
   targetSystem: "master-accounting",
   formatType: "flat",
@@ -1623,7 +1640,7 @@ const MASTER_ACCOUNTING_COST_CENTRE: PrebuiltTemplate = {
   name: "Master Accounting (Cost Centre)",
   description:
     "Export business departments as Cost Centre master data for Master Accounting import",
-  module: "accounting",
+  module: "master-data",
   version: "1.0.0",
   targetSystem: "master-accounting",
   formatType: "flat",
@@ -1641,6 +1658,435 @@ const MASTER_ACCOUNTING_COST_CENTRE: PrebuiltTemplate = {
 };
 
 // ============================================
+// MYOB EXPORT TEMPLATES
+// ============================================
+
+const MYOB_EXPENSE: PrebuiltTemplate = {
+  id: "myob-expense",
+  name: "MYOB",
+  description: "Export expense claims for MYOB Spend Money import",
+  module: "expense",
+  version: "1.0.0",
+  targetSystem: "myob",
+  formatType: "flat",
+  delimiter: ",",
+  fileExtension: ".csv",
+  defaultDateFormat: "DD/MM/YYYY",
+  defaultDecimalPlaces: 2,
+  fieldMappings: [
+    { sourceField: "transactionDate", targetColumn: "Date", order: 1, dateFormat: "DD/MM/YYYY" },
+    { sourceField: "expenseCategory", targetColumn: "AccountNumber", order: 2 },
+    { sourceField: "totalAmount", targetColumn: "Amount", order: 3, decimalPlaces: 2 },
+    { sourceField: "description", targetColumn: "Memo", order: 4 },
+    { sourceField: "vendorName", targetColumn: "Card", order: 5 },
+    { sourceField: "referenceNumber", targetColumn: "ChqNo", order: 6 },
+    { sourceField: "currency", targetColumn: "CurrencyCode", order: 7 },
+  ],
+};
+
+const MYOB_JOURNAL: PrebuiltTemplate = {
+  id: "myob-journal",
+  name: "MYOB",
+  description: "Export accounting journal entries for MYOB General Journal import",
+  module: "accounting",
+  version: "1.0.0",
+  targetSystem: "myob",
+  formatType: "flat",
+  delimiter: ",",
+  fileExtension: ".csv",
+  defaultDateFormat: "DD/MM/YYYY",
+  defaultDecimalPlaces: 2,
+  fieldMappings: [
+    { sourceField: "documentNumber", targetColumn: "JournalNumber", order: 1 },
+    { sourceField: "transactionDate", targetColumn: "Date", order: 2, dateFormat: "DD/MM/YYYY" },
+    { sourceField: "lineItem.description", targetColumn: "Memo", order: 3 },
+    { sourceField: "category", targetColumn: "AccountNumber", order: 4 },
+    { sourceField: "lineItem.debitAmount", targetColumn: "DebitAmount", order: 5, decimalPlaces: 2 },
+    { sourceField: "lineItem.creditAmount", targetColumn: "CreditAmount", order: 6, decimalPlaces: 2 },
+    { sourceField: "lineItem.taxAmount", targetColumn: "TaxCode", order: 7 },
+    { sourceField: "description", targetColumn: "Job", order: 8 },
+  ],
+};
+
+const MYOB_AP_INVOICE: PrebuiltTemplate = {
+  id: "myob-ap-invoice",
+  name: "MYOB (AP)",
+  description: "Export purchase invoices for MYOB Purchases import",
+  module: "invoice",
+  version: "1.0.0",
+  targetSystem: "myob",
+  formatType: "flat",
+  delimiter: ",",
+  fileExtension: ".csv",
+  defaultDateFormat: "DD/MM/YYYY",
+  defaultDecimalPlaces: 2,
+  fieldMappings: [
+    { sourceField: "entityName", targetColumn: "Co./Last Name", order: 1 },
+    { sourceField: "invoiceNumber", targetColumn: "PurchaseNo", order: 2 },
+    { sourceField: "invoiceDate", targetColumn: "Date", order: 3, dateFormat: "DD/MM/YYYY" },
+    { sourceField: "lineItem.description", targetColumn: "Description", order: 4 },
+    { sourceField: "lineItem.quantity", targetColumn: "Quantity", order: 5, decimalPlaces: 2 },
+    { sourceField: "lineItem.unitPrice", targetColumn: "Price", order: 6, decimalPlaces: 2 },
+    { sourceField: "lineItem.totalAmount", targetColumn: "Total", order: 7, decimalPlaces: 2 },
+    { sourceField: "lineItem.taxRate", targetColumn: "Tax Code", order: 8 },
+    { sourceField: "lineItem.itemCode", targetColumn: "Account No.", order: 9 },
+  ],
+};
+
+const MYOB_AR_INVOICE: PrebuiltTemplate = {
+  id: "myob-ar-invoice",
+  name: "MYOB (AR)",
+  description: "Export sales invoices for MYOB Sales import",
+  module: "invoice",
+  version: "1.0.0",
+  targetSystem: "myob",
+  formatType: "flat",
+  delimiter: ",",
+  fileExtension: ".csv",
+  defaultDateFormat: "DD/MM/YYYY",
+  defaultDecimalPlaces: 2,
+  fieldMappings: [
+    { sourceField: "entityName", targetColumn: "Co./Last Name", order: 1 },
+    { sourceField: "invoiceNumber", targetColumn: "InvoiceNo", order: 2 },
+    { sourceField: "invoiceDate", targetColumn: "Date", order: 3, dateFormat: "DD/MM/YYYY" },
+    { sourceField: "dueDate", targetColumn: "DueDate", order: 4, dateFormat: "DD/MM/YYYY" },
+    { sourceField: "lineItem.description", targetColumn: "Description", order: 5 },
+    { sourceField: "lineItem.quantity", targetColumn: "Quantity", order: 6, decimalPlaces: 2 },
+    { sourceField: "lineItem.unitPrice", targetColumn: "Price", order: 7, decimalPlaces: 2 },
+    { sourceField: "lineItem.totalAmount", targetColumn: "Total", order: 8, decimalPlaces: 2 },
+    { sourceField: "lineItem.taxRate", targetColumn: "Tax Code", order: 9 },
+    { sourceField: "lineItem.itemCode", targetColumn: "Account No.", order: 10 },
+  ],
+};
+
+// ============================================
+// HREASILY & SWINGVY EXPORT TEMPLATES
+// ============================================
+
+const HREASILY_LEAVE: PrebuiltTemplate = {
+  id: "hreasily-leave",
+  name: "HReasily",
+  description: "Export leave records for HReasily import (MY/SG)",
+  module: "leave",
+  version: "1.0.0",
+  targetSystem: "hreasily",
+  formatType: "flat",
+  delimiter: ",",
+  fileExtension: ".csv",
+  defaultDateFormat: "YYYY-MM-DD",
+  defaultDecimalPlaces: 1,
+  fieldMappings: [
+    { sourceField: "employee.employeeId", targetColumn: "EmployeeID", order: 1 },
+    { sourceField: "employee.name", targetColumn: "EmployeeName", order: 2 },
+    { sourceField: "leaveType.name", targetColumn: "LeaveType", order: 3 },
+    { sourceField: "startDate", targetColumn: "StartDate", order: 4, dateFormat: "YYYY-MM-DD" },
+    { sourceField: "endDate", targetColumn: "EndDate", order: 5, dateFormat: "YYYY-MM-DD" },
+    { sourceField: "totalDays", targetColumn: "Days", order: 6, decimalPlaces: 1 },
+    { sourceField: "status", targetColumn: "Status", order: 7 },
+    { sourceField: "notes", targetColumn: "Remarks", order: 8 },
+  ],
+};
+
+const HREASILY_EXPENSE: PrebuiltTemplate = {
+  id: "hreasily-expense",
+  name: "HReasily",
+  description: "Export expense claims for HReasily import (MY/SG)",
+  module: "expense",
+  version: "1.0.0",
+  targetSystem: "hreasily",
+  formatType: "flat",
+  delimiter: ",",
+  fileExtension: ".csv",
+  defaultDateFormat: "YYYY-MM-DD",
+  defaultDecimalPlaces: 2,
+  fieldMappings: [
+    { sourceField: "employee.employeeId", targetColumn: "EmployeeID", order: 1 },
+    { sourceField: "employee.name", targetColumn: "EmployeeName", order: 2 },
+    { sourceField: "transactionDate", targetColumn: "ClaimDate", order: 3, dateFormat: "YYYY-MM-DD" },
+    { sourceField: "vendorName", targetColumn: "Vendor", order: 4 },
+    { sourceField: "totalAmount", targetColumn: "Amount", order: 5, decimalPlaces: 2 },
+    { sourceField: "currency", targetColumn: "Currency", order: 6 },
+    { sourceField: "expenseCategory", targetColumn: "Category", order: 7 },
+    { sourceField: "description", targetColumn: "Description", order: 8 },
+    { sourceField: "status", targetColumn: "Status", order: 9 },
+    { sourceField: "approvedAt", targetColumn: "ApprovedDate", order: 10, dateFormat: "YYYY-MM-DD" },
+  ],
+};
+
+const SWINGVY_LEAVE: PrebuiltTemplate = {
+  id: "swingvy-leave",
+  name: "Swingvy",
+  description: "Export leave records for Swingvy import (SG/MY)",
+  module: "leave",
+  version: "1.0.0",
+  targetSystem: "swingvy",
+  formatType: "flat",
+  delimiter: ",",
+  fileExtension: ".csv",
+  defaultDateFormat: "YYYY-MM-DD",
+  defaultDecimalPlaces: 1,
+  fieldMappings: [
+    { sourceField: "employee.email", targetColumn: "Email", order: 1 },
+    { sourceField: "employee.name", targetColumn: "Employee Name", order: 2 },
+    { sourceField: "leaveType.name", targetColumn: "Leave Type", order: 3 },
+    { sourceField: "startDate", targetColumn: "Start Date", order: 4, dateFormat: "YYYY-MM-DD" },
+    { sourceField: "endDate", targetColumn: "End Date", order: 5, dateFormat: "YYYY-MM-DD" },
+    { sourceField: "totalDays", targetColumn: "Duration (Days)", order: 6, decimalPlaces: 1 },
+    { sourceField: "status", targetColumn: "Status", order: 7 },
+    { sourceField: "notes", targetColumn: "Reason", order: 8 },
+    { sourceField: "approvedAt", targetColumn: "Approved Date", order: 9, dateFormat: "YYYY-MM-DD" },
+  ],
+};
+
+const SWINGVY_EXPENSE: PrebuiltTemplate = {
+  id: "swingvy-expense",
+  name: "Swingvy",
+  description: "Export expense claims for Swingvy import (SG/MY)",
+  module: "expense",
+  version: "1.0.0",
+  targetSystem: "swingvy",
+  formatType: "flat",
+  delimiter: ",",
+  fileExtension: ".csv",
+  defaultDateFormat: "YYYY-MM-DD",
+  defaultDecimalPlaces: 2,
+  fieldMappings: [
+    { sourceField: "employee.email", targetColumn: "Email", order: 1 },
+    { sourceField: "employee.name", targetColumn: "Employee Name", order: 2 },
+    { sourceField: "transactionDate", targetColumn: "Claim Date", order: 3, dateFormat: "YYYY-MM-DD" },
+    { sourceField: "vendorName", targetColumn: "Vendor", order: 4 },
+    { sourceField: "totalAmount", targetColumn: "Amount", order: 5, decimalPlaces: 2 },
+    { sourceField: "currency", targetColumn: "Currency", order: 6 },
+    { sourceField: "expenseCategory", targetColumn: "Category", order: 7 },
+    { sourceField: "description", targetColumn: "Description", order: 8 },
+    { sourceField: "status", targetColumn: "Status", order: 9 },
+    { sourceField: "approver.name", targetColumn: "Approved By", order: 10 },
+  ],
+};
+
+// ============================================
+// ERP MASTER DATA EXPORT TEMPLATES
+// ============================================
+
+const SQL_ACCOUNTING_CREDITOR: PrebuiltTemplate = {
+  id: "sql-accounting-creditor",
+  name: "SQL Accounting (Creditor)",
+  description: "Export vendors as creditor master data for SQL Accounting import",
+  module: "master-data",
+  version: "1.0.0",
+  targetSystem: "sql-accounting",
+  formatType: "flat",
+  delimiter: ",",
+  fileExtension: ".csv",
+  defaultDateFormat: "DD/MM/YYYY",
+  defaultDecimalPlaces: 2,
+  fieldMappings: [
+    { sourceField: "vendorName", targetColumn: "AccNo", order: 1 },
+    { sourceField: "vendorFullName", targetColumn: "CompanyName", order: 2 },
+    { sourceField: "registerNo", targetColumn: "RegisterNo", order: 3 },
+    { sourceField: "address1", targetColumn: "Address1", order: 4 },
+    { sourceField: "address2", targetColumn: "Address2", order: 5 },
+    { sourceField: "address3", targetColumn: "Address3", order: 6 },
+    { sourceField: "address4", targetColumn: "Address4", order: 7 },
+    { sourceField: "contactPerson", targetColumn: "Attention", order: 8 },
+    { sourceField: "phone1", targetColumn: "Phone1", order: 9 },
+    { sourceField: "fax1", targetColumn: "Fax1", order: 10 },
+    { sourceField: "email1", targetColumn: "EmailAddress", order: 11 },
+    { sourceField: "currencyCode", targetColumn: "CurrencyCode", order: 12 },
+    { sourceField: "termCode", targetColumn: "CreditTerm", order: 13 },
+  ],
+};
+
+const SQL_ACCOUNTING_DEBTOR: PrebuiltTemplate = {
+  id: "sql-accounting-debtor",
+  name: "SQL Accounting (Debtor)",
+  description: "Export customers as debtor master data for SQL Accounting import",
+  module: "master-data",
+  version: "1.0.0",
+  targetSystem: "sql-accounting",
+  formatType: "flat",
+  delimiter: ",",
+  fileExtension: ".csv",
+  defaultDateFormat: "DD/MM/YYYY",
+  defaultDecimalPlaces: 2,
+  fieldMappings: [
+    { sourceField: "entityCode", targetColumn: "AccNo", order: 1 },
+    { sourceField: "entityName", targetColumn: "CompanyName", order: 2 },
+    { sourceField: "registerNo", targetColumn: "RegisterNo", order: 3 },
+    { sourceField: "address1", targetColumn: "Address1", order: 4 },
+    { sourceField: "address2", targetColumn: "Address2", order: 5 },
+    { sourceField: "address3", targetColumn: "Address3", order: 6 },
+    { sourceField: "address4", targetColumn: "Address4", order: 7 },
+    { sourceField: "contactPerson", targetColumn: "Attention", order: 8 },
+    { sourceField: "phone1", targetColumn: "Phone1", order: 9 },
+    { sourceField: "fax1", targetColumn: "Fax1", order: 10 },
+    { sourceField: "email1", targetColumn: "EmailAddress", order: 11 },
+    { sourceField: "currencyCode", targetColumn: "CurrencyCode", order: 12 },
+    { sourceField: "termCode", targetColumn: "CreditTerm", order: 13 },
+  ],
+};
+
+const AUTOCOUNT_SUPPLIER: PrebuiltTemplate = {
+  id: "autocount-supplier",
+  name: "AutoCount (Supplier)",
+  description: "Export vendors as supplier master data for AutoCount import",
+  module: "master-data",
+  version: "1.0.0",
+  targetSystem: "autocount",
+  formatType: "flat",
+  delimiter: ",",
+  fileExtension: ".csv",
+  defaultDateFormat: "DD/MM/YYYY",
+  defaultDecimalPlaces: 2,
+  fieldMappings: [
+    { sourceField: "vendorName", targetColumn: "CreditorCode", order: 1 },
+    { sourceField: "vendorFullName", targetColumn: "CompanyName", order: 2 },
+    { sourceField: "registerNo", targetColumn: "RegisterNo", order: 3 },
+    { sourceField: "address1", targetColumn: "Address1", order: 4 },
+    { sourceField: "address2", targetColumn: "Address2", order: 5 },
+    { sourceField: "contactPerson", targetColumn: "ContactPerson", order: 6 },
+    { sourceField: "phone1", targetColumn: "Phone", order: 7 },
+    { sourceField: "email1", targetColumn: "Email", order: 8 },
+    { sourceField: "currencyCode", targetColumn: "CurrencyCode", order: 9 },
+  ],
+};
+
+const AUTOCOUNT_CUSTOMER: PrebuiltTemplate = {
+  id: "autocount-customer",
+  name: "AutoCount (Customer)",
+  description: "Export customers as debtor master data for AutoCount import",
+  module: "master-data",
+  version: "1.0.0",
+  targetSystem: "autocount",
+  formatType: "flat",
+  delimiter: ",",
+  fileExtension: ".csv",
+  defaultDateFormat: "DD/MM/YYYY",
+  defaultDecimalPlaces: 2,
+  fieldMappings: [
+    { sourceField: "entityCode", targetColumn: "DebtorCode", order: 1 },
+    { sourceField: "entityName", targetColumn: "CompanyName", order: 2 },
+    { sourceField: "registerNo", targetColumn: "RegisterNo", order: 3 },
+    { sourceField: "address1", targetColumn: "Address1", order: 4 },
+    { sourceField: "address2", targetColumn: "Address2", order: 5 },
+    { sourceField: "contactPerson", targetColumn: "ContactPerson", order: 6 },
+    { sourceField: "phone1", targetColumn: "Phone", order: 7 },
+    { sourceField: "email1", targetColumn: "Email", order: 8 },
+    { sourceField: "currencyCode", targetColumn: "CurrencyCode", order: 9 },
+  ],
+};
+
+const MYOB_SUPPLIER: PrebuiltTemplate = {
+  id: "myob-supplier",
+  name: "MYOB (Supplier)",
+  description: "Export vendors as supplier card for MYOB import",
+  module: "master-data",
+  version: "1.0.0",
+  targetSystem: "myob",
+  formatType: "flat",
+  delimiter: ",",
+  fileExtension: ".csv",
+  defaultDateFormat: "DD/MM/YYYY",
+  defaultDecimalPlaces: 2,
+  fieldMappings: [
+    { sourceField: "vendorName", targetColumn: "Co./Last Name", order: 1 },
+    { sourceField: "vendorFullName", targetColumn: "First Name", order: 2 },
+    { sourceField: "address1", targetColumn: "Addr 1 - Line 1", order: 3 },
+    { sourceField: "address2", targetColumn: "Addr 1 - Line 2", order: 4 },
+    { sourceField: "city", targetColumn: "Addr 1 - City", order: 5 },
+    { sourceField: "state", targetColumn: "Addr 1 - State", order: 6 },
+    { sourceField: "postalCode", targetColumn: "Addr 1 - Postcode", order: 7 },
+    { sourceField: "phone1", targetColumn: "Phone # 1", order: 8 },
+    { sourceField: "fax1", targetColumn: "Fax #", order: 9 },
+    { sourceField: "email1", targetColumn: "Email", order: 10 },
+    { sourceField: "registerNo", targetColumn: "ABN/Company No.", order: 11 },
+    { sourceField: "contactPerson", targetColumn: "Contact Name", order: 12 },
+    { sourceField: "currencyCode", targetColumn: "Currency Code", order: 13 },
+  ],
+};
+
+const MYOB_CUSTOMER: PrebuiltTemplate = {
+  id: "myob-customer",
+  name: "MYOB (Customer)",
+  description: "Export customers as customer card for MYOB import",
+  module: "master-data",
+  version: "1.0.0",
+  targetSystem: "myob",
+  formatType: "flat",
+  delimiter: ",",
+  fileExtension: ".csv",
+  defaultDateFormat: "DD/MM/YYYY",
+  defaultDecimalPlaces: 2,
+  fieldMappings: [
+    { sourceField: "entityCode", targetColumn: "Co./Last Name", order: 1 },
+    { sourceField: "entityName", targetColumn: "First Name", order: 2 },
+    { sourceField: "address1", targetColumn: "Addr 1 - Line 1", order: 3 },
+    { sourceField: "address2", targetColumn: "Addr 1 - Line 2", order: 4 },
+    { sourceField: "city", targetColumn: "Addr 1 - City", order: 5 },
+    { sourceField: "state", targetColumn: "Addr 1 - State", order: 6 },
+    { sourceField: "postalCode", targetColumn: "Addr 1 - Postcode", order: 7 },
+    { sourceField: "phone1", targetColumn: "Phone # 1", order: 8 },
+    { sourceField: "fax1", targetColumn: "Fax #", order: 9 },
+    { sourceField: "email1", targetColumn: "Email", order: 10 },
+    { sourceField: "registerNo", targetColumn: "ABN/Company No.", order: 11 },
+    { sourceField: "contactPerson", targetColumn: "Contact Name", order: 12 },
+    { sourceField: "currencyCode", targetColumn: "Currency Code", order: 13 },
+  ],
+};
+
+const SQL_ACCOUNTING_COA: PrebuiltTemplate = {
+  id: "sql-accounting-coa",
+  name: "SQL Accounting (Chart of Accounts)",
+  description: "Export chart of accounts for SQL Accounting import",
+  module: "master-data",
+  version: "1.0.0",
+  targetSystem: "sql-accounting",
+  formatType: "flat",
+  delimiter: ",",
+  fileExtension: ".csv",
+  fieldMappings: [
+    { sourceField: "glCode", targetColumn: "AccNo", order: 1 },
+    { sourceField: "categoryName", targetColumn: "Description", order: 2 },
+    { sourceField: "accountType", targetColumn: "AccType", order: 3 },
+    { sourceField: "drCr", targetColumn: "SpecialAccType", order: 4 },
+  ],
+};
+
+const AUTOCOUNT_COA: PrebuiltTemplate = {
+  id: "autocount-coa",
+  name: "AutoCount (Chart of Accounts)",
+  description: "Export chart of accounts for AutoCount import",
+  module: "master-data",
+  version: "1.0.0",
+  targetSystem: "autocount",
+  formatType: "flat",
+  delimiter: ",",
+  fileExtension: ".csv",
+  fieldMappings: [
+    { sourceField: "glCode", targetColumn: "AccountNo", order: 1 },
+    { sourceField: "categoryName", targetColumn: "Description", order: 2 },
+    { sourceField: "accountType", targetColumn: "AccountType", order: 3 },
+  ],
+};
+
+const MYOB_COA: PrebuiltTemplate = {
+  id: "myob-coa",
+  name: "MYOB (Chart of Accounts)",
+  description: "Export chart of accounts for MYOB import",
+  module: "master-data",
+  version: "1.0.0",
+  targetSystem: "myob",
+  formatType: "flat",
+  delimiter: "\t",
+  fileExtension: ".txt",
+  fieldMappings: [
+    { sourceField: "glCode", targetColumn: "Account Number", order: 1 },
+    { sourceField: "categoryName", targetColumn: "Account Name", order: 2 },
+    { sourceField: "accountType", targetColumn: "Account Type", order: 3 },
+  ],
+};
+
+// ============================================
 // TEMPLATE COLLECTIONS
 // ============================================
 
@@ -1653,8 +2099,10 @@ export const EXPENSE_TEMPLATES: PrebuiltTemplate[] = [
   GENERIC_EXPENSE,
   MASTER_ACCOUNTING_PURCHASES_BILL,
   MASTER_ACCOUNTING_CASHBOOK_PAYMENT,
-  MASTER_ACCOUNTING_CREDITOR,
   MASTER_ACCOUNTING_PURCHASES_DEBIT_NOTE,
+  MYOB_EXPENSE,
+  HREASILY_EXPENSE,
+  SWINGVY_EXPENSE,
 ];
 
 export const LEAVE_TEMPLATES: PrebuiltTemplate[] = [
@@ -1662,6 +2110,8 @@ export const LEAVE_TEMPLATES: PrebuiltTemplate[] = [
   BRIOHR_LEAVE,
   KAKITANGAN_LEAVE,
   GENERIC_LEAVE,
+  HREASILY_LEAVE,
+  SWINGVY_LEAVE,
 ];
 
 export const ACCOUNTING_TEMPLATES: PrebuiltTemplate[] = [
@@ -1669,8 +2119,7 @@ export const ACCOUNTING_TEMPLATES: PrebuiltTemplate[] = [
   AUTOCOUNT_JOURNAL,
   GENERIC_ACCOUNTING,
   MASTER_ACCOUNTING_JOURNAL,
-  MASTER_ACCOUNTING_CHART_OF_ACCOUNT,
-  MASTER_ACCOUNTING_COST_CENTRE,
+  MYOB_JOURNAL,
 ];
 
 export const INVOICE_TEMPLATES: PrebuiltTemplate[] = [
@@ -1679,12 +2128,31 @@ export const INVOICE_TEMPLATES: PrebuiltTemplate[] = [
   AUTOCOUNT_INVOICE,
   GENERIC_INVOICE,
   MASTER_ACCOUNTING_SALES_INVOICE,
-  MASTER_ACCOUNTING_DEBTOR,
   MASTER_ACCOUNTING_PURCHASES_BILL_AP,
   MASTER_ACCOUNTING_CASHBOOK_RECEIPT,
   MASTER_ACCOUNTING_SALES_CREDIT_NOTE,
+  MYOB_AP_INVOICE,
+  MYOB_AR_INVOICE,
+];
+
+export const MASTER_DATA_EXPORT_TEMPLATES: PrebuiltTemplate[] = [
+  // Existing Master Accounting templates (migrated)
+  MASTER_ACCOUNTING_CREDITOR,
+  MASTER_ACCOUNTING_DEBTOR,
+  MASTER_ACCOUNTING_CHART_OF_ACCOUNT,
   MASTER_ACCOUNTING_STOCK_ITEM,
   MASTER_ACCOUNTING_CATEGORY,
+  MASTER_ACCOUNTING_COST_CENTRE,
+  // New ERP-specific templates
+  SQL_ACCOUNTING_CREDITOR,
+  SQL_ACCOUNTING_DEBTOR,
+  SQL_ACCOUNTING_COA,
+  AUTOCOUNT_SUPPLIER,
+  AUTOCOUNT_CUSTOMER,
+  AUTOCOUNT_COA,
+  MYOB_SUPPLIER,
+  MYOB_CUSTOMER,
+  MYOB_COA,
 ];
 
 export const PREBUILT_TEMPLATES: PrebuiltTemplate[] = [
@@ -1692,6 +2160,7 @@ export const PREBUILT_TEMPLATES: PrebuiltTemplate[] = [
   ...LEAVE_TEMPLATES,
   ...ACCOUNTING_TEMPLATES,
   ...INVOICE_TEMPLATES,
+  ...MASTER_DATA_EXPORT_TEMPLATES,
 ];
 
 // ============================================
@@ -1703,6 +2172,7 @@ const TEMPLATES_BY_MODULE: Record<ExportModule, PrebuiltTemplate[]> = {
   invoice: INVOICE_TEMPLATES,
   leave: LEAVE_TEMPLATES,
   accounting: ACCOUNTING_TEMPLATES,
+  "master-data": MASTER_DATA_EXPORT_TEMPLATES,
 };
 
 export function getPrebuiltTemplatesByModule(

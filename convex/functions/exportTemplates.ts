@@ -1,7 +1,7 @@
 /**
  * Export Templates Functions - Convex queries and mutations
  *
- * These functions handle:
+ * Handles:
  * - Listing pre-built and custom templates
  * - Creating/updating/deleting custom templates
  * - Cloning pre-built templates for customization

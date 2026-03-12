@@ -167,9 +167,15 @@ export const leaveRequestStatusValidator = literalUnion(LEAVE_REQUEST_STATUS_VAL
 
 /**
  * Export module validator
- * Which data to export: expense claims or leave records
+ * Supported modules: expense, invoice, leave, accounting, master-data
  */
-export const exportModuleValidator = literalUnion(EXPORT_MODULE_VALUES);
+export const exportModuleValidator = v.union(
+  v.literal("expense"),
+  v.literal("invoice"),
+  v.literal("leave"),
+  v.literal("accounting"),
+  v.literal("master-data"),
+);
 
 /**
  * Export template type validator

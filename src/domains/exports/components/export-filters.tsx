@@ -61,6 +61,9 @@ const STATUS_OPTIONS: Record<ExportModule, { value: string; label: string }[]> =
     { value: 'draft', label: 'Draft' },
     { value: 'sent', label: 'Sent' },
   ],
+  'master-data': [
+    { value: 'all', label: 'All records' },
+  ],
 };
 
 const DATE_PRESETS = [
@@ -147,6 +150,21 @@ export function ExportFilters({
     filters.transactionTypeFilter;
 
   const statusOptions = STATUS_OPTIONS[module];
+
+  // Master data module doesn't need date/status filters
+  if (module === 'master-data') {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <Filter className="h-4 w-4" />
+          Filters
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Master data exports include all active records. Select a template to preview the data.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
