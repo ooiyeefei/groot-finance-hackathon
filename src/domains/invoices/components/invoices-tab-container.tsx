@@ -10,6 +10,7 @@ import {
   Package,
   Building,
   TrendingUp,
+  ArrowRightLeft,
   Loader2,
 } from 'lucide-react'
 import DocumentsContainer from './documents-container'
@@ -27,6 +28,9 @@ const DebtorList = lazy(
 const CatalogItemManager = lazy(
   () => import('@/domains/sales-invoices/components/catalog-item-manager')
 )
+const ARReconciliation = lazy(
+  () => import('@/domains/sales-invoices/components/ar-reconciliation')
+)
 
 // AP sub-tab components (lazy-loaded)
 const APDashboard = lazy(
@@ -41,10 +45,10 @@ const PriceIntelligence = lazy(
 
 // --- Types ---
 type TopLevelTab = 'ar' | 'ap'
-type ARSubTab = 'dashboard' | 'sales' | 'debtors' | 'catalog'
+type ARSubTab = 'dashboard' | 'sales' | 'debtors' | 'catalog' | 'reconciliation'
 type APSubTab = 'dashboard' | 'incoming' | 'vendors' | 'prices'
 
-const AR_SUB_TABS: readonly ARSubTab[] = ['dashboard', 'sales', 'debtors', 'catalog']
+const AR_SUB_TABS: readonly ARSubTab[] = ['dashboard', 'sales', 'debtors', 'catalog', 'reconciliation']
 const AP_SUB_TABS: readonly APSubTab[] = ['dashboard', 'incoming', 'vendors', 'prices']
 
 // --- Hash routing ---
@@ -157,6 +161,10 @@ export default function InvoicesTabContainer() {
                 <Package className="h-4 w-4" />
                 Product Catalog
               </TabsTrigger>
+              <TabsTrigger value="reconciliation" className={subTriggerClassName}>
+                <ArrowRightLeft className="h-4 w-4" />
+                Reconciliation
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="dashboard" className="mt-4">
@@ -180,6 +188,12 @@ export default function InvoicesTabContainer() {
             <TabsContent value="catalog" className="mt-4">
               <Suspense fallback={<TabLoading />}>
                 <CatalogItemManager />
+              </Suspense>
+            </TabsContent>
+
+            <TabsContent value="reconciliation" className="mt-4">
+              <Suspense fallback={<TabLoading />}>
+                <ARReconciliation />
               </Suspense>
             </TabsContent>
           </Tabs>

@@ -64,6 +64,7 @@ import type * as functions_referral from "../functions/referral.js";
 import type * as functions_retentionJobs from "../functions/retentionJobs.js";
 import type * as functions_salesInvoiceUsage from "../functions/salesInvoiceUsage.js";
 import type * as functions_salesInvoices from "../functions/salesInvoices.js";
+import type * as functions_salesOrders from "../functions/salesOrders.js";
 import type * as functions_stripeEvents from "../functions/stripeEvents.js";
 import type * as functions_stripeIntegrations from "../functions/stripeIntegrations.js";
 import type * as functions_system from "../functions/system.js";
@@ -145,6 +146,7 @@ declare const fullApi: ApiFromModules<{
   "functions/retentionJobs": typeof functions_retentionJobs;
   "functions/salesInvoiceUsage": typeof functions_salesInvoiceUsage;
   "functions/salesInvoices": typeof functions_salesInvoices;
+  "functions/salesOrders": typeof functions_salesOrders;
   "functions/stripeEvents": typeof functions_stripeEvents;
   "functions/stripeIntegrations": typeof functions_stripeIntegrations;
   "functions/system": typeof functions_system;

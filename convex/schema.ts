@@ -41,6 +41,8 @@ import {
   payPeriodFrequencyValidator,
   payrollAdjustmentTypeValidator,
   overtimeCalculationBasisValidator,
+  salesOrderMatchStatusValidator,
+  salesOrderMatchMethodValidator,
 } from "./lib/validators";
 
 export default defineSchema({
@@ -2317,6 +2319,42 @@ export default defineSchema({
     .index("by_referrerUserId", ["referrerUserId"])
     .index("by_referredBusinessId", ["referredBusinessId"])
     .index("by_status", ["status"]),
+
+  // ============================================
+  // AR RECONCILIATION: Sales Orders (imported from platform statements)
+  // ============================================
+  sales_orders: defineTable({
+    businessId: v.id("businesses"),
+    sourcePlatform: v.optional(v.string()),
+    sourceFileName: v.string(),
+    importBatchId: v.string(),
+    orderReference: v.string(),
+    orderDate: v.string(),
+    customerName: v.optional(v.string()),
+    productName: v.optional(v.string()),
+    productCode: v.optional(v.string()),
+    quantity: v.optional(v.number()),
+    unitPrice: v.optional(v.number()),
+    grossAmount: v.number(),
+    platformFee: v.optional(v.number()),
+    netAmount: v.optional(v.number()),
+    currency: v.string(),
+    paymentMethod: v.optional(v.string()),
+    matchStatus: salesOrderMatchStatusValidator,
+    matchedInvoiceId: v.optional(v.id("sales_invoices")),
+    matchConfidence: v.optional(v.number()),
+    matchMethod: v.optional(salesOrderMatchMethodValidator),
+    varianceAmount: v.optional(v.number()),
+    varianceReason: v.optional(v.string()),
+    isRefund: v.optional(v.boolean()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_matchStatus", ["businessId", "matchStatus"])
+    .index("by_businessId_orderDate", ["businessId", "orderDate"])
+    .index("by_businessId_importBatchId", ["businessId", "importBatchId"])
+    .index("by_businessId_orderReference", ["businessId", "orderReference"]),
 
   deletion_data_exports: defineTable({
     businessId: v.id("businesses"),
