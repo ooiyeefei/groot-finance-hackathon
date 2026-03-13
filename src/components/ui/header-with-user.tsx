@@ -146,7 +146,7 @@ export default function HeaderWithUser({ title, subtitle, actions }: HeaderWithU
         {/* Right: Notifications, feedback, theme toggle, language switcher and user button */}
         <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
           <NotificationBell businessId={businessId} />
-          <EarnHeaderButton />
+          {!isNative && <EarnHeaderButton />}
           <span className="hidden sm:inline-flex"><FeedbackButton /></span>
           <ThemeToggle />
           <span className="hidden sm:inline-flex"><LanguageSwitcher /></span>

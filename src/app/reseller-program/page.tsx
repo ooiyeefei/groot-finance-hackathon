@@ -3,7 +3,10 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
 import { ArrowRight, CheckCircle2, Sparkles, Send, Loader2, TrendingUp, Gift, BookOpen, Presentation, Play, Calculator, FileText, Users, Zap } from 'lucide-react'
+import { isNativePlatform } from '@/lib/capacitor/platform'
 
 // Metadata is exported from layout.tsx (client components cannot export metadata)
 
@@ -83,8 +86,16 @@ const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-[#D1D5DB] bg-[
 const labelClass = 'block text-sm font-medium text-[#111827] mb-1.5'
 
 export default function ResellerProgramPage() {
+  const router = useRouter()
   const currentYear = new Date().getFullYear()
   const [form, setForm] = useState({ fullName: '', email: '', phone: '', companyName: '', companyWebsite: '', smeClients: '', currentServices: '', heardFrom: '' })
+
+  // Redirect native iOS users away from reseller/pricing content (Apple 3.1.1)
+  useEffect(() => {
+    if (isNativePlatform()) {
+      router.replace('/')
+    }
+  }, [router])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)

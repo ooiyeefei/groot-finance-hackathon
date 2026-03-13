@@ -7,6 +7,7 @@ import HeaderWithUser from '@/components/ui/header-with-user'
 import { ClientProviders } from '@/components/providers/client-providers'
 import { Suspense, lazy } from 'react'
 import { Loader2 } from 'lucide-react'
+import { NativePlatformRedirect } from '@/components/capacitor/native-platform-redirect'
 
 const ReferralDashboard = lazy(() => import('@/domains/referral/components/referral-dashboard'))
 
@@ -19,6 +20,7 @@ export default async function ReferralPage() {
 
   return (
     <ClientProviders>
+      <NativePlatformRedirect />
       <div className="flex h-screen bg-background">
         <Sidebar />
         <div className="flex-1 flex flex-col min-w-0">

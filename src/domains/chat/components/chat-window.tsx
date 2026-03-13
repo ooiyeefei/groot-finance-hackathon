@@ -13,6 +13,7 @@ import { X, ArrowUp, Square, Loader2, Sparkles } from 'lucide-react'
 import { MessageRenderer } from './message-renderer'
 import { ConversationSwitcher } from './conversation-switcher'
 import { RichContentPanel, type RichContentData } from './rich-content-panel'
+import { AiDataConsent, hasAiConsent } from './ai-data-consent'
 import { useCopilotBridge } from '../hooks/use-copilot-chat'
 import { useAuth } from '@clerk/nextjs'
 import type { CitationData } from '@/lib/ai/tools/base-tool'
@@ -28,6 +29,7 @@ interface ChatWindowProps {
 
 export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, onInitialMessageConsumed }: ChatWindowProps) {
   const [input, setInput] = useState('')
+  const [showAiConsent, setShowAiConsent] = useState(() => !hasAiConsent())
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -211,6 +213,16 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
         </button>
       </div>
 
+      {/* AI Data Consent — shown before first interaction (Apple 5.1.1(i)) */}
+      {showAiConsent ? (
+        <div className="flex-1 overflow-y-auto">
+          <AiDataConsent
+            onAccept={() => setShowAiConsent(false)}
+            onDecline={onClose}
+          />
+        </div>
+      ) : (
+      <>
       {/* Messages Area */}
       <div
         ref={messagesContainerRef}
@@ -327,6 +339,8 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
           AI may make mistakes. Verify important information.
         </p>
       </div>
+      </>
+      )}
     </div>
     </>
   )
