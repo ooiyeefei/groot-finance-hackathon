@@ -32,6 +32,7 @@ import type * as functions_customers from "../functions/customers.js";
 import type * as functions_duplicateMatches from "../functions/duplicateMatches.js";
 import type * as functions_einvoiceJobs from "../functions/einvoiceJobs.js";
 import type * as functions_einvoiceJobsNode from "../functions/einvoiceJobsNode.js";
+import type * as functions_einvoiceMonitoring from "../functions/einvoiceMonitoring.js";
 import type * as functions_einvoiceReceivedDocuments from "../functions/einvoiceReceivedDocuments.js";
 import type * as functions_einvoiceUsage from "../functions/einvoiceUsage.js";
 import type * as functions_emails from "../functions/emails.js";
@@ -122,6 +123,7 @@ declare const fullApi: ApiFromModules<{
   "functions/duplicateMatches": typeof functions_duplicateMatches;
   "functions/einvoiceJobs": typeof functions_einvoiceJobs;
   "functions/einvoiceJobsNode": typeof functions_einvoiceJobsNode;
+  "functions/einvoiceMonitoring": typeof functions_einvoiceMonitoring;
   "functions/einvoiceReceivedDocuments": typeof functions_einvoiceReceivedDocuments;
   "functions/einvoiceUsage": typeof functions_einvoiceUsage;
   "functions/emails": typeof functions_emails;
