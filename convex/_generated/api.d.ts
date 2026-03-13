@@ -10,6 +10,7 @@
 
 import type * as crons from "../crons.js";
 import type * as functions_accountingEntries from "../functions/accountingEntries.js";
+import type * as functions_accountingPeriods from "../functions/accountingPeriods.js";
 import type * as functions_actionCenterInsights from "../functions/actionCenterInsights.js";
 import type * as functions_actionCenterJobs from "../functions/actionCenterJobs.js";
 import type * as functions_admin from "../functions/admin.js";
@@ -24,6 +25,7 @@ import type * as functions_bankImportSessions from "../functions/bankImportSessi
 import type * as functions_bankTransactions from "../functions/bankTransactions.js";
 import type * as functions_businesses from "../functions/businesses.js";
 import type * as functions_catalogItems from "../functions/catalogItems.js";
+import type * as functions_chartOfAccounts from "../functions/chartOfAccounts.js";
 import type * as functions_consent from "../functions/consent.js";
 import type * as functions_conversations from "../functions/conversations.js";
 import type * as functions_creditPacks from "../functions/creditPacks.js";
@@ -45,13 +47,19 @@ import type * as functions_exportSchedules from "../functions/exportSchedules.js
 import type * as functions_exportTemplates from "../functions/exportTemplates.js";
 import type * as functions_feedback from "../functions/feedback.js";
 import type * as functions_financialIntelligence from "../functions/financialIntelligence.js";
+import type * as functions_financialStatements from "../functions/financialStatements.js";
 import type * as functions_goodsReceivedNotes from "../functions/goodsReceivedNotes.js";
+import type * as functions_integrations_arReconciliationIntegration from "../functions/integrations/arReconciliationIntegration.js";
+import type * as functions_integrations_expenseClaimIntegration from "../functions/integrations/expenseClaimIntegration.js";
+import type * as functions_integrations_salesInvoiceIntegration from "../functions/integrations/salesInvoiceIntegration.js";
 import type * as functions_invoices from "../functions/invoices.js";
+import type * as functions_journalEntries from "../functions/journalEntries.js";
 import type * as functions_leaveBalances from "../functions/leaveBalances.js";
 import type * as functions_leaveRequests from "../functions/leaveRequests.js";
 import type * as functions_leaveTypes from "../functions/leaveTypes.js";
 import type * as functions_lhdnJobs from "../functions/lhdnJobs.js";
 import type * as functions_lhdnTokens from "../functions/lhdnTokens.js";
+import type * as functions_manualExchangeRates from "../functions/manualExchangeRates.js";
 import type * as functions_matchingSettings from "../functions/matchingSettings.js";
 import type * as functions_mcpApiKeys from "../functions/mcpApiKeys.js";
 import type * as functions_mcpProposals from "../functions/mcpProposals.js";
@@ -74,6 +82,7 @@ import type * as functions_retentionJobs from "../functions/retentionJobs.js";
 import type * as functions_salesInvoiceUsage from "../functions/salesInvoiceUsage.js";
 import type * as functions_salesInvoices from "../functions/salesInvoices.js";
 import type * as functions_salesOrders from "../functions/salesOrders.js";
+import type * as functions_seedAccounting from "../functions/seedAccounting.js";
 import type * as functions_stripeEvents from "../functions/stripeEvents.js";
 import type * as functions_stripeIntegrations from "../functions/stripeIntegrations.js";
 import type * as functions_system from "../functions/system.js";
@@ -88,8 +97,12 @@ import type * as functions_workSchedules from "../functions/workSchedules.js";
 import type * as lib_llm from "../lib/llm.js";
 import type * as lib_mcpClient from "../lib/mcpClient.js";
 import type * as lib_resolvers from "../lib/resolvers.js";
+import type * as lib_statement_generators_profit_loss_generator from "../lib/statement_generators/profit_loss_generator.js";
+import type * as lib_statement_generators_trial_balance_generator from "../lib/statement_generators/trial_balance_generator.js";
+import type * as lib_validation from "../lib/validation.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as migrations from "../migrations.js";
+import type * as migrations_migrateAccountingEntries from "../migrations/migrateAccountingEntries.js";
 import type * as types from "../types.js";
 
 import type {
@@ -101,6 +114,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   "functions/accountingEntries": typeof functions_accountingEntries;
+  "functions/accountingPeriods": typeof functions_accountingPeriods;
   "functions/actionCenterInsights": typeof functions_actionCenterInsights;
   "functions/actionCenterJobs": typeof functions_actionCenterJobs;
   "functions/admin": typeof functions_admin;
@@ -115,6 +129,7 @@ declare const fullApi: ApiFromModules<{
   "functions/bankTransactions": typeof functions_bankTransactions;
   "functions/businesses": typeof functions_businesses;
   "functions/catalogItems": typeof functions_catalogItems;
+  "functions/chartOfAccounts": typeof functions_chartOfAccounts;
   "functions/consent": typeof functions_consent;
   "functions/conversations": typeof functions_conversations;
   "functions/creditPacks": typeof functions_creditPacks;
@@ -136,13 +151,19 @@ declare const fullApi: ApiFromModules<{
   "functions/exportTemplates": typeof functions_exportTemplates;
   "functions/feedback": typeof functions_feedback;
   "functions/financialIntelligence": typeof functions_financialIntelligence;
+  "functions/financialStatements": typeof functions_financialStatements;
   "functions/goodsReceivedNotes": typeof functions_goodsReceivedNotes;
+  "functions/integrations/arReconciliationIntegration": typeof functions_integrations_arReconciliationIntegration;
+  "functions/integrations/expenseClaimIntegration": typeof functions_integrations_expenseClaimIntegration;
+  "functions/integrations/salesInvoiceIntegration": typeof functions_integrations_salesInvoiceIntegration;
   "functions/invoices": typeof functions_invoices;
+  "functions/journalEntries": typeof functions_journalEntries;
   "functions/leaveBalances": typeof functions_leaveBalances;
   "functions/leaveRequests": typeof functions_leaveRequests;
   "functions/leaveTypes": typeof functions_leaveTypes;
   "functions/lhdnJobs": typeof functions_lhdnJobs;
   "functions/lhdnTokens": typeof functions_lhdnTokens;
+  "functions/manualExchangeRates": typeof functions_manualExchangeRates;
   "functions/matchingSettings": typeof functions_matchingSettings;
   "functions/mcpApiKeys": typeof functions_mcpApiKeys;
   "functions/mcpProposals": typeof functions_mcpProposals;
@@ -165,6 +186,7 @@ declare const fullApi: ApiFromModules<{
   "functions/salesInvoiceUsage": typeof functions_salesInvoiceUsage;
   "functions/salesInvoices": typeof functions_salesInvoices;
   "functions/salesOrders": typeof functions_salesOrders;
+  "functions/seedAccounting": typeof functions_seedAccounting;
   "functions/stripeEvents": typeof functions_stripeEvents;
   "functions/stripeIntegrations": typeof functions_stripeIntegrations;
   "functions/system": typeof functions_system;
@@ -179,8 +201,12 @@ declare const fullApi: ApiFromModules<{
   "lib/llm": typeof lib_llm;
   "lib/mcpClient": typeof lib_mcpClient;
   "lib/resolvers": typeof lib_resolvers;
+  "lib/statement_generators/profit_loss_generator": typeof lib_statement_generators_profit_loss_generator;
+  "lib/statement_generators/trial_balance_generator": typeof lib_statement_generators_trial_balance_generator;
+  "lib/validation": typeof lib_validation;
   "lib/validators": typeof lib_validators;
   migrations: typeof migrations;
+  "migrations/migrateAccountingEntries": typeof migrations_migrateAccountingEntries;
   types: typeof types;
 }>;
 

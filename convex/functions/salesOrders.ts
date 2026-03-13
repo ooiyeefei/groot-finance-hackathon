@@ -843,6 +843,39 @@ export const closePeriod = mutation({
     }
 
     return { closed, disputed, total: inRange.length };
+    // Create journal entries for matched orders (accounting integration)
+    try {
+      const accountingResult = await ctx.runMutation(
+        "functions/integrations/arReconciliationIntegration:createJournalEntriesFromReconciliation" as any,
+        {
+          businessId: args.businessId,
+          dateFrom: args.dateFrom,
+          dateTo: args.dateTo,
+          closedBy: args.closedBy,
+        }
+      );
+
+      return {
+        closed,
+        disputed,
+        total: inRange.length,
+        accounting: accountingResult,
+      };
+    } catch (error: any) {
+      console.error("[AR Recon] Failed to create accounting entries:", error);
+      // Return success for period close even if accounting fails
+      // User can manually create entries or retry
+      return {
+        closed,
+        disputed,
+        total: inRange.length,
+        accounting: {
+          error: error.message,
+          ordersProcessed: 0,
+          entriesCreated: 0,
+        },
+      };
+    }
   },
 });
 

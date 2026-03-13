@@ -1,60 +1,55 @@
-// Force dynamic rendering - required for authentication
-export const dynamic = 'force-dynamic'
+'use client'
 
-import { auth } from '@clerk/nextjs/server'
-import { redirect } from 'next/navigation'
-import { Suspense } from 'react'
-import AccountingEntriesClient from '@/domains/accounting-entries/components/accounting-entries-client'
-import { AccountingEntriesPageSkeleton } from '@/domains/accounting-entries/components/accounting-entries-skeleton'
-import { getAccountingPageData } from '@/domains/accounting-entries/lib/server-data-access'
-import { getUserRole } from '@/domains/users/lib/user.service'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useDashboardMetrics } from '@/domains/accounting/hooks/use-dashboard-metrics'
+import { formatCurrency } from '@/lib/utils/format-number'
 
-/**
- * Accounting Entries Page - Optimized with Server Components
- *
- * Performance Optimizations:
- * 1. Server-side authentication (eliminates 2.9s Clerk roundtrips)
- * 2. Parallel data fetching (business + entries + categories simultaneously)
- * 3. Direct database access (bypasses API route overhead)
- * 4. Loading skeletons (prevents CLS)
- * 5. Initial data passed to client (no client-side fetch on mount)
- *
- * Access Control:
- * - Admin only - managers and employees are redirected to expense claims
- */
-export default async function AccountingPage({ params }: { params: Promise<{ locale: string }> }) {
-  const { locale } = await params
+export default function AccountingDashboard() {
+  const { metrics, isLoading } = useDashboardMetrics()
 
-  // Server-side authentication check
-  const { userId } = await auth()
-
-  if (!userId) {
-    redirect('/sign-in')
-  }
-
-  // Admin role check - accounting page is for finance admins only
-  const roleData = await getUserRole()
-  const isAdmin = roleData?.permissions?.finance_admin
-
-  if (!isAdmin) {
-    console.log(`[Accounting] Non-admin user redirected to expense-claims`)
-    redirect(`/${locale}/expense-claims`)
-  }
-
-  // ⚡ PARALLEL FETCH: All data loaded simultaneously on server
-  // This replaces the 6.5s sequential waterfall:
-  // OLD: Clerk (2.9s) → businesses (1.8s) → categories (1.78s) → entries (2.9s)
-  // NEW: Clerk (100ms server-side) → [businesses + categories + entries] in parallel (~500ms)
-  const pageData = await getAccountingPageData(userId)
+  if (isLoading) return <div className="p-6">Loading...</div>
 
   return (
-    <Suspense fallback={<AccountingEntriesPageSkeleton />}>
-      <AccountingEntriesClient
-        initialData={pageData.entries}
-        businessContext={pageData.business}
-        categories={pageData.categories}
-        userId={userId}
-      />
-    </Suspense>
+    <div className="p-6 space-y-6">
+      <h1 className="text-3xl font-bold">Accounting Dashboard</h1>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm text-muted-foreground">Revenue (This Month)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(metrics?.revenue || 0, 'MYR')}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm text-muted-foreground">Expenses (This Month)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(metrics?.expenses || 0, 'MYR')}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm text-muted-foreground">Net Profit</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(metrics?.netProfit || 0, 'MYR')}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm text-muted-foreground">Cash Balance</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(metrics?.cashBalance || 0, 'MYR')}</div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   )
 }

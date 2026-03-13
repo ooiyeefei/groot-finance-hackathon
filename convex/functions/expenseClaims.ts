@@ -1194,6 +1194,17 @@ export const updateStatus = mutation({
           // Link the accounting entry back to the expense claim
           updateData.accountingEntryId = accountingEntryId;
 
+          // Double-entry accounting integration
+          try {
+            await ctx.runMutation(
+              internal.functions.integrations.expenseClaimIntegration.createJournalEntryOnApproval,
+              { claimId: claim._id }
+            );
+          } catch (error: any) {
+            console.error(`[Expense Claim] Failed to create journal entry on approval:`, error);
+            // Continue even if journal entry fails - user can manually create it
+          }
+
           // Schedule real-time anomaly detection for this expense
           await ctx.scheduler.runAfter(0, internal.functions.actionCenterJobs.analyzeNewTransaction, {
             transactionId: accountingEntryId,
@@ -1265,6 +1276,17 @@ export const updateStatus = mutation({
             updatedAt: now,
           });
           console.log(`[Convex] Updated accounting entry ${claim.accountingEntryId} status to 'paid'`);
+        }
+
+        // Double-entry accounting integration
+        try {
+          await ctx.runMutation(
+            internal.functions.integrations.expenseClaimIntegration.createJournalEntryOnReimbursement,
+            { claimId: claim._id }
+          );
+        } catch (error: any) {
+          console.error(`[Expense Claim] Failed to create payment journal entry:`, error);
+          // Continue even if journal entry fails
         }
 
         // Check if all claims in the parent submission are reimbursed
