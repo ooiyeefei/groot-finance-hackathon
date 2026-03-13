@@ -18,6 +18,7 @@ export function useChartOfAccounts() {
   const deactivateAccount = useMutation(api.functions.chartOfAccounts.deactivate)
 
   return {
+    businessId,
     accounts: accounts ?? [],
     isLoading: accounts === undefined,
     createAccount,
