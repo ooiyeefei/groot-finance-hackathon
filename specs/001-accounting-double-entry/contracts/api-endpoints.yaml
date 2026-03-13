@@ -1,0 +1,967 @@
+openapi: 3.0.3
+info:
+  title: Groot Finance - Accounting API
+  description: |
+    REST API for double-entry accounting system.
+    Implements GAAP/IFRS/MAS-8 compliant journal entries, chart of accounts, and financial statements.
+  version: 1.0.0
+  contact:
+    name: Groot Finance Development Team
+    email: dev@hellogroot.com
+
+servers:
+  - url: https://finance.hellogroot.com/api/v1
+    description: Production
+  - url: http://localhost:3000/api/v1
+    description: Local development
+
+tags:
+  - name: Chart of Accounts
+    description: Account master data management
+  - name: Journal Entries
+    description: Transaction recording and retrieval
+  - name: Financial Statements
+    description: P&L, Balance Sheet, Cash Flow, Trial Balance
+  - name: Accounting Periods
+    description: Period management and closing
+  - name: Currency Rates
+    description: Manual exchange rate overrides
+
+paths:
+  # =================================================================
+  # CHART OF ACCOUNTS
+  # =================================================================
+
+  /accounting/chart-of-accounts:
+    get:
+      tags: [Chart of Accounts]
+      summary: List chart of accounts
+      description: Retrieve all accounts for current business, optionally filtered by type or active status
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: accountType
+          in: query
+          schema:
+            type: string
+            enum: [Asset, Liability, Equity, Revenue, Expense]
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: List of accounts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ChartOfAccount'
+
+    post:
+      tags: [Chart of Accounts]
+      summary: Create account
+      description: Add new account to chart of accounts (Finance Admin only)
+      security:
+        - clerkAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountRequest'
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ChartOfAccount'
+
+  /accounting/chart-of-accounts/{accountId}:
+    patch:
+      tags: [Chart of Accounts]
+      summary: Update account
+      description: Modify account properties (Finance Admin only)
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAccountRequest'
+      responses:
+        '200':
+          description: Account updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ChartOfAccount'
+
+    delete:
+      tags: [Chart of Accounts]
+      summary: Deactivate account
+      description: Set account to inactive (cannot delete system accounts)
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Account deactivated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+
+  # =================================================================
+  # JOURNAL ENTRIES
+  # =================================================================
+
+  /accounting/journal-entries:
+    get:
+      tags: [Journal Entries]
+      summary: List journal entries
+      description: Retrieve paginated list of journal entries with filters
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, posted, reversed, voided]
+        - name: sourceType
+          in: query
+          schema:
+            type: string
+            enum: [manual, sales_invoice, expense_claim, ar_reconciliation, migrated]
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Paginated list of journal entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      entries:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/JournalEntry'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+
+    post:
+      tags: [Journal Entries]
+      summary: Create manual journal entry
+      description: Create new journal entry with balanced lines (Finance Admin only)
+      security:
+        - clerkAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateJournalEntryRequest'
+      responses:
+        '201':
+          description: Journal entry created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/JournalEntry'
+
+  /accounting/journal-entries/{entryId}:
+    get:
+      tags: [Journal Entries]
+      summary: Get journal entry detail
+      description: Retrieve journal entry with all lines
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: entryId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Journal entry with lines
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/JournalEntryWithLines'
+
+  /accounting/journal-entries/{entryId}/reverse:
+    post:
+      tags: [Journal Entries]
+      summary: Reverse journal entry
+      description: Create reversing entry (debits→credits, credits→debits)
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: entryId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Reason for reversal
+                reversalDate:
+                  type: string
+                  format: date
+                  description: Date of reversing entry (default: today)
+      responses:
+        '201':
+          description: Reversing entry created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      originalEntry:
+                        $ref: '#/components/schemas/JournalEntry'
+                      reversingEntry:
+                        $ref: '#/components/schemas/JournalEntry'
+
+  # =================================================================
+  # FINANCIAL STATEMENTS
+  # =================================================================
+
+  /accounting/statements/profit-loss:
+    get:
+      tags: [Financial Statements]
+      summary: Generate Profit & Loss statement
+      description: Revenue - Expenses = Net Profit/Loss for date range
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: dateFrom
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: P&L statement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfitLossStatement'
+
+  /accounting/statements/balance-sheet:
+    get:
+      tags: [Financial Statements]
+      summary: Generate Balance Sheet
+      description: Assets = Liabilities + Equity as of specified date
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: asOfDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Balance Sheet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceSheet'
+
+  /accounting/statements/trial-balance:
+    get:
+      tags: [Financial Statements]
+      summary: Generate Trial Balance
+      description: All accounts with debit/credit totals (sum to zero)
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: asOfDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Trial Balance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrialBalance'
+
+  /accounting/statements/cash-flow:
+    get:
+      tags: [Financial Statements]
+      summary: Generate Cash Flow Statement
+      description: Indirect method - Operating, Investing, Financing activities
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: dateFrom
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Cash Flow Statement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CashFlowStatement'
+
+  /accounting/statements/export:
+    post:
+      tags: [Financial Statements]
+      summary: Export financial statements
+      description: Generate Excel or PDF file with all statements
+      security:
+        - clerkAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                statements:
+                  type: array
+                  items:
+                    type: string
+                    enum: [profit-loss, balance-sheet, trial-balance, cash-flow]
+                dateFrom:
+                  type: string
+                  format: date
+                dateTo:
+                  type: string
+                  format: date
+                format:
+                  type: string
+                  enum: [excel, pdf]
+      responses:
+        '200':
+          description: Export file URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      downloadUrl:
+                        type: string
+                        format: uri
+                      expiresAt:
+                        type: string
+                        format: date-time
+
+  # =================================================================
+  # ACCOUNTING PERIODS
+  # =================================================================
+
+  /accounting/periods:
+    get:
+      tags: [Accounting Periods]
+      summary: List accounting periods
+      description: Retrieve fiscal periods with status
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: fiscalYear
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of periods
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AccountingPeriod'
+
+  /accounting/periods/{periodId}/close:
+    post:
+      tags: [Accounting Periods]
+      summary: Close accounting period
+      description: Lock period and prevent further transactions (Finance Admin only)
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: periodId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                closingNotes:
+                  type: string
+      responses:
+        '200':
+          description: Period closed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/AccountingPeriod'
+
+  # =================================================================
+  # MANUAL EXCHANGE RATES
+  # =================================================================
+
+  /accounting/currency-rates:
+    get:
+      tags: [Currency Rates]
+      summary: List manual exchange rates
+      description: Retrieve Finance Admin-defined rates
+      security:
+        - clerkAuth: []
+      responses:
+        '200':
+          description: List of manual rates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ManualExchangeRate'
+
+    post:
+      tags: [Currency Rates]
+      summary: Create manual exchange rate
+      description: Add Finance Admin-defined rate (Finance Admin only)
+      security:
+        - clerkAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fromCurrency, toCurrency, rate, effectiveDate]
+              properties:
+                fromCurrency:
+                  type: string
+                  example: USD
+                toCurrency:
+                  type: string
+                  example: MYR
+                rate:
+                  type: number
+                  example: 4.65
+                effectiveDate:
+                  type: string
+                  format: date
+                reason:
+                  type: string
+                  example: Bank Negara Malaysia official rate
+                source:
+                  type: string
+                  example: BNM website
+      responses:
+        '201':
+          description: Manual rate created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ManualExchangeRate'
+
+  /accounting/currency-rates/{rateId}:
+    patch:
+      tags: [Currency Rates]
+      summary: Update manual exchange rate
+      description: Modify existing manual rate (Finance Admin only)
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: rateId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rate:
+                  type: number
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Rate updated
+
+    delete:
+      tags: [Currency Rates]
+      summary: Delete manual exchange rate
+      description: Remove manual rate override (Finance Admin only)
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: rateId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Rate deleted
+
+# =================================================================
+# COMPONENTS
+# =================================================================
+
+components:
+  securitySchemes:
+    clerkAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Clerk session token
+
+  schemas:
+    ChartOfAccount:
+      type: object
+      properties:
+        _id:
+          type: string
+        businessId:
+          type: string
+        accountCode:
+          type: string
+          example: "1000"
+        accountName:
+          type: string
+          example: Cash
+        accountType:
+          type: string
+          enum: [Asset, Liability, Equity, Revenue, Expense]
+        normalBalance:
+          type: string
+          enum: [debit, credit]
+        isActive:
+          type: boolean
+        parentAccountId:
+          type: string
+        level:
+          type: integer
+
+    CreateAccountRequest:
+      type: object
+      required: [accountCode, accountName, accountType]
+      properties:
+        accountCode:
+          type: string
+          pattern: "^[1-5][0-9]{3}$"
+        accountName:
+          type: string
+        accountType:
+          type: string
+          enum: [Asset, Liability, Equity, Revenue, Expense]
+        description:
+          type: string
+        parentAccountId:
+          type: string
+
+    UpdateAccountRequest:
+      type: object
+      properties:
+        accountName:
+          type: string
+        description:
+          type: string
+        isActive:
+          type: boolean
+
+    JournalEntry:
+      type: object
+      properties:
+        _id:
+          type: string
+        businessId:
+          type: string
+        entryNumber:
+          type: string
+          example: JE-2026-00001
+        transactionDate:
+          type: string
+          format: date
+        description:
+          type: string
+        status:
+          type: string
+          enum: [draft, posted, reversed, voided]
+        sourceType:
+          type: string
+        totalDebit:
+          type: number
+        totalCredit:
+          type: number
+        lineCount:
+          type: integer
+
+    JournalEntryLine:
+      type: object
+      properties:
+        _id:
+          type: string
+        journalEntryId:
+          type: string
+        accountCode:
+          type: string
+        accountName:
+          type: string
+        debitAmount:
+          type: number
+        creditAmount:
+          type: number
+        lineDescription:
+          type: string
+
+    JournalEntryWithLines:
+      allOf:
+        - $ref: '#/components/schemas/JournalEntry'
+        - type: object
+          properties:
+            lines:
+              type: array
+              items:
+                $ref: '#/components/schemas/JournalEntryLine'
+
+    CreateJournalEntryRequest:
+      type: object
+      required: [transactionDate, description, lines]
+      properties:
+        transactionDate:
+          type: string
+          format: date
+        description:
+          type: string
+        memo:
+          type: string
+        lines:
+          type: array
+          minItems: 2
+          items:
+            type: object
+            required: [accountCode, amount, type]
+            properties:
+              accountCode:
+                type: string
+              amount:
+                type: number
+              type:
+                type: string
+                enum: [debit, credit]
+              lineDescription:
+                type: string
+
+    AccountingPeriod:
+      type: object
+      properties:
+        _id:
+          type: string
+        periodCode:
+          type: string
+          example: "2026-01"
+        periodName:
+          type: string
+          example: January 2026
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [open, closed]
+        fiscalYear:
+          type: integer
+
+    ManualExchangeRate:
+      type: object
+      properties:
+        _id:
+          type: string
+        fromCurrency:
+          type: string
+        toCurrency:
+          type: string
+        rate:
+          type: number
+        effectiveDate:
+          type: string
+          format: date
+        reason:
+          type: string
+        enteredBy:
+          type: string
+
+    ProfitLossStatement:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            period:
+              type: object
+              properties:
+                from:
+                  type: string
+                  format: date
+                to:
+                  type: string
+                  format: date
+            revenue:
+              type: number
+            expenses:
+              type: number
+            netProfit:
+              type: number
+            revenueCategories:
+              type: array
+              items:
+                type: object
+                properties:
+                  category:
+                    type: string
+                  amount:
+                    type: number
+            expenseCategories:
+              type: array
+              items:
+                type: object
+                properties:
+                  category:
+                    type: string
+                  amount:
+                    type: number
+
+    BalanceSheet:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            asOfDate:
+              type: string
+              format: date
+            assets:
+              type: number
+            liabilities:
+              type: number
+            equity:
+              type: number
+            balanced:
+              type: boolean
+
+    TrialBalance:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            asOfDate:
+              type: string
+              format: date
+            accounts:
+              type: array
+              items:
+                type: object
+                properties:
+                  accountCode:
+                    type: string
+                  accountName:
+                    type: string
+                  debitBalance:
+                    type: number
+                  creditBalance:
+                    type: number
+            totalDebits:
+              type: number
+            totalCredits:
+              type: number
+            balanced:
+              type: boolean
+
+    CashFlowStatement:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            period:
+              type: object
+            netIncome:
+              type: number
+            operatingActivities:
+              type: number
+            investingActivities:
+              type: number
+            financingActivities:
+              type: number
+            netCashFlow:
+              type: number
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+        code:
+          type: string
+        details:
+          type: object

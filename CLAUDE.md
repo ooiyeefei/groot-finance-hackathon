@@ -301,6 +301,8 @@ After making changes to any system (e-invoice, expense claims, chat, etc.), **al
 - TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, React 19.1.2, Convex 1.31.3, Clerk 6.30.0, lucide-react, Radix UI (021-ap-3-way)
 - TypeScript 5.9.3 / Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, Clerk 6.30.0, Radix UI Tabs, TanStack Query 5.90.7, Zod 3.23.8 (021-bank-statement-import-recon)
 - Convex (new `bank_accounts`, `bank_transactions`, `bank_import_sessions`, `reconciliation_matches` tables) (021-bank-statement-import-recon)
+- TypeScript 5.9.3 / Node.js 20.x + Next.js 15.5.7, React 19.1.2 + Convex 1.31.3 (real-time database), React Query 5.90.7, Zod 3.23.8, Clerk 6.30.0 (auth), Radix UI (components), lucide-react (icons) (001-accounting-double-entry)
+- Convex document database with real-time subscriptions. New tables: `chart_of_accounts`, `journal_entries`, `journal_entry_lines`, `accounting_periods`, `manual_exchange_rates`. Migration from existing `accounting_entries` table (001-accounting-double-entry)
 
 ## Recent Changes
 - 001-category-3-mcp: Added MCP Server with API key management

@@ -1,6 +1,7 @@
 // convex/schema.ts
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { accountingSchema } from "../specs/001-accounting-double-entry/contracts/convex-schema";
 import {
   membershipRoleValidator,
   membershipStatusValidator,
@@ -60,6 +61,11 @@ import {
 } from "./lib/validators";
 
 export default defineSchema({
+  // ============================================
+  // ACCOUNTING: Double-Entry Bookkeeping
+  // ============================================
+  ...accountingSchema,
+
   // ============================================
   // CORE DOMAIN: User & Business Management
   // ============================================

@@ -5,6 +5,16 @@
 **Status**: Draft
 **Input**: User description: "Revamp accounting system with double-entry bookkeeping and modern UX - proper GAAP/IFRS/MAS-8 compliant financial reporting with chart of accounts, automated journal entries, financial statements, AR reconciliation integration, and user-friendly dashboard replacing current table view"
 
+## Clarifications
+
+### Session 2026-03-12
+
+- Q: Who can access the accounting module and what permissions do they have? (Roles: Owner, Finance Admin, Manager, Employee) → A: Finance Admin Only model - Finance Admin has full access (view/edit/post/manage COA/close periods). Owner can view reports only (no edit). Manager and Employee are blocked from accounting module entirely.
+- Q: What happens during one-time data migration if some old accounting_entries records can't be converted to double-entry format? → A: Big Bang - Skip Bad Records. Migration script converts valid records and skips broken records (logs them). Generate migration report showing skipped records for review. User/Finance Admin can decide whether to fix or permanently delete skipped records. (Note: Limited active usage currently, acceptable to skip/delete bad records)
+- Q: Where should the system source exchange rates for currency conversion? → A: Hybrid approach - API default + Finance Admin manual override. System uses existing CurrencyService (ExchangeRate-API.com free tier) for automated daily rates. Finance Admin can optionally enter manual rates for specific currency pairs (effective date) which take precedence over API rates. This provides compliance flexibility for businesses requiring official bank rates or government-mandated rates (e.g., Bank Negara Malaysia rates) while maintaining automation for most transactions.
+- Q: What is the expected monthly transaction volume for a typical business using this system? → A: Medium volume (500-2000 transactions/month). Typical SME scale covering: 50-100 sales invoices, 100-200 expense claims, 50-100 vendor payments, 200-500 platform orders for e-commerce. This volume allows simple queries for single-period views but requires indexed queries and pagination for year-to-date reports (12k-24k annual transactions). Performance optimization targets: dashboard aggregation <1 second, financial statement generation <5 seconds with proper database indexing.
+- Q: Which Cash Flow Statement method should the system use (Direct vs Indirect)? → A: Indirect Method. Industry-standard approach used by 95%+ of businesses globally. Starts with Net Income from P&L, adjusts for non-cash items (depreciation, amortization), and adjusts for changes in working capital (AR, AP, inventory). Easier implementation - calculates from existing P&L and Balance Sheet data without requiring separate cash flow tags on every transaction. Accepted by IFRS, GAAP, and MAS-8. Shows reconciliation between profit and cash flow, helping users understand why profit ≠ cash.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - View Accurate Financial Statements (Priority: P1)
@@ -123,10 +133,13 @@ As a business owner who is not an accountant, I need to see my financial health 
 - **What happens when fiscal year closes?** System should allow year-end closing process that transfers net profit/loss to retained earnings and opens new fiscal year while maintaining historical data access
 - **How does system handle transactions spanning multiple accounting periods?** System should record transactions in the period they occurred (transaction date) and prevent modifying closed periods without proper authorization
 - **What happens when user tries to delete a transaction that's part of closed period?** System prevents deletion and requires formal reversal entry to maintain audit trail
-- **How does system handle currency exchange rate changes?** System should record transactions at exchange rate on transaction date and track unrealized gains/losses for foreign currency accounts
+- **How does system handle currency exchange rate changes?** System records transactions at exchange rate on transaction date (API rate or manual override if exists). For transactions on effective date of manual rate entry, system uses manual rate. Finance Admin can update manual rates for future transactions but cannot retroactively change rates for posted transactions (requires reversal and re-entry). System tracks unrealized gains/losses for foreign currency accounts at period-end using current rates
 - **What happens when AR reconciliation finds no matching invoice?** Order remains unmatched with status "disputed" and must be resolved manually before period can be closed
 - **How does system handle partial payments?** System creates partial journal entries and maintains outstanding balance in AR/AP accounts until fully paid
-- **What happens when data migration fails validation?** System rolls back migration, generates detailed error report, and requires admin to fix data issues before retrying
+- **What happens when data migration encounters invalid records?** Migration script converts valid records and skips broken records (cannot convert to double-entry format). System generates migration report listing all skipped records with specific failure reasons. Finance Admin reviews report and decides whether to fix and manually re-import skipped records or permanently delete them as corrupt data. New accounting system becomes active immediately with successfully migrated records.
+- **What happens when ExchangeRate-API.com is down?** System falls back to hardcoded rates stored in CurrencyService. If manual rate exists for currency pair, manual rate takes precedence regardless of API status. UI displays rate source (API/Manual/Fallback) for transparency
+- **What happens when transaction volume exceeds 5000/month?** System performance may degrade for year-to-date reports (>60k entries). Recommended solutions: (1) Increase pagination page size limits, (2) Add database partitioning by accounting_period, (3) Implement materialized views for common aggregations. Finance Admin receives performance warning when monthly volume exceeds 3000 transactions
+- **How does Cash Flow Statement handle non-cash transactions like depreciation or barter?** Indirect Method automatically handles non-cash items by adding them back to Net Income in Operating Activities section (since they reduced net income but didn't use cash). Example: Depreciation Expense reduces Net Income but is added back in cash flow as "+Depreciation". Barter transactions (debit Asset, credit Revenue) show as negative adjustment in working capital changes. System identifies non-cash items by analyzing journal entries where no Cash/Bank account is involved
 
 ## Requirements *(mandatory)*
 
@@ -144,28 +157,33 @@ As a business owner who is not an accountant, I need to see my financial health 
 - **FR-010**: System MUST generate Profit & Loss statement showing: Revenue - Expenses = Net Profit/Loss, grouped by account category, for user-selected date range
 - **FR-011**: System MUST generate Balance Sheet showing: Assets = Liabilities + Equity, with current vs non-current classification, as of specified date
 - **FR-012**: System MUST generate Trial Balance listing all accounts with debit and credit totals that sum to zero
-- **FR-013**: System MUST generate Cash Flow Statement showing operating, investing, and financing activities for user-selected period
+- **FR-013**: System MUST generate Cash Flow Statement using Indirect Method showing three sections: (1) Operating Activities - starts with Net Income, adjusts for non-cash items (depreciation/amortization), adjusts for working capital changes (AR/AP/inventory), (2) Investing Activities - capital expenditures and asset sales, (3) Financing Activities - loans, equity, dividends. Calculation derives from P&L and Balance Sheet changes without requiring separate cash flow tags on transactions
 - **FR-014**: Users MUST be able to export financial statements to Excel and PDF formats
 - **FR-015**: System MUST integrate with AR reconciliation module such that closing a reconciliation period creates three journal entries: platform fees expense, bank deposit, and AR clearance
 - **FR-016**: System MUST update sales invoice status to "paid" when corresponding order is reconciled and period is closed
 - **FR-017**: System MUST handle variance between order amount and invoice amount by creating adjustment entries and flagging for manual review if variance exceeds 10% (industry standard for SME e-commerce AR reconciliation - balances accuracy with practical platform fee/rounding variations)
 - **FR-017a**: System MUST display the 10% variance threshold to users in the AR reconciliation UI with explanation: "Variances under 10% are auto-adjusted. Larger variances are flagged for your review to ensure accuracy."
 - **FR-018**: System MUST prevent modification or deletion of transactions in closed accounting periods, requiring formal reversal process
-- **FR-019**: System MUST support multiple currencies with exchange rate tracking on transaction date
+- **FR-019**: System MUST support multiple currencies with exchange rate tracking on transaction date. Exchange rates are sourced via hybrid approach: (1) Automated daily fetch from ExchangeRate-API.com free tier via existing CurrencyService, (2) Finance Admin can manually enter rates for specific currency pairs with effective dates that override API rates, (3) System falls back to hardcoded rates if both API and manual rates unavailable
+- **FR-019a**: System MUST provide Finance Admin interface to enter manual exchange rates (from_currency, to_currency, rate, effective_date) which take precedence over API rates for transactions on or after the effective date. Use case: businesses requiring Bank Negara Malaysia official rates or other government-mandated exchange rates for compliance
 - **FR-020**: System MUST maintain audit trail showing: who created/modified transactions, when, and what changed
+- **FR-020a**: System MUST implement pagination for transaction lists and reports when viewing year-to-date data (>1000 entries). Default page size: 50 entries. Financial statement generation (P&L, Balance Sheet) processes full dataset without pagination but uses indexed aggregation queries
 - **FR-021**: System MUST display dashboard with key financial metrics: current month revenue, expenses, net profit/loss, cash balance, accounts receivable, accounts payable
 - **FR-022**: System MUST provide visual charts on dashboard: revenue vs expenses trend (line chart), expense breakdown by category (pie chart), cash flow over time (bar chart)
 - **FR-023**: System MUST use simplified language for non-accountant users ("Money In" instead of "Debit Cash", "Money Owed to Us" instead of "Accounts Receivable")
 - **FR-024**: System MUST provide toggle for "Accountant Mode" that switches interface to technical accounting terminology (debit/credit, account codes)
-- **FR-025**: System MUST support data migration from existing accounting_entries table to new journal_entries structure, validating that all migrated entries balance
+- **FR-025**: System MUST support data migration from existing accounting_entries table to new journal_entries structure, converting valid records and skipping records that cannot be converted to balanced double-entry format
+- **FR-025a**: Migration process MUST generate detailed report listing all skipped records with specific failure reasons (e.g., "missing amount", "invalid transaction type", "unbalanced entry"). Report must be accessible to Finance Admin for review and decision on whether to fix or delete skipped records
+- **FR-026**: System MUST enforce role-based access control: Finance Admin has full access (view/edit/post entries/manage COA/close periods), Owner has view-only access to all reports and financial statements, Manager and Employee roles are blocked from accessing accounting module entirely
 
 ### Key Entities
 
 - **Chart of Accounts**: Organizational structure categorizing all accounts used in the business. Each account has: unique code, name, type (Asset/Liability/Equity/Revenue/Expense), normal balance (debit/credit), parent account (for hierarchy), active status
-- **Journal Entry**: Complete accounting transaction representing a business event. Contains: unique entry ID, transaction date, posting date, description, status (draft/posted/reversed), source document type (sales invoice, expense, AR recon, manual), link to source record
-- **Journal Entry Line**: Individual debit or credit within a journal entry. Contains: account reference, debit amount, credit amount, line description, line order. Multiple lines make up one complete journal entry
-- **Financial Statement**: Generated report from journal entry data. Types include: Profit & Loss (revenue vs expenses over period), Balance Sheet (assets vs liabilities+equity at point in time), Cash Flow (operating/investing/financing activities), Trial Balance (all accounts with balances)
+- **Journal Entry**: Complete accounting transaction representing a business event. Contains: unique entry ID, transaction date, posting date, description, status (draft/posted/reversed), source document type (sales invoice, expense, AR recon, manual), link to source record, business_id (for multi-tenancy). Expected volume: 500-2000 entries per month per business. Requires composite index on (business_id, transaction_date, status) for efficient querying
+- **Journal Entry Line**: Individual debit or credit within a journal entry. Contains: account reference, debit amount, credit amount, line description, line order. Multiple lines make up one complete journal entry. Expected volume: 2-5 lines per entry average (1000-10000 lines per month). Requires index on (journal_entry_id, account_id) for account balance queries
+- **Financial Statement**: Generated report from journal entry data. Types include: Profit & Loss (revenue vs expenses over period), Balance Sheet (assets vs liabilities+equity at point in time), Cash Flow Statement using Indirect Method (reconciles Net Income to Operating Cash Flow by adjusting for non-cash items and working capital changes, plus Investing and Financing sections), Trial Balance (all accounts with balances). Cash flow calculated from P&L + balance sheet changes without separate transaction tagging
 - **Accounting Period**: Time period for financial reporting (month, quarter, year). Periods can be open (accepting transactions) or closed (locked for historical integrity)
+- **Manual Exchange Rate**: Finance Admin-defined exchange rate override for compliance. Contains: from_currency, to_currency, rate, effective_date, entered_by (Finance Admin user), reason for manual entry. Takes precedence over API rates for transactions on/after effective date
 - **Audit Log**: Immutable record of all transaction creation, modification, reversal activities with user identity and timestamp
 
 ## Success Criteria *(mandatory)*
@@ -176,14 +194,16 @@ As a business owner who is not an accountant, I need to see my financial health 
 - **SC-002**: Trial balance must always sum to zero (total debits - total credits = 0)
 - **SC-003**: Balance sheet must satisfy accounting equation (Assets = Liabilities + Equity) with zero variance
 - **SC-004**: Profit & Loss statement net profit/loss must equal the change in equity between two balance sheet dates (excluding owner contributions/distributions)
-- **SC-005**: Users can generate a complete set of financial statements (P&L, Balance Sheet, Cash Flow, Trial Balance) in under 5 seconds for any date range
-- **SC-006**: Dashboard loads and displays key financial metrics in under 1 second
+- **SC-005**: Users can generate a complete set of financial statements (P&L, Balance Sheet, Cash Flow, Trial Balance) in under 5 seconds for any date range. Performance tested with 2000 transactions/month dataset (24k annual entries). Achievable with indexed queries on (business_id, transaction_date, account_id)
+- **SC-006**: Dashboard loads and displays key financial metrics in under 1 second. Performance tested with current month data (~500-2000 transactions). Achievable with aggregation queries using indexed fields
 - **SC-007**: 90% of users can successfully record a common transaction (sale, expense, payment) in under 2 minutes without training
 - **SC-008**: Users can export financial statements to Excel/PDF in under 10 seconds
 - **SC-009**: When AR reconciliation period closes, accounting entries are created automatically within 5 seconds
 - **SC-010**: System prevents 100% of attempts to modify closed accounting periods without proper reversal process
-- **SC-011**: Data migration from old accounting_entries to new journal_entries structure completes with 100% of entries balanced (any unbalanced legacy data is flagged for manual review)
+- **SC-011**: Data migration from old accounting_entries to new journal_entries structure completes with all valid records successfully converted to balanced entries. Migration report identifies any skipped records (unable to convert) with specific error reasons. System becomes operational immediately with migrated data.
 - **SC-012**: Non-accountant users report understanding their business financial health after viewing dashboard (measured by ability to answer: "Is your business profitable this month?", "What is your largest expense category?", "How much cash do you have?")
+- **SC-013**: Multi-currency transactions use correct exchange rates: API-sourced rates load within 5 seconds, Finance Admin can enter manual rates in under 1 minute, manual rates take precedence over API rates for transactions on/after effective date with 100% accuracy
+- **SC-014**: Cash Flow Statement (Indirect Method) reconciles to P&L with 100% accuracy: Operating Cash Flow = Net Income + Non-cash Adjustments ± Working Capital Changes. Statement generation completes in under 5 seconds for any date range (tested with 2000 transactions/month dataset)
 
 ### Quality Attributes
 
@@ -203,14 +223,15 @@ As a business owner who is not an accountant, I need to see my financial health 
 7. Integration with external accounting software (Xero, QuickBooks, SQL Account) will be via CSV export in Phase 1; API integration is Phase 2
 8. Tax calculation (GST/SST) will be added as Phase 2 feature; Phase 1 focuses on core accounting functionality
 9. Historical data before migration date will remain in old accounting_entries table and be accessible via separate "Historical Records" view; only new transactions use double-entry system
+10. Target businesses process 500-2000 transactions per month (typical SME scale). Businesses exceeding 5000 transactions/month may require performance optimization (database partitioning, materialized views) in future phases
 
 ## Dependencies
 
 1. **AR Reconciliation Module**: Must provide hooks/events when reconciliation period is closed so accounting system can create proper journal entries
 2. **Sales Invoices Module**: Must trigger accounting events when invoice is created, sent, or marked paid so proper revenue/AR entries are generated
 3. **Expense Claims Module**: Must trigger accounting events when expense is approved, reimbursed, or rejected so proper expense/AP entries are generated
-4. **User Permissions System**: Accounting module will require role-based permissions (admin can close periods, accountant can post entries, manager can view reports, employee read-only)
-5. **Multi-Currency Service**: Need reliable exchange rate data source for transactions in non-home currencies
+4. **User Permissions System**: Accounting module will require role-based permissions with Finance Admin Only model - Finance Admin has full access (view/edit/post entries/manage COA/close periods), Owner has view-only access to reports, Manager and Employee are blocked from accounting module access
+5. **CurrencyService**: Existing service at src/lib/services/currency-service.ts provides automated exchange rates via ExchangeRate-API.com (free tier). Accounting system will extend this with manual rate override capability stored in new manual_exchange_rates table. Rate resolution priority: manual rates → API rates → fallback rates
 
 ## Out of Scope
 
