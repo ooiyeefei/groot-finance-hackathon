@@ -898,3 +898,43 @@ export const debugMigrationStatus = query({
     return result;
   },
 });
+
+/**
+ * One-time: Add a user to businesses with a specified role.
+ * Run via: npx convex run --prod functions/admin:addUserToBusinesses '{...}'
+ */
+export const addUserToBusinesses = mutation({
+  args: {
+    userId: v.id("users"),
+    businessIds: v.array(v.id("businesses")),
+    role: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const results = [];
+    for (const bizId of args.businessIds) {
+      // Check if membership already exists
+      const existing = await ctx.db
+        .query("business_memberships")
+        .withIndex("by_userId_businessId", (q) =>
+          q.eq("userId", args.userId).eq("businessId", bizId)
+        )
+        .first();
+
+      if (existing) {
+        results.push({ businessId: bizId, status: "already_exists", role: existing.role });
+        continue;
+      }
+
+      await ctx.db.insert("business_memberships", {
+        userId: args.userId,
+        businessId: bizId,
+        role: args.role as "owner" | "finance_admin" | "manager" | "employee",
+        status: "active",
+        joinedAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      results.push({ businessId: bizId, status: "created", role: args.role });
+    }
+    return results;
+  },
+});

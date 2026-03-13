@@ -24,6 +24,7 @@ import type * as functions_bankImportSessions from "../functions/bankImportSessi
 import type * as functions_bankTransactions from "../functions/bankTransactions.js";
 import type * as functions_businesses from "../functions/businesses.js";
 import type * as functions_catalogItems from "../functions/catalogItems.js";
+import type * as functions_chartOfAccounts from "../functions/chartOfAccounts.js";
 import type * as functions_consent from "../functions/consent.js";
 import type * as functions_conversations from "../functions/conversations.js";
 import type * as functions_creditPacks from "../functions/creditPacks.js";
@@ -74,6 +75,7 @@ import type * as functions_retentionJobs from "../functions/retentionJobs.js";
 import type * as functions_salesInvoiceUsage from "../functions/salesInvoiceUsage.js";
 import type * as functions_salesInvoices from "../functions/salesInvoices.js";
 import type * as functions_salesOrders from "../functions/salesOrders.js";
+import type * as functions_seedAccounting from "../functions/seedAccounting.js";
 import type * as functions_stripeEvents from "../functions/stripeEvents.js";
 import type * as functions_stripeIntegrations from "../functions/stripeIntegrations.js";
 import type * as functions_system from "../functions/system.js";
@@ -88,6 +90,7 @@ import type * as functions_workSchedules from "../functions/workSchedules.js";
 import type * as lib_llm from "../lib/llm.js";
 import type * as lib_mcpClient from "../lib/mcpClient.js";
 import type * as lib_resolvers from "../lib/resolvers.js";
+import type * as lib_validation from "../lib/validation.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as migrations from "../migrations.js";
 import type * as types from "../types.js";
@@ -115,6 +118,7 @@ declare const fullApi: ApiFromModules<{
   "functions/bankTransactions": typeof functions_bankTransactions;
   "functions/businesses": typeof functions_businesses;
   "functions/catalogItems": typeof functions_catalogItems;
+  "functions/chartOfAccounts": typeof functions_chartOfAccounts;
   "functions/consent": typeof functions_consent;
   "functions/conversations": typeof functions_conversations;
   "functions/creditPacks": typeof functions_creditPacks;
@@ -165,6 +169,7 @@ declare const fullApi: ApiFromModules<{
   "functions/salesInvoiceUsage": typeof functions_salesInvoiceUsage;
   "functions/salesInvoices": typeof functions_salesInvoices;
   "functions/salesOrders": typeof functions_salesOrders;
+  "functions/seedAccounting": typeof functions_seedAccounting;
   "functions/stripeEvents": typeof functions_stripeEvents;
   "functions/stripeIntegrations": typeof functions_stripeIntegrations;
   "functions/system": typeof functions_system;
@@ -179,6 +184,7 @@ declare const fullApi: ApiFromModules<{
   "lib/llm": typeof lib_llm;
   "lib/mcpClient": typeof lib_mcpClient;
   "lib/resolvers": typeof lib_resolvers;
+  "lib/validation": typeof lib_validation;
   "lib/validators": typeof lib_validators;
   migrations: typeof migrations;
   types: typeof types;
