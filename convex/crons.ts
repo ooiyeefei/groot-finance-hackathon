@@ -232,6 +232,23 @@ crons.daily(
 // Handled by AWS EventBridge → Lambda (every 5 min). No Convex cron needed.
 // Lambda queries Convex for businesses with pending requests, polls LHDN directly.
 
+/**
+ * E-Invoice Monitoring: Self-Improving Error Detection
+ *
+ * Runs every 2 hours to:
+ * 1. Clean up stale in_progress records (Lambda timeout >15 min)
+ * 2. Categorize new failures into error patterns
+ * 3. Email dev@hellogroot.com about unresolved new patterns
+ *
+ * This enables the system to self-improve by catching new error types
+ * as merchants update their forms or new merchants are added.
+ */
+crons.interval(
+  "einvoice-monitoring",
+  { hours: 2 },
+  internal.functions.einvoiceMonitoring.runMonitoringCycle
+);
+
 // ============================================
 // PDPA Data Retention Cleanup (001-pdpa-data-retention-cleanup)
 // ============================================

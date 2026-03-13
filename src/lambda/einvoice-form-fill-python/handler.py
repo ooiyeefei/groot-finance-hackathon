@@ -26,6 +26,24 @@ from playwright.sync_api import sync_playwright, Page, Browser
 # DSPy imported lazily in troubleshoot() — avoids 10s cold start penalty on every invocation
 dspy = None  # type: ignore
 
+# ── Per-domain rate limiting (prevents 429s from merchants) ──
+_domain_last_request: dict[str, float] = {}  # domain → last request timestamp
+DOMAIN_MIN_INTERVAL_S = 10  # Minimum seconds between requests to same domain
+
+
+def _rate_limit_domain(url: str):
+    """Enforce minimum interval between requests to same merchant domain."""
+    from urllib.parse import urlparse
+    domain = urlparse(url).netloc
+    now = time.time()
+    last = _domain_last_request.get(domain, 0)
+    wait = DOMAIN_MIN_INTERVAL_S - (now - last)
+    if wait > 0:
+        print(f"[RateLimit] Waiting {wait:.1f}s before requesting {domain}")
+        time.sleep(wait)
+    _domain_last_request[domain] = time.time()
+
+
 # ── Config ──────────────────────────────────────────────────
 
 SCREEN_W, SCREEN_H = 1440, 900
@@ -2570,6 +2588,9 @@ def handler(event: dict, context=None) -> dict:
         else:
             browser, page, _ = launch_local(pw)
 
+        # Rate limit: enforce minimum interval between requests to same domain
+        _rate_limit_domain(url)
+
         # Navigate (with Browserbase fallback on network errors)
         try:
             resp = page.goto(url, wait_until="domcontentloaded", timeout=45000)
@@ -2970,6 +2991,12 @@ def handler(event: dict, context=None) -> dict:
         print(f"[Cost] {cost_tracker.summary()}")
         traceback.print_exc()
 
+        # Sanitize Browserbase billing errors — don't expose to users
+        user_facing_error = error
+        if "402" in error or "Payment Required" in error or "Free plan browser minutes" in error:
+            user_facing_error = "Our e-invoice processing service is temporarily at capacity. Our support team has been notified and is working on it."
+            print("[Browser] Browserbase limit hit — sanitizing error for user")
+
         # ── Tier 3: Troubleshoot on failure → diagnose + retry if fixable ──
         ts_result: dict = {"fixable": False, "infra_action": None}
         if merchant and not error.startswith("BOT_BLOCKED"):
@@ -3119,13 +3146,13 @@ def handler(event: dict, context=None) -> dict:
         try:
             convex_mutation("functions/system:reportEinvoiceFormFillResult", {
                 "expenseClaimId": claim_id, "emailRef": event["emailRef"],
-                "status": "failed", "errorMessage": error, "durationMs": dur,
+                "status": "failed", "errorMessage": user_facing_error, "durationMs": dur,
                 **_debug_fields(),
             })
         except Exception:
             pass
 
-        return {"success": False, "error": error, "durationMs": dur, "cost": cost_tracker.to_dict()}
+        return {"success": False, "error": user_facing_error, "durationMs": dur, "cost": cost_tracker.to_dict()}
 
     finally:
         # Clean up temp receipt image file

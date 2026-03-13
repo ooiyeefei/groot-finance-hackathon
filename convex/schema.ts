@@ -2617,4 +2617,39 @@ export default defineSchema({
     .index("by_downloadToken", ["downloadToken"])
     .index("by_businessId", ["businessId"]),
 
+  // ============================================
+  // E-INVOICE ERROR PATTERNS (self-improving monitoring)
+  // ============================================
+
+  einvoice_error_patterns: defineTable({
+    // Pattern identification
+    category: v.string(),                              // "captcha_blocked", "bot_blocked", "rate_limited", "form_validation", "infra_bug", "browserbase_limit", "network_error", "merchant_logic", "unknown"
+    merchantDomain: v.string(),                        // "einvoice.7eleven.com.my" or "*" for cross-merchant
+    errorFingerprint: v.string(),                      // Normalized error substring for dedup (e.g., "CAPTCHA", "429", "402")
+
+    // Aggregation
+    occurrenceCount: v.number(),                       // How many times this pattern has occurred
+    firstSeenAt: v.number(),                           // Timestamp of first occurrence
+    lastSeenAt: v.number(),                            // Timestamp of most recent occurrence
+    sampleErrorMessages: v.array(v.string()),          // Up to 3 sample error messages for context
+    affectedClaimIds: v.array(v.string()),             // Up to 10 recent claim IDs
+
+    // Resolution tracking
+    status: v.union(
+      v.literal("new"),                                // Just detected, not yet investigated
+      v.literal("investigating"),                      // Dev is looking into it
+      v.literal("resolved"),                           // Fix deployed
+      v.literal("wont_fix"),                           // Accepted limitation (e.g., manual-only merchant)
+    ),
+    resolution: v.optional(v.string()),                // How it was resolved: "marked manual-only", "fixed captcha solver", etc.
+    resolvedAt: v.optional(v.number()),
+    notifiedAt: v.optional(v.number()),                // When dev@hellogroot.com was emailed
+
+    // Metadata
+    lastAnalyzedLogId: v.optional(v.string()),         // Bookmark for incremental processing
+  })
+    .index("by_status", ["status"])
+    .index("by_category_domain", ["category", "merchantDomain"])
+    .index("by_fingerprint", ["errorFingerprint", "merchantDomain"]),
+
 });
