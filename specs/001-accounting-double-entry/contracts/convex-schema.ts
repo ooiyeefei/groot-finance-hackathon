@@ -115,6 +115,7 @@ const journalEntries = defineTable({
   accountingPeriodId: v.optional(v.id("accounting_periods")),
   isPeriodLocked: v.boolean(),
 })
+  .index("by_businessId", ["businessId"])
   .index("by_business_date_status", ["businessId", "transactionDate", "status"])
   .index("by_business_period", ["businessId", "fiscalPeriod", "status"])
   .index("by_source", ["sourceType", "sourceId"])

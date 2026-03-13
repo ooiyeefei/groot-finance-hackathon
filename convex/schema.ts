@@ -471,6 +471,10 @@ export default defineSchema({
     // Linked Accounting Entry (created on approval)
     accountingEntryId: v.optional(v.id("accounting_entries")),
 
+    // Double-entry accounting (new system)
+    journalEntryId: v.optional(v.id("journal_entries")),
+    paymentJournalEntryId: v.optional(v.id("journal_entries")),
+
     // ============================================
     // DUPLICATE DETECTION FIELDS (007-duplicate-expense-detection)
     // ============================================
@@ -1734,6 +1738,10 @@ export default defineSchema({
     // Accounting
     accountingEntryId: v.optional(v.string()),
 
+    // Double-entry accounting (new system)
+    journalEntryId: v.optional(v.id("journal_entries")),
+    paymentJournalEntryId: v.optional(v.id("journal_entries")),
+
     // PDF Storage (generated on save from preview, used for email attachments)
     pdfStorageId: v.optional(v.id("_storage")),
 
@@ -2393,6 +2401,10 @@ export default defineSchema({
 
     // Document linkage
     sourceDocumentId: v.optional(v.id("invoices")),
+
+    // Accounting integration
+    journalEntryIds: v.optional(v.array(v.id("journal_entries"))),
+    reconciledAt: v.optional(v.number()),
 
     isRefund: v.optional(v.boolean()),
     createdAt: v.number(),

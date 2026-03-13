@@ -641,6 +641,17 @@ export const send = mutation({
       businessId: args.businessId,
     });
 
+
+    // Double-entry accounting integration
+    try {
+      await ctx.runMutation(
+        internal.functions.integrations.salesInvoiceIntegration.createJournalEntryOnInvoiceCreation,
+        { invoiceId: args.id }
+      );
+    } catch (error: any) {
+      console.error(`[Sales Invoice] Failed to create journal entry on send:`, error);
+      // Continue even if journal entry fails
+    }
     return args.id;
   },
 });
@@ -689,6 +700,19 @@ export const recordPayment = mutation({
 
     if (newStatus === "paid") {
       updates.paidAt = args.paymentDate;
+
+    // Double-entry accounting integration (only on full payment)
+    if (newStatus === "paid") {
+      try {
+        await ctx.runMutation(
+          internal.functions.integrations.salesInvoiceIntegration.createJournalEntryOnInvoicePayment,
+          { invoiceId: args.id, paymentDate: args.paymentDate }
+        );
+      } catch (error: any) {
+        console.error(`[Sales Invoice] Failed to create payment journal entry:`, error);
+        // Continue even if journal entry fails
+      }
+    }
     }
 
     await ctx.db.patch(args.id, updates);
