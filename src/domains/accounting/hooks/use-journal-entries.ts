@@ -24,7 +24,7 @@ export function useJournalEntries() {
 
   return {
     businessId,
-    entries: entries?.entries ?? [],
+    entries: entries ?? [],
     isLoading: entries === undefined,
     createEntry,
     postEntry,
