@@ -31,3 +31,15 @@ export function useJournalEntries() {
     reverseEntry,
   }
 }
+
+export function useJournalEntry(entryId: Id<'journal_entries'> | null) {
+  const entry = useQuery(
+    api.functions.journalEntries.getById,
+    entryId ? { entryId } : 'skip'
+  )
+
+  return {
+    entry,
+    isLoading: entry === undefined,
+  }
+}

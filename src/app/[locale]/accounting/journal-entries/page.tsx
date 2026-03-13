@@ -10,19 +10,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { useJournalEntries } from '@/domains/accounting/hooks/use-journal-entries'
+import { useJournalEntries, useJournalEntry } from '@/domains/accounting/hooks/use-journal-entries'
 import { Plus, ArrowLeft, Eye, CheckCircle, XCircle } from 'lucide-react'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { formatBusinessDate } from '@/lib/utils'
 import { toast } from 'sonner'
+import type { Id } from '../../../../convex/_generated/dataModel'
 
 export default function JournalEntriesPage() {
   const { entries: entriesRaw, isLoading, postEntry, reverseEntry } = useJournalEntries()
   const entries = (entriesRaw || []) as any[]
 
-  const [selectedEntry, setSelectedEntry] = useState<any>(null)
+  const [selectedEntryId, setSelectedEntryId] = useState<Id<'journal_entries'> | null>(null)
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
+
+  const { entry: selectedEntry } = useJournalEntry(selectedEntryId)
 
   const handlePost = async (entryId: string) => {
     if (!confirm('Are you sure you want to post this entry? Posted entries cannot be edited.')) {
@@ -62,7 +65,7 @@ export default function JournalEntriesPage() {
   }
 
   const openDetailDialog = (entry: any) => {
-    setSelectedEntry(entry)
+    setSelectedEntryId(entry._id)
     setIsDetailDialogOpen(true)
   }
 
