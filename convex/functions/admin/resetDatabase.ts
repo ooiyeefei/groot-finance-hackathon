@@ -38,7 +38,6 @@ export const resetAllData = mutation({
       "stripe_events",
       "expense_claims",
       "invoices",
-      "accounting_entries",
       "vendors",
       "business_memberships",
       "users",

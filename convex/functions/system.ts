@@ -759,26 +759,21 @@ export const getAccountingEntriesForBusiness = query({
     }
 
     const entries = await ctx.db
-      .query("accounting_entries")
-      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .query("journal_entries")
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", business._id))
       .collect();
 
-    // Return entries with only the fields needed for analysis
-    // Map actual schema fields to what MCP tools expect
-    return entries.map((e) => ({
+    // Map journal entries to what MCP tools expect
+    return entries.map((e: any) => ({
       _id: e._id.toString(),
       businessId: e.businessId?.toString() ?? "",
-      transactionType: e.transactionType,
+      transactionType: e.sourceType || "manual",
       transactionDate: e.transactionDate,
-      category: e.category,
-      categoryName: e.category, // MCP tools expect categoryName, schema has category
-      vendorName: e.vendorName,
-      vendorId: e.vendorId?.toString(),
       description: e.description,
-      originalAmount: e.originalAmount,
-      homeCurrencyAmount: e.homeCurrencyAmount,
-      currency: e.originalCurrency, // MCP tools expect currency, schema has originalCurrency
-      deletedAt: e.deletedAt,
+      originalAmount: e.totalDebit,
+      homeCurrencyAmount: e.totalDebit,
+      currency: e.homeCurrency || "MYR",
+      status: e.status,
     }));
   },
 });

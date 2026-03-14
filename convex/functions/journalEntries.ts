@@ -652,7 +652,7 @@ export const searchForAI = query({
       })
     );
 
-    // Transform to AI-friendly format (similar to accounting_entries structure)
+    // Transform to AI-friendly format
     let transformedEntries = entriesWithLines.map((entry) => {
       // For expense entries, find the debit line in expense accounts (5000-5999)
       const expenseLine = entry.lines.find(

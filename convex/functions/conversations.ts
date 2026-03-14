@@ -235,7 +235,7 @@ export const getByBusinessId = query({
 export const getByContext = query({
   args: {
     contextDocumentId: v.optional(v.id("invoices")),
-    contextTransactionId: v.optional(v.id("accounting_entries")),
+    contextTransactionId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -282,7 +282,7 @@ export const create = mutation({
     title: v.optional(v.string()),
     language: v.optional(v.string()),
     contextDocumentId: v.optional(v.id("invoices")),
-    contextTransactionId: v.optional(v.id("accounting_entries")),
+    contextTransactionId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -343,7 +343,7 @@ export const update = mutation({
     language: v.optional(v.string()),
     isActive: v.optional(v.boolean()),
     contextDocumentId: v.optional(v.id("invoices")),
-    contextTransactionId: v.optional(v.id("accounting_entries")),
+    contextTransactionId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();

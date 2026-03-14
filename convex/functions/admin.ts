@@ -67,66 +67,32 @@ export const debugGetUserById = internalQuery({
 });
 
 /**
- * Debug: Get accounting entry by ID to check its userId reference
+ * Debug: Get journal entry by ID to check its details
  */
 export const debugGetEntryById = internalQuery({
   args: { entryId: v.string() },
   handler: async (ctx, args) => {
     // Try as Convex ID first
     try {
-      const entry = await ctx.db.get(args.entryId as Id<"accounting_entries">);
+      const entry = await ctx.db.get(args.entryId as Id<"journal_entries">);
       if (entry) {
-        // Also fetch the associated user
-        const user = entry.userId ? await ctx.db.get(entry.userId) : null;
-
         return {
           found: true,
           source: "convex_id",
           entry: {
             _id: entry._id,
-            userId: entry.userId,
             businessId: entry.businessId,
-            legacyId: entry.legacyId,
+            entryNumber: entry.entryNumber,
             description: entry.description,
-            deletedAt: entry.deletedAt,
+            status: entry.status,
+            createdBy: entry.createdBy,
+            transactionDate: entry.transactionDate,
           },
-          associatedUser: user ? {
-            _id: user._id,
-            clerkUserId: user.clerkUserId,
-            email: user.email,
-          } : null,
+          associatedUser: null,
         };
       }
     } catch (e) {
       // Not a valid Convex ID
-    }
-
-    // Try as legacy UUID
-    const entryByLegacy = await ctx.db
-      .query("accounting_entries")
-      .withIndex("by_legacyId", (q) => q.eq("legacyId", args.entryId))
-      .first();
-
-    if (entryByLegacy) {
-      const user = entryByLegacy.userId ? await ctx.db.get(entryByLegacy.userId) : null;
-
-      return {
-        found: true,
-        source: "legacy_id",
-        entry: {
-          _id: entryByLegacy._id,
-          userId: entryByLegacy.userId,
-          businessId: entryByLegacy.businessId,
-          legacyId: entryByLegacy.legacyId,
-          description: entryByLegacy.description,
-          deletedAt: entryByLegacy.deletedAt,
-        },
-        associatedUser: user ? {
-          _id: user._id,
-          clerkUserId: user.clerkUserId,
-          email: user.email,
-        } : null,
-      };
     }
 
     return { found: false, source: null, entry: null, associatedUser: null };
@@ -406,24 +372,30 @@ export const debugCheckMembership = internalQuery({
 });
 
 /**
- * Debug: List all entries for a user (ignoring business filtering)
+ * Debug: List all journal entries for a business
  */
 export const debugListUserEntries = internalQuery({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
+    // journal_entries doesn't have a by_userId index; look up the user's business first
+    const user = await ctx.db.get(args.userId);
+    if (!user || !user.businessId) {
+      return { total: 0, entries: [] };
+    }
+
     const entries = await ctx.db
-      .query("accounting_entries")
-      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .query("journal_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", user.businessId as Id<"businesses">))
       .collect();
 
     return {
       total: entries.length,
       entries: entries.map((e) => ({
         _id: e._id,
-        legacyId: e.legacyId,
+        entryNumber: e.entryNumber,
         businessId: e.businessId,
         description: e.description?.substring(0, 50),
-        deletedAt: e.deletedAt,
+        status: e.status,
       })),
     };
   },
@@ -459,14 +431,19 @@ export const mergeDuplicateUsers = internalMutation({
 
     console.log(`[MergeDuplicateUsers] Found ${users.length} users with clerkUserId ${args.clerkUserId}`);
 
-    // Count entries for each user to find canonical
+    // Count journal entries for each user's business to find canonical
     const userEntryCounts: Array<{ userId: Id<"users">; entryCount: number }> = [];
     for (const user of users) {
-      const entries = await ctx.db
-        .query("accounting_entries")
-        .withIndex("by_userId", (q) => q.eq("userId", user._id))
-        .collect();
-      userEntryCounts.push({ userId: user._id, entryCount: entries.length });
+      // journal_entries uses createdBy (string) not userId, so count by business
+      let entryCount = 0;
+      if (user.businessId) {
+        const entries = await ctx.db
+          .query("journal_entries")
+          .withIndex("by_businessId", (q) => q.eq("businessId", user.businessId as any))
+          .collect();
+        entryCount = entries.length;
+      }
+      userEntryCounts.push({ userId: user._id, entryCount });
     }
 
     // Sort by entry count (desc) to find canonical user
@@ -479,7 +456,6 @@ export const mergeDuplicateUsers = internalMutation({
 
     // Track changes
     const changes = {
-      accountingEntries: 0,
       memberships: 0,
       invoices: 0,
       expenseClaims: 0,
@@ -490,19 +466,7 @@ export const mergeDuplicateUsers = internalMutation({
 
     // Update all references for each duplicate user
     for (const duplicateId of duplicateUserIds) {
-      // 1. Update accounting_entries
-      const entries = await ctx.db
-        .query("accounting_entries")
-        .withIndex("by_userId", (q) => q.eq("userId", duplicateId))
-        .collect();
-      for (const entry of entries) {
-        if (!isDryRun) {
-          await ctx.db.patch(entry._id, { userId: canonicalUserId });
-        }
-        changes.accountingEntries++;
-      }
-
-      // 2. Update business_memberships
+      // 1. Update business_memberships
       const memberships = await ctx.db
         .query("business_memberships")
         .withIndex("by_userId", (q) => q.eq("userId", duplicateId))
@@ -530,7 +494,7 @@ export const mergeDuplicateUsers = internalMutation({
         changes.memberships++;
       }
 
-      // 3. Update invoices
+      // 2. Update invoices
       const invoices = await ctx.db
         .query("invoices")
         .withIndex("by_userId", (q) => q.eq("userId", duplicateId))
@@ -542,7 +506,7 @@ export const mergeDuplicateUsers = internalMutation({
         changes.invoices++;
       }
 
-      // 4. Update expense_claims
+      // 3. Update expense_claims
       const claims = await ctx.db
         .query("expense_claims")
         .withIndex("by_userId", (q) => q.eq("userId", duplicateId))
@@ -554,7 +518,7 @@ export const mergeDuplicateUsers = internalMutation({
         changes.expenseClaims++;
       }
 
-      // 5. Update conversations
+      // 4. Update conversations
       const conversations = await ctx.db
         .query("conversations")
         .withIndex("by_userId", (q) => q.eq("userId", duplicateId))
@@ -566,7 +530,7 @@ export const mergeDuplicateUsers = internalMutation({
         changes.conversations++;
       }
 
-      // 6. Delete duplicate user
+      // 5. Delete duplicate user
       if (!isDryRun) {
         await ctx.db.delete(duplicateId);
       }
@@ -665,14 +629,18 @@ export const batchMergeAllDuplicates = internalMutation({
       if (users.length <= 1) continue;
 
       try {
-        // Count entries for each user to find canonical
+        // Count journal entries for each user's business to find canonical
         const userEntryCounts: Array<{ userId: typeof users[0]["_id"]; entryCount: number }> = [];
         for (const user of users) {
-          const entries = await ctx.db
-            .query("accounting_entries")
-            .withIndex("by_userId", (q) => q.eq("userId", user._id))
-            .collect();
-          userEntryCounts.push({ userId: user._id, entryCount: entries.length });
+          let entryCount = 0;
+          if (user.businessId) {
+            const entries = await ctx.db
+              .query("journal_entries")
+              .withIndex("by_businessId", (q) => q.eq("businessId", user.businessId as any))
+              .collect();
+            entryCount = entries.length;
+          }
+          userEntryCounts.push({ userId: user._id, entryCount });
         }
 
         // Sort by entry count (desc) to find canonical user
@@ -682,18 +650,7 @@ export const batchMergeAllDuplicates = internalMutation({
 
         // Update all references for each duplicate user
         for (const duplicateId of duplicateUserIds) {
-          // 1. Update accounting_entries
-          const entries = await ctx.db
-            .query("accounting_entries")
-            .withIndex("by_userId", (q) => q.eq("userId", duplicateId))
-            .collect();
-          for (const entry of entries) {
-            if (!isDryRun) {
-              await ctx.db.patch(entry._id, { userId: canonicalUserId });
-            }
-          }
-
-          // 2. Update business_memberships
+          // 1. Update business_memberships
           const memberships = await ctx.db
             .query("business_memberships")
             .withIndex("by_userId", (q) => q.eq("userId", duplicateId))
@@ -712,7 +669,7 @@ export const batchMergeAllDuplicates = internalMutation({
             }
           }
 
-          // 3. Update invoices
+          // 2. Update invoices
           const invoices = await ctx.db
             .query("invoices")
             .withIndex("by_userId", (q) => q.eq("userId", duplicateId))
@@ -721,7 +678,7 @@ export const batchMergeAllDuplicates = internalMutation({
             if (!isDryRun) await ctx.db.patch(invoice._id, { userId: canonicalUserId });
           }
 
-          // 4. Update expense_claims
+          // 3. Update expense_claims
           const claims = await ctx.db
             .query("expense_claims")
             .withIndex("by_userId", (q) => q.eq("userId", duplicateId))
@@ -730,7 +687,7 @@ export const batchMergeAllDuplicates = internalMutation({
             if (!isDryRun) await ctx.db.patch(claim._id, { userId: canonicalUserId });
           }
 
-          // 5. Update conversations
+          // 4. Update conversations
           const conversations = await ctx.db
             .query("conversations")
             .withIndex("by_userId", (q) => q.eq("userId", duplicateId))
@@ -739,7 +696,7 @@ export const batchMergeAllDuplicates = internalMutation({
             if (!isDryRun) await ctx.db.patch(conv._id, { userId: canonicalUserId });
           }
 
-          // 6. Delete duplicate user
+          // 5. Delete duplicate user
           if (!isDryRun) await ctx.db.delete(duplicateId);
         }
 
@@ -850,48 +807,36 @@ export const debugMigrationStatus = query({
       result.diagnosis.push(`❌ User not found in database at all`);
     }
 
-    // Check entry if provided
+    // Check entry if provided (look up in journal_entries by source)
     if (args.legacyEntryId) {
-      const entry = await ctx.db
-        .query("accounting_entries")
-        .withIndex("by_legacyId", (q) => q.eq("legacyId", args.legacyEntryId))
-        .first();
+      // Try to find by Convex ID directly
+      let entry = null;
+      try {
+        entry = await ctx.db.get(args.legacyEntryId as Id<"journal_entries">);
+      } catch (e) {
+        // Not a valid Convex ID, try by sourceId
+        entry = await ctx.db
+          .query("journal_entries")
+          .withIndex("by_source", (q) => q.eq("sourceType", "migrated" as any).eq("sourceId", args.legacyEntryId))
+          .first();
+      }
 
       if (entry) {
-        const entryUser = entry.userId ? await ctx.db.get(entry.userId) : null;
         result.entryLookup = {
           found: true,
           entry: {
             _id: entry._id,
-            userId: entry.userId,
-            legacyId: entry.legacyId,
+            businessId: entry.businessId,
+            entryNumber: entry.entryNumber,
+            description: entry.description,
+            createdBy: entry.createdBy,
           },
-          associatedUser: entryUser
-            ? {
-                _id: entryUser._id,
-                clerkUserId: entryUser.clerkUserId,
-                email: entryUser.email,
-              }
-            : null,
+          associatedUser: null,
         };
-
-        // Check if entry's user matches current user
-        if (entryUser) {
-          if (entryUser._id === userByClerkId?._id) {
-            result.diagnosis.push(`✅ Entry's user matches current user by Clerk ID`);
-          } else if (entryUser._id === userByEmail?._id) {
-            result.diagnosis.push(
-              `⚠️ Entry's user matches current user by email, but Clerk ID doesn't match. This is why the entry is not showing up!`
-            );
-          } else {
-            result.diagnosis.push(
-              `❌ Entry belongs to a different user entirely`
-            );
-          }
-        }
+        result.diagnosis.push(`Found journal entry ${entry.entryNumber}`);
       } else {
         result.entryLookup = { found: false };
-        result.diagnosis.push(`❌ Entry with legacy ID ${args.legacyEntryId} not found`);
+        result.diagnosis.push(`Entry with ID ${args.legacyEntryId} not found in journal_entries`);
       }
     }
 

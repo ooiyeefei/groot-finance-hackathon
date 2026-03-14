@@ -159,40 +159,28 @@ export const list = query({
           ? String(startIndex + limit)
           : null;
 
-      // Fetch linked accounting entries for all invoices - batch fetch to eliminate N+1
-      const allInvoiceEntries = await ctx.db
-        .query("accounting_entries")
-        .withIndex("by_sourceDocument", (q) =>
-          q.eq("sourceDocumentType", "invoice")
-        )
-        .collect();
-
-      // Build map: sourceRecordId -> array of entries for that invoice
-      const entriesByInvoice = new Map<string, typeof allInvoiceEntries>();
-      for (const entry of allInvoiceEntries) {
-        if (!entry.sourceRecordId) continue;
-        const existing = entriesByInvoice.get(entry.sourceRecordId) || [];
-        existing.push(entry);
-        entriesByInvoice.set(entry.sourceRecordId, existing);
-      }
+      // Fetch linked journal entries for invoices that have journalEntryId
+      const journalEntryIds = paginatedInvoices
+        .map((inv) => inv.journalEntryId)
+        .filter(Boolean);
+      const journalEntries = await Promise.all(
+        journalEntryIds.map((id) => ctx.db.get(id!))
+      );
+      const jeMap = new Map(
+        journalEntries.filter(Boolean).map((je) => [je!._id.toString(), je!])
+      );
 
       const invoicesWithLinks = paginatedInvoices.map((invoice) => {
-        // Look for accounting entry linked to this invoice
-        // Collect all entries and find the first ACTIVE one (handles case where
-        // old entry was soft-deleted and new entry created)
-        const linkedEntries = entriesByInvoice.get(invoice._id) || [];
-        const linkedEntry = linkedEntries.find(entry => !entry.deletedAt);
-        const isLinkedTransactionActive = !!linkedEntry;
-
+        const je = invoice.journalEntryId ? jeMap.get(invoice.journalEntryId.toString()) : null;
         return {
           ...invoice,
-          linkedTransaction: isLinkedTransactionActive
+          linkedTransaction: je
             ? {
-                id: linkedEntry._id,
-                description: linkedEntry.description || "",
-                originalAmount: linkedEntry.originalAmount,
-                originalCurrency: linkedEntry.originalCurrency,
-                createdAt: linkedEntry._creationTime,
+                id: je._id,
+                description: (je as any).description || "",
+                originalAmount: (je as any).totalDebit,
+                originalCurrency: (je as any).homeCurrency || "MYR",
+                createdAt: je._creationTime,
               }
             : null,
         };
@@ -230,40 +218,22 @@ export const list = query({
         ? String(startIndex + limit)
         : null;
 
-    // Fetch linked accounting entries for all invoices - batch fetch to eliminate N+1
-    const allInvoiceEntries = await ctx.db
-      .query("accounting_entries")
-      .withIndex("by_sourceDocument", (q) =>
-        q.eq("sourceDocumentType", "invoice")
-      )
-      .collect();
-
-    // Build map: sourceRecordId -> array of entries for that invoice
-    const entriesByInvoice = new Map<string, typeof allInvoiceEntries>();
-    for (const entry of allInvoiceEntries) {
-      if (!entry.sourceRecordId) continue;
-      const existing = entriesByInvoice.get(entry.sourceRecordId) || [];
-      existing.push(entry);
-      entriesByInvoice.set(entry.sourceRecordId, existing);
-    }
+    // Use journalEntryId directly on invoices (no accounting_entries lookup needed)
+    const jeIds2 = paginatedInvoices.map((inv) => inv.journalEntryId).filter(Boolean);
+    const jes2 = await Promise.all(jeIds2.map((id) => ctx.db.get(id!)));
+    const jeMap2 = new Map(jes2.filter(Boolean).map((je) => [je!._id.toString(), je!]));
 
     const invoicesWithLinks = paginatedInvoices.map((invoice) => {
-      // Look for accounting entry linked to this invoice
-      // Collect all entries and find the first ACTIVE one (handles case where
-      // old entry was soft-deleted and new entry created)
-      const linkedEntries = entriesByInvoice.get(invoice._id) || [];
-      const linkedEntry = linkedEntries.find(entry => !entry.deletedAt);
-      const isLinkedTransactionActive = !!linkedEntry;
-
+      const je = invoice.journalEntryId ? jeMap2.get(invoice.journalEntryId.toString()) : null;
       return {
         ...invoice,
-        linkedTransaction: isLinkedTransactionActive
+        linkedTransaction: je
           ? {
-              id: linkedEntry._id,
-              description: linkedEntry.description || "",
-              originalAmount: linkedEntry.originalAmount,
-              originalCurrency: linkedEntry.originalCurrency,
-              createdAt: linkedEntry._creationTime,
+              id: je._id,
+              description: (je as any).description || "",
+              originalAmount: (je as any).totalDebit,
+              originalCurrency: (je as any).homeCurrency || "MYR",
+              createdAt: je._creationTime,
             }
           : null,
       };
@@ -1021,23 +991,14 @@ export const internalUpdateExtraction = internalMutation({
     console.log(`[Convex Internal] Updated invoice ${args.id} extraction results`);
 
     // ============================================
-    // Auto-post to accounting_entries for AP invoices
+    // Auto-post journal entry for AP invoices
     // Mirrors expense claims (on approval) and sales invoices (on send)
     // ============================================
     if (invoice.businessId && invoice.documentDomain !== "expense_claims") {
       const extracted = args.extractedData as Record<string, unknown> | undefined;
       if (extracted) {
-        // Duplicate guard: skip if already posted (e.g. on reprocess)
-        const existingEntry = await ctx.db
-          .query("accounting_entries")
-          .withIndex("by_sourceDocument", (q) =>
-            q
-              .eq("sourceDocumentType", "invoice")
-              .eq("sourceRecordId", invoice._id.toString())
-          )
-          .first();
-
-        if (!existingEntry) {
+        // Duplicate guard: skip if already posted (check journalEntryId on invoice)
+        if (!invoice.journalEntryId) {
           const vendorName = (extracted.vendor_name as string) ?? (extracted.vendorName as string) ?? "";
           const totalAmount = (extracted.total_amount as number) ?? (extracted.totalAmount as number) ?? 0;
           const currency = (extracted.currency as string) ?? "MYR";
@@ -1909,17 +1870,11 @@ export const getCompletedForAI = query({
       .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0))
       .slice(0, args.limit ?? 20);
 
-    // Check which invoices already have accounting entries posted
-    const invoiceIds = new Set(completed.map((inv) => inv._id.toString()));
-    const allEntries = await ctx.db
-      .query("accounting_entries")
-      .withIndex("by_businessId", (q) => q.eq("businessId", businessId))
-      .collect();
+    // Check which invoices already have journal entries posted
     const postedInvoiceIds = new Set(
-      allEntries
-        .filter((e) => !e.deletedAt && e.sourceDocumentType === "invoice" && e.sourceRecordId)
-        .map((e) => e.sourceRecordId!.toString())
-        .filter((id) => invoiceIds.has(id))
+      completed
+        .filter((inv) => inv.journalEntryId || inv.accountingStatus === "posted")
+        .map((inv) => inv._id.toString())
     );
 
     // Map to AI-friendly shape with normalized camelCase line items

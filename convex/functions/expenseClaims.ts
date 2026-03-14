@@ -293,8 +293,8 @@ export const getById = query({
     const approver = claim.approvedBy
       ? await ctx.db.get(claim.approvedBy)
       : null;
-    const accountingEntry = claim.accountingEntryId
-      ? await ctx.db.get(claim.accountingEntryId)
+    const accountingEntry = (claim as any).journalEntryId
+      ? await ctx.db.get((claim as any).journalEntryId)
       : null;
 
     return {
@@ -1185,7 +1185,7 @@ export const updateStatus = mutation({
           updateData.journalEntryId = journalEntryId;
 
           // Schedule real-time anomaly detection for this expense
-          // Note: Action Center now queries journal_entry_lines instead of accounting_entries
+          // Note: Action Center now queries journal_entry_lines
           await ctx.scheduler.runAfter(0, internal.functions.actionCenterJobs.analyzeNewTransaction, {
             transactionId: journalEntryId,
             businessId: claim.businessId,
@@ -1223,16 +1223,7 @@ export const updateStatus = mutation({
         }
         updateData.paidAt = now;
 
-        // Update the linked accounting entry status to 'paid'
-        if (claim.accountingEntryId) {
-          const isoDate = new Date(now).toISOString().split("T")[0];
-          await ctx.db.patch(claim.accountingEntryId, {
-            status: "paid",
-            paymentDate: isoDate,
-            updatedAt: now,
-          });
-          console.log(`[Convex] Updated accounting entry ${claim.accountingEntryId} status to 'paid'`);
-        }
+        // accounting_entries update removed — table dropped
 
         // Double-entry accounting integration
         try {
@@ -1808,15 +1799,15 @@ export const getFormattedReportData = query({
 
     // Enrich with employee and accounting entry details - batch fetch to eliminate N+1
     const employeeIds = [...new Set(claims.map((c) => c.userId))] as Id<"users">[];
-    const entryIds = [
+    const journalEntryIds = [
       ...new Set(
-        claims.map((c) => c.accountingEntryId).filter((id): id is Id<"accounting_entries"> => !!id)
+        claims.map((c) => (c as any).journalEntryId).filter(Boolean)
       ),
-    ] as Id<"accounting_entries">[];
+    ];
 
     const [employees, entries] = await Promise.all([
       Promise.all(employeeIds.map((id) => ctx.db.get(id))),
-      Promise.all(entryIds.map((id) => ctx.db.get(id))),
+      Promise.all(journalEntryIds.map((id: any) => ctx.db.get(id))),
     ]);
 
     const employeeMap = new Map(
@@ -1832,8 +1823,8 @@ export const getFormattedReportData = query({
 
     const enrichedClaims = claims.map((claim) => {
       const employee = employeeMap.get(claim.userId);
-      const accountingEntry = claim.accountingEntryId
-        ? entryMap.get(claim.accountingEntryId)
+      const accountingEntry = (claim as any).journalEntryId
+        ? entryMap.get((claim as any).journalEntryId)
         : null;
 
       return {
@@ -3432,7 +3423,7 @@ export const getPendingPaymentClaims = query({
 
 /**
  * Batch mark expense claims as reimbursed (paid).
- * Updates both expense_claims and linked accounting_entries atomically.
+ * Updates expense_claims and creates journal entries for approved claims.
  */
 export const batchMarkAsPaid = mutation({
   args: {
@@ -3477,18 +3468,7 @@ export const batchMarkAsPaid = mutation({
         updatedAt: now,
       });
 
-      // Update linked accounting entry if exists
-      if (claim.accountingEntryId) {
-        const entry = await ctx.db.get(claim.accountingEntryId);
-        if (entry && !entry.deletedAt) {
-          await ctx.db.patch(claim.accountingEntryId, {
-            status: "paid",
-            paymentDate: args.paymentDate || new Date().toISOString().split("T")[0],
-            paymentMethod: args.paymentMethod,
-            updatedAt: now,
-          });
-        }
-      }
+      // accounting_entries update removed — table dropped
 
       // Track totals per currency
       const currency = claim.currency || claim.homeCurrency || "MYR";

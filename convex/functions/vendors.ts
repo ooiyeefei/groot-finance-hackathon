@@ -261,29 +261,35 @@ export const getVendorContext = query({
       return null;
     }
 
-    // Fetch unpaid entries for this vendor
-    const entries = await ctx.db
-      .query("accounting_entries")
-      .withIndex("by_businessId_vendorId_status", (q) =>
-        q.eq("businessId", args.businessId).eq("vendorId", args.vendorId)
+    // Fetch unpaid vendor journal entry lines (expense accounts 5000-5999)
+    const vendorLines = await ctx.db
+      .query("journal_entry_lines")
+      .withIndex("by_entity", (q) =>
+        q.eq("entityType", "vendor").eq("entityId", args.vendorId)
       )
       .collect();
 
-    const unpaidEntries = entries.filter(
-      (e) =>
-        !e.deletedAt &&
-        (e.status === "pending" || e.status === "overdue") &&
-        (e.transactionType === "Expense" || e.transactionType === "Cost of Goods Sold")
+    // Filter to expense account lines with outstanding debit amounts
+    const expenseLines = vendorLines.filter(
+      (line: any) =>
+        line.businessId === args.businessId &&
+        line.accountCode >= "5000" &&
+        line.accountCode < "6000" &&
+        line.debitAmount > 0
     );
 
+    // Look up parent journal entries to get due dates and check status
     let totalAmount = 0;
     let oldestDueDate: string | undefined;
 
-    for (const entry of unpaidEntries) {
-      const outstanding = (entry.homeCurrencyAmount ?? entry.originalAmount) - (entry.paidAmount ?? 0);
-      totalAmount += outstanding;
-      if (entry.dueDate && (!oldestDueDate || entry.dueDate < oldestDueDate)) {
-        oldestDueDate = entry.dueDate;
+    for (const line of expenseLines) {
+      const journalEntry = await ctx.db.get(line.journalEntryId);
+      if (!journalEntry || journalEntry.status === "voided") continue;
+
+      totalAmount += line.debitAmount - line.creditAmount;
+      const dueDate = (journalEntry as any).dueDate;
+      if (dueDate && (!oldestDueDate || dueDate < oldestDueDate)) {
+        oldestDueDate = dueDate;
       }
     }
 
@@ -311,7 +317,7 @@ export const getVendorContext = query({
       },
       outstanding: {
         totalAmount,
-        entryCount: unpaidEntries.length,
+        entryCount: expenseLines.length,
         oldestDueDate,
       },
       suggestedDueDate,
@@ -618,16 +624,15 @@ export const remove = mutation({
       throw new Error("Only owners can permanently delete vendors");
     }
 
-    // Check for linked accounting entries
-    // (Convex doesn't support .filter() after .withIndex() - use JS find)
-    const allBusinessEntries = await ctx.db
-      .query("accounting_entries")
-      .withIndex("by_businessId", (q) => q.eq("businessId", vendor.businessId))
-      .collect();
+    // Check for linked journal entry lines (vendor has accounting activity)
+    const linkedLines = await ctx.db
+      .query("journal_entry_lines")
+      .withIndex("by_entity", (q) =>
+        q.eq("entityType", "vendor").eq("entityId", vendor._id)
+      )
+      .first();
 
-    const linkedEntries = allBusinessEntries.find((e) => e.vendorId === vendor._id);
-
-    if (linkedEntries) {
+    if (linkedLines) {
       throw new Error(
         "Cannot delete vendor with linked transactions. Deactivate instead."
       );
@@ -775,25 +780,28 @@ export const demoteExpenseClaimVendors = internalMutation({
       .collect()
       .then((vs) => vs.filter((v) => v.status === "active"));
 
-    // Get all accounting entries for this business
-    const allEntries = await ctx.db
-      .query("accounting_entries")
-      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
-      .collect()
-      .then((es) => es.filter((e) => !e.deletedAt && e.vendorId));
-
-    // For each active vendor: check if it has ANY invoice-sourced accounting entry
+    // For each active vendor: check if it has ANY invoice-sourced journal entry
     const results = [];
     const now = Date.now();
 
     for (const vendor of activeVendors) {
-      const vendorEntries = allEntries.filter(
-        (e) => e.vendorId?.toString() === vendor._id.toString()
-      );
+      // Get all journal entry lines for this vendor
+      const vendorLines = await ctx.db
+        .query("journal_entry_lines")
+        .withIndex("by_entity", (q) =>
+          q.eq("entityType", "vendor").eq("entityId", vendor._id)
+        )
+        .collect();
 
-      const hasInvoiceEntry = vendorEntries.some(
-        (e) => e.sourceDocumentType !== "expense_claim"
-      );
+      // Check parent journal entries for non-expense-claim sources
+      let hasInvoiceEntry = false;
+      for (const line of vendorLines) {
+        const je = await ctx.db.get(line.journalEntryId);
+        if (je && (je as any).referenceType !== "expense_claim") {
+          hasInvoiceEntry = true;
+          break;
+        }
+      }
 
       if (!hasInvoiceEntry) {
         // All activity is from expense claims — demote to prospective
@@ -801,7 +809,7 @@ export const demoteExpenseClaimVendors = internalMutation({
           vendorId: vendor._id,
           name: vendor.name,
           action: "demoted",
-          entryCount: vendorEntries.length,
+          entryCount: vendorLines.length,
         });
 
         if (!args.dryRun) {
@@ -815,7 +823,7 @@ export const demoteExpenseClaimVendors = internalMutation({
           vendorId: vendor._id,
           name: vendor.name,
           action: "kept_active",
-          entryCount: vendorEntries.length,
+          entryCount: vendorLines.length,
         });
       }
     }
@@ -910,24 +918,28 @@ export const deleteExpenseOnlyVendors = internalMutation({
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
       .collect();
 
-    const allEntries = await ctx.db
-      .query("accounting_entries")
-      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
-      .collect()
-      .then((es) => es.filter((e) => !e.deletedAt && e.vendorId));
-
     const results = [];
 
     for (const vendor of vendors) {
       if (vendor.status === "inactive") continue; // leave manually managed vendors alone
 
-      const vendorEntries = allEntries.filter(
-        (e) => e.vendorId?.toString() === vendor._id.toString()
-      );
+      // Get all journal entry lines for this vendor
+      const vendorLines = await ctx.db
+        .query("journal_entry_lines")
+        .withIndex("by_entity", (q) =>
+          q.eq("entityType", "vendor").eq("entityId", vendor._id)
+        )
+        .collect();
 
-      const hasInvoiceEntry = vendorEntries.some(
-        (e) => e.sourceDocumentType !== "expense_claim"
-      );
+      // Check parent journal entries for non-expense-claim sources
+      let hasInvoiceEntry = false;
+      for (const line of vendorLines) {
+        const je = await ctx.db.get(line.journalEntryId);
+        if (je && (je as any).referenceType !== "expense_claim") {
+          hasInvoiceEntry = true;
+          break;
+        }
+      }
 
       if (!hasInvoiceEntry) {
         // Delete price history first

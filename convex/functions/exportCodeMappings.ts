@@ -238,16 +238,16 @@ export const getDistinctMappableValues = query({
 
     if (args.module === "accounting") {
       const entries = await ctx.db
-        .query("accounting_entries")
-        .withIndex("by_businessId", (q) => q.eq("businessId", bizId))
+        .query("journal_entries")
+        .withIndex("by_businessId", (q: any) => q.eq("businessId", bizId))
         .collect();
 
       if (args.mappingTypes.includes("account_code")) {
         const codes = [
           ...new Set(
             entries
-              .map((e) => e.category)
-              .filter((c): c is string => !!c)
+              .map((e: any) => e.sourceType || e.description)
+              .filter((c: any): c is string => !!c)
           ),
         ];
         result.account_code = codes.sort();

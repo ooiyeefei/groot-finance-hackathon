@@ -586,8 +586,7 @@ export const getUpcomingPayments = query({
 });
 
 /**
- * Get currency exposure breakdown
- * NOTE: Still uses accounting_entries for pending transactions with currency metadata.
+ * Get currency exposure breakdown from unpaid invoices
  */
 export const getCurrencyExposure = query({
   args: {
@@ -604,7 +603,6 @@ export const getCurrencyExposure = query({
       return null;
     }
 
-    // Verify business membership
     const membership = await ctx.db
       .query("business_memberships")
       .withIndex("by_userId_businessId", (q) =>
@@ -616,23 +614,24 @@ export const getCurrencyExposure = query({
       return null;
     }
 
-    // NOTE: Still using accounting_entries for pending transactions
-    const entries = await ctx.db
-      .query("accounting_entries")
-      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+    // Query unpaid invoices for currency exposure
+    const invoices = await ctx.db
+      .query("invoices")
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", args.businessId))
       .collect();
 
-    const activeTransactions = entries.filter((entry) => {
-      if (entry.deletedAt) return false;
-      return ["pending"].includes(entry.status);
-    });
+    const unpaidInvoices = invoices.filter(
+      (inv: any) => !inv.deletedAt && inv.accountingStatus === "posted" && inv.paymentStatus !== "paid"
+    );
 
     const currencyTotals: Record<string, number> = {};
     let totalAmount = 0;
 
-    for (const txn of activeTransactions) {
-      const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
-      const currency = txn.originalCurrency || "MYR";
+    for (const inv of unpaidInvoices) {
+      const extracted = (inv as any).extractedData || {};
+      const je = inv.journalEntryId ? await ctx.db.get(inv.journalEntryId) : null;
+      const amount = (je as any)?.totalDebit ?? (typeof extracted.total_amount === "number" ? extracted.total_amount : 0);
+      const currency = extracted.currency?.value || extracted.currency || "MYR";
 
       if (!currencyTotals[currency]) {
         currencyTotals[currency] = 0;
@@ -663,14 +662,14 @@ export const getCurrencyExposure = query({
     return {
       currencyExposure,
       totalOutstanding: totalAmount,
-      transactionCount: activeTransactions.length,
+      transactionCount: unpaidInvoices.length,
     };
   },
 });
 
 /**
  * Get cash flow projection data
- * NOTE: Still uses accounting_entries for pending transactions with due dates.
+ * Cash flow projection from invoices and sales_invoices.
  */
 export const getCashFlowProjection = query({
   args: {
@@ -706,29 +705,37 @@ export const getCashFlowProjection = query({
     const currentDateStr = currentDate.toISOString().split("T")[0];
     const periodEndStr = periodEnd.toISOString().split("T")[0];
 
-    // NOTE: Still using accounting_entries for pending transactions with due dates
-    const entries = await ctx.db
-      .query("accounting_entries")
-      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+    // Project cash flows from unpaid invoices (AP outflows) and sales invoices (AR inflows)
+    const apInvoices = await ctx.db
+      .query("invoices")
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", args.businessId))
       .collect();
-
-    const relevantTransactions = entries.filter((entry) => {
-      if (entry.deletedAt) return false;
-      if (!entry.dueDate) return false;
-      return entry.dueDate >= currentDateStr && entry.dueDate <= periodEndStr;
-    });
+    const arInvoices = await ctx.db
+      .query("sales_invoices")
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", args.businessId))
+      .collect();
 
     let projectedInflows = 0;
     let projectedOutflows = 0;
 
-    for (const txn of relevantTransactions) {
-      const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
+    // AP outflows: unpaid vendor invoices with dueDate in period
+    for (const inv of apInvoices) {
+      if ((inv as any).deletedAt || (inv as any).paymentStatus === "paid") continue;
+      const dueDate = (inv as any).dueDate;
+      if (!dueDate || dueDate < currentDateStr || dueDate > periodEndStr) continue;
+      const je = inv.journalEntryId ? await ctx.db.get(inv.journalEntryId) : null;
+      const amount = (je as any)?.totalDebit ?? 0;
+      const outstanding = amount - ((inv as any).paidAmount ?? 0);
+      projectedOutflows += outstanding;
+    }
 
-      if (txn.transactionType === "Income") {
-        projectedInflows += amount;
-      } else {
-        projectedOutflows += amount;
-      }
+    // AR inflows: unpaid sales invoices with dueDate in period
+    for (const inv of arInvoices) {
+      if ((inv as any).deletedAt) continue;
+      if (!["sent", "overdue", "partially_paid"].includes((inv as any).status)) continue;
+      const dueDate = (inv as any).dueDate;
+      if (!dueDate || dueDate < currentDateStr || dueDate > periodEndStr) continue;
+      projectedInflows += (inv as any).balanceDue ?? (inv as any).totalAmount ?? 0;
     }
 
     // Get business home currency
@@ -743,7 +750,7 @@ export const getCashFlowProjection = query({
       projectedOutflows,
       netCashFlow: projectedInflows - projectedOutflows,
       currency: homeCurrency,
-      transactionCount: relevantTransactions.length,
+      transactionCount: apInvoices.length + arInvoices.length,
     };
   },
 });

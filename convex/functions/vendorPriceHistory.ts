@@ -610,7 +610,7 @@ export const confirmPriceObservations = internalMutation({
   args: {
     sourceType: v.union(v.literal("invoice"), v.literal("expense_claim")),
     sourceId: v.string(),
-    accountingEntryId: v.id("accounting_entries"),
+    accountingEntryId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Find all price observations for this source

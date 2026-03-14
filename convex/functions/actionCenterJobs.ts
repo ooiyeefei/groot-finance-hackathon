@@ -90,14 +90,14 @@ function resolveCategoryName(
 }
 
 /**
- * Classify an accounting entry's domain based on vendorId presence.
- * - "ap_vendor": has vendorId (linked to vendors table) — AP/supplier domain
- * - "cogs": transactionType is Cost of Goods Sold
- * - "expense_claim": no vendorId — employee expense claim domain
+ * Classify a journal entry line's domain based on entityType and accountCode.
+ * - "ap_vendor": entityType is "vendor" — AP/supplier domain
+ * - "cogs": accountCode starts with "5" and has vendor entity — Cost of Goods Sold
+ * - "expense_claim": entityType is "employee" or no entity — employee expense claim domain
  */
-function classifyEntryDomain(entry: any): "ap_vendor" | "cogs" | "expense_claim" {
-  if (entry.transactionType === "Cost of Goods Sold") return "cogs";
-  if (entry.vendorId) return "ap_vendor";
+function classifyLineDomain(line: any): "ap_vendor" | "cogs" | "expense_claim" {
+  if (line.entityType === "vendor") return "ap_vendor";
+  if (line.entityType === "employee") return "expense_claim";
   return "expense_claim";
 }
 
@@ -192,18 +192,25 @@ export const getBusinessSummary = internalQuery({
     // Business info
     const business = await ctx.db.get(args.businessId);
 
-    // Accounting entries (last 90 days)
-    const entries = await ctx.db
-      .query("accounting_entries")
+    // Journal entries (last 90 days)
+    const journalEntries = await ctx.db
+      .query("journal_entries")
       .withIndex("by_businessId", (q: any) => q.eq("businessId", args.businessId))
       .collect();
 
-    const recent = entries.filter(
-      (e: any) => !e.deletedAt && e.transactionDate && e.transactionDate >= ninetyDaysAgo
+    const recentEntries = journalEntries.filter(
+      (e: any) => e.status === "posted" && e.transactionDate && e.transactionDate >= ninetyDaysAgo
     );
 
-    // Load business custom categories for name resolution
-    const customCategories = ((business as any)?.customExpenseCategories as Array<{ id: string; category_name: string }>) || [];
+    // Load all journal entry lines for recent entries
+    const allLines: any[] = [];
+    for (const entry of recentEntries) {
+      const lines = await ctx.db
+        .query("journal_entry_lines")
+        .withIndex("by_journal_entry", (q: any) => q.eq("journalEntryId", entry._id))
+        .collect();
+      allLines.push(...lines);
+    }
 
     let totalIncome = 0;
     let totalExpenses = 0;
@@ -213,34 +220,52 @@ export const getBusinessSummary = internalQuery({
     let pendingPayables = 0;
     let overduePayables = 0;
 
-    for (const e of recent) {
-      const amount = Math.abs(e.homeCurrencyAmount || e.originalAmount || 0);
-      if (e.transactionType === "Income") {
-        totalIncome += amount;
-      } else {
-        totalExpenses += amount;
-        const catCode = e.category || "uncategorized";
-        const catName = resolveCategoryName(catCode, customCategories);
-        categorySpend[catName] = (categorySpend[catName] || 0) + amount;
+    for (const line of allLines) {
+      // Income: account codes 4000-4999 (credit amounts)
+      if (line.accountCode >= "4000" && line.accountCode < "5000" && line.creditAmount > 0) {
+        totalIncome += line.creditAmount;
+      }
+      // Expenses: account codes 5000-5999 (debit amounts)
+      if (line.accountCode >= "5000" && line.accountCode < "6000" && line.debitAmount > 0) {
+        totalExpenses += line.debitAmount;
+        const catName = line.accountName || "Uncategorized";
+        categorySpend[catName] = (categorySpend[catName] || 0) + line.debitAmount;
 
         // Separate AP suppliers from expense-claim merchants
-        const domain = classifyEntryDomain(e);
-        const payeeName = e.vendorName || "Unknown";
+        const domain = classifyLineDomain(line);
+        const payeeName = line.entityName || "Unknown";
         if (domain === "ap_vendor" || domain === "cogs") {
           if (!supplierSpend[payeeName]) supplierSpend[payeeName] = { name: payeeName, amount: 0, count: 0 };
-          supplierSpend[payeeName].amount += amount;
+          supplierSpend[payeeName].amount += line.debitAmount;
           supplierSpend[payeeName].count++;
         } else {
           if (!merchantSpend[payeeName]) merchantSpend[payeeName] = { name: payeeName, amount: 0, count: 0 };
-          merchantSpend[payeeName].amount += amount;
+          merchantSpend[payeeName].amount += line.debitAmount;
           merchantSpend[payeeName].count++;
         }
       }
-      if (e.status === "pending" && (e.transactionType === "Expense" || e.transactionType === "Cost of Goods Sold")) {
-        pendingPayables += amount;
+    }
+
+    // AP pending/overdue from invoices table
+    const invoices = await ctx.db
+      .query("invoices")
+      .filter((q: any) =>
+        q.and(
+          q.eq(q.field("businessId"), args.businessId),
+          q.eq(q.field("deletedAt"), undefined)
+        )
+      )
+      .collect();
+
+    for (const inv of invoices) {
+      const amount = (inv as any).extractedData?.total_amount || 0;
+      const paid = (inv as any).paidAmount || 0;
+      const remaining = amount - paid;
+      if ((inv as any).paymentStatus === "unpaid" || (inv as any).paymentStatus === "partial") {
+        pendingPayables += remaining;
       }
-      if (e.status === "overdue") {
-        overduePayables += amount;
+      if ((inv as any).dueDate && (inv as any).dueDate < ninetyDaysAgo && (inv as any).paymentStatus !== "paid") {
+        overduePayables += remaining;
       }
     }
 
@@ -309,7 +334,7 @@ export const getBusinessSummary = internalQuery({
       homeCurrency: business?.homeCurrency || "MYR",
       totalIncome: Math.round(totalIncome),
       totalExpenses: Math.round(totalExpenses),
-      transactionCount: recent.length,
+      transactionCount: recentEntries.length,
       topVendors: topSuppliers, // backward compat alias
       topSuppliers,
       topMerchants,
@@ -326,6 +351,7 @@ export const getBusinessSummary = internalQuery({
 
 /**
  * Get recent transactions for a business (for anomaly detection)
+ * Returns journal entries with their lines for the given date range.
  */
 export const getRecentTransactions = internalQuery({
   args: {
@@ -337,13 +363,13 @@ export const getRecentTransactions = internalQuery({
     const cutoffDate = new Date(cutoffTime).toISOString().split("T")[0];
 
     const entries = await ctx.db
-      .query("accounting_entries")
-      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .query("journal_entries")
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", args.businessId))
       .collect();
 
-    // Filter to recent, non-deleted transactions
+    // Filter to recent, posted entries
     const recentEntries = entries.filter(
-      (e) => !e.deletedAt && e.transactionDate && e.transactionDate >= cutoffDate
+      (e: any) => e.status === "posted" && e.transactionDate && e.transactionDate >= cutoffDate
     );
 
     return recentEntries;
@@ -352,6 +378,7 @@ export const getRecentTransactions = internalQuery({
 
 /**
  * Get historical transaction statistics (for baseline calculation)
+ * Queries journal_entry_lines for expense accounts (5000-5999).
  */
 export const getTransactionStats = internalQuery({
   args: {
@@ -359,32 +386,32 @@ export const getTransactionStats = internalQuery({
     category: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const entries = await ctx.db
-      .query("accounting_entries")
-      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+    // Query expense lines (account codes 5000-5999)
+    const lines = await ctx.db
+      .query("journal_entry_lines")
+      .withIndex("by_business_account", (q: any) => q.eq("businessId", args.businessId))
       .collect();
 
-    // Filter to non-deleted, expense transactions
-    let expenses = entries.filter(
-      (e) => !e.deletedAt && e.transactionType === "Expense"
+    let expenseLines = lines.filter(
+      (l: any) => l.accountCode >= "5000" && l.accountCode < "6000" && l.debitAmount > 0
     );
 
     if (args.category) {
-      expenses = expenses.filter((e) => e.category === args.category);
+      expenseLines = expenseLines.filter((l: any) => l.accountName === args.category);
     }
 
-    if (expenses.length === 0) {
+    if (expenseLines.length === 0) {
       return { count: 0, mean: 0, stdDev: 0, total: 0 };
     }
 
     // Calculate statistics
-    const amounts = expenses.map((e) => Math.abs(e.homeCurrencyAmount || e.originalAmount || 0));
-    const total = amounts.reduce((sum, a) => sum + a, 0);
+    const amounts = expenseLines.map((l: any) => l.debitAmount);
+    const total = amounts.reduce((sum: number, a: number) => sum + a, 0);
     const mean = total / amounts.length;
 
     // Standard deviation
-    const squaredDiffs = amounts.map((a) => Math.pow(a - mean, 2));
-    const variance = squaredDiffs.reduce((sum, d) => sum + d, 0) / amounts.length;
+    const squaredDiffs = amounts.map((a: number) => Math.pow(a - mean, 2));
+    const variance = squaredDiffs.reduce((sum: number, d: number) => sum + d, 0) / amounts.length;
     const stdDev = Math.sqrt(variance);
 
     return {
@@ -398,24 +425,30 @@ export const getTransactionStats = internalQuery({
 
 /**
  * Get uncategorized transaction count
+ * Checks journal_entry_lines for lines without a meaningful account name.
  */
 export const getUncategorizedCount = internalQuery({
   args: {
     businessId: v.id("businesses"),
   },
   handler: async (ctx, args) => {
-    const entries = await ctx.db
-      .query("accounting_entries")
-      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+    const lines = await ctx.db
+      .query("journal_entry_lines")
+      .withIndex("by_business_account", (q: any) => q.eq("businessId", args.businessId))
       .collect();
 
-    const uncategorized = entries.filter(
-      (e) => !e.deletedAt && (!e.category || e.category === "uncategorized")
+    // Expense lines (5000-5999) without proper categorization
+    const expenseLines = lines.filter(
+      (l: any) => l.accountCode >= "5000" && l.accountCode < "6000" && l.debitAmount > 0
+    );
+
+    const uncategorized = expenseLines.filter(
+      (l: any) => !l.accountName || l.accountName === "uncategorized" || l.accountName === "Uncategorized"
     );
 
     return {
       uncategorizedCount: uncategorized.length,
-      totalCount: entries.filter((e) => !e.deletedAt).length,
+      totalCount: expenseLines.length,
       transactions: uncategorized.slice(0, 10), // Return first 10 for metadata
     };
   },
@@ -547,15 +580,32 @@ async function runAnomalyDetection(
   businessId: any,
   memberUserIds: string[]
 ): Promise<number> {
-  // Get recent transactions (last 90 days)
-  const recentTxns = await ctx.db
-    .query("accounting_entries")
+  // Get recent journal entries (last 90 days) with their expense lines
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+  const journalEntries = await ctx.db
+    .query("journal_entries")
     .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
     .collect();
 
-  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-  const recent = recentTxns.filter(
-    (e: any) => !e.deletedAt && e.transactionDate && e.transactionDate >= ninetyDaysAgo
+  const recentJE = journalEntries.filter(
+    (e: any) => e.status === "posted" && e.transactionDate && e.transactionDate >= ninetyDaysAgo
+  );
+
+  // Build a map of journalEntryId -> transactionDate for date filtering
+  const jeMap = new Map<string, any>();
+  for (const je of recentJE) {
+    jeMap.set(je._id.toString(), je);
+  }
+
+  // Get all expense lines for this business (account codes 5000-5999)
+  const allLines = await ctx.db
+    .query("journal_entry_lines")
+    .withIndex("by_business_account", (q: any) => q.eq("businessId", businessId))
+    .collect();
+
+  const expenseLines = allLines.filter(
+    (l: any) => l.accountCode >= "5000" && l.accountCode < "6000" && l.debitAmount > 0 && jeMap.has(l.journalEntryId.toString())
   );
 
   // Load business custom categories for name resolution
@@ -564,19 +614,22 @@ async function runAnomalyDetection(
 
   // Calculate monthly expenses for materiality threshold
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-  const monthlyExpenses = recent
-    .filter((e: any) => e.transactionType !== "Income" && e.transactionDate >= thirtyDaysAgo)
-    .reduce((sum: number, e: any) => sum + Math.abs(e.homeCurrencyAmount || e.originalAmount || 0), 0);
+  const monthlyExpenses = expenseLines
+    .filter((l: any) => {
+      const je = jeMap.get(l.journalEntryId.toString());
+      return je && je.transactionDate >= thirtyDaysAgo;
+    })
+    .reduce((sum: number, l: any) => sum + l.debitAmount, 0);
 
-  // Group by category to calculate stats
-  const byCategory: Record<string, number[]> = {};
-  for (const txn of recent) {
-    const category = txn.category || "uncategorized";
-    const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
+  // Group by account name (category) to calculate stats
+  const byCategory: Record<string, Array<{ amount: number; line: any; je: any }>> = {};
+  for (const line of expenseLines) {
+    const category = line.accountName || "uncategorized";
+    const amount = line.debitAmount;
     if (!byCategory[category]) {
       byCategory[category] = [];
     }
-    byCategory[category].push(amount);
+    byCategory[category].push({ amount, line, je: jeMap.get(line.journalEntryId.toString()) });
   }
 
   let insightsCreated = 0;
@@ -590,7 +643,8 @@ async function runAnomalyDetection(
   const dedupCutoff = Date.now() - DEDUP_WINDOW_MS;
 
   // Check each category for anomalies
-  for (const [category, amounts] of Object.entries(byCategory)) {
+  for (const [category, entries] of Object.entries(byCategory)) {
+    const amounts = entries.map((e) => e.amount);
     if (amounts.length < 3) continue; // Need enough data points
 
     const mean = amounts.reduce((sum, a) => sum + a, 0) / amounts.length;
@@ -603,23 +657,23 @@ async function runAnomalyDetection(
     // Find transactions >2σ from mean
     const threshold2Sigma = mean + 2 * stdDev;
 
-    const recentCategoryTxns = recent.filter((t: any) => (t.category || "uncategorized") === category);
     const last7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
     // Resolve category name for display
     const categoryDisplayName = resolveCategoryName(category, customCategories);
 
-    for (const txn of recentCategoryTxns) {
-      if (txn.transactionDate < last7Days) continue; // Only alert on recent transactions
+    for (const entry of entries) {
+      const je = entry.je;
+      if (!je || je.transactionDate < last7Days) continue; // Only alert on recent transactions
 
-      const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
+      const amount = entry.amount;
       if (amount <= threshold2Sigma) continue;
 
-      // Dedup: skip if an anomaly insight for this transaction exists within dedup window
-      const txnIdStr = txn._id.toString();
+      // Dedup: skip if an anomaly insight for this journal entry exists within dedup window
+      const jeIdStr = je._id.toString();
       const isDuplicate = existingAnomalyInsights.some(
         (i: any) =>
-          i.metadata?.transactionId === txnIdStr &&
+          i.metadata?.transactionId === jeIdStr &&
           i.businessId === businessId.toString() &&
           i.detectedAt > dedupCutoff
       );
@@ -643,7 +697,7 @@ async function runAnomalyDetection(
           status: "new",
           title: `Unusual expense detected in "${categoryDisplayName}"`,
           description: `An expense of ${amount.toLocaleString()} in "${categoryDisplayName}" is ${deviation}σ above your average of ${mean.toLocaleString()}.`,
-          affectedEntities: [txn._id.toString()],
+          affectedEntities: [jeIdStr],
           recommendedAction: `Review this transaction to ensure it's legitimate and correctly categorized.`,
           detectedAt: Date.now(),
           metadata: {
@@ -651,8 +705,8 @@ async function runAnomalyDetection(
             baseline: mean,
             category,
             categoryDisplayName,
-            transactionId: txn._id.toString(),
-            sourceDataDomain: classifyEntryDomain(txn),
+            transactionId: jeIdStr,
+            sourceDataDomain: classifyLineDomain(entry.line),
             materialityPct: monthlyExpenses > 0 ? amount / monthlyExpenses : undefined,
           },
         });
@@ -672,19 +726,23 @@ async function runCategorizationDetection(
   businessId: any,
   memberUserIds: string[]
 ): Promise<number> {
-  const entries = await ctx.db
-    .query("accounting_entries")
-    .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
+  // Query expense lines (5000-5999) for categorization quality
+  const lines = await ctx.db
+    .query("journal_entry_lines")
+    .withIndex("by_business_account", (q: any) => q.eq("businessId", businessId))
     .collect();
 
-  const activeEntries = entries.filter((e: any) => !e.deletedAt);
-  const uncategorized = activeEntries.filter(
-    (e: any) => !e.category || e.category === "uncategorized"
+  const expenseLines = lines.filter(
+    (l: any) => l.accountCode >= "5000" && l.accountCode < "6000" && l.debitAmount > 0
   );
 
-  if (activeEntries.length < 10) return 0; // Not enough data
+  const uncategorized = expenseLines.filter(
+    (l: any) => !l.accountName || l.accountName === "uncategorized" || l.accountName === "Uncategorized"
+  );
 
-  const uncategorizedPct = (uncategorized.length / activeEntries.length) * 100;
+  if (expenseLines.length < 10) return 0; // Not enough data
+
+  const uncategorizedPct = (uncategorized.length / expenseLines.length) * 100;
 
   if (uncategorizedPct < 10) return 0; // Below threshold
 
@@ -713,8 +771,8 @@ async function runCategorizationDetection(
       priority,
       status: "new",
       title: `${uncategorized.length} transactions need categorization`,
-      description: `${uncategorizedPct.toFixed(0)}% of your transactions are uncategorized. Proper categorization improves financial insights and reporting accuracy.`,
-      affectedEntities: uncategorized.slice(0, 10).map((e: any) => e._id.toString()),
+      description: `${uncategorizedPct.toFixed(0)}% of your expense transactions are uncategorized. Proper categorization improves financial insights and reporting accuracy.`,
+      affectedEntities: uncategorized.slice(0, 10).map((l: any) => l.journalEntryId.toString()),
       recommendedAction: `Review and categorize your uncategorized transactions for better financial tracking.`,
       detectedAt: Date.now(),
       // No expiresAt — insight persists until user dismisses or actions it
@@ -738,27 +796,37 @@ async function runCashFlowDetection(
   businessId: any,
   memberUserIds: string[]
 ): Promise<number> {
-  // Get transactions from last 30 days
+  // Get journal entries from last 30 days
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
-  const entries = await ctx.db
-    .query("accounting_entries")
+  const journalEntries = await ctx.db
+    .query("journal_entries")
     .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
     .collect();
 
-  const recent = entries.filter(
-    (e: any) => !e.deletedAt && e.transactionDate && e.transactionDate >= thirtyDaysAgo
+  const recentJE = journalEntries.filter(
+    (e: any) => e.status === "posted" && e.transactionDate && e.transactionDate >= thirtyDaysAgo
   );
 
+  // Get lines for recent entries
   let totalIncome = 0;
   let totalExpenses = 0;
 
-  for (const txn of recent) {
-    const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
-    if (txn.transactionType === "Income") {
-      totalIncome += amount;
-    } else if (txn.transactionType === "Expense") {
-      totalExpenses += amount;
+  for (const je of recentJE) {
+    const lines = await ctx.db
+      .query("journal_entry_lines")
+      .withIndex("by_journal_entry", (q: any) => q.eq("journalEntryId", je._id))
+      .collect();
+
+    for (const line of lines) {
+      // Income: account codes 4000-4999 (credit amounts)
+      if (line.accountCode >= "4000" && line.accountCode < "5000" && line.creditAmount > 0) {
+        totalIncome += line.creditAmount;
+      }
+      // Expenses: account codes 5000-5999 (debit amounts)
+      if (line.accountCode >= "5000" && line.accountCode < "6000" && line.debitAmount > 0) {
+        totalExpenses += line.debitAmount;
+      }
     }
   }
 
@@ -860,26 +928,39 @@ async function runVendorConcentration(
     .toISOString()
     .split("T")[0];
 
-  const entries = await ctx.db
-    .query("accounting_entries")
+  // Get journal entries in the lookback period
+  const journalEntries = await ctx.db
+    .query("journal_entries")
     .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
     .collect();
 
-  // DOMAIN SEPARATION: Only analyze AP/COGS entries (has vendorId) — NOT expense claims
-  const apEntries = entries.filter(
-    (e: any) =>
-      !e.deletedAt &&
-      (e.transactionType === "Expense" || e.transactionType === "Cost of Goods Sold") &&
-      e.transactionDate &&
-      e.transactionDate >= cutoffDate &&
-      e.vendorId // Must have vendorId — this is the AP/supplier domain filter
+  const recentJE = journalEntries.filter(
+    (e: any) => e.status === "posted" && e.transactionDate && e.transactionDate >= cutoffDate
   );
 
-  if (apEntries.length < 5) return 0;
+  // Get vendor expense lines from recent journal entries
+  const vendorLines: any[] = [];
+  for (const je of recentJE) {
+    const lines = await ctx.db
+      .query("journal_entry_lines")
+      .withIndex("by_journal_entry", (q: any) => q.eq("journalEntryId", je._id))
+      .collect();
+
+    // DOMAIN SEPARATION: Only analyze vendor lines (entityType="vendor") — NOT expense claims
+    const vendorExpenseLines = lines.filter(
+      (l: any) =>
+        l.accountCode >= "5000" && l.accountCode < "6000" &&
+        l.debitAmount > 0 &&
+        l.entityType === "vendor" && l.entityId // Must have vendor entity
+    );
+    vendorLines.push(...vendorExpenseLines);
+  }
+
+  if (vendorLines.length < 5) return 0;
 
   // Calculate total AP spend for overall concentration
-  const totalAPSpend = apEntries.reduce(
-    (sum: number, e: any) => sum + Math.abs(e.homeCurrencyAmount || e.originalAmount || 0), 0
+  const totalAPSpend = vendorLines.reduce(
+    (sum: number, l: any) => sum + l.debitAmount, 0
   );
 
   if (totalAPSpend < 1000) return 0;
@@ -887,10 +968,10 @@ async function runVendorConcentration(
   // Group by supplier
   const bySupplier: Record<string, { name: string; amount: number; count: number }> = {};
 
-  for (const txn of apEntries) {
-    const supplierKey = txn.vendorId.toString();
-    const supplierName = txn.vendorName || "Unknown Supplier";
-    const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
+  for (const line of vendorLines) {
+    const supplierKey = line.entityId;
+    const supplierName = line.entityName || "Unknown Supplier";
+    const amount = line.debitAmount;
 
     if (!bySupplier[supplierKey]) {
       bySupplier[supplierKey] = { name: supplierName, amount: 0, count: 0 };
@@ -980,28 +1061,50 @@ async function runVendorSpendingChanges(
   const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
-  const entries = await ctx.db
-    .query("accounting_entries")
+  // Get journal entries in the lookback period
+  const journalEntries = await ctx.db
+    .query("journal_entries")
     .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
     .collect();
 
-  // DOMAIN SEPARATION: Only analyze AP entries (has vendorId) — NOT expense claims
-  const apExpenses = entries.filter(
-    (e: any) =>
-      !e.deletedAt &&
-      (e.transactionType === "Expense" || e.transactionType === "Cost of Goods Sold") &&
-      e.transactionDate &&
-      e.transactionDate >= ninetyDaysAgo &&
-      e.vendorId // AP domain only
+  const recentJE = journalEntries.filter(
+    (e: any) => e.status === "posted" && e.transactionDate && e.transactionDate >= ninetyDaysAgo
   );
+
+  // Build date map for journal entries
+  const jeDateMap = new Map<string, string>();
+  for (const je of recentJE) {
+    jeDateMap.set(je._id.toString(), je.transactionDate);
+  }
+
+  // Get vendor expense lines from recent journal entries
+  const vendorLines: Array<{ entityId: string; entityName: string; amount: number; date: string }> = [];
+  for (const je of recentJE) {
+    const lines = await ctx.db
+      .query("journal_entry_lines")
+      .withIndex("by_journal_entry", (q: any) => q.eq("journalEntryId", je._id))
+      .collect();
+
+    // DOMAIN SEPARATION: Only analyze vendor lines — NOT expense claims
+    for (const l of lines) {
+      if (l.accountCode >= "5000" && l.accountCode < "6000" && l.debitAmount > 0 && l.entityType === "vendor" && l.entityId) {
+        vendorLines.push({
+          entityId: l.entityId,
+          entityName: l.entityName || "Unknown Supplier",
+          amount: l.debitAmount,
+          date: je.transactionDate || "",
+        });
+      }
+    }
+  }
 
   const supplierPeriods: Record<string, { name: string; recent: number; historical: number; historicalCount: number }> = {};
 
-  for (const txn of apExpenses) {
-    const supplierKey = txn.vendorId.toString();
-    const supplierName = txn.vendorName || "Unknown Supplier";
-    const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
-    const date = txn.transactionDate || "";
+  for (const line of vendorLines) {
+    const supplierKey = line.entityId;
+    const supplierName = line.entityName;
+    const amount = line.amount;
+    const date = line.date;
 
     if (!supplierPeriods[supplierKey]) {
       supplierPeriods[supplierKey] = { name: supplierName, recent: 0, historical: 0, historicalCount: 0 };
@@ -1102,17 +1205,18 @@ async function runVendorRiskAnalysis(
 
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
-  const entries = await ctx.db
-    .query("accounting_entries")
-    .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
+  // Get vendor expense lines from journal_entry_lines
+  const vendorExpenseLines = await ctx.db
+    .query("journal_entry_lines")
+    .withIndex("by_entity", (q: any) => q.eq("entityType", "vendor"))
     .collect();
 
-  const recentExpenses = entries.filter(
-    (e: any) =>
-      !e.deletedAt &&
-      e.transactionType === "Expense" &&
-      e.transactionDate &&
-      e.transactionDate >= ninetyDaysAgo
+  // Filter to this business's recent expense lines
+  const recentVendorLines = vendorExpenseLines.filter(
+    (l: any) =>
+      l.businessId?.toString() === businessId.toString() &&
+      l.accountCode >= "5000" && l.accountCode < "6000" &&
+      l.debitAmount > 0
   );
 
   let insightsCreated = 0;
@@ -1120,8 +1224,8 @@ async function runVendorRiskAnalysis(
   for (const vendor of vendors) {
     if (vendor.status === "inactive") continue;
 
-    const vendorTxns = recentExpenses.filter(
-      (e: any) => e.vendorId?.toString() === vendor._id.toString()
+    const vendorTxns = recentVendorLines.filter(
+      (l: any) => l.entityId === vendor._id.toString()
     );
 
     let riskScore = 0;
@@ -1147,7 +1251,7 @@ async function runVendorRiskAnalysis(
 
     // Transaction irregularity
     if (vendorTxns.length >= 3) {
-      const amounts = vendorTxns.map((t: any) => Math.abs(t.homeCurrencyAmount || t.originalAmount || 0));
+      const amounts = vendorTxns.map((t: any) => t.debitAmount);
       const mean = amounts.reduce((sum: number, a: number) => sum + a, 0) / amounts.length;
       const variance = amounts.reduce((sum: number, a: number) => sum + Math.pow(a - mean, 2), 0) / amounts.length;
       const cv = mean > 0 ? Math.sqrt(variance) / mean : 0;
@@ -1260,22 +1364,27 @@ async function runDeadlineProximityAlerts(
     .split("T")[0];
   const today = new Date().toISOString().split("T")[0];
 
-  const entries = await ctx.db
-    .query("accounting_entries")
-    .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
+  // Use invoices table for deadline tracking (AP documents with dueDate)
+  const invoices = await ctx.db
+    .query("invoices")
+    .filter((q: any) =>
+      q.and(
+        q.eq(q.field("businessId"), businessId),
+        q.eq(q.field("deletedAt"), undefined)
+      )
+    )
     .collect();
 
-  const upcomingDue = entries.filter((e: any) => {
-    if (e.deletedAt) return false;
-    if (!e.dueDate) return false;
-    if (e.status === "paid") return false;
-    return e.dueDate >= today && e.dueDate <= warningDate;
+  const upcomingDue = invoices.filter((inv: any) => {
+    if (!inv.dueDate) return false;
+    if (inv.paymentStatus === "paid") return false;
+    return inv.dueDate >= today && inv.dueDate <= warningDate;
   });
 
   let insightsCreated = 0;
 
-  for (const entry of upcomingDue) {
-    const dueDate = new Date(entry.dueDate);
+  for (const invoice of upcomingDue) {
+    const dueDate = new Date(invoice.dueDate);
     const daysUntilDue = Math.ceil(
       (dueDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000)
     );
@@ -1288,14 +1397,17 @@ async function runDeadlineProximityAlerts(
 
     const isDuplicate = existingAlerts.some(
       (i: any) =>
-        i.metadata?.transactionId === entry._id.toString() &&
+        i.metadata?.transactionId === invoice._id.toString() &&
         i.metadata?.insightType === "payment_due" &&
         i.detectedAt > Date.now() - DEADLINE_DEDUP_WINDOW_MS
     );
 
     if (isDuplicate) continue;
 
-    const amount = Math.abs(entry.homeCurrencyAmount || entry.originalAmount || 0);
+    const totalAmount = (invoice as any).extractedData?.total_amount || 0;
+    const paidAmount = (invoice as any).paidAmount || 0;
+    const amount = totalAmount - paidAmount;
+    const vendorName = (invoice as any).extractedData?.vendor_name || "Unknown";
     const priority =
       daysUntilDue <= 3 ? "critical" : daysUntilDue <= 7 ? "high" : "medium";
 
@@ -1307,20 +1419,20 @@ async function runDeadlineProximityAlerts(
         priority,
         status: "new",
         title: `Payment due in ${daysUntilDue} days: ${amount.toLocaleString()}`,
-        description: `${entry.description || "Invoice"} of ${amount.toLocaleString()} is due on ${entry.dueDate}.`,
-        affectedEntities: [entry._id.toString()],
+        description: `Invoice from ${vendorName} of ${amount.toLocaleString()} is due on ${invoice.dueDate}.`,
+        affectedEntities: [invoice._id.toString()],
         recommendedAction:
           daysUntilDue <= 3
             ? `Urgent: Process this payment immediately.`
-            : `Schedule this payment before ${entry.dueDate}.`,
+            : `Schedule this payment before ${invoice.dueDate}.`,
         detectedAt: Date.now(),
         expiresAt: dueDate.getTime(),
         metadata: {
-          transactionId: entry._id.toString(),
-          dueDate: entry.dueDate,
+          transactionId: invoice._id.toString(),
+          dueDate: invoice.dueDate,
           daysUntilDue,
           amount,
-          vendorName: entry.vendorName,
+          vendorName,
           insightType: "payment_due",
         },
       });
@@ -1344,28 +1456,37 @@ async function runCashBalanceAlerts(
     .toISOString()
     .split("T")[0];
 
-  const entries = await ctx.db
-    .query("accounting_entries")
+  // Get journal entries for cash balance calculation
+  const journalEntries = await ctx.db
+    .query("journal_entries")
     .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
     .collect();
 
-  const recent = entries.filter(
-    (e: any) =>
-      !e.deletedAt && e.transactionDate && e.transactionDate >= ninetyDaysAgo
+  const recentJE = journalEntries.filter(
+    (e: any) => e.status === "posted" && e.transactionDate && e.transactionDate >= ninetyDaysAgo
   );
 
   let totalIncome = 0;
   let totalExpenses = 0;
   let cashBalance = 0;
 
-  for (const txn of recent) {
-    const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
-    if (txn.transactionType === "Income") {
-      totalIncome += amount;
-      cashBalance += amount;
-    } else if (txn.transactionType === "Expense") {
-      totalExpenses += amount;
-      cashBalance -= amount;
+  for (const je of recentJE) {
+    const lines = await ctx.db
+      .query("journal_entry_lines")
+      .withIndex("by_journal_entry", (q: any) => q.eq("journalEntryId", je._id))
+      .collect();
+
+    for (const line of lines) {
+      // Income: account codes 4000-4999 (credit amounts)
+      if (line.accountCode >= "4000" && line.accountCode < "5000" && line.creditAmount > 0) {
+        totalIncome += line.creditAmount;
+        cashBalance += line.creditAmount;
+      }
+      // Expenses: account codes 5000-5999 (debit amounts)
+      if (line.accountCode >= "5000" && line.accountCode < "6000" && line.debitAmount > 0) {
+        totalExpenses += line.debitAmount;
+        cashBalance -= line.debitAmount;
+      }
     }
   }
 
@@ -1442,25 +1563,25 @@ async function runDuplicateTransactionAlerts(
     .toISOString()
     .split("T")[0];
 
-  const entries = await ctx.db
-    .query("accounting_entries")
+  // Get journal entries for duplicate detection
+  const journalEntries = await ctx.db
+    .query("journal_entries")
     .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
     .collect();
 
-  const recent = entries.filter(
-    (e: any) =>
-      !e.deletedAt && e.transactionDate && e.transactionDate >= thirtyDaysAgo
+  const recentJE = journalEntries.filter(
+    (e: any) => e.status === "posted" && e.transactionDate && e.transactionDate >= thirtyDaysAgo
   );
 
-  // Group by amount + vendor + date
+  // Group by amount + date (using totalDebit as the amount and description for context)
   const grouped: Record<string, any[]> = {};
 
-  for (const txn of recent) {
-    const key = `${txn.vendorName || "unknown"}_${txn.originalAmount}_${txn.transactionDate}`;
+  for (const je of recentJE) {
+    const key = `${je.description || "unknown"}_${je.totalDebit}_${je.transactionDate}`;
     if (!grouped[key]) {
       grouped[key] = [];
     }
-    grouped[key].push(txn);
+    grouped[key].push(je);
   }
 
   const potentialDuplicates = Object.entries(grouped).filter(
@@ -1471,9 +1592,7 @@ async function runDuplicateTransactionAlerts(
 
   for (const [, txns] of potentialDuplicates) {
     const firstTxn = txns[0];
-    const amount = Math.abs(
-      firstTxn.homeCurrencyAmount || firstTxn.originalAmount || 0
-    );
+    const amount = firstTxn.totalDebit || 0;
 
     // Skip trivial amounts (< 5 in home currency) to avoid noise from rounding
     if (amount < 5) continue;
@@ -1503,16 +1622,16 @@ async function runDuplicateTransactionAlerts(
         category: "anomaly",
         priority,
         status: "new",
-        title: `Potential duplicate: ${txns.length} transactions of ${amount.toLocaleString()}`,
-        description: `Found ${txns.length} transactions with same amount and date. These may be duplicates.`,
+        title: `Potential duplicate: ${txns.length} entries of ${amount.toLocaleString()}`,
+        description: `Found ${txns.length} journal entries with same amount and date. These may be duplicates.`,
         affectedEntities: txns.map((t: any) => t._id.toString()),
-        recommendedAction: `Review these transactions to confirm they are not duplicates.`,
+        recommendedAction: `Review these entries to confirm they are not duplicates.`,
         detectedAt: Date.now(),
         // No expiresAt — persists until user acts
         metadata: {
           duplicateGroupIds: txnIds,
           amount,
-          vendorName: firstTxn.vendorName,
+          description: firstTxn.description,
           transactionDate: firstTxn.transactionDate,
           count: txns.length,
           insightType: "potential_duplicate",
@@ -1557,26 +1676,30 @@ async function runStalePayableDetection(
   businessId: any,
   memberUserIds: string[]
 ): Promise<number> {
-  const entries = await ctx.db
-    .query("accounting_entries")
-    .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
+  // Use invoices table to find stale unpaid payables
+  const invoices = await ctx.db
+    .query("invoices")
+    .filter((q: any) =>
+      q.and(
+        q.eq(q.field("businessId"), businessId),
+        q.eq(q.field("deletedAt"), undefined)
+      )
+    )
     .collect();
 
   const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
 
-  // Find pending expense/COGS entries that are old and have no dueDate
-  const staleEntries = entries.filter((e: any) => {
-    if (e.deletedAt) return false;
-    if (e.status !== "pending") return false;
-    if (e.transactionType !== "Expense" && e.transactionType !== "Cost of Goods Sold") return false;
-    if (e.dueDate) return false; // Has dueDate — handled by markOverduePayables cron
-    if (!e._creationTime || e._creationTime > thirtyDaysAgo) return false; // Less than 30 days old
+  // Find unpaid invoices that are old and have no dueDate
+  const staleInvoices = invoices.filter((inv: any) => {
+    if (inv.paymentStatus === "paid") return false;
+    if (inv.dueDate) return false; // Has dueDate — handled by deadline alerts
+    if (!inv._creationTime || inv._creationTime > thirtyDaysAgo) return false; // Less than 30 days old
     return true;
   });
 
-  if (staleEntries.length === 0) return 0;
+  if (staleInvoices.length === 0) return 0;
 
-  // Dedup: check for existing stale payable insight within 7 days
+  // Dedup: check for existing stale payable insight
   const existingInsights = await ctx.db
     .query("actionCenterInsights")
     .withIndex("by_category", (q: any) => q.eq("category", "deadline"))
@@ -1592,13 +1715,17 @@ async function runStalePayableDetection(
 
   if (isDuplicate) return 0;
 
-  const totalAmount = staleEntries.reduce(
-    (sum: number, e: any) => sum + Math.abs(e.homeCurrencyAmount || e.originalAmount || 0),
+  const totalAmount = staleInvoices.reduce(
+    (sum: number, inv: any) => {
+      const total = (inv as any).extractedData?.total_amount || 0;
+      const paid = (inv as any).paidAmount || 0;
+      return sum + (total - paid);
+    },
     0
   );
 
-  // Calculate age of oldest entry
-  const oldestCreation = Math.min(...staleEntries.map((e: any) => e._creationTime));
+  // Calculate age of oldest invoice
+  const oldestCreation = Math.min(...staleInvoices.map((inv: any) => inv._creationTime));
   const daysOld = Math.floor((Date.now() - oldestCreation) / (24 * 60 * 60 * 1000));
   const priority = daysOld > 90 ? "high" : daysOld > 60 ? "medium" : "low";
 
@@ -1610,18 +1737,18 @@ async function runStalePayableDetection(
       category: "deadline" as const,
       priority: priority as "high" | "medium" | "low",
       status: "new" as const,
-      title: `${staleEntries.length} unpaid bill${staleEntries.length > 1 ? "s" : ""} aging ${daysOld}+ days`,
-      description: `${staleEntries.length} payable${staleEntries.length > 1 ? "s" : ""} totaling ${totalAmount.toLocaleString()} have no due date set and have been pending for ${daysOld}+ days. Set due dates or record payments.`,
-      affectedEntities: staleEntries.map((e: any) => e._id.toString()),
+      title: `${staleInvoices.length} unpaid bill${staleInvoices.length > 1 ? "s" : ""} aging ${daysOld}+ days`,
+      description: `${staleInvoices.length} payable${staleInvoices.length > 1 ? "s" : ""} totaling ${totalAmount.toLocaleString()} have no due date set and have been pending for ${daysOld}+ days. Set due dates or record payments.`,
+      affectedEntities: staleInvoices.map((inv: any) => inv._id.toString()),
       recommendedAction: `Set due dates on these payables and schedule payments. Bills without due dates are easy to forget.`,
       detectedAt: Date.now(),
       // No expiresAt — persists until user acts
       metadata: {
         insightType: "stale_payables",
-        count: staleEntries.length,
+        count: staleInvoices.length,
         totalAmount,
         daysOld,
-        vendors: [...new Set(staleEntries.map((e: any) => e.vendorName).filter(Boolean))],
+        vendors: [...new Set(staleInvoices.map((inv: any) => (inv as any).extractedData?.vendor_name).filter(Boolean))],
       },
     });
     insightsCreated++;
@@ -1836,7 +1963,7 @@ async function runExpenseClaimPatternDetection(
 
 /**
  * Lightweight anomaly check for a single new transaction.
- * Scheduled from accountingEntries.create so insights surface immediately
+ * Scheduled from journal entry creation so insights surface immediately
  * instead of waiting up to 4 hours for the cron.
  *
  * Only runs anomaly detection (the most valuable for real-time feedback).
@@ -2148,17 +2275,25 @@ export const getBusinessSummaryByStringId = internalQuery({
     // Delegate to getBusinessSummary logic (inline to avoid circular dependency)
     const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
-    const entries = await ctx.db
-      .query("accounting_entries")
+    // Journal entries (last 90 days)
+    const journalEntries = await ctx.db
+      .query("journal_entries")
       .withIndex("by_businessId", (q: any) => q.eq("businessId", business._id))
       .collect();
 
-    const recent = entries.filter(
-      (e: any) => !e.deletedAt && e.transactionDate && e.transactionDate >= ninetyDaysAgo
+    const recentJE = journalEntries.filter(
+      (e: any) => e.status === "posted" && e.transactionDate && e.transactionDate >= ninetyDaysAgo
     );
 
-    // Load business custom categories for name resolution
-    const customCategories = ((business as any)?.customExpenseCategories as Array<{ id: string; category_name: string }>) || [];
+    // Load all journal entry lines for recent entries
+    const allLines: any[] = [];
+    for (const entry of recentJE) {
+      const lines = await ctx.db
+        .query("journal_entry_lines")
+        .withIndex("by_journal_entry", (q: any) => q.eq("journalEntryId", entry._id))
+        .collect();
+      allLines.push(...lines);
+    }
 
     let totalIncome = 0;
     let totalExpenses = 0;
@@ -2168,28 +2303,49 @@ export const getBusinessSummaryByStringId = internalQuery({
     let pendingPayables = 0;
     let overduePayables = 0;
 
-    for (const e of recent) {
-      const amount = Math.abs(e.homeCurrencyAmount || e.originalAmount || 0);
-      if (e.transactionType === "Income") totalIncome += amount;
-      else {
-        totalExpenses += amount;
-        const catCode = e.category || "uncategorized";
-        const catName = resolveCategoryName(catCode, customCategories);
-        categorySpend[catName] = (categorySpend[catName] || 0) + amount;
-        const domain = classifyEntryDomain(e);
-        const payeeName = e.vendorName || "Unknown";
+    for (const line of allLines) {
+      if (line.accountCode >= "4000" && line.accountCode < "5000" && line.creditAmount > 0) {
+        totalIncome += line.creditAmount;
+      }
+      if (line.accountCode >= "5000" && line.accountCode < "6000" && line.debitAmount > 0) {
+        totalExpenses += line.debitAmount;
+        const catName = line.accountName || "Uncategorized";
+        categorySpend[catName] = (categorySpend[catName] || 0) + line.debitAmount;
+        const domain = classifyLineDomain(line);
+        const payeeName = line.entityName || "Unknown";
         if (domain === "ap_vendor" || domain === "cogs") {
           if (!supplierSpend[payeeName]) supplierSpend[payeeName] = { name: payeeName, amount: 0, count: 0 };
-          supplierSpend[payeeName].amount += amount;
+          supplierSpend[payeeName].amount += line.debitAmount;
           supplierSpend[payeeName].count++;
         } else {
           if (!merchantSpend[payeeName]) merchantSpend[payeeName] = { name: payeeName, amount: 0, count: 0 };
-          merchantSpend[payeeName].amount += amount;
+          merchantSpend[payeeName].amount += line.debitAmount;
           merchantSpend[payeeName].count++;
         }
       }
-      if (e.status === "pending" && (e.transactionType === "Expense" || e.transactionType === "Cost of Goods Sold")) pendingPayables += amount;
-      if (e.status === "overdue") overduePayables += amount;
+    }
+
+    // AP pending/overdue from invoices table
+    const bsInvoices = await ctx.db
+      .query("invoices")
+      .filter((q: any) =>
+        q.and(
+          q.eq(q.field("businessId"), business._id),
+          q.eq(q.field("deletedAt"), undefined)
+        )
+      )
+      .collect();
+
+    for (const inv of bsInvoices) {
+      const invAmount = (inv as any).extractedData?.total_amount || 0;
+      const paid = (inv as any).paidAmount || 0;
+      const remaining = invAmount - paid;
+      if ((inv as any).paymentStatus === "unpaid" || (inv as any).paymentStatus === "partial") {
+        pendingPayables += remaining;
+      }
+      if ((inv as any).dueDate && (inv as any).dueDate < ninetyDaysAgo && (inv as any).paymentStatus !== "paid") {
+        overduePayables += remaining;
+      }
     }
 
     const topSuppliers = Object.values(supplierSpend).sort((a, b) => b.amount - a.amount).slice(0, 5).map((v) => `${v.name}: ${v.amount.toLocaleString()} (${v.count} txns)`);
@@ -2209,7 +2365,7 @@ export const getBusinessSummaryByStringId = internalQuery({
       homeCurrency: business.homeCurrency || "MYR",
       totalIncome: Math.round(totalIncome),
       totalExpenses: Math.round(totalExpenses),
-      transactionCount: recent.length,
+      transactionCount: recentJE.length,
       topVendors: topSuppliers,
       topSuppliers,
       topMerchants,
@@ -2225,6 +2381,7 @@ export const getBusinessSummaryByStringId = internalQuery({
 
 /**
  * Helper query: get transaction details for affected entities
+ * Looks up journal entries by ID string.
  */
 export const getTransactionDetails = internalQuery({
   args: { transactionIds: v.array(v.string()) },
@@ -2232,12 +2389,23 @@ export const getTransactionDetails = internalQuery({
     const details: string[] = [];
     for (const idStr of args.transactionIds) {
       try {
-        // Try as accounting entry first
-        const entries = await ctx.db.query("accounting_entries").collect();
-        const entry = entries.find((e: any) => e._id.toString() === idStr);
-        if (entry) {
+        // Try as journal entry
+        const allJE = await ctx.db.query("journal_entries").collect();
+        const je = allJE.find((e: any) => e._id.toString() === idStr);
+        if (je) {
+          // Get lines for description
+          const lines = await ctx.db
+            .query("journal_entry_lines")
+            .withIndex("by_journal_entry", (q: any) => q.eq("journalEntryId", je._id))
+            .collect();
+
+          const expenseLines = lines.filter((l: any) => l.accountCode >= "5000" && l.accountCode < "6000" && l.debitAmount > 0);
+          const vendorLine = lines.find((l: any) => l.entityType === "vendor");
+          const vendorName = vendorLine?.entityName || "Unknown";
+          const category = expenseLines[0]?.accountName || "uncategorized";
+
           details.push(
-            `- ${entry.transactionType}: ${entry.vendorName || "Unknown"}, ${Math.abs(entry.homeCurrencyAmount || entry.originalAmount || 0).toLocaleString()} ${entry.originalCurrency || ""}, ${entry.transactionDate || ""}, category: ${entry.category || "uncategorized"}, status: ${entry.status || "unknown"}`
+            `- ${je.sourceType || "manual"}: ${vendorName}, ${je.totalDebit.toLocaleString()} ${je.homeCurrency || ""}, ${je.transactionDate || ""}, category: ${category}, status: ${je.status || "unknown"}`
           );
         }
       } catch {

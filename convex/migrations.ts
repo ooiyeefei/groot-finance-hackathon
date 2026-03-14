@@ -159,80 +159,7 @@ export const insertVendor = mutation({
 });
 
 // ============================================
-// ACCOUNTING ENTRY MIGRATIONS
-// ============================================
-
-export const insertAccountingEntry = mutation({
-  args: {
-    legacyId: v.string(),
-    userId: v.id("users"),
-    businessId: v.optional(v.id("businesses")),
-    vendorId: v.optional(v.id("vendors")),
-    sourceRecordId: v.optional(v.string()),
-    sourceDocumentType: v.optional(v.string()),
-    transactionType: v.string(),
-    description: v.optional(v.string()),
-    originalAmount: v.number(),
-    originalCurrency: v.string(),
-    homeCurrencyAmount: v.optional(v.number()),
-    homeCurrency: v.optional(v.string()),
-    exchangeRate: v.optional(v.number()),
-    exchangeRateDate: v.optional(v.string()),
-    transactionDate: v.string(),
-    category: v.optional(v.string()),
-    subcategory: v.optional(v.string()),
-    vendorName: v.optional(v.string()),
-    referenceNumber: v.optional(v.string()),
-    notes: v.optional(v.string()),
-    status: v.optional(v.string()),
-    dueDate: v.optional(v.string()),
-    paymentDate: v.optional(v.string()),
-    paymentMethod: v.optional(v.string()),
-    createdByMethod: v.optional(v.string()),
-    processingMetadata: v.optional(v.any()),
-    documentMetadata: v.optional(v.any()),
-    deletedAt: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    return await ctx.db.insert("accounting_entries", {
-      legacyId: args.legacyId,
-      userId: args.userId,
-      businessId: args.businessId,
-      vendorId: args.vendorId,
-      sourceRecordId: args.sourceRecordId,
-      sourceDocumentType: args.sourceDocumentType as "invoice" | "expense_claim" | undefined,
-      transactionType: args.transactionType as "Income" | "Cost of Goods Sold" | "Expense",
-      description: args.description,
-      originalAmount: args.originalAmount,
-      originalCurrency: args.originalCurrency,
-      homeCurrencyAmount: args.homeCurrencyAmount,
-      homeCurrency: args.homeCurrency,
-      exchangeRate: args.exchangeRate,
-      exchangeRateDate: args.exchangeRateDate,
-      transactionDate: args.transactionDate,
-      category: args.category,
-      subcategory: args.subcategory,
-      vendorName: args.vendorName,
-      referenceNumber: args.referenceNumber,
-      notes: args.notes,
-      status: (args.status || "pending") as "pending" | "paid" | "overdue" | "cancelled" | "disputed",
-      dueDate: args.dueDate,
-      paymentDate: args.paymentDate,
-      paymentMethod: args.paymentMethod,
-      createdByMethod: (args.createdByMethod || "manual") as "manual" | "ocr" | "import" | "api",
-      processingMetadata: args.processingMetadata,
-      documentMetadata: args.documentMetadata,
-      deletedAt: args.deletedAt,
-      updatedAt: Date.now(),
-    });
-  },
-});
-
-// ============================================
-// LINE ITEM MIGRATIONS
-// ============================================
-// REMOVED: insertLineItem migration (one-time historical migration, already executed)
-// Line items are now embedded in accounting_entries.lineItems[] array
+// ACCOUNTING ENTRY MIGRATIONS — DELETED (table dropped 2026-03-14)
 
 // ============================================
 // INVOICE MIGRATIONS
@@ -311,7 +238,7 @@ export const insertExpenseClaim = mutation({
     legacyId: v.string(),
     userId: v.id("users"),
     businessId: v.id("businesses"),
-    accountingEntryId: v.optional(v.id("accounting_entries")),
+    accountingEntryId: v.optional(v.string()),
     businessPurpose: v.string(),
     expenseCategory: v.optional(v.string()),
     vendorName: v.optional(v.string()),

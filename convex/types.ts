@@ -5,7 +5,6 @@ import { Doc, Id } from "./_generated/dataModel";
 export type User = Doc<"users">;
 export type Business = Doc<"businesses">;
 export type BusinessMembership = Doc<"business_memberships">;
-export type AccountingEntry = Doc<"accounting_entries">;
 export type ExpenseClaim = Doc<"expense_claims">;
 export type Invoice = Doc<"invoices">;
 export type Conversation = Doc<"conversations">;
@@ -14,13 +13,13 @@ export type Vendor = Doc<"vendors">;
 export type StripeEvent = Doc<"stripe_events">;
 export type OcrUsage = Doc<"ocr_usage">;
 
-// Embedded types (not separate tables)
-export type LineItem = NonNullable<AccountingEntry["lineItems"]>[number];
+// Journal entry types
+export type JournalEntry = Doc<"journal_entries">;
+export type JournalEntryLine = Doc<"journal_entry_lines">;
 
 // ID types
 export type UserId = Id<"users">;
 export type BusinessId = Id<"businesses">;
-export type AccountingEntryId = Id<"accounting_entries">;
 export type ExpenseClaimId = Id<"expense_claims">;
 export type InvoiceId = Id<"invoices">;
 export type ConversationId = Id<"conversations">;

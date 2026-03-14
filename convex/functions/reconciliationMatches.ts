@@ -3,7 +3,7 @@
  * 021-bank-statement-import-recon
  *
  * Auto-matching engine + manual reconciliation workflows + split matching.
- * Matches bank transactions against accounting_entries.
+ * Matches bank transactions against journal_entries.
  * Access restricted to owner/finance_admin/manager roles.
  */
 
@@ -109,28 +109,29 @@ export const getCandidates = query({
     const rejectedEntryIds = new Set(
       existingMatches
         .filter((m) => m.status === "rejected")
-        .map((m) => m.accountingEntryId.toString())
+        .map((m) => (m as any).accountingEntryId?.toString())
+        .filter(Boolean)
     );
 
-    // Find candidate accounting entries by amount match
-    const allEntries = await ctx.db
-      .query("accounting_entries")
-      .withIndex("by_businessId", (q) =>
+    // Find candidate journal entries by amount match
+    const allJournalEntries = await ctx.db
+      .query("journal_entries")
+      .withIndex("by_business_date", (q) =>
         q.eq("businessId", bankTx.businessId)
       )
       .collect();
 
     const candidates = [];
 
-    for (const entry of allEntries) {
-      if (entry.deletedAt) continue;
-      if (rejectedEntryIds.has(entry._id.toString())) continue;
+    for (const je of allJournalEntries) {
+      if ((je as any).status === "voided") continue;
+      if (rejectedEntryIds.has(je._id.toString())) continue;
 
       // Skip entries already reconciled by another bank transaction
       const entryMatches = await ctx.db
         .query("reconciliation_matches")
         .withIndex("by_accountingEntryId", (q) =>
-          q.eq("accountingEntryId", entry._id)
+          q.eq("accountingEntryId", je._id as any)
         )
         .collect();
       const isAlreadyReconciled = entryMatches.some(
@@ -138,7 +139,7 @@ export const getCandidates = query({
       );
       if (isAlreadyReconciled) continue;
 
-      const entryAmount = entry.originalAmount;
+      const entryAmount = (je as any).totalDebit ?? 0;
       let confidenceScore = 0;
       let matchReason = "";
 
@@ -148,7 +149,7 @@ export const getCandidates = query({
         matchReason = "Amount match";
 
         // Reference match in description
-        const refNum = entry.referenceNumber?.toLowerCase() ?? "";
+        const refNum = ((je as any).referenceNumber ?? "").toLowerCase();
         const desc = bankTx.description.toLowerCase();
         const bankRef = bankTx.reference?.toLowerCase() ?? "";
 
@@ -157,7 +158,7 @@ export const getCandidates = query({
           matchReason = "Reference + amount match";
         } else {
           // Date proximity check (±3 days)
-          const entryDate = new Date(entry.transactionDate);
+          const entryDate = new Date((je as any).entryDate);
           const txDate = new Date(bankTx.transactionDate);
           const daysDiff = Math.abs(
             (entryDate.getTime() - txDate.getTime()) / (1000 * 60 * 60 * 24)
@@ -172,7 +173,7 @@ export const getCandidates = query({
         // Description similarity boost
         const descScore = descriptionSimilarity(
           bankTx.description,
-          [entry.description ?? "", entry.vendorName ?? ""].join(" ")
+          (je as any).description ?? ""
         );
         if (descScore >= 0.3 && confidenceScore < 0.95) {
           confidenceScore = Math.min(confidenceScore + descScore * 0.2, 0.94);
@@ -185,7 +186,7 @@ export const getCandidates = query({
             confidenceScore >= 0.6 ? "medium" : "low";
 
           candidates.push({
-            accountingEntry: entry,
+            accountingEntry: je,
             confidenceScore,
             confidenceLevel,
             matchReason,
@@ -222,7 +223,7 @@ export const getByBankTransaction = query({
 
     if (!activeMatch) return null;
 
-    const accountingEntry = await ctx.db.get(activeMatch.accountingEntryId);
+    const accountingEntry = await ctx.db.get((activeMatch as any).accountingEntryId);
 
     return {
       ...activeMatch,
@@ -297,7 +298,7 @@ export const rejectMatch = mutation({
 export const createManualMatch = mutation({
   args: {
     bankTransactionId: v.id("bank_transactions"),
-    accountingEntryId: v.id("accounting_entries"),
+    journalEntryId: v.id("journal_entries"),
   },
   handler: async (ctx, args) => {
     const bankTx = await ctx.db.get(args.bankTransactionId);
@@ -308,7 +309,7 @@ export const createManualMatch = mutation({
     const matchId = await ctx.db.insert("reconciliation_matches", {
       businessId: bankTx.businessId,
       bankTransactionId: args.bankTransactionId,
-      accountingEntryId: args.accountingEntryId,
+      accountingEntryId: args.journalEntryId as any,
       matchType: "manual",
       confidenceScore: 1.0,
       confidenceLevel: "high",
@@ -316,7 +317,7 @@ export const createManualMatch = mutation({
       status: "confirmed",
       confirmedBy: userId,
       confirmedAt: Date.now(),
-    });
+    } as any);
 
     await ctx.db.patch(args.bankTransactionId, {
       reconciliationStatus: "reconciled",
@@ -333,7 +334,7 @@ export const createManualMatch = mutation({
 export const createSplitMatch = mutation({
   args: {
     bankTransactionId: v.id("bank_transactions"),
-    accountingEntryIds: v.array(v.id("accounting_entries")),
+    journalEntryIds: v.array(v.id("journal_entries")),
   },
   handler: async (ctx, args) => {
     const bankTx = await ctx.db.get(args.bankTransactionId);
@@ -341,17 +342,17 @@ export const createSplitMatch = mutation({
 
     const { userId } = await requireBankReconAccess(ctx, bankTx.businessId);
 
-    if (args.accountingEntryIds.length < 2) {
-      throw new Error("Split match requires at least 2 accounting entries");
+    if (args.journalEntryIds.length < 2) {
+      throw new Error("Split match requires at least 2 journal entries");
     }
 
     // Verify the entries sum to the bank transaction amount
     let total = 0;
-    for (const entryId of args.accountingEntryIds) {
+    for (const entryId of args.journalEntryIds) {
       const entry = await ctx.db.get(entryId);
-      if (!entry) throw new Error(`Accounting entry ${entryId} not found`);
-      if (entry.deletedAt) throw new Error(`Accounting entry ${entryId} is deleted`);
-      total += entry.originalAmount;
+      if (!entry) throw new Error(`Journal entry ${entryId} not found`);
+      if ((entry as any).status === "voided") throw new Error(`Journal entry ${entryId} is voided`);
+      total += (entry as any).totalDebit ?? 0;
     }
 
     if (Math.abs(total - bankTx.amount) >= 0.01) {
@@ -362,22 +363,23 @@ export const createSplitMatch = mutation({
 
     // Create a match record for each entry
     const matchIds: Id<"reconciliation_matches">[] = [];
-    for (const entryId of args.accountingEntryIds) {
+    for (const entryId of args.journalEntryIds) {
       const entry = await ctx.db.get(entryId);
-      const fraction = entry!.originalAmount / bankTx.amount;
+      const entryAmount = (entry as any).totalDebit ?? 0;
+      const fraction = entryAmount / bankTx.amount;
 
       const matchId = await ctx.db.insert("reconciliation_matches", {
         businessId: bankTx.businessId,
         bankTransactionId: args.bankTransactionId,
-        accountingEntryId: entryId,
+        accountingEntryId: entryId as any,
         matchType: "manual",
         confidenceScore: 1.0,
         confidenceLevel: "high",
-        matchReason: `Split match (${args.accountingEntryIds.length} entries, ${Math.round(fraction * 100)}% of total)`,
+        matchReason: `Split match (${args.journalEntryIds.length} entries, ${Math.round(fraction * 100)}% of total)`,
         status: "confirmed",
         confirmedBy: userId,
         confirmedAt: Date.now(),
-      });
+      } as any);
       matchIds.push(matchId);
     }
 
@@ -457,38 +459,38 @@ export const internalFindCandidates = internalQuery({
       .collect();
 
     const rejectedEntryIds = new Set(
-      existingMatches.filter((m) => m.status === "rejected").map((m) => m.accountingEntryId.toString())
+      existingMatches.filter((m) => m.status === "rejected").map((m) => (m as any).accountingEntryId?.toString()).filter(Boolean)
     );
 
-    const allEntries = await ctx.db
-      .query("accounting_entries")
-      .withIndex("by_businessId", (q) => q.eq("businessId", bankTx.businessId))
+    const allJournalEntries = await ctx.db
+      .query("journal_entries")
+      .withIndex("by_business_date", (q) => q.eq("businessId", bankTx.businessId))
       .collect();
 
     const candidates: Array<{
-      accountingEntryId: Id<"accounting_entries">;
+      accountingEntryId: string;
       confidenceScore: number;
       confidenceLevel: "high" | "medium" | "low";
       matchReason: string;
     }> = [];
 
-    for (const entry of allEntries) {
-      if (entry.deletedAt) continue;
-      if (rejectedEntryIds.has(entry._id.toString())) continue;
+    for (const je of allJournalEntries) {
+      if ((je as any).status === "voided") continue;
+      if (rejectedEntryIds.has(je._id.toString())) continue;
 
       const entryMatches = await ctx.db
         .query("reconciliation_matches")
-        .withIndex("by_accountingEntryId", (q) => q.eq("accountingEntryId", entry._id))
+        .withIndex("by_accountingEntryId", (q) => q.eq("accountingEntryId", je._id as any))
         .collect();
       if (entryMatches.some((m) => m.status === "confirmed" && !m.deletedAt)) continue;
 
-      const entryAmount = entry.originalAmount;
+      const entryAmount = (je as any).totalDebit ?? 0;
       if (Math.abs(entryAmount - bankTx.amount) >= 0.01) continue;
 
       let confidenceScore = 0.3;
       let matchReason = "Amount match";
 
-      const refNum = entry.referenceNumber?.toLowerCase() ?? "";
+      const refNum = ((je as any).referenceNumber ?? "").toLowerCase();
       const desc = bankTx.description.toLowerCase();
       const bankRef = bankTx.reference?.toLowerCase() ?? "";
 
@@ -496,7 +498,7 @@ export const internalFindCandidates = internalQuery({
         confidenceScore = 0.95;
         matchReason = "Reference + amount match";
       } else {
-        const entryDate = new Date(entry.transactionDate);
+        const entryDate = new Date((je as any).entryDate);
         const txDate = new Date(bankTx.transactionDate);
         const daysDiff = Math.abs((entryDate.getTime() - txDate.getTime()) / (1000 * 60 * 60 * 24));
         if (daysDiff <= 3) {
@@ -508,7 +510,7 @@ export const internalFindCandidates = internalQuery({
       // Description similarity boost
       const descScore = descriptionSimilarity(
         bankTx.description,
-        [entry.description ?? "", entry.vendorName ?? ""].join(" ")
+        (je as any).description ?? ""
       );
       if (descScore >= 0.3 && confidenceScore < 0.95) {
         confidenceScore = Math.min(confidenceScore + descScore * 0.2, 0.94);
@@ -516,7 +518,7 @@ export const internalFindCandidates = internalQuery({
       }
 
       candidates.push({
-        accountingEntryId: entry._id,
+        accountingEntryId: je._id as any,
         confidenceScore,
         confidenceLevel: confidenceScore >= 0.9 ? "high" : confidenceScore >= 0.6 ? "medium" : "low",
         matchReason,
@@ -532,7 +534,7 @@ export const internalCreateSuggestedMatch = internalMutation({
   args: {
     businessId: v.id("businesses"),
     bankTransactionId: v.id("bank_transactions"),
-    accountingEntryId: v.id("accounting_entries"),
+    accountingEntryId: v.string(),
     confidenceScore: v.number(),
     confidenceLevel: v.union(v.literal("high"), v.literal("medium"), v.literal("low")),
     matchReason: v.string(),
@@ -550,13 +552,13 @@ export const internalCreateSuggestedMatch = internalMutation({
     await ctx.db.insert("reconciliation_matches", {
       businessId: args.businessId,
       bankTransactionId: args.bankTransactionId,
-      accountingEntryId: args.accountingEntryId,
+      accountingEntryId: args.accountingEntryId as any,
       matchType: "auto",
       confidenceScore: args.confidenceScore,
       confidenceLevel: args.confidenceLevel,
       matchReason: args.matchReason,
       status: "suggested",
-    });
+    } as any);
 
     await ctx.db.patch(args.bankTransactionId, {
       reconciliationStatus: "suggested",

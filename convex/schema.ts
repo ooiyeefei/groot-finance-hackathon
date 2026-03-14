@@ -295,104 +295,6 @@ export default defineSchema({
 
   // ============================================
   // ACCOUNTING DOMAIN: Transactions & Line Items
-  // ============================================
-
-  // DEPRECATED (2026-03-14): This table is being replaced by the journal_entries + journal_entry_lines system.
-  // New accounting transactions should use journal entries for proper double-entry bookkeeping.
-  // This table remains for historical data and read operations only.
-  // Migration: See docs/plans/2026-03-14-accounting-entries-to-journal-entries-migration.md
-  accounting_entries: defineTable({
-    // Identity
-    legacyId: v.optional(v.string()),
-    businessId: v.optional(v.id("businesses")),   // Optional for migration
-    userId: v.id("users"),
-    vendorId: v.optional(v.id("vendors")),        // Link to vendors table
-
-    // Transaction Type (validator from src/lib/constants/statuses.ts)
-    transactionType: transactionTypeValidator,
-
-    // Financial Data
-    description: v.optional(v.string()),          // Optional for migration
-    originalAmount: v.number(),
-    originalCurrency: v.string(),
-    homeCurrency: v.optional(v.string()),         // Optional for migration
-    homeCurrencyAmount: v.optional(v.number()),
-    exchangeRate: v.optional(v.number()),
-    exchangeRateDate: v.optional(v.string()),     // Date when rate was fetched
-    transactionDate: v.string(),                  // ISO date string
-
-    // Categorization
-    category: v.optional(v.string()),             // Optional for migration
-    subcategory: v.optional(v.string()),
-    vendorName: v.optional(v.string()),
-    referenceNumber: v.optional(v.string()),
-    notes: v.optional(v.string()),
-
-    // Status (validator from src/lib/constants/statuses.ts)
-    status: accountingEntryStatusValidator,
-    dueDate: v.optional(v.string()),
-    paymentDate: v.optional(v.string()),
-    paymentMethod: v.optional(v.string()),
-
-    // AP Payment Tracking (013-ap-vendor-management)
-    paidAmount: v.optional(v.number()),
-    paymentHistory: v.optional(v.array(v.object({
-      amount: v.number(),
-      paymentDate: v.string(),
-      paymentMethod: v.string(),
-      notes: v.optional(v.string()),
-      recordedAt: v.number(),
-    }))),
-
-    // Creation Method (validator from src/lib/constants/statuses.ts)
-    createdByMethod: v.optional(createdByMethodValidator),
-
-    // Source Document Tracking
-    sourceRecordId: v.optional(v.string()),       // Legacy UUID of source
-    sourceDocumentType: v.optional(sourceDocumentTypeValidator),
-
-    // Processing Metadata (JSONB from Supabase)
-    processingMetadata: v.optional(v.any()),
-    documentMetadata: v.optional(v.any()),
-    complianceAnalysis: v.optional(v.any()),    // Cross-border tax compliance results
-
-    // Soft Delete
-    deletedAt: v.optional(v.number()),
-
-    // Embedded Line Items (Convex optimization)
-    lineItems: v.optional(v.array(v.object({
-      itemDescription: v.string(),
-      quantity: v.number(),
-      unitPrice: v.number(),
-      totalAmount: v.number(),
-      currency: v.string(),
-      taxAmount: v.optional(v.number()),
-      taxRate: v.optional(v.number()),
-      itemCategory: v.optional(v.string()),
-      itemCode: v.optional(v.string()),
-      unitMeasurement: v.optional(v.string()),
-      lineOrder: v.number(),
-      legacyId: v.optional(v.string()),
-    }))),
-
-    // AP 3-Way Matching (021-ap-3-way)
-    purchaseOrderId: v.optional(v.id("purchase_orders")),
-    matchId: v.optional(v.id("po_matches")),
-    matchGated: v.optional(v.boolean()),
-
-    // Timestamps
-    updatedAt: v.optional(v.number()),
-  })
-    .index("by_businessId", ["businessId"])
-    .index("by_userId", ["userId"])
-    .index("by_vendorId", ["vendorId"])
-    .index("by_transactionDate", ["transactionDate"])
-    .index("by_category", ["category"])
-    .index("by_status", ["status"])
-    .index("by_sourceDocument", ["sourceDocumentType", "sourceRecordId"])
-    .index("by_legacyId", ["legacyId"])
-    .index("by_businessId_dueDate", ["businessId", "dueDate"])
-    .index("by_businessId_vendorId_status", ["businessId", "vendorId", "status"]),
 
   // ============================================
   // DOUBLE-ENTRY ACCOUNTING: Journal Entries & Lines
@@ -541,7 +443,7 @@ export default defineSchema({
     deletedAt: v.optional(v.number()),
 
     // Linked Accounting Entry (created on approval)
-    accountingEntryId: v.optional(v.id("accounting_entries")),
+    accountingEntryId: v.optional(v.string()),  // Legacy field - table dropped
 
     // Double-entry accounting (new system)
     journalEntryId: v.optional(v.id("journal_entries")),
@@ -988,7 +890,7 @@ export default defineSchema({
 
     // Context
     contextDocumentId: v.optional(v.id("invoices")),
-    contextTransactionId: v.optional(v.id("accounting_entries")),
+    contextTransactionId: v.optional(v.string()),
 
     // Denormalized Fields (Convex optimization)
     lastMessageContent: v.optional(v.string()),
@@ -1118,7 +1020,7 @@ export default defineSchema({
 
     // Confirmation Status
     isConfirmed: v.boolean(),          // true if linked to an accounting entry
-    accountingEntryId: v.optional(v.id("accounting_entries")),
+    accountingEntryId: v.optional(v.string()),  // Legacy field - table dropped
 
     // Timestamps
     updatedAt: v.optional(v.number()),
@@ -2577,7 +2479,7 @@ export default defineSchema({
   reconciliation_matches: defineTable({
     businessId: v.id("businesses"),
     bankTransactionId: v.id("bank_transactions"),
-    accountingEntryId: v.id("accounting_entries"),
+    accountingEntryId: v.optional(v.string()),  // Legacy field - table dropped
     matchType: matchTypeValidator,
     confidenceScore: v.number(),
     confidenceLevel: confidenceLevelValidator,
@@ -2663,7 +2565,7 @@ export default defineSchema({
   po_matches: defineTable({
     businessId: v.id("businesses"),
     purchaseOrderId: v.id("purchase_orders"),
-    accountingEntryId: v.optional(v.id("accounting_entries")),
+    accountingEntryId: v.optional(v.string()),  // Legacy field - table dropped
     invoiceId: v.optional(v.id("invoices")),
     grnIds: v.optional(v.array(v.id("goods_received_notes"))),
     matchType: poMatchTypeValidator,

@@ -7,7 +7,7 @@
  *
  * Tables with `legacyId` field and index:
  * - users, businesses, business_memberships
- * - accounting_entries, expense_claims, invoices
+ * - expense_claims, invoices
  * - conversations, messages, vendors, ocr_usage
  *
  * NOT included (no legacy IDs): stripe_events
@@ -24,7 +24,6 @@ export type MigratableTable =
   | "users"
   | "businesses"
   | "business_memberships"
-  | "accounting_entries"
   | "expense_claims"
   | "invoices"
   | "conversations"

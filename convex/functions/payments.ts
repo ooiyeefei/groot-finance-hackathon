@@ -195,19 +195,19 @@ export const recordPayment = mutation({
 
       await ctx.db.patch(allocation.invoiceId, updates);
 
-      // Update linked accounting entry
-      if (invoice.accountingEntryId) {
+      // Update linked journal entry status
+      if ((invoice as any).journalEntryId) {
         try {
-          const entryId = invoice.accountingEntryId as Id<"accounting_entries">;
+          const entryId = (invoice as any).journalEntryId as Id<"journal_entries">;
           const entry = await ctx.db.get(entryId);
           if (entry) {
             await ctx.db.patch(entryId, {
-              status: newStatus === "paid" ? "paid" : "pending",
+              status: newStatus === "paid" ? "posted" : "posted",
               updatedAt: now,
-            });
+            } as any);
           }
         } catch {
-          // Accounting entry may not exist
+          // Journal entry may not exist
         }
       }
     }
@@ -297,19 +297,19 @@ export const recordReversal = mutation({
         updatedAt: now,
       });
 
-      // Revert accounting entry
-      if (invoice.accountingEntryId) {
+      // Revert linked journal entry
+      if ((invoice as any).journalEntryId) {
         try {
-          const entryId = invoice.accountingEntryId as Id<"accounting_entries">;
+          const entryId = (invoice as any).journalEntryId as Id<"journal_entries">;
           const entry = await ctx.db.get(entryId);
           if (entry) {
             await ctx.db.patch(entryId, {
-              status: "pending",
+              status: "posted",
               updatedAt: now,
-            });
+            } as any);
           }
         } catch {
-          // Accounting entry may not exist
+          // Journal entry may not exist
         }
       }
     }

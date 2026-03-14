@@ -9,7 +9,6 @@
  */
 
 import type * as crons from "../crons.js";
-import type * as functions_accountingEntries from "../functions/accountingEntries.js";
 import type * as functions_accountingPeriods from "../functions/accountingPeriods.js";
 import type * as functions_actionCenterInsights from "../functions/actionCenterInsights.js";
 import type * as functions_actionCenterJobs from "../functions/actionCenterJobs.js";
@@ -103,9 +102,6 @@ import type * as lib_statement_generators_trial_balance_generator from "../lib/s
 import type * as lib_validation from "../lib/validation.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as migrations from "../migrations.js";
-import type * as migrations_backfillInvoicePaymentState from "../migrations/backfillInvoicePaymentState.js";
-import type * as migrations_deprecateAccountingEntries from "../migrations/deprecateAccountingEntries.js";
-import type * as migrations_migrateAccountingEntries from "../migrations/migrateAccountingEntries.js";
 import type * as types from "../types.js";
 
 import type {
@@ -116,7 +112,6 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   crons: typeof crons;
-  "functions/accountingEntries": typeof functions_accountingEntries;
   "functions/accountingPeriods": typeof functions_accountingPeriods;
   "functions/actionCenterInsights": typeof functions_actionCenterInsights;
   "functions/actionCenterJobs": typeof functions_actionCenterJobs;
@@ -210,9 +205,6 @@ declare const fullApi: ApiFromModules<{
   "lib/validation": typeof lib_validation;
   "lib/validators": typeof lib_validators;
   migrations: typeof migrations;
-  "migrations/backfillInvoicePaymentState": typeof migrations_backfillInvoicePaymentState;
-  "migrations/deprecateAccountingEntries": typeof migrations_deprecateAccountingEntries;
-  "migrations/migrateAccountingEntries": typeof migrations_migrateAccountingEntries;
   types: typeof types;
 }>;
 

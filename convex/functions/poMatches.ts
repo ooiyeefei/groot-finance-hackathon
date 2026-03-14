@@ -542,21 +542,21 @@ export const getUnmatched = query({
     }
 
     if (args.tab === "invoices_without_pos") {
-      // Accounting entries (Expense type) that are match-gated or have no match
-      const entries = await ctx.db
-        .query("accounting_entries")
+      // AP invoices that have no PO match
+      const invoices = await ctx.db
+        .query("invoices")
         .withIndex("by_businessId", (q: any) => q.eq("businessId", args.businessId))
         .collect();
 
-      const unmatchedEntries = entries.filter(
-        (entry: any) =>
-          entry.transactionType === "Expense" &&
-          entry.status !== "cancelled" &&
-          !entry.matchId &&
-          entry.matchGated !== false // not explicitly cleared
+      const unmatchedInvoices = invoices.filter(
+        (inv: any) =>
+          !inv.deletedAt &&
+          inv.status !== "cancelled" &&
+          !inv.matchId &&
+          inv.matchGated !== false // not explicitly cleared
       );
 
-      return unmatchedEntries;
+      return unmatchedInvoices;
     }
 
     if (args.tab === "pos_without_grns") {
@@ -981,15 +981,6 @@ export const markNoMatchRequired = mutation({
       throw new Error("Invoice not found");
     }
 
-    // Find associated accounting entry
-    const entries = await ctx.db
-      .query("accounting_entries")
-      .withIndex("by_sourceDocument", (q: any) =>
-        q.eq("sourceDocumentType", "invoice").eq("sourceRecordId", args.invoiceId as string)
-      )
-      .collect();
-
-    // Also check by businessId for entries that reference this invoice
     const businessId = (invoice as any).businessId;
     if (!businessId) {
       throw new Error("Invoice has no business context");
@@ -1011,14 +1002,12 @@ export const markNoMatchRequired = mutation({
       throw new Error("Only admins or managers can mark invoices as no match required");
     }
 
-    // Clear matchGated on any associated accounting entries
-    for (const entry of entries) {
-      if (entry.matchGated) {
-        await ctx.db.patch(entry._id, {
-          matchGated: false,
-          updatedAt: Date.now(),
-        });
-      }
+    // Clear matchGated on the invoice itself
+    if ((invoice as any).matchGated) {
+      await ctx.db.patch(args.invoiceId, {
+        matchGated: false,
+        updatedAt: Date.now(),
+      } as any);
     }
   },
 });

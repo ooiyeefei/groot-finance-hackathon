@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
             { key: 'expense_claims', fields: EXPENSE_FIELDS, data: business.modules.expense_claims },
             { key: 'invoices', fields: INVOICE_FIELDS, data: business.modules.invoices },
             { key: 'leave_requests', fields: LEAVE_FIELDS, data: business.modules.leave_requests },
-            { key: 'accounting_entries', fields: ACCOUNTING_FIELDS, data: business.modules.accounting_entries },
+            { key: 'journal_entries', fields: ACCOUNTING_FIELDS, data: business.modules.journal_entries },
           ] as const
 
           for (const mod of modules) {

@@ -1364,7 +1364,7 @@ export const getMcpAccountingEntries = query({
     const relevantLines = allLines.filter((line) => journalEntryIds.includes(line.journalEntryId));
 
     // Return lines with only the fields needed for analysis
-    // Map journal entry lines to what MCP tools expect (accounting_entries format)
+    // Map journal entry lines to what MCP tools expect
     return relevantLines.map((line) => {
       const entry = journalEntries.find((e) => e._id === line.journalEntryId);
       const code = line.accountCode;

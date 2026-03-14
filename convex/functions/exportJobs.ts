@@ -1041,12 +1041,12 @@ async function enrichExpenseRecords(
           ? await ctx.db.get(record.approvedBy)
           : null;
 
-      // Fetch line items from embedded accounting_entries.lineItems array
+      // Fetch line items from journal_entry_lines
       let lineItems: any[] = [];
-      if (record.accountingEntryId) {
-        const accountingEntry = await ctx.db.get(record.accountingEntryId);
-        if (accountingEntry?.lineItems) {
-          lineItems = accountingEntry.lineItems
+      if ((record as any).journalEntryId) {
+        const jeLines = await ctx.db.query("journal_entry_lines").withIndex("by_journal_entry", (q: any) => q.eq("journalEntryId", (record as any).journalEntryId)).collect();
+        if (jeLines.length > 0) {
+          lineItems = jeLines
             .sort((a: any, b: any) => (a.lineOrder ?? 0) - (b.lineOrder ?? 0))
             .map((item: any) => ({
               description: item.itemDescription || "",
@@ -1205,12 +1205,12 @@ async function getAccountingRecords(
   }
 ): Promise<any[]> {
   let entries = await ctx.db
-    .query("accounting_entries")
+    .query("journal_entries")
     .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
     .collect();
 
-  // Filter out soft-deleted
-  entries = entries.filter((e: any) => !e.deletedAt);
+  // Filter to posted entries only
+  entries = entries.filter((e: any) => e.status === "posted");
 
   // Role-based filtering
   if (role === "employee") {
@@ -1537,7 +1537,7 @@ export const getMyDataExport = query({
             expense_claims: enrichedExpenses,
             invoices: enrichedInvoices,
             leave_requests: enrichedLeaves,
-            accounting_entries: enrichedAccounting,
+            journal_entries: enrichedAccounting,
           },
         };
       })

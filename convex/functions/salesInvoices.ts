@@ -736,21 +736,7 @@ export const recordPayment = mutation({
 
     await ctx.db.patch(args.id, updates);
 
-    // Update linked accounting entry
-    if (invoice.accountingEntryId) {
-      try {
-        const entryId = invoice.accountingEntryId as import("../_generated/dataModel").Id<"accounting_entries">;
-        const entry = await ctx.db.get(entryId);
-        if (entry) {
-          await ctx.db.patch(entryId, {
-            status: newStatus === "paid" ? "paid" : "pending",
-            updatedAt: Date.now(),
-          });
-        }
-      } catch {
-        // Accounting entry may not exist
-      }
-    }
+    // accounting_entries update removed — table dropped
 
     return args.id;
   },
@@ -783,21 +769,7 @@ export const voidInvoice = mutation({
       updatedAt: Date.now(),
     });
 
-    // Reverse/cancel linked accounting entry
-    if (invoice.accountingEntryId) {
-      try {
-        const entryId = invoice.accountingEntryId as import("../_generated/dataModel").Id<"accounting_entries">;
-        const entry = await ctx.db.get(entryId);
-        if (entry) {
-          await ctx.db.patch(entryId, {
-            status: "cancelled",
-            updatedAt: Date.now(),
-          });
-        }
-      } catch {
-        // Accounting entry may not exist
-      }
-    }
+    // accounting_entries cancellation removed — table dropped
 
     return args.id;
   },
