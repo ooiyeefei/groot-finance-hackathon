@@ -6,6 +6,7 @@
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
 import { aiConfig } from '@/lib/ai/config/ai-config'
 import { resolveDateRange } from '@/lib/ai/utils/date-range-resolver'
+import { Id } from '@/convex/_generated/dataModel'
 
 interface TransactionLookupParameters {
   query?: string
@@ -874,11 +875,11 @@ Please clarify which type you'd like me to search, or say "both" to see all tran
         throw new Error('Convex client not initialized - authentication may have failed')
       }
 
-      // ✅ MIGRATED: Use Convex searchForAI instead of Supabase (authenticated)
+      // ✅ MIGRATED: Use journal entries instead of accounting entries
       const result = await this.convex.query(
-        this.convexApi.functions.accountingEntries.searchForAI,
+        this.convexApi.functions.journalEntries.searchForAI,
         {
-          businessId: userContext.businessId,
+          businessId: userContext.businessId as Id<"businesses">,
           startDate: startDate,
           endDate: endDate,
           category: categoryFilter,
@@ -935,10 +936,10 @@ Please clarify which type you'd like me to search, or say "both" to see all tran
         // PERFORMANCE OPTIMIZATION: Only fetch count when truly needed for user feedback
         let totalCount = 0;
         try {
-          // ✅ MIGRATED: Use Convex instead of Supabase for count
+          // ✅ MIGRATED: Use journal entries for count
           const countResult = await this.convex.query(
-            this.convexApi.functions.accountingEntries.getEntryCount,
-            { businessId: userContext.businessId }
+            this.convexApi.functions.journalEntries.getEntryCount,
+            { businessId: userContext.businessId as any }
           )
           totalCount = countResult.count || 0;
         } catch (countError) {

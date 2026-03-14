@@ -2801,4 +2801,79 @@ export default defineSchema({
     .index("by_category_domain", ["category", "merchantDomain"])
     .index("by_fingerprint", ["errorFingerprint", "merchantDomain"]),
 
+  // ============================================
+  // DOUBLE-ENTRY ACCOUNTING (001-accounting-double-entry)
+  // ============================================
+
+  journal_entries: defineTable({
+    businessId: v.id("businesses"),
+    entryNumber: v.string(),                          // JE-2026-00001
+    transactionDate: v.string(),                      // Date of transaction (YYYY-MM-DD)
+    postingDate: v.string(),                          // Date when entry was posted
+    description: v.string(),
+    memo: v.optional(v.string()),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("posted"),
+      v.literal("reversed"),
+      v.literal("voided")
+    ),
+    sourceType: v.optional(v.union(
+      v.literal("manual"),
+      v.literal("sales_invoice"),
+      v.literal("expense_claim"),
+      v.literal("ar_reconciliation"),
+      v.literal("migrated")
+    )),
+    sourceId: v.optional(v.string()),                 // ID of source document
+    fiscalYear: v.number(),
+    fiscalPeriod: v.string(),                         // 2026-01, 2026-02, etc.
+    accountingPeriodId: v.optional(v.id("accounting_periods")),
+    homeCurrency: v.string(),
+    totalDebit: v.number(),
+    totalCredit: v.number(),
+    lineCount: v.number(),
+    isPeriodLocked: v.boolean(),
+    reversalOf: v.optional(v.id("journal_entries")),  // If this is a reversal
+    reversedBy: v.optional(v.id("journal_entries")),  // If reversed
+    createdBy: v.string(),
+    createdAt: v.number(),
+    postedBy: v.optional(v.string()),
+    postedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_business_entry_number", ["businessId", "entryNumber"])
+    .index("by_business_date", ["businessId", "transactionDate"])
+    .index("by_business_period", ["businessId", "fiscalPeriod", "status"])
+    .index("by_source", ["sourceType", "sourceId"])
+    .index("by_status", ["businessId", "status"]),
+
+  journal_entry_lines: defineTable({
+    journalEntryId: v.id("journal_entries"),
+    businessId: v.id("businesses"),
+    lineOrder: v.number(),
+    accountId: v.id("chart_of_accounts"),
+    accountCode: v.string(),
+    accountName: v.string(),
+    accountType: v.string(),
+    debitAmount: v.number(),
+    creditAmount: v.number(),
+    homeCurrencyAmount: v.number(),
+    lineDescription: v.optional(v.string()),
+    entityType: v.optional(v.union(
+      v.literal("customer"),
+      v.literal("vendor"),
+      v.literal("employee")
+    )),
+    entityId: v.optional(v.string()),
+    entityName: v.optional(v.string()),
+    bankReconciled: v.boolean(),
+    createdAt: v.number(),
+  })
+    .index("by_journal_entry", ["journalEntryId"])
+    .index("by_account_date", ["accountId", "createdAt"])
+    .index("by_business_account", ["businessId", "accountCode"])
+    .index("by_entity", ["entityType", "entityId"])
+    .index("by_bank_reconciled", ["businessId", "bankReconciled"]),
+
 });

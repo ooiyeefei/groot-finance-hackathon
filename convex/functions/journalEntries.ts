@@ -574,3 +574,289 @@ export const createInternal = internalMutation({
     return { entryId, entryNumber };
   },
 });
+
+/**
+ * Search journal entries for AI tools
+ *
+ * Similar to accountingEntries.searchForAI but queries journal_entry_lines
+ * to extract transaction data from double-entry bookkeeping.
+ */
+export const searchForAI = query({
+  args: {
+    businessId: v.id("businesses"),
+    searchQuery: v.optional(v.string()),
+    transactionType: v.optional(v.string()),
+    category: v.optional(v.string()),
+    vendorName: v.optional(v.string()),
+    minAmount: v.optional(v.number()),
+    maxAmount: v.optional(v.number()),
+    currency: v.optional(v.string()),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+    status: v.optional(v.string()),
+    sourceDocumentType: v.optional(
+      v.union(
+        v.literal("invoice"),
+        v.literal("expense_claim")
+      )
+    ),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 100;
+
+    // Query journal entries for the business
+    let entries = await ctx.db
+      .query("journal_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .order("desc")
+      .collect();
+
+    // Filter by status if specified
+    if (args.status) {
+      entries = entries.filter((e) => e.status === args.status);
+    }
+
+    // Filter by date range
+    if (args.startDate) {
+      entries = entries.filter((e) => e.transactionDate >= args.startDate!);
+    }
+    if (args.endDate) {
+      entries = entries.filter((e) => e.transactionDate <= args.endDate!);
+    }
+
+    // Filter by source document type (maps to sourceType)
+    if (args.sourceDocumentType) {
+      const sourceType = args.sourceDocumentType === "invoice"
+        ? "sales_invoice"
+        : "expense_claim";
+      entries = entries.filter((e) => e.sourceType === sourceType);
+    }
+
+    // Get lines for each entry and flatten for AI consumption
+    const entriesWithLines = await Promise.all(
+      entries.map(async (entry) => {
+        const lines = await ctx.db
+          .query("journal_entry_lines")
+          .withIndex("by_journal_entry", (q) => q.eq("journalEntryId", entry._id))
+          .collect();
+
+        return {
+          ...entry,
+          lines: lines.sort((a, b) => a.lineOrder - b.lineOrder),
+        };
+      })
+    );
+
+    // Transform to AI-friendly format (similar to accounting_entries structure)
+    let transformedEntries = entriesWithLines.map((entry) => {
+      // For expense entries, find the debit line in expense accounts (5000-5999)
+      const expenseLine = entry.lines.find(
+        (line) =>
+          line.accountCode >= "5000" &&
+          line.accountCode < "6000" &&
+          line.debitAmount > 0
+      );
+
+      // For income entries, find the credit line in revenue accounts (4000-4999)
+      const incomeLine = entry.lines.find(
+        (line) =>
+          line.accountCode >= "4000" &&
+          line.accountCode < "5000" &&
+          line.creditAmount > 0
+      );
+
+      // For COGS entries, find the debit line in COGS accounts (6000-6999)
+      const cogsLine = entry.lines.find(
+        (line) =>
+          line.accountCode >= "6000" &&
+          line.accountCode < "7000" &&
+          line.debitAmount > 0
+      );
+
+      // Determine transaction type and amount from the lines
+      let transactionType: string = "Expense";
+      let amount = 0;
+      let category = "";
+      let vendorName = "";
+
+      if (expenseLine) {
+        transactionType = "Expense";
+        amount = expenseLine.debitAmount;
+        category = expenseLine.accountName;
+        vendorName = expenseLine.entityName || "";
+      } else if (incomeLine) {
+        transactionType = "Income";
+        amount = incomeLine.creditAmount;
+        category = incomeLine.accountName;
+        vendorName = incomeLine.entityName || "";
+      } else if (cogsLine) {
+        transactionType = "Cost of Goods Sold";
+        amount = cogsLine.debitAmount;
+        category = cogsLine.accountName;
+        vendorName = cogsLine.entityName || "";
+      }
+
+      return {
+        _id: entry._id,
+        description: entry.description,
+        originalAmount: amount,
+        originalCurrency: entry.homeCurrency,
+        homeCurrencyAmount: amount,
+        transactionDate: entry.transactionDate,
+        category,
+        vendorName,
+        transactionType,
+        sourceDocumentType:
+          entry.sourceType === "sales_invoice"
+            ? "invoice"
+            : entry.sourceType === "expense_claim"
+            ? "expense_claim"
+            : entry.sourceType,
+        status: entry.status,
+        _creationTime: entry.createdAt,
+      };
+    });
+
+    // Apply text search (description, vendor)
+    if (args.searchQuery) {
+      const query = args.searchQuery.toLowerCase();
+      transformedEntries = transformedEntries.filter((e) => {
+        const desc = (e.description || "").toLowerCase();
+        const vendor = (e.vendorName || "").toLowerCase();
+        return desc.includes(query) || vendor.includes(query);
+      });
+    }
+
+    // Apply transaction type filter
+    if (args.transactionType) {
+      transformedEntries = transformedEntries.filter(
+        (e) => e.transactionType === args.transactionType
+      );
+    }
+
+    // Apply category filter
+    if (args.category) {
+      transformedEntries = transformedEntries.filter((e) =>
+        e.category.toLowerCase().includes(args.category!.toLowerCase())
+      );
+    }
+
+    // Apply vendor name filter
+    if (args.vendorName) {
+      const vendorQuery = args.vendorName.toLowerCase();
+      transformedEntries = transformedEntries.filter(
+        (e) => e.vendorName && e.vendorName.toLowerCase().includes(vendorQuery)
+      );
+    }
+
+    // Apply amount filters
+    if (args.minAmount !== undefined) {
+      transformedEntries = transformedEntries.filter(
+        (e) => e.originalAmount >= args.minAmount!
+      );
+    }
+    if (args.maxAmount !== undefined) {
+      transformedEntries = transformedEntries.filter(
+        (e) => e.originalAmount <= args.maxAmount!
+      );
+    }
+
+    // Currency filter (all entries are in home currency already)
+    if (args.currency) {
+      transformedEntries = transformedEntries.filter(
+        (e) => e.originalCurrency === args.currency
+      );
+    }
+
+    // Sort by date (newest first)
+    transformedEntries.sort((a, b) => {
+      const dateA = new Date(a.transactionDate).getTime();
+      const dateB = new Date(b.transactionDate).getTime();
+      return dateB - dateA;
+    });
+
+    const totalCount = transformedEntries.length;
+    const limitedEntries = transformedEntries.slice(0, limit);
+
+    return {
+      entries: limitedEntries,
+      totalCount,
+    };
+  },
+});
+
+/**
+ * Get journal entry count for a business (for AI tools)
+ */
+export const getEntryCount = query({
+  args: {
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    const entries = await ctx.db
+      .query("journal_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    return {
+      count: entries.filter((e) => e.status === "posted").length,
+    };
+  },
+});
+
+/**
+ * Get unique vendors from journal entry lines (for AI tools)
+ *
+ * Extracts vendor names from journal entry lines where entityType = "vendor".
+ */
+export const getUniqueVendors = query({
+  args: {
+    businessId: v.id("businesses"),
+    sourceDocumentType: v.optional(
+      v.union(
+        v.literal("invoice"),
+        v.literal("expense_claim")
+      )
+    ),
+  },
+  handler: async (ctx, args) => {
+    // Query journal entries for the business
+    let entries = await ctx.db
+      .query("journal_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    // Filter by source document type if specified
+    if (args.sourceDocumentType) {
+      const sourceType = args.sourceDocumentType === "invoice"
+        ? "sales_invoice"
+        : "expense_claim";
+      entries = entries.filter((e) => e.sourceType === sourceType);
+    }
+
+    // Get all lines for these entries
+    const allLines = await Promise.all(
+      entries.map(async (entry) => {
+        const lines = await ctx.db
+          .query("journal_entry_lines")
+          .withIndex("by_journal_entry", (q) => q.eq("journalEntryId", entry._id))
+          .collect();
+        return lines;
+      })
+    );
+
+    // Flatten and extract unique vendor names
+    const vendorNames = allLines
+      .flat()
+      .filter((line) => line.entityType === "vendor" && line.entityName?.trim())
+      .map((line) => line.entityName!)
+      .filter((name, index, self) => self.indexOf(name) === index)
+      .sort();
+
+    return {
+      vendors: vendorNames,
+      totalCount: vendorNames.length,
+    };
+  },
+});

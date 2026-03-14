@@ -32,6 +32,7 @@ export default function MatchCandidatesSheet({
 
   const [searchQuery, setSearchQuery] = useState('')
   const [splitMode, setSplitMode] = useState(false)
+  // Note: accounting_entries being migrated to journal_entries
   const [selectedEntryIds, setSelectedEntryIds] = useState<Id<'accounting_entries'>[]>([])
 
   // Filter candidates by search query

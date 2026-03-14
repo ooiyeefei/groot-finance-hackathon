@@ -89,7 +89,7 @@ interface ConvexInvoice {
   updatedAt?: number
   // Line items status for two-phase extraction
   lineItemsStatus?: 'pending' | 'extracting' | 'complete' | 'skipped'
-  // Joined from accounting_entries via Convex query
+  // Joined from journal_entries via Convex query
   linkedTransaction?: ConvexLinkedTransaction | null
 }
 
@@ -111,7 +111,7 @@ export interface Invoice {
   confidence_score?: number
   // Line items status for two-phase extraction real-time updates
   line_items_status?: 'pending' | 'extracting' | 'complete' | 'skipped'
-  // Linked transaction data (joined from accounting_entries)
+  // Linked transaction data (joined from journal_entries)
   linked_transaction?: {
     id: string
     description: string

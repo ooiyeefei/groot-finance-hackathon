@@ -6,6 +6,7 @@
  */
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
+import { Id } from '@/convex/_generated/dataModel'
 
 export class GetVendorsTool extends BaseTool {
   getToolName(_modelType: ModelType = 'openai'): string {
@@ -50,12 +51,19 @@ export class GetVendorsTool extends BaseTool {
         throw new Error('Convex client not initialized - authentication may have failed')
       }
 
-      // ✅ MIGRATED: Use Convex instead of Supabase
+      if (!userContext.businessId) {
+        return {
+          success: false,
+          error: 'Missing business context'
+        }
+      }
+
+      // ✅ MIGRATED: Use journal entries instead of accounting entries
       // Default to "invoice" sourceDocumentType — vendors are AP suppliers (incoming invoices),
       // NOT expense claim merchants (99 Speed Mart, Grab, etc.)
       const result = await this.convex.query(
-        this.convexApi.functions.accountingEntries.getUniqueVendors,
-        { businessId: userContext.businessId, sourceDocumentType: 'invoice' }
+        this.convexApi.functions.journalEntries.getUniqueVendors,
+        { businessId: userContext.businessId as Id<"businesses">, sourceDocumentType: 'invoice' }
       )
 
       if (!result || result.totalCount === 0) {
