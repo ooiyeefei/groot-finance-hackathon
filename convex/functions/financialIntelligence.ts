@@ -133,30 +133,35 @@ export const detectAnomalies = query({
       .toISOString()
       .split("T")[0];
 
-    // Fetch transactions
-    const entries = await ctx.db
-      .query("accounting_entries")
+    // Fetch journal entries and lines
+    const journalEntries = await ctx.db
+      .query("journal_entries")
       .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .filter((q) => q.gte(q.field("transactionDate"), cutoffDate))
+      .filter((q) => q.eq(q.field("status"), "posted"))
       .collect();
 
-    const recentExpenses = entries.filter(
-      (e) =>
-        !e.deletedAt &&
-        e.transactionType === "Expense" &&
-        e.transactionDate &&
-        e.transactionDate >= cutoffDate
-    );
+    const journalEntryIds = journalEntries.map((e) => e._id);
 
-    // Group by category for statistical analysis
-    const byCategory: Record<string, Array<{ txn: typeof recentExpenses[0]; amount: number }>> = {};
+    // Get all expense lines (account codes 5000-5999, debit side)
+    const allLines = await ctx.db.query("journal_entry_lines").collect();
+    const expenseLines = allLines.filter((line) => {
+      if (!journalEntryIds.includes(line.journalEntryId)) return false;
+      if (line.debitAmount === 0) return false; // Expenses increase with debits
+      const code = line.accountCode;
+      return code >= "5000" && code < "6000";
+    });
 
-    for (const txn of recentExpenses) {
-      const category = txn.category || "uncategorized";
-      const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
+    // Group by account name (category equivalent) for statistical analysis
+    const byCategory: Record<string, Array<{ line: typeof expenseLines[0]; amount: number; entryId: string }>> = {};
+
+    for (const line of expenseLines) {
+      const category = line.accountName || "uncategorized";
+      const amount = line.debitAmount;
       if (!byCategory[category]) {
         byCategory[category] = [];
       }
-      byCategory[category].push({ txn, amount });
+      byCategory[category].push({ line, amount, entryId: line.journalEntryId });
     }
 
     // Run anomaly detection - THE INTELLIGENCE
@@ -179,15 +184,15 @@ export const detectAnomalies = query({
       const threshold3Sigma = mean + 3 * stdDev;
 
       // Find anomalies
-      for (const { txn, amount } of items) {
+      for (const { line, amount, entryId } of items) {
         if (amount <= threshold) continue;
 
         const zScore = (amount - mean) / stdDev;
         const severity = amount > threshold3Sigma ? "high" : "medium";
 
         anomalies.push({
-          transactionId: txn._id.toString(),
-          description: txn.description || `${category} expense`,
+          transactionId: entryId,
+          description: line.lineDescription || `${category} expense`,
           category,
           amount,
           zScore: parseFloat(zScore.toFixed(2)),
@@ -203,7 +208,7 @@ export const detectAnomalies = query({
 
     return {
       anomalies,
-      analyzedTransactions: recentExpenses.length,
+      analyzedTransactions: expenseLines.length,
       categoriesAnalyzed: Object.keys(byCategory).length,
       periodDays: dateRangeDays,
     };
@@ -246,30 +251,37 @@ export const analyzeCashFlow = query({
       .toISOString()
       .split("T")[0];
 
-    const entries = await ctx.db
-      .query("accounting_entries")
+    // Fetch journal entries and lines
+    const journalEntries = await ctx.db
+      .query("journal_entries")
       .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .filter((q) => q.gte(q.field("transactionDate"), cutoffDate))
+      .filter((q) => q.eq(q.field("status"), "posted"))
       .collect();
 
-    const recent = entries.filter(
-      (e) => !e.deletedAt && e.transactionDate && e.transactionDate >= cutoffDate
-    );
+    const journalEntryIds = journalEntries.map((e) => e._id);
+
+    // Get all lines for these entries
+    const allLines = await ctx.db.query("journal_entry_lines").collect();
+    const relevantLines = allLines.filter((line) => journalEntryIds.includes(line.journalEntryId));
 
     // Calculate totals - THE INTELLIGENCE
     let totalIncome = 0;
     let totalExpenses = 0;
-    let estimatedBalance = 0;
 
-    for (const txn of recent) {
-      const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
-      if (txn.transactionType === "Income") {
-        totalIncome += amount;
-        estimatedBalance += amount;
-      } else if (txn.transactionType === "Expense") {
-        totalExpenses += amount;
-        estimatedBalance -= amount;
+    for (const line of relevantLines) {
+      const code = line.accountCode;
+      // Revenue accounts (4000-4999) increase with credits
+      if (code >= "4000" && code < "5000" && line.creditAmount > 0) {
+        totalIncome += line.creditAmount;
+      }
+      // Expense accounts (5000-5999) increase with debits
+      else if (code >= "5000" && code < "6000" && line.debitAmount > 0) {
+        totalExpenses += line.debitAmount;
       }
     }
+
+    const estimatedBalance = totalIncome - totalExpenses;
 
     // Calculate burn rate and runway
     const months = horizonDays / 30;
@@ -374,18 +386,23 @@ export const analyzeVendorRisk = query({
     }
 
     // Get recent transactions for analysis
-    const entries = await ctx.db
-      .query("accounting_entries")
+    const journalEntries = await ctx.db
+      .query("journal_entries")
       .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .filter((q) => q.gte(q.field("transactionDate"), ninetyDaysAgo))
+      .filter((q) => q.eq(q.field("status"), "posted"))
       .collect();
 
-    const recentExpenses = entries.filter(
-      (e) =>
-        !e.deletedAt &&
-        e.transactionType === "Expense" &&
-        e.transactionDate &&
-        e.transactionDate >= ninetyDaysAgo
-    );
+    const journalEntryIds = journalEntries.map((e) => e._id);
+
+    // Get all expense lines (account codes 5000-5999, debit side)
+    const allLines = await ctx.db.query("journal_entry_lines").collect();
+    const expenseLines = allLines.filter((line) => {
+      if (!journalEntryIds.includes(line.journalEntryId)) return false;
+      if (line.debitAmount === 0) return false;
+      const code = line.accountCode;
+      return code >= "5000" && code < "6000";
+    });
 
     // Analyze each vendor - THE INTELLIGENCE
     const results: VendorRiskResult[] = [];
@@ -393,8 +410,9 @@ export const analyzeVendorRisk = query({
     for (const vendor of vendors) {
       if (vendor.status === "inactive") continue;
 
-      const vendorTxns = recentExpenses.filter(
-        (e) => e.vendorId?.toString() === vendor._id.toString()
+      // Filter expense lines for this vendor
+      const vendorLines = expenseLines.filter(
+        (line) => line.entityType === "vendor" && line.entityId === vendor._id.toString()
       );
 
       let riskScore = 0;
@@ -419,10 +437,8 @@ export const analyzeVendorRisk = query({
       }
 
       // Transaction irregularity - high coefficient of variation (+20-30 risk)
-      if (vendorTxns.length >= 3) {
-        const amounts = vendorTxns.map((t) =>
-          Math.abs(t.homeCurrencyAmount || t.originalAmount || 0)
-        );
+      if (vendorLines.length >= 3) {
+        const amounts = vendorLines.map((line) => line.debitAmount);
         const mean = amounts.reduce((sum, a) => sum + a, 0) / amounts.length;
         const variance =
           amounts.reduce((sum, a) => sum + Math.pow(a - mean, 2), 0) / amounts.length;
@@ -438,7 +454,7 @@ export const analyzeVendorRisk = query({
       }
 
       // Inactivity - no transactions in 6+ months (+20 risk)
-      if (vendorTxns.length === 0) {
+      if (vendorLines.length === 0) {
         const daysSinceUpdate = vendor.updatedAt
           ? (Date.now() - vendor.updatedAt) / (24 * 60 * 60 * 1000)
           : 365;
@@ -451,10 +467,7 @@ export const analyzeVendorRisk = query({
 
       // Only include vendors above threshold
       if (riskScore >= riskThreshold) {
-        const recentSpend = vendorTxns.reduce(
-          (sum, t) => sum + Math.abs(t.homeCurrencyAmount || t.originalAmount || 0),
-          0
-        );
+        const recentSpend = vendorLines.reduce((sum, line) => sum + line.debitAmount, 0);
 
         results.push({
           vendorId: vendor._id.toString(),
@@ -463,7 +476,7 @@ export const analyzeVendorRisk = query({
           riskFactors: factors,
           severity: riskScore > 85 ? "high" : riskScore > 75 ? "medium" : "low",
           recentSpend: parseFloat(recentSpend.toFixed(2)),
-          transactionCount: vendorTxns.length,
+          transactionCount: vendorLines.length,
         });
       }
     }
@@ -527,31 +540,36 @@ export const analyzeVendorConcentration = query({
       .toISOString()
       .split("T")[0];
 
-    const entries = await ctx.db
-      .query("accounting_entries")
+    // Fetch journal entries and expense lines
+    const journalEntries = await ctx.db
+      .query("journal_entries")
       .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .filter((q) => q.gte(q.field("transactionDate"), cutoffDate))
+      .filter((q) => q.eq(q.field("status"), "posted"))
       .collect();
 
-    const expenses = entries.filter(
-      (e) =>
-        !e.deletedAt &&
-        e.transactionType === "Expense" &&
-        e.transactionDate &&
-        e.transactionDate >= cutoffDate &&
-        e.category
-    );
+    const journalEntryIds = journalEntries.map((e) => e._id);
 
-    // Group by category and vendor - THE INTELLIGENCE
+    // Get all expense lines (account codes 5000-5999, debit side)
+    const allLines = await ctx.db.query("journal_entry_lines").collect();
+    const expenseLines = allLines.filter((line) => {
+      if (!journalEntryIds.includes(line.journalEntryId)) return false;
+      if (line.debitAmount === 0) return false;
+      const code = line.accountCode;
+      return code >= "5000" && code < "6000";
+    });
+
+    // Group by account (category equivalent) and vendor - THE INTELLIGENCE
     const byCategory: Record<
       string,
       { total: number; byVendor: Record<string, { name: string; amount: number }> }
     > = {};
 
-    for (const txn of expenses) {
-      const category = txn.category!;
-      const vendorKey = txn.vendorId?.toString() || txn.vendorName || "unknown";
-      const vendorName = txn.vendorName || "Unknown Vendor";
-      const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
+    for (const line of expenseLines) {
+      const category = line.accountName || "uncategorized";
+      const vendorKey = line.entityType === "vendor" && line.entityId ? line.entityId : "unknown";
+      const vendorName = line.entityName || "Unknown Vendor";
+      const amount = line.debitAmount;
 
       if (!byCategory[category]) {
         byCategory[category] = { total: 0, byVendor: {} };
@@ -646,49 +664,64 @@ export const detectDuplicates = query({
       .toISOString()
       .split("T")[0];
 
-    const entries = await ctx.db
-      .query("accounting_entries")
+    // Fetch journal entries
+    const journalEntries = await ctx.db
+      .query("journal_entries")
       .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .filter((q) => q.gte(q.field("transactionDate"), cutoffDate))
+      .filter((q) => q.eq(q.field("status"), "posted"))
       .collect();
 
-    const recent = entries.filter(
-      (e) => !e.deletedAt && e.transactionDate && e.transactionDate >= cutoffDate
-    );
+    const journalEntryIds = journalEntries.map((e) => e._id);
+
+    // Get all expense lines (account codes 5000-5999, debit side)
+    const allLines = await ctx.db.query("journal_entry_lines").collect();
+    const expenseLines = allLines.filter((line) => {
+      if (!journalEntryIds.includes(line.journalEntryId)) return false;
+      if (line.debitAmount === 0) return false;
+      if (line.debitAmount < minAmount) return false;
+      const code = line.accountCode;
+      return code >= "5000" && code < "6000";
+    });
 
     // Group by amount + vendor + date - THE INTELLIGENCE
-    const grouped: Record<string, typeof recent> = {};
+    const grouped: Record<string, typeof expenseLines> = {};
 
-    for (const txn of recent) {
-      const amount = Math.abs(txn.originalAmount || 0);
-      if (amount < minAmount) continue;
+    for (const line of expenseLines) {
+      const entry = journalEntries.find((e) => e._id === line.journalEntryId);
+      if (!entry) continue;
 
-      const key = `${txn.vendorName || "unknown"}_${amount}_${txn.transactionDate}`;
+      const amount = line.debitAmount;
+      const vendorName = line.entityName || "unknown";
+      const key = `${vendorName}_${amount}_${entry.transactionDate}`;
+
       if (!grouped[key]) {
         grouped[key] = [];
       }
-      grouped[key].push(txn);
+      grouped[key].push(line);
     }
 
     // Find duplicates
     const duplicates: DuplicateResult[] = [];
     let potentialSavings = 0;
 
-    for (const [, txns] of Object.entries(grouped)) {
-      if (txns.length <= 1) continue;
+    for (const [, lines] of Object.entries(grouped)) {
+      if (lines.length <= 1) continue;
 
-      const firstTxn = txns[0];
-      const amount = Math.abs(firstTxn.homeCurrencyAmount || firstTxn.originalAmount || 0);
+      const firstLine = lines[0];
+      const amount = firstLine.debitAmount;
+      const entry = journalEntries.find((e) => e._id === firstLine.journalEntryId);
 
       duplicates.push({
-        transactionIds: txns.map((t) => t._id.toString()),
+        transactionIds: lines.map((l) => l.journalEntryId),
         amount,
-        vendorName: firstTxn.vendorName || "Unknown",
-        transactionDate: firstTxn.transactionDate || "",
-        count: txns.length,
+        vendorName: firstLine.entityName || "Unknown",
+        transactionDate: entry?.transactionDate || "",
+        count: lines.length,
       });
 
       // Potential savings = duplicate amount (assuming all but one are duplicates)
-      potentialSavings += amount * (txns.length - 1);
+      potentialSavings += amount * (lines.length - 1);
     }
 
     // Sort by amount descending
@@ -696,7 +729,7 @@ export const detectDuplicates = query({
 
     return {
       duplicates,
-      transactionsAnalyzed: recent.length,
+      transactionsAnalyzed: expenseLines.length,
       potentialSavings: parseFloat(potentialSavings.toFixed(2)),
     };
   },
@@ -847,58 +880,78 @@ export const getEmployeeExpensesForManager = query({
     }
     // Self-query: any role can query their own expenses
 
-    // Query accounting entries
-    const allEntries = await ctx.db
-      .query("accounting_entries")
+    // Query journal entries and lines for this employee
+    const allJournalEntries = await ctx.db
+      .query("journal_entries")
       .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .filter((q) => q.eq(q.field("status"), "posted"))
       .collect();
 
-    // Filter: userId match, not deleted, apply optional filters
-    let filtered = allEntries.filter((e) =>
-      e.userId === targetEmployee._id && !e.deletedAt
-    );
-
+    // Filter by date range if provided
     const filters = args.filters;
+    let journalEntries = allJournalEntries;
+    if (filters?.startDate) {
+      journalEntries = journalEntries.filter((e) => e.transactionDate >= filters.startDate!);
+    }
+    if (filters?.endDate) {
+      journalEntries = journalEntries.filter((e) => e.transactionDate <= filters.endDate!);
+    }
+
+    const journalEntryIds = journalEntries.map((e) => e._id);
+
+    // Get all lines for these entries
+    const allLines = await ctx.db.query("journal_entry_lines").collect();
+    let relevantLines = allLines.filter((line) => {
+      if (!journalEntryIds.includes(line.journalEntryId)) return false;
+      // Filter by employee entity
+      if (line.entityType !== "employee" || line.entityId !== targetEmployee._id.toString()) return false;
+      return true;
+    });
+
+    // Apply optional filters
     if (filters) {
       if (filters.vendorName) {
         const vendorLower = filters.vendorName.toLowerCase();
-        filtered = filtered.filter((e) =>
-          (e.vendorName || "").toLowerCase().includes(vendorLower)
+        relevantLines = relevantLines.filter((line) =>
+          (line.entityName || "").toLowerCase().includes(vendorLower)
         );
       }
       if (filters.category) {
-        filtered = filtered.filter((e) => e.category === filters.category);
-      }
-      if (filters.startDate) {
-        filtered = filtered.filter((e) =>
-          e.transactionDate && e.transactionDate >= filters.startDate!
-        );
-      }
-      if (filters.endDate) {
-        filtered = filtered.filter((e) =>
-          e.transactionDate && e.transactionDate <= filters.endDate!
-        );
+        relevantLines = relevantLines.filter((line) => line.accountName === filters.category);
       }
       if (filters.transactionType) {
-        filtered = filtered.filter((e) => e.transactionType === filters.transactionType);
+        // Filter by account code range
+        if (filters.transactionType === "Expense") {
+          relevantLines = relevantLines.filter((line) => {
+            const code = line.accountCode;
+            return code >= "5000" && code < "6000";
+          });
+        } else if (filters.transactionType === "Income") {
+          relevantLines = relevantLines.filter((line) => {
+            const code = line.accountCode;
+            return code >= "4000" && code < "5000";
+          });
+        }
       }
     }
 
-    // Sort by transactionDate descending
-    filtered.sort((a, b) =>
-      (b.transactionDate || "").localeCompare(a.transactionDate || "")
-    );
+    // Sort by transaction date descending
+    relevantLines.sort((a, b) => {
+      const entryA = journalEntries.find((e) => e._id === a.journalEntryId);
+      const entryB = journalEntries.find((e) => e._id === b.journalEntryId);
+      return (entryB?.transactionDate || "").localeCompare(entryA?.transactionDate || "");
+    });
 
     // Compute totals BEFORE applying limit
-    const totalCount = filtered.length;
-    const totalAmount = filtered.reduce(
-      (sum, e) => sum + Math.abs(e.homeCurrencyAmount || e.originalAmount || 0),
+    const totalCount = relevantLines.length;
+    const totalAmount = relevantLines.reduce(
+      (sum, line) => sum + (line.debitAmount || line.creditAmount),
       0
     );
 
     // Apply limit
     const limit = Math.min(filters?.limit || 50, 50);
-    const limited = filtered.slice(0, limit);
+    const limited = relevantLines.slice(0, limit);
 
     // Build category ID → display name lookup from business custom categories
     const customCategories = (business.customExpenseCategories as Array<{
@@ -909,20 +962,28 @@ export const getEmployeeExpensesForManager = query({
       if (cat.id) categoryLookup[cat.id] = cat.category_name || cat.name || cat.id;
     }
 
-    // Map entries to response format
-    const entries = limited.map((e) => ({
-      id: e._id.toString(),
-      transactionDate: e.transactionDate || "",
-      description: e.description || "",
-      vendorName: e.vendorName || "",
-      originalAmount: e.originalAmount || 0,
-      homeCurrencyAmount: e.homeCurrencyAmount || e.originalAmount || 0,
-      originalCurrency: e.originalCurrency || "MYR",
-      homeCurrency: e.homeCurrency || business.homeCurrency || "MYR",
-      category: categoryLookup[e.category || ""] || e.category || "",
-      transactionType: e.transactionType,
-      sourceDocumentType: e.sourceDocumentType || "",
-    }));
+    // Map lines to response format
+    const entries = limited.map((line) => {
+      const entry = journalEntries.find((e) => e._id === line.journalEntryId);
+      const code = line.accountCode;
+      const isExpense = code >= "5000" && code < "6000";
+      const isIncome = code >= "4000" && code < "5000";
+      const transactionType = isExpense ? "Expense" : isIncome ? "Income" : "Other";
+
+      return {
+        id: line.journalEntryId,
+        transactionDate: entry?.transactionDate || "",
+        description: line.lineDescription || entry?.description || "",
+        vendorName: line.entityName || "",
+        originalAmount: line.debitAmount || line.creditAmount,
+        homeCurrencyAmount: line.debitAmount || line.creditAmount,
+        originalCurrency: business.homeCurrency || "MYR",
+        homeCurrency: business.homeCurrency || "MYR",
+        category: categoryLookup[line.accountName || ""] || line.accountName || "",
+        transactionType,
+        sourceDocumentType: entry?.sourceType || "",
+      };
+    });
 
     return {
       authorized: true,
@@ -1027,60 +1088,66 @@ export const getTeamExpenseSummary = query({
       }
     }
 
-    // Query all entries for business
-    const allEntries = await ctx.db
-      .query("accounting_entries")
+    // Query journal entries for business
+    const allJournalEntries = await ctx.db
+      .query("journal_entries")
       .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .filter((q) => q.eq(q.field("status"), "posted"))
       .collect();
 
-    // Filter to target users, not deleted, apply optional filters
-    let filtered = allEntries.filter((e) =>
-      targetUserIds.has(e.userId.toString()) && !e.deletedAt
-    );
-
+    // Apply date filters
     const filters = args.filters;
-    if (filters) {
-      if (filters.startDate) {
-        filtered = filtered.filter((e) =>
-          e.transactionDate && e.transactionDate >= filters.startDate!
-        );
-      }
-      if (filters.endDate) {
-        filtered = filtered.filter((e) =>
-          e.transactionDate && e.transactionDate <= filters.endDate!
-        );
-      }
-      if (filters.category) {
-        filtered = filtered.filter((e) => e.category === filters.category);
-      }
+    let journalEntries = allJournalEntries;
+    if (filters?.startDate) {
+      journalEntries = journalEntries.filter((e) => e.transactionDate >= filters.startDate!);
+    }
+    if (filters?.endDate) {
+      journalEntries = journalEntries.filter((e) => e.transactionDate <= filters.endDate!);
+    }
+
+    const journalEntryIds = journalEntries.map((e) => e._id);
+
+    // Get all lines for these entries
+    const allLines = await ctx.db.query("journal_entry_lines").collect();
+    let relevantLines = allLines.filter((line) => {
+      if (!journalEntryIds.includes(line.journalEntryId)) return false;
+      // Filter to target employee IDs
+      if (line.entityType !== "employee") return false;
+      if (!line.entityId || !targetUserIds.has(line.entityId)) return false;
+      return true;
+    });
+
+    // Apply category filter if provided
+    if (filters?.category) {
+      relevantLines = relevantLines.filter((line) => line.accountName === filters.category);
     }
 
     // Compute summary
-    const totalAmount = filtered.reduce(
-      (sum, e) => sum + Math.abs(e.homeCurrencyAmount || e.originalAmount || 0),
+    const totalAmount = relevantLines.reduce(
+      (sum, line) => sum + (line.debitAmount || line.creditAmount),
       0
     );
-    const uniqueEmployees = new Set(filtered.map((e) => e.userId.toString()));
+    const uniqueEmployees = new Set(relevantLines.map((line) => line.entityId).filter((id): id is string => !!id));
 
     // Group by requested dimension
     const groupBy = filters?.groupBy || "employee";
     const groups: Record<string, { groupKey: string; groupId: string; totalAmount: number; recordCount: number }> = {};
 
-    for (const entry of filtered) {
-      const amount = Math.abs(entry.homeCurrencyAmount || entry.originalAmount || 0);
+    for (const line of relevantLines) {
+      const amount = line.debitAmount || line.creditAmount;
       let key: string;
       let groupKey: string;
 
       if (groupBy === "employee") {
-        key = entry.userId.toString();
-        groupKey = userNameMap[key] || key;
+        key = line.entityId || "unknown";
+        groupKey = userNameMap[key] || line.entityName || key;
       } else if (groupBy === "category") {
-        key = entry.category || "uncategorized";
+        key = line.accountName || "uncategorized";
         groupKey = key;
       } else {
         // vendor
-        key = (entry.vendorName || "Unknown").toLowerCase();
-        groupKey = entry.vendorName || "Unknown";
+        key = (line.entityName || "Unknown").toLowerCase();
+        groupKey = line.entityName || "Unknown";
       }
 
       if (!groups[key]) {
@@ -1101,9 +1168,9 @@ export const getTeamExpenseSummary = query({
 
     // Compute top categories (always, regardless of groupBy)
     const categoryGroups: Record<string, number> = {};
-    for (const entry of filtered) {
-      const category = entry.category || "uncategorized";
-      const amount = Math.abs(entry.homeCurrencyAmount || entry.originalAmount || 0);
+    for (const line of relevantLines) {
+      const category = line.accountName || "uncategorized";
+      const amount = line.debitAmount || line.creditAmount;
       categoryGroups[category] = (categoryGroups[category] || 0) + amount;
     }
 
@@ -1124,7 +1191,7 @@ export const getTeamExpenseSummary = query({
         currency: business.homeCurrency || "MYR",
         employeeCount: targetUserIds.size,       // total team members in scope
         employeesWithData: uniqueEmployees.size, // members who have transactions in this period
-        recordCount: filtered.length,
+        recordCount: relevantLines.length,
       },
       breakdown,
       topCategories,
@@ -1204,41 +1271,60 @@ export const getMcpTeamExpenses = query({
       }
     }
 
-    // Query entries
-    const entries = await ctx.db
-      .query("accounting_entries")
+    // Query journal entries
+    let journalEntries = await ctx.db
+      .query("journal_entries")
       .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .filter((q) => q.eq(q.field("status"), "posted"))
       .collect();
 
-    // Filter
-    let filtered = entries.filter((e) =>
-      targetUserIds.has(e.userId.toString()) && !e.deletedAt
-    );
-
+    // Apply date filters
     if (args.startDate) {
-      filtered = filtered.filter((e) => e.transactionDate && e.transactionDate >= args.startDate!);
+      journalEntries = journalEntries.filter((e) => e.transactionDate >= args.startDate!);
     }
     if (args.endDate) {
-      filtered = filtered.filter((e) => e.transactionDate && e.transactionDate <= args.endDate!);
-    }
-    if (args.categoryFilter && args.categoryFilter.length > 0) {
-      const categorySet = new Set(args.categoryFilter);
-      filtered = filtered.filter((e) => categorySet.has(e.category || ""));
+      journalEntries = journalEntries.filter((e) => e.transactionDate <= args.endDate!);
     }
 
-    return filtered.map((e) => ({
-      _id: e._id.toString(),
-      userId: e.userId.toString(),
-      userName: userNameMap[e.userId.toString()] || "",
-      transactionDate: e.transactionDate || "",
-      vendorName: e.vendorName || "",
-      category: e.category || "",
-      categoryName: e.category || "",
-      originalAmount: e.originalAmount || 0,
-      homeCurrencyAmount: e.homeCurrencyAmount || e.originalAmount || 0,
-      currency: e.originalCurrency || business.homeCurrency || "MYR",
-      transactionType: e.transactionType,
-    }));
+    const journalEntryIds = journalEntries.map((e) => e._id);
+
+    // Get all lines for these entries
+    const allLines = await ctx.db.query("journal_entry_lines").collect();
+    let relevantLines = allLines.filter((line) => {
+      if (!journalEntryIds.includes(line.journalEntryId)) return false;
+      // Filter to target employee IDs
+      if (line.entityType !== "employee") return false;
+      if (!line.entityId || !targetUserIds.has(line.entityId)) return false;
+      return true;
+    });
+
+    // Apply category filter if provided
+    if (args.categoryFilter && args.categoryFilter.length > 0) {
+      const categorySet = new Set(args.categoryFilter);
+      relevantLines = relevantLines.filter((line) => categorySet.has(line.accountName || ""));
+    }
+
+    return relevantLines.map((line) => {
+      const entry = journalEntries.find((e) => e._id === line.journalEntryId);
+      const code = line.accountCode;
+      const isExpense = code >= "5000" && code < "6000";
+      const isIncome = code >= "4000" && code < "5000";
+      const transactionType = isExpense ? "Expense" : isIncome ? "Income" : "Other";
+
+      return {
+        _id: line.journalEntryId,
+        userId: line.entityId || "",
+        userName: userNameMap[line.entityId || ""] || line.entityName || "",
+        transactionDate: entry?.transactionDate || "",
+        vendorName: line.entityName || "",
+        category: line.accountName || "",
+        categoryName: line.accountName || "",
+        originalAmount: line.debitAmount || line.creditAmount,
+        homeCurrencyAmount: line.debitAmount || line.creditAmount,
+        currency: business.homeCurrency || "MYR",
+        transactionType,
+      };
+    });
   },
 });
 
@@ -1264,28 +1350,44 @@ export const getMcpAccountingEntries = query({
       return [];
     }
 
-    const entries = await ctx.db
-      .query("accounting_entries")
+    // Query journal entries and lines
+    const journalEntries = await ctx.db
+      .query("journal_entries")
       .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .filter((q) => q.eq(q.field("status"), "posted"))
       .collect();
 
-    // Return entries with only the fields needed for analysis
-    // Map actual schema fields to what MCP tools expect
-    return entries.map((e) => ({
-      _id: e._id.toString(),
-      businessId: e.businessId?.toString() ?? "",
-      transactionType: e.transactionType,
-      transactionDate: e.transactionDate,
-      category: e.category,
-      categoryName: e.category, // MCP tools expect categoryName, schema has category
-      vendorName: e.vendorName,
-      vendorId: e.vendorId?.toString(),
-      description: e.description,
-      originalAmount: e.originalAmount,
-      homeCurrencyAmount: e.homeCurrencyAmount,
-      currency: e.originalCurrency, // MCP tools expect currency, schema has originalCurrency
-      deletedAt: e.deletedAt,
-    }));
+    const journalEntryIds = journalEntries.map((e) => e._id);
+
+    // Get all lines for these entries
+    const allLines = await ctx.db.query("journal_entry_lines").collect();
+    const relevantLines = allLines.filter((line) => journalEntryIds.includes(line.journalEntryId));
+
+    // Return lines with only the fields needed for analysis
+    // Map journal entry lines to what MCP tools expect (accounting_entries format)
+    return relevantLines.map((line) => {
+      const entry = journalEntries.find((e) => e._id === line.journalEntryId);
+      const code = line.accountCode;
+      const isExpense = code >= "5000" && code < "6000";
+      const isIncome = code >= "4000" && code < "5000";
+      const transactionType = isExpense ? "Expense" : isIncome ? "Income" : "Other";
+
+      return {
+        _id: line.journalEntryId,
+        businessId: business._id.toString(),
+        transactionType,
+        transactionDate: entry?.transactionDate || "",
+        category: line.accountName,
+        categoryName: line.accountName,
+        vendorName: line.entityType === "vendor" ? line.entityName : undefined,
+        vendorId: line.entityType === "vendor" ? line.entityId : undefined,
+        description: line.lineDescription || entry?.description,
+        originalAmount: line.debitAmount || line.creditAmount,
+        homeCurrencyAmount: line.debitAmount || line.creditAmount,
+        currency: business.homeCurrency || "MYR",
+        deletedAt: undefined, // Journal entries don't have soft delete
+      };
+    });
   },
 });
 
