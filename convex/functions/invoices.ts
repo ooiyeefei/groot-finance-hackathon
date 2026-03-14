@@ -13,6 +13,7 @@ import { query, mutation, internalMutation, internalQuery } from "../_generated/
 import { Id } from "../_generated/dataModel";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 import { internal } from "../_generated/api";
+import { createInvoiceJournalEntry } from "../lib/journal_entry_helpers";
 
 // Helper: require finance admin role (owner/finance_admin/manager)
 async function requireFinanceAdminForInvoices(
@@ -1046,31 +1047,7 @@ export const internalUpdateExtraction = internalMutation({
             ? `Invoice from ${vendorName}${invoiceNumber ? ` #${invoiceNumber}` : ""}`
             : `Supplier invoice${invoiceNumber ? ` #${invoiceNumber}` : ""}`;
 
-          // Map line items from OCR extracted data
-          type RawLineItem = {
-            item_description?: string; description?: string;
-            quantity?: number; unit_price?: number; total_amount?: number;
-            currency?: string; tax_amount?: number; tax_rate?: number;
-            item_category?: string; item_code?: string; unit_measurement?: string;
-          };
-          const rawLineItems = ((extracted.line_items ?? extracted.lineItems) as RawLineItem[] | undefined) ?? [];
-          const lineItems = rawLineItems
-            .filter((item) => item.item_description || item.description)
-            .map((item, index) => ({
-              itemDescription: (item.item_description || item.description || "Item")!,
-              quantity: item.quantity ?? 1,
-              unitPrice: item.unit_price ?? 0,
-              totalAmount: item.total_amount ?? Math.round((item.unit_price ?? 0) * (item.quantity ?? 1) * 100) / 100,
-              currency: item.currency || currency,
-              taxAmount: item.tax_amount,
-              taxRate: item.tax_rate,
-              itemCategory: item.item_category,
-              itemCode: item.item_code,
-              unitMeasurement: item.unit_measurement,
-              lineOrder: index + 1,
-            }));
-
-          // Look up vendor record for vendorId link
+          // Look up vendor record for entityId link
           let matchedVendor: { _id: any } | undefined;
           if (vendorName && invoice.businessId) {
             const vendors = await ctx.db
@@ -1080,27 +1057,73 @@ export const internalUpdateExtraction = internalMutation({
             matchedVendor = vendors.find((v) => v.name === vendorName);
           }
 
-          const accountingEntryId = await ctx.db.insert("accounting_entries", {
-            businessId: invoice.businessId,
-            userId: invoice.userId,
-            vendorId: matchedVendor?._id,
-            transactionType: "Expense",
+          // Get expense account (default 5200)
+          const expenseAccount = await ctx.db
+            .query("chart_of_accounts")
+            .withIndex("by_business_code", (q) =>
+              q.eq("businessId", invoice.businessId!).eq("accountCode", "5200")
+            )
+            .first();
+
+          if (!expenseAccount) {
+            throw new Error("Expense account 5200 not found");
+          }
+
+          // Get AP account (2100)
+          const apAccount = await ctx.db
+            .query("chart_of_accounts")
+            .withIndex("by_business_code", (q) =>
+              q.eq("businessId", invoice.businessId!).eq("accountCode", "2100")
+            )
+            .first();
+
+          if (!apAccount) {
+            throw new Error("AP account 2100 not found");
+          }
+
+          // Create journal entry lines
+          const lines = createInvoiceJournalEntry({
+            amount: totalAmount,
+            expenseAccountId: expenseAccount._id,
+            expenseAccountCode: expenseAccount.accountCode,
+            expenseAccountName: expenseAccount.accountName,
             description,
-            originalAmount: totalAmount,
-            originalCurrency: currency,
-            transactionDate: invoiceDate,
-            category: "Accounts Payable",
-            vendorName: vendorName || undefined,
-            referenceNumber: invoiceNumber || undefined,
-            status: "pending",
-            createdByMethod: "document_extract",
-            sourceRecordId: invoice._id.toString(),
-            sourceDocumentType: "invoice",
-            lineItems: lineItems.length > 0 ? lineItems : undefined,
-            updatedAt: now,
+            apAccountId: apAccount._id,
+            apAccountCode: apAccount.accountCode,
+            apAccountName: apAccount.accountName,
           });
 
-          console.log(`[Convex Internal] Auto-posted accounting entry ${accountingEntryId} for AP invoice ${args.id} with ${lineItems.length} line items`);
+          // Create journal entry via internal API
+          const { entryId: journalEntryId } = await ctx.runMutation(
+            internal.functions.journalEntries.createInternal,
+            {
+              businessId: invoice.businessId!,
+              transactionDate: invoiceDate,
+              description,
+              sourceType: "expense_claim", // TODO: Add "vendor_invoice" to schema sourceType union
+              sourceId: invoice._id,
+              lines: lines.map((l, index) => ({
+                accountCode: l.accountCode,
+                debitAmount: l.debitAmount,
+                creditAmount: l.creditAmount,
+                lineDescription: l.lineDescription,
+                // Add vendor entity tracking to AP line (credit line)
+                ...(index === 1 && matchedVendor ? {
+                  entityType: "vendor" as const,
+                  entityId: matchedVendor._id,
+                  entityName: vendorName,
+                } : {}),
+              })),
+            }
+          );
+
+          // Update invoice with journal entry reference
+          await ctx.db.patch(invoice._id, {
+            journalEntryId,
+            accountingStatus: "posted",
+          });
+
+          console.log(`[Convex Internal] Auto-posted journal entry ${journalEntryId} for AP invoice ${args.id}`);
         } else {
           console.log(`[Convex Internal] Skipped auto-post for invoice ${args.id} — accounting entry already exists`);
         }

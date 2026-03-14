@@ -966,6 +966,14 @@ export default defineSchema({
       v.literal("skipped")      // Line items extraction skipped
     )),
 
+    // Double-entry accounting (001-accounting-double-entry)
+    journalEntryId: v.optional(v.id("journal_entries")),
+    accountingStatus: v.optional(v.union(
+      v.literal("draft"),
+      v.literal("posted"),
+      v.literal("voided")
+    )),
+
     // Timestamps
     processingStartedAt: v.optional(v.number()),
     processedAt: v.optional(v.number()),
