@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUserContextWithBusiness } from '@/domains/security/lib/rbac'
 import { getEnabledCategories } from '@/domains/expense-claims/lib/expense-category.service'
 import { redisCategoryCache } from '@/lib/cache/redis-cache'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 /**
  * GET /api/v1/expense-claims/categories/enabled
@@ -29,14 +30,14 @@ export async function GET(request: NextRequest) {
     const cacheKey = `expense-enabled-${businessId}`
     const cached = await redisCategoryCache.get(cacheKey)
     if (cached) {
-      return NextResponse.json({
+      return withCacheHeaders(NextResponse.json({
         success: true,
         data: cached,
         meta: {
           cached: true,
           source: 'redis-cache'
         }
-      })
+      }), 'stable')
     }
 
     // Cache miss - fetch from database
@@ -45,14 +46,14 @@ export async function GET(request: NextRequest) {
     // Cache the result
     await redisCategoryCache.set(cacheKey, enabledCategories)
 
-    return NextResponse.json({
+    return withCacheHeaders(NextResponse.json({
       success: true,
       data: enabledCategories,
       meta: {
         cached: false,
         source: 'database'
       }
-    })
+    }), 'stable')
   } catch (error) {
     console.error('[API v1 GET /expense-claims/categories/enabled] Error:', error)
 

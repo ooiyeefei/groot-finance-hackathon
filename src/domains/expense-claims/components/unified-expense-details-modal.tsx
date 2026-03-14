@@ -161,61 +161,111 @@ export default function UnifiedExpenseDetailsModal({
   const [duplicateLoading, setDuplicateLoading] = useState(false)
   const { profile: businessProfile } = useBusinessProfile()
 
-  // Fetch categories on component mount
+  // Reset state when modal closes to prevent stale data on reopen
   useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        const response = await fetch('/api/v1/expense-claims/categories')
-        const result = await response.json()
-
-        if (result.success && result.data.categories) {
-          setCategories(result.data.categories)
-        }
-      } catch (error) {
-        console.error('[Unified Modal] Failed to fetch categories:', error)
-      }
-    }
-
-    if (isOpen) {
-      fetchCategories()
+    if (!isOpen) {
+      setClaimDetails(null)
+      setSignedImageUrl(null)
+      setImageLoading(false)
+      setLoading(false)
+      setError(null)
+      setApprovalNotes('')
+      setShowDuplicateReview(false)
+      setDuplicateMatches([])
     }
   }, [isOpen])
 
-  // Fetch claim details + business profile
+  // Fetch categories, claim details, and signed URL together when modal opens
+  // Combines into one effect to eliminate waterfall between claim fetch → signed URL
   useEffect(() => {
-    if (isOpen && claimId) {
-      fetchClaimDetails()
-    }
-  }, [isOpen, claimId])
+    if (!isOpen || !claimId) return
 
-  // Generate signed URL when claim details are loaded
-  // Uses lightweight /api/v1/signed-url endpoint (skips redundant Convex query)
-  useEffect(() => {
-    const generateSignedUrl = async () => {
-      if (!claimDetails?.storage_path) return
+    let cancelled = false
 
+    const fetchAll = async () => {
+      // Fire categories fetch in parallel (independent)
+      const categoriesPromise = fetch('/api/v1/expense-claims/categories')
+        .then(res => res.json())
+        .then(result => {
+          if (!cancelled && result.success && result.data.categories) {
+            setCategories(result.data.categories)
+          }
+        })
+        .catch(error => console.error('[Unified Modal] Failed to fetch categories:', error))
+
+      // Fetch claim details
       try {
+        setLoading(true)
         setImageLoading(true)
-        const s3Key = `expense_claims/${claimDetails.storage_path}`
-        const response = await fetch(`/api/v1/signed-url?path=${encodeURIComponent(s3Key)}`)
+
+        const response = await fetch(`/api/v1/expense-claims/${claimId}`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        })
+
+        if (cancelled) return
 
         if (!response.ok) {
-          throw new Error('Failed to generate signed URL')
+          const errorData = await response.json()
+          throw new Error(errorData.error || 'Failed to fetch claim details')
         }
 
         const result = await response.json()
-        setSignedImageUrl(result?.data?.imageUrl || null)
+
+        if (!result.success || !result.data) {
+          throw new Error('Invalid response format')
+        }
+
+        const enrichedData = {
+          ...result.data,
+          status_display: result.data.status_display || getStatusDisplayInfo(result.data.status),
+          workflow_progress: result.data.workflow_progress || getWorkflowProgress(result.data.status),
+        }
+
+        if (cancelled) return
+        setClaimDetails(enrichedData)
+        setLoading(false)
+
+        // Now generate signed URL immediately (no second effect needed)
+        const storagePath = enrichedData.storage_path
+        if (storagePath) {
+          try {
+            const s3Key = `expense_claims/${storagePath}`
+            const urlResponse = await fetch(`/api/v1/signed-url?path=${encodeURIComponent(s3Key)}`)
+
+            if (cancelled) return
+
+            if (urlResponse.ok) {
+              const urlResult = await urlResponse.json()
+              setSignedImageUrl(urlResult?.data?.imageUrl || null)
+            } else {
+              setSignedImageUrl(null)
+            }
+          } catch (error) {
+            console.error('[Unified Modal] Failed to generate signed URL:', error)
+            if (!cancelled) setSignedImageUrl(null)
+          }
+        }
       } catch (error) {
-        console.error('[Unified Modal] Failed to generate signed URL:', error)
-        setSignedImageUrl(null)
+        if (!cancelled) {
+          console.error('Error fetching claim details:', error)
+          setError(error instanceof Error ? error.message : 'Failed to load claim details')
+          setLoading(false)
+        }
       } finally {
-        setImageLoading(false)
+        if (!cancelled) setImageLoading(false)
       }
+
+      // Wait for categories to finish (non-blocking)
+      await categoriesPromise
     }
 
-    generateSignedUrl()
-  }, [claimDetails?.storage_path, claimDetails?.id])
+    fetchAll()
 
+    return () => { cancelled = true }
+  }, [isOpen, claimId])
+
+  // Standalone refresh function for callbacks (after edits, duplicate checks, etc.)
   const fetchClaimDetails = async () => {
     try {
       setLoading(true)
@@ -223,9 +273,7 @@ export default function UnifiedExpenseDetailsModal({
 
       const response = await fetch(`/api/v1/expense-claims/${claimId}`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
       })
 
       if (!response.ok) {
@@ -236,11 +284,10 @@ export default function UnifiedExpenseDetailsModal({
       const result = await response.json()
 
       if (result.success && result.data) {
-        // Enrich with status display info if not present
         const enrichedData = {
           ...result.data,
-          status_display: result.data.status_display || getStatusDisplayInfo(result.data.status), // ✅ Unified status field
-          workflow_progress: result.data.workflow_progress || getWorkflowProgress(result.data.status) // ✅ Unified status field
+          status_display: result.data.status_display || getStatusDisplayInfo(result.data.status),
+          workflow_progress: result.data.workflow_progress || getWorkflowProgress(result.data.status),
         }
         setClaimDetails(enrichedData)
       } else {

@@ -13,6 +13,7 @@ import { rateLimiters } from '@/domains/security/lib/rate-limit'
 import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
 import { handleApiError, ApiError, HttpStatus } from '@/lib/api-error-handler'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 /**
  * Create new business and assign current user as owner
@@ -148,7 +149,7 @@ export async function GET(request: NextRequest) {
 
     const businesses = await getUserBusinessMemberships(userId)
 
-    return NextResponse.json({
+    return withCacheHeaders(NextResponse.json({
       success: true,
       data: {
         memberships: businesses
@@ -156,7 +157,7 @@ export async function GET(request: NextRequest) {
       meta: {
         duration_ms: Date.now() - startTime,
       }
-    })
+    }), 'standard')
 
   } catch (error) {
     return handleApiError(error, {

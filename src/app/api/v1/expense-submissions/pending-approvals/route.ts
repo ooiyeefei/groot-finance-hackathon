@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
       businessId,
     })
 
-    return NextResponse.json({ submissions })
+    return withCacheHeaders(NextResponse.json({ submissions }), 'volatile')
   } catch (error) {
     console.error('[API] GET /expense-submissions/pending-approvals error:', error)
     return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: 'Failed to list pending approvals' } }, { status: 500 })

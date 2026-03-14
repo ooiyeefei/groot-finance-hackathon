@@ -10,6 +10,7 @@ import { getUserProfile, updateUserProfile, updateUserName } from '@/domains/use
 import { rateLimit, RATE_LIMIT_CONFIGS } from '@/domains/security/lib/rate-limit'
 import { withCache, apiCache, CACHE_TTL } from '@/lib/cache/api-cache'
 import { getCurrentUserContextWithBusiness } from '@/domains/security/lib/rbac'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 // GET /api/v1/users/profile - Fetch user profile
 export async function GET(request: NextRequest) {
@@ -39,10 +40,10 @@ export async function GET(request: NextRequest) {
       }
     )
 
-    return NextResponse.json({
+    return withCacheHeaders(NextResponse.json({
       success: true,
       data: profile
-    })
+    }), 'standard')
 
   } catch (error) {
     console.error('Error in GET /api/v1/users/profile:', error)

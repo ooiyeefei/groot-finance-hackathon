@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse, after } from 'next/server'
 import { getInvoices, createInvoice } from '@/domains/invoices/lib/data-access'
 import { rateLimiters } from '@/domains/security/lib/rate-limit'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 /**
  * GET /api/v1/invoices - List invoices with filtering and pagination
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
 
     const result = await getInvoices(filters)
 
-    return NextResponse.json(result, { status: 200 })
+    return withCacheHeaders(NextResponse.json(result, { status: 200 }), 'standard')
   } catch (error) {
     console.error('[API v1] GET /invoices error:', error)
 

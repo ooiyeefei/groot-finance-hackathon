@@ -25,6 +25,7 @@ import {
   calculateAnalyticsTrends
 } from '@/domains/analytics/lib/analytics.service'
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 // GET - Retrieve financial analytics with optional trends
 export async function GET(request: NextRequest) {
@@ -87,24 +88,24 @@ export async function GET(request: NextRequest) {
       // Call service layer for trends
       const trendsData = await calculateAnalyticsTrends(userId, { start: startDate, end: endDate }, options)
 
-      return NextResponse.json({
+      return withCacheHeaders(NextResponse.json({
         success: true,
         data: {
           analytics: trendsData.current,
           trends: trendsData.trends,
           previous_period: trendsData.previous
         }
-      })
+      }), 'volatile')
     } else {
       // Call service layer for analytics only
       const analytics = await calculateFinancialAnalytics(userId, startDate, endDate, options)
 
-      return NextResponse.json({
+      return withCacheHeaders(NextResponse.json({
         success: true,
         data: {
           analytics
         }
-      })
+      }), 'volatile')
     }
 
   } catch (error) {

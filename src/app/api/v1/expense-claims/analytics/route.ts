@@ -18,6 +18,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { getExpenseAnalytics } from '@/domains/expense-claims/lib/data-access'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 export async function GET(request: NextRequest) {
   try {
@@ -60,10 +61,10 @@ export async function GET(request: NextRequest) {
       }, { status: 400 })
     }
 
-    return NextResponse.json({
+    return withCacheHeaders(NextResponse.json({
       success: true,
       data: analyticsResult.data
-    })
+    }), 'standard')
 
   } catch (error) {
     console.error('[Expense Claims Analytics V1 API] Error:', error)

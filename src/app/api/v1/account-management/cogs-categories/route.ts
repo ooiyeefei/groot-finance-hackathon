@@ -31,6 +31,7 @@ import {
 } from '@/domains/account-management/lib/account-management.service'
 import { redisCategoryCache } from '@/lib/cache/redis-cache'
 import { withCache, apiCache, CACHE_TTL } from '@/lib/cache/api-cache'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 // GET - Retrieve all COGS categories for the business
 export async function GET(request: NextRequest) {
@@ -68,13 +69,13 @@ export async function GET(request: NextRequest) {
     // Check management permissions from database (consistent with expense-claims API)
     const canManage = userProfile.role_permissions.manager || userProfile.role_permissions.finance_admin
 
-    return NextResponse.json({
+    return withCacheHeaders(NextResponse.json({
       success: true,
       data: {
         categories,
         can_manage: canManage
       }
-    })
+    }), 'stable')
 
   } catch (error) {
     console.error('[COGS Categories V1 API] Error:', error)

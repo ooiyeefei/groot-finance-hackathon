@@ -12,6 +12,7 @@ import { teamManagementRateLimiter, getClientIdentifier, applyRateLimit } from '
 import { auditLogger } from '@/domains/security/lib/audit-logger'
 import { getTeamMembers, getDirectReports } from '@/domains/users/lib/user.service'
 import { withCache, CACHE_TTL } from '@/lib/cache/api-cache'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 // GET /api/v1/users/team - Get all team members
 export async function GET(request: NextRequest) {
@@ -92,12 +93,12 @@ export async function GET(request: NextRequest) {
       teamData.users.length
     )
 
-    return NextResponse.json({
+    return withCacheHeaders(NextResponse.json({
       success: true,
       data: teamData
     }, {
       headers: rateLimitResult.headers
-    })
+    }), 'volatile')
 
   } catch (error) {
     console.error('[Team API] Error:', error)

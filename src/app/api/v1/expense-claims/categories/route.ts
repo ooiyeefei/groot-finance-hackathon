@@ -17,6 +17,7 @@ import {
 } from '@/domains/expense-claims/lib/expense-category.service'
 import { getCurrentUserContextWithBusiness } from '@/domains/security/lib/rbac'
 import { redisCategoryCache } from '@/lib/cache/redis-cache'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 /**
  * GET /api/v1/expense-claims/categories
@@ -26,10 +27,10 @@ export async function GET(request: NextRequest) {
   try {
     const result = await getAllCategories()
 
-    return NextResponse.json({
+    return withCacheHeaders(NextResponse.json({
       success: true,
       data: result
-    })
+    }), 'stable')
   } catch (error) {
     console.error('[API v1 GET /expense-claims/categories] Error:', error)
 

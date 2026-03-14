@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getBusinessContext } from '@/domains/account-management/lib/account-management.service'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,21 +22,21 @@ export async function GET(request: NextRequest) {
     const context = await getBusinessContext(userId)
 
     if (!context) {
-      return NextResponse.json({
+      return withCacheHeaders(NextResponse.json({
         success: true,
         data: {
           context: null
         },
         message: 'No active business context'
-      })
+      }), 'standard')
     }
 
-    return NextResponse.json({
+    return withCacheHeaders(NextResponse.json({
       success: true,
       data: {
         context
       }
-    })
+    }), 'standard')
 
   } catch (error) {
     console.error('[Business Context V1 API] Error:', error)

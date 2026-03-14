@@ -19,6 +19,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { listSupportedCurrencies } from '@/domains/utilities/lib/utilities.service'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 // GET - List all supported currencies with filtering
 export async function GET(request: NextRequest) {
@@ -44,10 +45,10 @@ export async function GET(request: NextRequest) {
       popular: popular || undefined
     })
 
-    return NextResponse.json({
+    return withCacheHeaders(NextResponse.json({
       success: true,
       data: result
-    })
+    }), 'static')
 
   } catch (error) {
     console.error('[Currency List V1 API] Error:', error)

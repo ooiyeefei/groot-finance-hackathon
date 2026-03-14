@@ -20,6 +20,7 @@ import {
 import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
 import { Id } from '@/convex/_generated/dataModel'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 export async function GET(request: NextRequest) {
   console.log('[Billing Subscription] Fetching subscription status')
@@ -292,7 +293,7 @@ export async function GET(request: NextRequest) {
       },
     }
 
-    return NextResponse.json(response)
+    return withCacheHeaders(NextResponse.json(response), 'volatile')
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
     console.error(`[Billing Subscription] Error: ${message}`)

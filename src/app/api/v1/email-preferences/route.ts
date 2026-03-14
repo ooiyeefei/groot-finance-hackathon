@@ -11,6 +11,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { ConvexHttpClient } from 'convex/browser'
 import { api } from '@/convex/_generated/api'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 // ===== CONVEX CLIENT =====
 
@@ -55,7 +56,7 @@ export async function GET() {
       userId: user._id
     })
 
-    return NextResponse.json({
+    return withCacheHeaders(NextResponse.json({
       success: true,
       data: {
         marketingEnabled: preferences.marketingEnabled,
@@ -63,7 +64,7 @@ export async function GET() {
         productUpdatesEnabled: preferences.productUpdatesEnabled,
         globalUnsubscribe: preferences.globalUnsubscribe,
       }
-    })
+    }), 'stable')
 
   } catch (error) {
     console.error('[Email Preferences API] GET error:', error)

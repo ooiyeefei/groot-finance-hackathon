@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getEnabledCOGSCategories } from '@/domains/account-management/lib/account-management.service'
 import { redisCategoryCache } from '@/lib/cache/redis-cache'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 // GET - Retrieve only enabled COGS categories for dropdowns
 export async function GET(request: NextRequest) {
@@ -33,14 +34,14 @@ export async function GET(request: NextRequest) {
     const cached = await redisCategoryCache.get(cacheKey)
     if (cached) {
       console.log(`[Enabled COGS Categories V1 API] Cache hit for user: ${userId}`)
-      return NextResponse.json({
+      return withCacheHeaders(NextResponse.json({
         success: true,
         data: cached,
         meta: {
           cached: true,
           source: 'redis-cache'
         }
-      })
+      }), 'stable')
     }
 
     console.log(`[Enabled COGS Categories V1 API] Cache miss, fetching from Convex`)
@@ -53,14 +54,14 @@ export async function GET(request: NextRequest) {
 
     console.log(`[Enabled COGS Categories V1 API] Found ${categories.length} enabled categories, cached for 30 minutes`)
 
-    return NextResponse.json({
+    return withCacheHeaders(NextResponse.json({
       success: true,
       data: categories,
       meta: {
         cached: false,
         source: 'convex'
       }
-    })
+    }), 'stable')
 
   } catch (error) {
     console.error('[Enabled COGS Categories V1 API] Error:', error)

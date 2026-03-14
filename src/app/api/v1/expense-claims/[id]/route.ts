@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getExpenseClaim, updateExpenseClaim, deleteExpenseClaim } from '@/domains/expense-claims/lib/data-access'
 import { UpdateExpenseClaimRequest } from '@/domains/expense-claims/types'
 import { apiCache } from '@/lib/cache/api-cache'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -40,10 +41,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    return NextResponse.json({
+    return withCacheHeaders(NextResponse.json({
       success: true,
       data: result.data
-    })
+    }), 'volatile')
 
   } catch (error) {
     console.error('[North Star API v1] GET expense-claim error:', error)

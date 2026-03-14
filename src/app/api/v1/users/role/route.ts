@@ -9,6 +9,7 @@ import { auth } from '@clerk/nextjs/server'
 import { rateLimiters } from '@/domains/security/lib/rate-limit'
 import { getUserRole } from '@/domains/users/lib/user.service'
 import { redisRoleCache } from '@/lib/cache/redis-cache'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 // Cache TTL for reference (actual implementation in Redis cache)
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
     // Check Redis cache first to avoid repeated API calls on navigation
     const cached = await redisRoleCache.get(userId)
     if (cached) {
-      return NextResponse.json({
+      return withCacheHeaders(NextResponse.json({
         success: true,
         data: cached,
         meta: {
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
           duration_ms: 0,
           source: 'redis-cache'
         }
-      })
+      }), 'volatile')
     }
 
     const startTime = Date.now()
@@ -54,14 +55,14 @@ export async function GET(request: NextRequest) {
 
     const duration = Date.now() - startTime
 
-    return NextResponse.json({
+    return withCacheHeaders(NextResponse.json({
       success: true,
       data: roleInfo,
       meta: {
         cached: false,
         duration_ms: duration
       }
-    })
+    }), 'volatile')
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'

@@ -22,6 +22,7 @@ import {
 } from '@/lib/stripe/catalog'
 import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 export async function GET(request: NextRequest) {
   try {
@@ -103,7 +104,7 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({
+    return withCacheHeaders(NextResponse.json({
       success: true,
       data: {
         plans,
@@ -111,7 +112,7 @@ export async function GET(request: NextRequest) {
         availableCurrencies,
         currencyLocked,  // 019: New field
       },
-    })
+    }), 'stable')
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
     console.error(`[Billing Catalog] Error: ${message}`)

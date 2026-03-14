@@ -14,6 +14,7 @@ import {
   deleteAccountingEntry,
   type UpdateAccountingEntryRequest
 } from '@/domains/accounting-entries/lib/data-access'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 /**
  * Get single accounting entry by ID
@@ -44,7 +45,7 @@ export async function GET(
       )
     }
 
-    return NextResponse.json(result)
+    return withCacheHeaders(NextResponse.json(result), 'volatile')
 
   } catch (error) {
     console.error('[Accounting Entries API v1] Unexpected error during get:', error)

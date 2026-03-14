@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDocument, updateDocument, deleteDocument, processDocument } from '@/domains/invoices/lib/data-access'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 /**
  * GET /api/v1/invoices/[invoiceId] - Get single invoice by ID
@@ -20,10 +21,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       }, { status: 404 })
     }
 
-    return NextResponse.json({
+    return withCacheHeaders(NextResponse.json({
       success: true,
       data: document
-    }, { status: 200 })
+    }, { status: 200 }), 'standard')
 
   } catch (error) {
     console.error('[API v1] GET /invoices/:id error:', error)

@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { api } from '@/convex/_generated/api'
 import { getAuthenticatedConvex } from '@/lib/convex'
 import { mapExpenseCategoryToAccounting } from '@/domains/expense-claims/lib/expense-category-mapper'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 export async function GET(request: NextRequest) {
   try {
@@ -86,7 +87,7 @@ export async function GET(request: NextRequest) {
 
     // If no claims found, return empty report
     if (totalClaims === 0) {
-      return NextResponse.json({
+      return withCacheHeaders(NextResponse.json({
         success: true,
         data: {
           month,
@@ -106,7 +107,7 @@ export async function GET(request: NextRequest) {
             }
           }
         }
-      })
+      }), 'standard')
     }
 
     // Transform Convex data to API response format
@@ -217,10 +218,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
+    return withCacheHeaders(NextResponse.json({
       success: true,
       data: response
-    })
+    }), 'standard')
 
   } catch (error) {
     console.error('[Expense Reports V1 API] Error:', error)

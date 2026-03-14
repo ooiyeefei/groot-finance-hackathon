@@ -15,6 +15,7 @@ import { api } from '@/convex/_generated/api'
 import { rateLimit, RATE_LIMIT_CONFIGS } from '@/domains/security/lib/rate-limit'
 import { validateQuery, validateBody, validateFormData, listExpenseClaimsQuerySchema, createExpenseClaimSchema, createExpenseClaimFileSchema } from '@/lib/validations'
 import { withCache, apiCache, CACHE_TTL } from '@/lib/cache/api-cache'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 /**
  * GET /api/v1/expense-claims
@@ -63,10 +64,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    return NextResponse.json({
+    return withCacheHeaders(NextResponse.json({
       success: true,
       data: result.data
-    })
+    }), 'volatile')
 
   } catch (error) {
     console.error('[North Star API v1] GET expense-claims error:', error)

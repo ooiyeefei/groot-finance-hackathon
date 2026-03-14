@@ -14,6 +14,7 @@ import { auth } from '@clerk/nextjs/server'
 import { getStripe } from '@/lib/stripe/client'
 import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 /**
  * Invoice type for API response
@@ -69,14 +70,14 @@ export async function GET(request: NextRequest) {
 
     // No Stripe customer = no invoices yet
     if (!business.stripeCustomerId) {
-      return NextResponse.json({
+      return withCacheHeaders(NextResponse.json({
         success: true,
         data: {
           invoices: [],
           hasMore: false,
           message: 'No billing history yet'
         }
-      })
+      }), 'standard')
     }
 
     // Parse query parameters
@@ -141,13 +142,13 @@ export async function GET(request: NextRequest) {
 
     console.log(`[Billing Invoices] Found ${invoices.length} invoices for business ${business._id}`)
 
-    return NextResponse.json({
+    return withCacheHeaders(NextResponse.json({
       success: true,
       data: {
         invoices,
         hasMore: invoicesResponse.has_more,
       }
-    })
+    }), 'standard')
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
     console.error(`[Billing Invoices] Error: ${message}`)

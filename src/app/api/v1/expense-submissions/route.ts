@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 export async function GET(request: NextRequest) {
   try {
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
       cursor,
     })
 
-    return NextResponse.json({ submissions, cursor: null, hasMore: false })
+    return withCacheHeaders(NextResponse.json({ submissions, cursor: null, hasMore: false }), 'volatile')
   } catch (error) {
     console.error('[API] GET /expense-submissions error:', error)
     return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message: 'Failed to list submissions' } }, { status: 500 })

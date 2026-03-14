@@ -12,6 +12,7 @@ import { getBusinessProfile, updateBusinessProfile } from '@/domains/account-man
 import { rateLimiters } from '@/domains/security/lib/rate-limit'
 import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { withCache, apiCache, CACHE_TTL } from '@/lib/cache/api-cache'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 /**
  * Get business profile for current user
@@ -45,10 +46,10 @@ export async function GET(request: NextRequest) {
         }
       )
 
-      return NextResponse.json({
+      return withCacheHeaders(NextResponse.json({
         success: true,
         data: profile
-      })
+      }), 'stable')
     } catch (profileError: any) {
       // If business membership validation fails, try repair
       if (profileError.message?.includes('Failed to validate business membership') ||
@@ -59,21 +60,21 @@ export async function GET(request: NextRequest) {
 
         if (repairResult.fixed) {
           console.log(`[Business Profile API] ✅ Repaired broken user state, redirecting to dashboard`)
-          return NextResponse.json({
+          return withCacheHeaders(NextResponse.json({
             success: true,
             data: repairResult.business,
             message: 'Account setup completed successfully',
             action: 'redirect_to_dashboard'
-          })
+          }), 'stable')
         }
 
         if (repairResult.hasExistingBusiness) {
           console.log(`[Business Profile API] ⚠️ User already has business, redirect to dashboard`)
-          return NextResponse.json({
+          return withCacheHeaders(NextResponse.json({
             success: true,
             data: repairResult.business,
             message: 'Welcome back to your business account'
-          })
+          }), 'stable')
         }
       }
 

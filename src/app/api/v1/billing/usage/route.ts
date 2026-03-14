@@ -15,6 +15,7 @@ import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
 import { Id } from '@/convex/_generated/dataModel'
 import { PlanKey, canUseOcr, getOcrLimit, getUsagePercentage } from '@/lib/stripe/plans'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 /**
  * GET /api/v1/billing/usage
@@ -75,7 +76,7 @@ export async function GET(request: NextRequest) {
     const canUse = canUseOcr(planName, currentUsage)
     const percentage = getUsagePercentage(planName, currentUsage)
 
-    return NextResponse.json({
+    return withCacheHeaders(NextResponse.json({
       success: true,
       data: {
         canUse,
@@ -86,7 +87,7 @@ export async function GET(request: NextRequest) {
         isUnlimited: limit === -1,
         plan: planName,
       },
-    })
+    }), 'volatile')
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
     console.error(`[Billing Usage] Error checking usage: ${message}`)

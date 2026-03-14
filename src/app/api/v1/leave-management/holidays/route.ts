@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import Holidays from 'date-holidays'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 // Supported SEA countries
 const SUPPORTED_COUNTRIES: Record<string, string> = {
@@ -76,7 +77,7 @@ export async function GET(request: NextRequest) {
       `[Holidays API] Fetched ${publicHolidays.length} public holidays for ${countryCode} ${year}`
     )
 
-    return NextResponse.json({
+    return withCacheHeaders(NextResponse.json({
       success: true,
       data: {
         country: countryCode,
@@ -85,7 +86,7 @@ export async function GET(request: NextRequest) {
         holidays: publicHolidays,
         totalCount: publicHolidays.length,
       },
-    })
+    }), 'static')
   } catch (error) {
     console.error('[Holidays API] Error:', error)
     return NextResponse.json(

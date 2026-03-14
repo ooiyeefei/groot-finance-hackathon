@@ -14,6 +14,7 @@ import {
 } from '@/domains/accounting-entries/lib/data-access'
 import { validateQuery, validateBody, createAccountingEntrySchema, listAccountingEntriesQuerySchema } from '@/lib/validations'
 import { withEnhancedCache, enhancedApiCache, ENHANCED_CACHE_TTL } from '@/lib/cache/enhanced-api-cache'
+import { withCacheHeaders } from '@/lib/cache/cache-headers'
 import { convexClient } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
 
@@ -156,7 +157,7 @@ export async function GET(request: NextRequest) {
     }
 
     console.log(`[Accounting Entries API v1] ✅ Returning ${result.data?.transactions?.length || 0} entries to client`)
-    return NextResponse.json(result)
+    return withCacheHeaders(NextResponse.json(result), 'volatile')
 
   } catch (error) {
     console.error('[Accounting Entries API v1] Unexpected error during listing:', error)
