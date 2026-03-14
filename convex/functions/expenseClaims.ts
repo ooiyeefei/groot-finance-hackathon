@@ -1175,95 +1175,23 @@ export const updateStatus = mutation({
             }>;
           } | null;
 
-          const rawLineItems = processingMetadata?.line_items ?? [];
-          const lineItems = rawLineItems
-            .filter((item) => {
-              const desc = item.item_description || item.description;
-              return desc && desc.trim().length > 0;
-            })
-            .map((item, index) => ({
-              itemDescription: (item.item_description || item.description || "Item")!,
-              quantity: item.quantity ?? 1,
-              unitPrice: item.unit_price ?? 0,
-              totalAmount: item.total_amount ?? Math.round((item.unit_price ?? 0) * (item.quantity ?? 1) * 100) / 100,
-              currency: item.currency || claim.currency || "MYR",
-              taxAmount: item.tax_amount,
-              taxRate: item.tax_rate,
-              itemCategory: item.item_category,
-              itemCode: item.item_code,
-              unitMeasurement: item.unit_measurement,
-              lineOrder: item.line_order ?? index + 1,
-            }));
+          // Create journal entry via integration hook
+          const { entryId: journalEntryId } = await ctx.runMutation(
+            internal.functions.integrations.expenseClaimIntegration.createJournalEntryOnApproval,
+            { claimId: claim._id }
+          );
 
-          // Create the accounting entry with line items
-          const accountingEntryId = await ctx.db.insert("accounting_entries", {
-            businessId: claim.businessId,
-            userId: claim.userId,
-            transactionType: "Expense",
-            description: claim.businessPurpose || claim.description || "Expense claim",
-            originalAmount: claim.totalAmount,
-            originalCurrency: claim.currency,
-            homeCurrency: homeCurrency,
-            homeCurrencyAmount: claim.homeCurrencyAmount || claim.totalAmount,
-            exchangeRate: claim.exchangeRate || 1,
-            transactionDate: claim.transactionDate,
-            category: claim.expenseCategory,
-            vendorName: claim.vendorName,
-            referenceNumber: claim.referenceNumber,
-            status: "pending",
-            createdByMethod: "document_extract",
-            sourceRecordId: claim._id,
-            sourceDocumentType: "expense_claim",
-            processingMetadata: claim.processingMetadata,
-            lineItems: lineItems.length > 0 ? lineItems : undefined,
-            updatedAt: now,
-          });
-
-          // Link the accounting entry back to the expense claim
-          updateData.accountingEntryId = accountingEntryId;
-
-          // Double-entry accounting integration
-          try {
-            await ctx.runMutation(
-              internal.functions.integrations.expenseClaimIntegration.createJournalEntryOnApproval,
-              { claimId: claim._id }
-            );
-          } catch (error: any) {
-            console.error(`[Expense Claim] Failed to create journal entry on approval:`, error);
-            // Continue even if journal entry fails - user can manually create it
-          }
+          // Link the journal entry back to the expense claim
+          updateData.journalEntryId = journalEntryId;
 
           // Schedule real-time anomaly detection for this expense
+          // Note: Action Center now queries journal_entry_lines instead of accounting_entries
           await ctx.scheduler.runAfter(0, internal.functions.actionCenterJobs.analyzeNewTransaction, {
-            transactionId: accountingEntryId,
+            transactionId: journalEntryId,
             businessId: claim.businessId,
           });
 
-          console.log(`[Convex] Created accounting entry ${accountingEntryId} for approved expense claim ${claim._id} with ${lineItems.length} line items`);
-
-          // ============================================
-          // PHASE 2: Vendor activation
-          // Link vendor to accounting entry and promote from prospective to active
-          // ============================================
-          if (claim.vendorName) {
-            // Look up vendor by name (created during extraction as "prospective")
-            const vendor = await ctx.runQuery(internal.functions.vendors.getByName, {
-              businessId: claim.businessId,
-              vendorName: claim.vendorName,
-            });
-
-            if (vendor) {
-              // Link accounting entry to vendor record
-              await ctx.db.patch(accountingEntryId, {
-                vendorId: vendor._id,
-              });
-              // NOTE: promoteIfProspective intentionally NOT called here.
-              // Expense claim merchants stay "prospective" — only supplier invoices create active vendors.
-              console.log(`[Convex] Linked vendor ${vendor._id} to accounting entry (no promotion — expense claim source)`);
-            } else {
-              console.log(`[Convex] No vendor found for name "${claim.vendorName}" - skipping vendor linking`);
-            }
-          }
+          console.log(`[Convex] Created journal entry ${journalEntryId} for approved expense claim ${claim._id}`);
         }
         break;
 
