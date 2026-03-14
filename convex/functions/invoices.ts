@@ -158,37 +158,44 @@ export const list = query({
           ? String(startIndex + limit)
           : null;
 
-      // Fetch linked accounting entries for all invoices
-      const invoicesWithLinks = await Promise.all(
-        paginatedInvoices.map(async (invoice) => {
-          // Look for accounting entry linked to this invoice
-          // Collect all entries and find the first ACTIVE one (handles case where
-          // old entry was soft-deleted and new entry created)
-          const linkedEntries = await ctx.db
-            .query("accounting_entries")
-            .withIndex("by_sourceDocument", (q) =>
-              q.eq("sourceDocumentType", "invoice").eq("sourceRecordId", invoice._id)
-            )
-            .collect();
+      // Fetch linked accounting entries for all invoices - batch fetch to eliminate N+1
+      const allInvoiceEntries = await ctx.db
+        .query("accounting_entries")
+        .withIndex("by_sourceDocument", (q) =>
+          q.eq("sourceDocumentType", "invoice")
+        )
+        .collect();
 
-          // Find the first active (non-deleted) entry
-          const linkedEntry = linkedEntries.find(entry => !entry.deletedAt);
-          const isLinkedTransactionActive = !!linkedEntry;
+      // Build map: sourceRecordId -> array of entries for that invoice
+      const entriesByInvoice = new Map<string, typeof allInvoiceEntries>();
+      for (const entry of allInvoiceEntries) {
+        if (!entry.sourceRecordId) continue;
+        const existing = entriesByInvoice.get(entry.sourceRecordId) || [];
+        existing.push(entry);
+        entriesByInvoice.set(entry.sourceRecordId, existing);
+      }
 
-          return {
-            ...invoice,
-            linkedTransaction: isLinkedTransactionActive
-              ? {
-                  id: linkedEntry._id,
-                  description: linkedEntry.description || "",
-                  originalAmount: linkedEntry.originalAmount,
-                  originalCurrency: linkedEntry.originalCurrency,
-                  createdAt: linkedEntry._creationTime,
-                }
-              : null,
-          };
-        })
-      );
+      const invoicesWithLinks = paginatedInvoices.map((invoice) => {
+        // Look for accounting entry linked to this invoice
+        // Collect all entries and find the first ACTIVE one (handles case where
+        // old entry was soft-deleted and new entry created)
+        const linkedEntries = entriesByInvoice.get(invoice._id) || [];
+        const linkedEntry = linkedEntries.find(entry => !entry.deletedAt);
+        const isLinkedTransactionActive = !!linkedEntry;
+
+        return {
+          ...invoice,
+          linkedTransaction: isLinkedTransactionActive
+            ? {
+                id: linkedEntry._id,
+                description: linkedEntry.description || "",
+                originalAmount: linkedEntry.originalAmount,
+                originalCurrency: linkedEntry.originalCurrency,
+                createdAt: linkedEntry._creationTime,
+              }
+            : null,
+        };
+      });
 
       return {
         invoices: invoicesWithLinks,
@@ -222,37 +229,44 @@ export const list = query({
         ? String(startIndex + limit)
         : null;
 
-    // Fetch linked accounting entries for all invoices
-    const invoicesWithLinks = await Promise.all(
-      paginatedInvoices.map(async (invoice) => {
-        // Look for accounting entry linked to this invoice
-        // Collect all entries and find the first ACTIVE one (handles case where
-        // old entry was soft-deleted and new entry created)
-        const linkedEntries = await ctx.db
-          .query("accounting_entries")
-          .withIndex("by_sourceDocument", (q) =>
-            q.eq("sourceDocumentType", "invoice").eq("sourceRecordId", invoice._id)
-          )
-          .collect();
+    // Fetch linked accounting entries for all invoices - batch fetch to eliminate N+1
+    const allInvoiceEntries = await ctx.db
+      .query("accounting_entries")
+      .withIndex("by_sourceDocument", (q) =>
+        q.eq("sourceDocumentType", "invoice")
+      )
+      .collect();
 
-        // Find the first active (non-deleted) entry
-        const linkedEntry = linkedEntries.find(entry => !entry.deletedAt);
-        const isLinkedTransactionActive = !!linkedEntry;
+    // Build map: sourceRecordId -> array of entries for that invoice
+    const entriesByInvoice = new Map<string, typeof allInvoiceEntries>();
+    for (const entry of allInvoiceEntries) {
+      if (!entry.sourceRecordId) continue;
+      const existing = entriesByInvoice.get(entry.sourceRecordId) || [];
+      existing.push(entry);
+      entriesByInvoice.set(entry.sourceRecordId, existing);
+    }
 
-        return {
-          ...invoice,
-          linkedTransaction: isLinkedTransactionActive
-            ? {
-                id: linkedEntry._id,
-                description: linkedEntry.description || "",
-                originalAmount: linkedEntry.originalAmount,
-                originalCurrency: linkedEntry.originalCurrency,
-                createdAt: linkedEntry._creationTime,
-              }
-            : null,
-        };
-      })
-    );
+    const invoicesWithLinks = paginatedInvoices.map((invoice) => {
+      // Look for accounting entry linked to this invoice
+      // Collect all entries and find the first ACTIVE one (handles case where
+      // old entry was soft-deleted and new entry created)
+      const linkedEntries = entriesByInvoice.get(invoice._id) || [];
+      const linkedEntry = linkedEntries.find(entry => !entry.deletedAt);
+      const isLinkedTransactionActive = !!linkedEntry;
+
+      return {
+        ...invoice,
+        linkedTransaction: isLinkedTransactionActive
+          ? {
+              id: linkedEntry._id,
+              description: linkedEntry.description || "",
+              originalAmount: linkedEntry.originalAmount,
+              originalCurrency: linkedEntry.originalCurrency,
+              createdAt: linkedEntry._creationTime,
+            }
+          : null,
+      };
+    });
 
     return {
       invoices: invoicesWithLinks,

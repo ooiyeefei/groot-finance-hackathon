@@ -187,31 +187,41 @@ export const list = query({
         ? String(startIndex + limit)
         : null;
 
-    // Enrich with user details
-    const enrichedClaims = await Promise.all(
-      paginatedClaims.map(async (claim) => {
-        const submitter = await ctx.db.get(claim.userId);
-        const reviewer = claim.reviewedBy
-          ? await ctx.db.get(claim.reviewedBy)
-          : null;
-        const approver = claim.approvedBy
-          ? await ctx.db.get(claim.approvedBy)
-          : null;
+    // Enrich with user details - batch fetch to eliminate N+1
+    const userIds = new Set<Id<"users">>();
+    for (const claim of paginatedClaims) {
+      userIds.add(claim.userId);
+      if (claim.reviewedBy) userIds.add(claim.reviewedBy as Id<"users">);
+      if (claim.approvedBy) userIds.add(claim.approvedBy as Id<"users">);
+    }
 
-        return {
-          ...claim,
-          submitter: submitter
-            ? { _id: submitter._id, email: submitter.email, fullName: submitter.fullName }
-            : null,
-          reviewer: reviewer
-            ? { _id: reviewer._id, email: reviewer.email, fullName: reviewer.fullName }
-            : null,
-          approver: approver
-            ? { _id: approver._id, email: approver.email, fullName: approver.fullName }
-            : null,
-        };
-      })
+    const userResults = await Promise.all(
+      Array.from(userIds).map((id) => ctx.db.get(id))
     );
+    const userMap = new Map(
+      userResults
+        .filter((u): u is NonNullable<typeof u> => u !== null)
+        .map((u) => [u._id, u])
+    );
+
+    const enrichedClaims = paginatedClaims.map((claim) => {
+      const submitter = userMap.get(claim.userId);
+      const reviewer = claim.reviewedBy ? userMap.get(claim.reviewedBy) : null;
+      const approver = claim.approvedBy ? userMap.get(claim.approvedBy) : null;
+
+      return {
+        ...claim,
+        submitter: submitter
+          ? { _id: submitter._id, email: submitter.email, fullName: submitter.fullName }
+          : null,
+        reviewer: reviewer
+          ? { _id: reviewer._id, email: reviewer.email, fullName: reviewer.fullName }
+          : null,
+        approver: approver
+          ? { _id: approver._id, email: approver.email, fullName: approver.fullName }
+          : null,
+      };
+    });
 
     return {
       claims: enrichedClaims,
@@ -385,18 +395,24 @@ export const getPendingApprovals = query({
     // Combine strict routed + legacy claims
     const pendingClaims = [...strictRoutedClaims, ...legacyClaims];
 
-    // Enrich with submitter details
-    return await Promise.all(
-      pendingClaims.map(async (claim) => {
-        const submitter = await ctx.db.get(claim.userId);
-        return {
-          ...claim,
-          submitter: submitter
-            ? { _id: submitter._id, email: submitter.email, fullName: submitter.fullName }
-            : null,
-        };
-      })
+    // Enrich with submitter details - batch fetch to eliminate N+1
+    const submitterIds = [...new Set(pendingClaims.map((c) => c.userId))] as Id<"users">[];
+    const submitters = await Promise.all(submitterIds.map((id) => ctx.db.get(id)));
+    const submitterMap = new Map(
+      submitters
+        .filter((u): u is NonNullable<typeof u> => u !== null)
+        .map((u) => [u._id, u])
     );
+
+    return pendingClaims.map((claim) => {
+      const submitter = submitterMap.get(claim.userId);
+      return {
+        ...claim,
+        submitter: submitter
+          ? { _id: submitter._id, email: submitter.email, fullName: submitter.fullName }
+          : null,
+      };
+    });
   },
 });
 
@@ -439,18 +455,24 @@ export const getEligibleApprovers = query({
         m.userId !== args.excludeUserId // Exclude specified user (usually current approver)
     );
 
-    // Enrich with user details
-    return await Promise.all(
-      approverMemberships.map(async (membership) => {
-        const approverUser = await ctx.db.get(membership.userId);
-        return {
-          _id: membership.userId,
-          email: approverUser?.email || "",
-          fullName: approverUser?.fullName || "Unknown",
-          role: membership.role,
-        };
-      })
+    // Enrich with user details - batch fetch to eliminate N+1
+    const approverIds = [...new Set(approverMemberships.map((m) => m.userId))] as Id<"users">[];
+    const approvers = await Promise.all(approverIds.map((id) => ctx.db.get(id)));
+    const approverMap = new Map(
+      approvers
+        .filter((u): u is NonNullable<typeof u> => u !== null)
+        .map((u) => [u._id, u])
     );
+
+    return approverMemberships.map((membership) => {
+      const approverUser = approverMap.get(membership.userId);
+      return {
+        _id: membership.userId,
+        email: approverUser?.email || "",
+        fullName: approverUser?.fullName || "Unknown",
+        role: membership.role,
+      };
+    });
   },
 });
 
@@ -493,24 +515,30 @@ export const checkDuplicates = query({
       )
       .collect();
 
-    // Get user info for each claim's submitter
-    const claimsWithUsers = await Promise.all(
-      claims.map(async (claim) => {
-        const user = await ctx.db.get(claim.userId);
-        return {
-          _id: claim._id,
-          userId: claim.userId,
-          vendorName: claim.vendorName,
-          transactionDate: claim.transactionDate,
-          totalAmount: claim.totalAmount,
-          currency: claim.currency,
-          referenceNumber: claim.referenceNumber,
-          status: claim.status,
-          _creationTime: claim._creationTime,
-          submittedByName: user?.fullName || user?.email || "Unknown",
-        };
-      })
+    // Get user info for each claim's submitter - batch fetch to eliminate N+1
+    const userIds = [...new Set(claims.map((c) => c.userId))] as Id<"users">[];
+    const users = await Promise.all(userIds.map((id) => ctx.db.get(id)));
+    const userMap = new Map(
+      users
+        .filter((u): u is NonNullable<typeof u> => u !== null)
+        .map((u) => [u._id, u])
     );
+
+    const claimsWithUsers = claims.map((claim) => {
+      const user = userMap.get(claim.userId);
+      return {
+        _id: claim._id,
+        userId: claim.userId,
+        vendorName: claim.vendorName,
+        transactionDate: claim.transactionDate,
+        totalAmount: claim.totalAmount,
+        currency: claim.currency,
+        referenceNumber: claim.referenceNumber,
+        status: claim.status,
+        _creationTime: claim._creationTime,
+        submittedByName: user?.fullName || user?.email || "Unknown",
+      };
+    });
 
     return claimsWithUsers;
   },
@@ -1651,21 +1679,28 @@ export const getReportData = query({
     }
 
     // Enrich with employee details
-    const enrichedClaims = await Promise.all(
-      claims.map(async (claim) => {
-        const employee = await ctx.db.get(claim.userId);
-        return {
-          ...claim,
-          employee: employee
-            ? {
-                _id: employee._id,
-                fullName: employee.fullName,
-                email: employee.email,
-              }
-            : null,
-        };
-      })
+    // Batch fetch employees to eliminate N+1
+    const employeeIds = [...new Set(claims.map((c) => c.userId))] as Id<"users">[];
+    const employees = await Promise.all(employeeIds.map((id) => ctx.db.get(id)));
+    const employeeMap = new Map(
+      employees
+        .filter((u): u is NonNullable<typeof u> => u !== null)
+        .map((u) => [u._id, u])
     );
+
+    const enrichedClaims = claims.map((claim) => {
+      const employee = employeeMap.get(claim.userId);
+      return {
+        ...claim,
+        employee: employee
+          ? {
+              _id: employee._id,
+              fullName: employee.fullName,
+              email: employee.email,
+            }
+          : null,
+      };
+    });
 
     // Group by expense category
     const categoryGroups: Record<
@@ -1843,27 +1878,48 @@ export const getFormattedReportData = query({
       }
     }
 
-    // Enrich with employee and accounting entry details
-    const enrichedClaims = await Promise.all(
-      claims.map(async (claim) => {
-        const employee = await ctx.db.get(claim.userId);
-        const accountingEntry = claim.accountingEntryId
-          ? await ctx.db.get(claim.accountingEntryId)
-          : null;
+    // Enrich with employee and accounting entry details - batch fetch to eliminate N+1
+    const employeeIds = [...new Set(claims.map((c) => c.userId))] as Id<"users">[];
+    const entryIds = [
+      ...new Set(
+        claims.map((c) => c.accountingEntryId).filter((id): id is Id<"accounting_entries"> => !!id)
+      ),
+    ] as Id<"accounting_entries">[];
 
-        return {
-          ...claim,
-          employee: employee
-            ? {
-                _id: employee._id,
-                fullName: employee.fullName,
-                email: employee.email,
-              }
-            : null,
-          accountingEntry,
-        };
-      })
+    const [employees, entries] = await Promise.all([
+      Promise.all(employeeIds.map((id) => ctx.db.get(id))),
+      Promise.all(entryIds.map((id) => ctx.db.get(id))),
+    ]);
+
+    const employeeMap = new Map(
+      employees
+        .filter((u): u is NonNullable<typeof u> => u !== null)
+        .map((u) => [u._id, u])
     );
+    const entryMap = new Map(
+      entries
+        .filter((e): e is NonNullable<typeof e> => e !== null)
+        .map((e) => [e._id, e])
+    );
+
+    const enrichedClaims = claims.map((claim) => {
+      const employee = employeeMap.get(claim.userId);
+      const accountingEntry = claim.accountingEntryId
+        ? entryMap.get(claim.accountingEntryId)
+        : null;
+
+      return {
+        ...claim,
+        employee: employee
+          ? {
+              _id: employee._id,
+              fullName: employee.fullName,
+              email: employee.email,
+            }
+          : null,
+        accountingEntry,
+      };
+    });
 
     // Get custom categories
     const customCategories = (business.customExpenseCategories as Array<{
@@ -2055,22 +2111,28 @@ export const getExportClaims = query({
     const limit = args.limit ?? 500;
     const paginatedClaims = claims.slice(offset, offset + limit);
 
-    // Enrich with employee details
-    const enrichedClaims = await Promise.all(
-      paginatedClaims.map(async (claim) => {
-        const employee = await ctx.db.get(claim.userId);
-        return {
-          ...claim,
-          employee: employee
-            ? {
-                _id: employee._id,
-                fullName: employee.fullName,
-                email: employee.email,
-              }
-            : null,
-        };
-      })
+    // Enrich with employee details - batch fetch to eliminate N+1
+    const employeeIds = [...new Set(paginatedClaims.map((c) => c.userId))] as Id<"users">[];
+    const employees = await Promise.all(employeeIds.map((id) => ctx.db.get(id)));
+    const employeeMap = new Map(
+      employees
+        .filter((u): u is NonNullable<typeof u> => u !== null)
+        .map((u) => [u._id, u])
     );
+
+    const enrichedClaims = paginatedClaims.map((claim) => {
+      const employee = employeeMap.get(claim.userId);
+      return {
+        ...claim,
+        employee: employee
+          ? {
+              _id: employee._id,
+              fullName: employee.fullName,
+              email: employee.email,
+            }
+          : null,
+      };
+    });
 
     // Get custom categories
     const customCategories = (business.customExpenseCategories as Array<{
@@ -3375,7 +3437,7 @@ export const getPendingPaymentClaims = query({
     );
 
     // Resolve user names for all claims
-    const userIds = [...new Set(approvedClaims.map((c) => c.userId))];
+    const userIds = [...new Set(approvedClaims.map((c) => c.userId))] as Id<"users">[];
     const users = await Promise.all(userIds.map((id) => ctx.db.get(id)));
     const userMap: Record<string, string> = {};
     for (const u of users) {
