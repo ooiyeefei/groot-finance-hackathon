@@ -1173,6 +1173,136 @@ export const reject = mutation({
 });
 
 /**
+ * Partially reject a submission: reject selected claims (move to a new draft
+ * submission for the employee to revise), keep remaining claims as "submitted"
+ * in the original submission so the manager can still act on them.
+ *
+ * If ALL claims are selected for rejection, short-circuits to full reject
+ * (reverts entire submission to draft).
+ */
+export const rejectPartial = mutation({
+  args: {
+    id: v.string(),
+    rejectedClaimIds: v.array(v.string()),
+    rejectionReason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    let submission;
+    try {
+      submission = await ctx.db.get(args.id as Id<"expense_submissions">);
+    } catch {
+      throw new Error("Submission not found");
+    }
+
+    if (!submission || submission.deletedAt) {
+      throw new Error("Submission not found");
+    }
+
+    if (submission.status !== "submitted") {
+      throw new Error("Can only reject claims in submitted submissions");
+    }
+
+    // Verify designated approver
+    if (submission.designatedApproverId && submission.designatedApproverId !== user._id) {
+      throw new Error("Only the designated approver can reject claims in this submission");
+    }
+
+    if (args.rejectedClaimIds.length === 0) {
+      throw new Error("At least one claim must be selected for rejection");
+    }
+
+    // Fetch all active claims
+    const claims = await ctx.db
+      .query("expense_claims")
+      .withIndex("by_submissionId", (q) => q.eq("submissionId", submission._id))
+      .collect();
+    const activeClaims = claims.filter((c) => !c.deletedAt);
+
+    const rejectedIdSet = new Set(args.rejectedClaimIds);
+    const rejectedClaims = activeClaims.filter((c) => rejectedIdSet.has(c._id));
+    const remainingClaims = activeClaims.filter((c) => !rejectedIdSet.has(c._id));
+
+    if (rejectedClaims.length === 0) {
+      throw new Error("None of the selected claim IDs match active claims in this submission");
+    }
+
+    const now = Date.now();
+
+    // If ALL claims are rejected, short-circuit to full reject behavior
+    if (remainingClaims.length === 0) {
+      for (const claim of rejectedClaims) {
+        await ctx.db.patch(claim._id, {
+          status: "draft",
+          designatedApproverId: undefined,
+          submittedAt: undefined,
+          updatedAt: now,
+        });
+      }
+
+      await ctx.db.patch(submission._id, {
+        status: "draft",
+        rejectionReason: args.rejectionReason,
+        rejectedAt: now,
+        designatedApproverId: undefined,
+        updatedAt: now,
+      });
+
+      console.log(`[Submission Reject Partial] All claims rejected for ${submission._id}, full reject applied`);
+
+      return {
+        submissionId: submission._id,
+        newDraftSubmissionId: null as string | null,
+        rejectedClaimsCount: rejectedClaims.length,
+        remainingClaimsCount: 0,
+      };
+    }
+
+    // --- Partial rejection: move rejected claims to new draft submission ---
+
+    const newDraftSubmissionId = await ctx.db.insert("expense_submissions", {
+      businessId: submission.businessId,
+      userId: submission.userId,
+      title: `Returned: ${submission.title}`,
+      status: "draft",
+      rejectionReason: args.rejectionReason,
+      rejectedAt: now,
+      updatedAt: now,
+    });
+
+    for (const claim of rejectedClaims) {
+      await ctx.db.patch(claim._id, {
+        submissionId: newDraftSubmissionId,
+        status: "draft",
+        designatedApproverId: undefined,
+        submittedAt: undefined,
+        updatedAt: now,
+      });
+    }
+
+    // Original submission stays "submitted" — remaining claims still need manager action
+
+    console.log(`[Submission Reject Partial] Rejected ${rejectedClaims.length} claims to new draft ${newDraftSubmissionId}, ${remainingClaims.length} claims remain submitted in ${submission._id}`);
+
+    return {
+      submissionId: submission._id,
+      newDraftSubmissionId: newDraftSubmissionId as string,
+      rejectedClaimsCount: rejectedClaims.length,
+      remainingClaimsCount: remainingClaims.length,
+    };
+  },
+});
+
+/**
  * Soft-delete a draft submission and its claims
  */
 export const softDelete = mutation({

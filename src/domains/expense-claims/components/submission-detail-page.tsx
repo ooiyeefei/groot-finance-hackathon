@@ -67,7 +67,7 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
   const { businessId } = useActiveBusiness()
   const { data, isLoading, error, refetch } = useSubmissionDetail(submissionId)
   const { categories } = useExpenseCategories({ includeDisabled: true })
-  const { updateSubmission, deleteSubmission, submitForApproval, removeClaim, approveSubmission, rejectSubmission, approvePartialSubmission } = useSubmissionMutations()
+  const { updateSubmission, deleteSubmission, submitForApproval, removeClaim, approveSubmission, rejectSubmission, approvePartialSubmission, rejectPartialSubmission } = useSubmissionMutations()
 
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -86,10 +86,12 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
   const [rejectionReason, setRejectionReason] = useState('')
   const [showApproveConfirm, setShowApproveConfirm] = useState(false)
 
-  // Partial approval selection state
+  // Partial approval/rejection selection state
   const [selectedClaimIds, setSelectedClaimIds] = useState<Set<string>>(new Set())
   const [showPartialApproveConfirm, setShowPartialApproveConfirm] = useState(false)
   const [partialRejectionReason, setPartialRejectionReason] = useState('')
+  const [showPartialRejectConfirm, setShowPartialRejectConfirm] = useState(false)
+  const [partialRejectReason, setPartialRejectReason] = useState('')
 
   const submission = data?.submission
   const claims = data?.claims || []
@@ -268,6 +270,32 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
       setIsConfirmLoading(false)
     }
   }, [submissionId, selectedClaimIds, partialRejectionReason, approvePartialSubmission, router, backPath])
+
+  const handlePartialRejectConfirmed = useCallback(async () => {
+    if (!partialRejectReason.trim()) return
+    try {
+      setIsConfirmLoading(true)
+      const result = await rejectPartialSubmission.mutateAsync({
+        id: submissionId,
+        rejectedClaimIds: Array.from(selectedClaimIds),
+        rejectionReason: partialRejectReason.trim(),
+      })
+      setShowPartialRejectConfirm(false)
+      setPartialRejectReason('')
+      setSelectedClaimIds(new Set())
+      // If all claims were rejected (full reject), go back to approvals list
+      // Otherwise stay on the page — remaining claims still need action
+      if (result.remainingClaimsCount === 0) {
+        router.push(backPath)
+      } else {
+        refetch()
+      }
+    } catch (e: any) {
+      alert(e.message)
+    } finally {
+      setIsConfirmLoading(false)
+    }
+  }, [submissionId, selectedClaimIds, partialRejectReason, rejectPartialSubmission, router, backPath, refetch])
 
   const handleRejectConfirmed = useCallback(async () => {
     if (!rejectionReason.trim()) return
@@ -474,6 +502,21 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" onClick={() => setSelectedClaimIds(new Set())}>
                   Clear Selection
+                </Button>
+                <Button
+                  className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                  onClick={() => {
+                    if (selectedClaimIds.size === claims.length) {
+                      // All claims selected — use full reject dialog
+                      setRejectionReason(partialRejectReason)
+                      setShowRejectDialog(true)
+                    } else {
+                      setShowPartialRejectConfirm(true)
+                    }
+                  }}
+                >
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Reject Selected ({selectedClaimIds.size})
                 </Button>
                 <Button
                   className="bg-primary hover:bg-primary/90 text-primary-foreground"
@@ -746,6 +789,45 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
                 </Button>
                 <Button className="bg-primary hover:bg-primary/90 text-primary-foreground min-w-[100px] sm:min-w-[120px]" onClick={handlePartialApproveConfirmed} disabled={isConfirmLoading}>
                   {isConfirmLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Approving...</> : `Approve ${selectedClaimIds.size} Claims`}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Partial rejection confirmation dialog */}
+      {showPartialRejectConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 transition-opacity"
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}
+            onClick={() => !isConfirmLoading && setShowPartialRejectConfirm(false)}
+          />
+          <div className="relative transform overflow-hidden rounded-xl bg-card shadow-2xl text-left transition-all w-full max-w-md">
+            <div className="p-6 space-y-5">
+              <div className="text-center">
+                <h3 className="text-lg font-semibold leading-6 text-foreground">Reject Selected Claims</h3>
+              </div>
+              <p className="text-sm text-muted-foreground text-center">
+                Rejecting {selectedClaimIds.size} of {claims.length} claims. These will be returned to the employee as a new draft submission. The remaining {claims.length - selectedClaimIds.size} claim(s) will stay pending for your review.
+              </p>
+              <div>
+                <label className="text-sm font-medium text-foreground">Reason for rejection</label>
+                <Textarea
+                  className="mt-2"
+                  rows={3}
+                  placeholder="Explain why these claims are being rejected..."
+                  value={partialRejectReason}
+                  onChange={(e) => setPartialRejectReason(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
+                <Button className="bg-secondary hover:bg-secondary/80 text-secondary-foreground min-w-[100px] sm:min-w-[120px]" onClick={() => setShowPartialRejectConfirm(false)} disabled={isConfirmLoading}>
+                  Cancel
+                </Button>
+                <Button className="bg-destructive hover:bg-destructive/90 text-destructive-foreground min-w-[100px] sm:min-w-[120px]" onClick={handlePartialRejectConfirmed} disabled={!partialRejectReason.trim() || isConfirmLoading}>
+                  {isConfirmLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Rejecting...</> : `Reject ${selectedClaimIds.size} Claims`}
                 </Button>
               </div>
             </div>
