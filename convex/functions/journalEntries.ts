@@ -122,6 +122,8 @@ async function createJournalEntryHelper(
     const now = Date.now();
 
     // Create journal entry
+    // Auto-post system-generated entries (non-manual), keep manual entries as draft
+    const isSystemGenerated = args.sourceType !== "manual";
     const entryId = await ctx.db.insert("journal_entries", {
       businessId: args.businessId,
       entryNumber,
@@ -129,7 +131,7 @@ async function createJournalEntryHelper(
       postingDate: args.transactionDate, // Same as transaction date initially
       description: args.description,
       memo: args.memo,
-      status: "draft",
+      status: isSystemGenerated ? "posted" : "draft",
       sourceType: args.sourceType ?? "manual",
       sourceId: args.sourceId,
       fiscalYear,
@@ -141,6 +143,10 @@ async function createJournalEntryHelper(
       isPeriodLocked: false,
       createdBy: userId,
       createdAt: now,
+      ...(isSystemGenerated && {
+        postedBy: userId,
+        postedAt: now,
+      }),
     });
 
     // Create journal entry lines
