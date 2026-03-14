@@ -25,6 +25,9 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
   const businessId = businessIdProp || activeBusinessId || undefined
   const [isOpen, setIsOpen] = useState(false)
   const [pendingMessage, setPendingMessage] = useState<string | undefined>()
+  const [pendingDraft, setPendingDraft] = useState<string | undefined>()
+  const [pendingSuggestionChips, setPendingSuggestionChips] = useState<string[] | undefined>()
+  const [pendingInsightContext, setPendingInsightContext] = useState<Record<string, unknown> | undefined>()
   const { isSignedIn } = useAuth()
   const { data: subscriptionData } = useSubscription()
 
@@ -35,6 +38,9 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
   const handleClose = useCallback(() => {
     setIsOpen(false)
     setPendingMessage(undefined)
+    setPendingDraft(undefined)
+    setPendingSuggestionChips(undefined)
+    setPendingInsightContext(undefined)
   }, [])
 
   // Handle Escape key to close
@@ -51,9 +57,20 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
   // Listen for external open-chat events (e.g. from InsightCard "Ask AI" button)
   useEffect(() => {
     const handleOpenChat = (e: Event) => {
-      const detail = (e as CustomEvent<{ message?: string }>).detail
+      const detail = (e as CustomEvent<{ message?: string; draftMessage?: string; suggestionChips?: string[]; insightContext?: Record<string, unknown> }>).detail
       if (detail?.message) {
+        // Legacy: auto-send message (backward compat)
         setPendingMessage(detail.message)
+      }
+      if (detail?.draftMessage) {
+        // New: populate input without sending (editable by user)
+        setPendingDraft(detail.draftMessage)
+      }
+      if (detail?.suggestionChips) {
+        setPendingSuggestionChips(detail.suggestionChips)
+      }
+      if (detail?.insightContext) {
+        setPendingInsightContext(detail.insightContext)
       }
       setIsOpen(true)
     }
@@ -87,6 +104,12 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
           businessId={businessId}
           initialMessage={pendingMessage}
           onInitialMessageConsumed={() => setPendingMessage(undefined)}
+          draftMessage={pendingDraft}
+          onDraftConsumed={() => setPendingDraft(undefined)}
+          suggestionChips={pendingSuggestionChips}
+          onSuggestionChipsConsumed={() => setPendingSuggestionChips(undefined)}
+          insightContext={pendingInsightContext}
+          onInsightContextConsumed={() => setPendingInsightContext(undefined)}
         />
       </div>
 

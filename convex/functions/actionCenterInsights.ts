@@ -343,16 +343,47 @@ export const internalCreate = internalMutation({
       .collect();
 
     const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000; // 3-month dedup
-    const duplicateExists = recentInsights.some(
+
+    // Exact title dedup (existing behavior)
+    const exactDuplicate = recentInsights.some(
       (i) =>
         i.category === args.category &&
         i.title === args.title &&
         i.detectedAt > ninetyDaysAgo
     );
 
-    if (duplicateExists) {
-      console.log(`[ActionCenterInsights] Skipping duplicate insight: ${args.title}`);
+    if (exactDuplicate) {
+      console.log(`[ActionCenterInsights] Skipping exact duplicate: ${args.title}`);
       return null;
+    }
+
+    // Semantic dedup via Jaccard similarity (for LLM-generated insights)
+    const isAIGenerated = (args.metadata as any)?.aiDiscovered === true;
+    if (isAIGenerated) {
+      const JACCARD_THRESHOLD = 0.6;
+      const tokenize = (t: string) => {
+        const STOP = new Set(["a","an","the","in","of","to","for","with","on","at","by","is","are","and","or","this","that","it","its","may","could"]);
+        const tokens = t.toLowerCase().replace(/[^\w\s]/g, "").split(/\s+/).filter(Boolean);
+        return new Set(tokens.filter((w) => !STOP.has(w)));
+      };
+      const newTokens = tokenize(args.title);
+
+      const semanticDuplicate = recentInsights.some((i) => {
+        if (i.detectedAt <= ninetyDaysAgo) return false;
+        if (i.status === "dismissed" || i.status === "actioned") return false;
+        const existingTokens = tokenize(i.title);
+        if (newTokens.size === 0 || existingTokens.size === 0) return false;
+        let intersection = 0;
+        for (const w of newTokens) { if (existingTokens.has(w)) intersection++; }
+        const union = newTokens.size + existingTokens.size - intersection;
+        const similarity = union > 0 ? intersection / union : 0;
+        return similarity > JACCARD_THRESHOLD;
+      });
+
+      if (semanticDuplicate) {
+        console.log(`[ActionCenterInsights] Skipping semantic duplicate (Jaccard >0.6): ${args.title}`);
+        return null;
+      }
     }
 
     const now = Date.now();
@@ -647,6 +678,30 @@ export const deduplicateExisting = internalMutation({
     );
 
     return { deleted: deletedCount, remaining: allInsights.length - deletedCount };
+  },
+});
+
+/**
+ * One-time migration: Delete all insights for a business so the improved pipeline can regenerate them.
+ *
+ * Run: npx convex run functions/actionCenterInsights:resetBusinessInsights '{"businessId":"..."}' --prod
+ */
+export const resetBusinessInsights = internalMutation({
+  args: { businessId: v.string() },
+  handler: async (ctx, args) => {
+    const insights = await ctx.db
+      .query("actionCenterInsights")
+      .withIndex("by_business_priority", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    let deletedCount = 0;
+    for (const insight of insights) {
+      await ctx.db.delete(insight._id);
+      deletedCount++;
+    }
+
+    console.log(`[Migration] Deleted ${deletedCount} insights for business ${args.businessId}`);
+    return { deleted: deletedCount };
   },
 });
 

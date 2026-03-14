@@ -32,6 +32,138 @@ const DEDUP_WINDOW_MS = 90 * 24 * 60 * 60 * 1000; // 90 days (3 months)
 /** Dedup window for deadline-specific alerts (shorter — re-alert as deadlines approach) */
 const DEADLINE_DEDUP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
+/** Stopwords for Jaccard similarity (common English words to ignore) */
+const STOPWORDS = new Set([
+  "a", "an", "the", "in", "of", "to", "for", "with", "on", "at", "by",
+  "is", "are", "was", "were", "be", "been", "being", "has", "have", "had",
+  "do", "does", "did", "and", "or", "but", "not", "this", "that", "these",
+  "those", "it", "its", "may", "could", "should", "would", "can", "will",
+]);
+
+// IFRS category code → human-readable display name
+const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
+  travel_expenses: "Travel Expenses",
+  professional_services: "Professional Services",
+  marketing_advertising: "Marketing & Advertising",
+  utilities: "Utilities",
+  office_supplies: "Office Supplies",
+  maintenance_repairs: "Maintenance & Repairs",
+  training_development: "Training & Development",
+  entertainment_meals: "Entertainment & Meals",
+  vehicle_transport: "Vehicle & Transport",
+  miscellaneous_expenses: "Miscellaneous",
+  other_operating: "Other Operating",
+  uncategorized: "Uncategorized",
+};
+
+// ============================================
+// HELPER UTILITIES
+// ============================================
+
+/**
+ * Resolve a category code to a human-readable display name.
+ *
+ * Priority:
+ * 1. IFRS standard code lookup (e.g., "travel_expenses" → "Travel Expenses")
+ * 2. Business custom category lookup (e.g., "other_9gsnmr" → "Others")
+ * 3. Fallback: strip random suffix, capitalize (e.g., "other_9gsnmr" → "Other")
+ */
+function resolveCategoryName(
+  categoryCode: string,
+  businessCustomCategories?: Array<{ id: string; category_name: string }>,
+): string {
+  if (!categoryCode) return "Uncategorized";
+
+  // 1. Check IFRS standard codes
+  if (CATEGORY_DISPLAY_NAMES[categoryCode]) {
+    return CATEGORY_DISPLAY_NAMES[categoryCode];
+  }
+
+  // 2. Check business custom categories
+  if (businessCustomCategories) {
+    const custom = businessCustomCategories.find((c) => c.id === categoryCode);
+    if (custom?.category_name) {
+      return custom.category_name;
+    }
+  }
+
+  // 3. Fallback: strip _[random] suffix, capitalize
+  const cleaned = categoryCode.replace(/_[a-z0-9]{4,}$/i, "");
+  if (cleaned && cleaned !== categoryCode) {
+    return cleaned.charAt(0).toUpperCase() + cleaned.slice(1).replace(/_/g, " ");
+  }
+
+  // Last resort: capitalize and replace underscores
+  return categoryCode.charAt(0).toUpperCase() + categoryCode.slice(1).replace(/_/g, " ");
+}
+
+/**
+ * Classify an accounting entry's domain based on vendorId presence.
+ * - "ap_vendor": has vendorId (linked to vendors table) — AP/supplier domain
+ * - "cogs": transactionType is Cost of Goods Sold
+ * - "expense_claim": no vendorId — employee expense claim domain
+ */
+function classifyEntryDomain(entry: any): "ap_vendor" | "cogs" | "expense_claim" {
+  if (entry.transactionType === "Cost of Goods Sold") return "cogs";
+  if (entry.vendorId) return "ap_vendor";
+  return "expense_claim";
+}
+
+/**
+ * Compute materiality-aware priority for anomalies.
+ * Considers both σ-deviation AND absolute amount relative to business size.
+ *
+ * Returns null to suppress the anomaly entirely, or a priority string.
+ */
+function computeMaterialityPriority(
+  amount: number,
+  monthlyExpenses: number,
+  sigmaDeviation: number,
+): "critical" | "high" | "medium" | "low" | null {
+  if (monthlyExpenses <= 0) {
+    // Can't compute materiality — fall back to σ-only
+    return sigmaDeviation > 3 ? "high" : "medium";
+  }
+
+  const materialityPct = amount / monthlyExpenses;
+
+  // Below 0.1% of monthly expenses → suppress entirely
+  if (materialityPct < 0.001) return null;
+
+  // Below 1% → cap at "low" regardless of σ
+  if (materialityPct < 0.01) return "low";
+
+  // Above 1%: use σ-based logic
+  if (sigmaDeviation > 3 && materialityPct >= 0.05) return "high";
+  if (sigmaDeviation > 3) return "medium";
+  return "medium";
+}
+
+/**
+ * Compute Jaccard similarity between two titles for semantic dedup.
+ * Tokenizes, removes stopwords, and computes |intersection| / |union|.
+ */
+function computeJaccardSimilarity(title1: string, title2: string): number {
+  const tokenize = (t: string) => {
+    const tokens = t.toLowerCase().replace(/[^\w\s]/g, "").split(/\s+/).filter(Boolean);
+    return new Set(tokens.filter((w) => !STOPWORDS.has(w)));
+  };
+
+  const set1 = tokenize(title1);
+  const set2 = tokenize(title2);
+
+  if (set1.size === 0 && set2.size === 0) return 1;
+  if (set1.size === 0 || set2.size === 0) return 0;
+
+  let intersection = 0;
+  for (const word of set1) {
+    if (set2.has(word)) intersection++;
+  }
+
+  const union = set1.size + set2.size - intersection;
+  return union > 0 ? intersection / union : 0;
+}
+
 // ============================================
 // INTERNAL QUERIES (for use in actions)
 // ============================================
@@ -99,9 +231,13 @@ export const getBusinessSummary = internalQuery({
       (e: any) => !e.deletedAt && e.transactionDate && e.transactionDate >= ninetyDaysAgo
     );
 
+    // Load business custom categories for name resolution
+    const customCategories = ((business as any)?.customExpenseCategories as Array<{ id: string; category_name: string }>) || [];
+
     let totalIncome = 0;
     let totalExpenses = 0;
-    const vendorSpend: Record<string, { name: string; amount: number; count: number }> = {};
+    const supplierSpend: Record<string, { name: string; amount: number; count: number }> = {};
+    const merchantSpend: Record<string, { name: string; amount: number; count: number }> = {};
     const categorySpend: Record<string, number> = {};
     let pendingPayables = 0;
     let overduePayables = 0;
@@ -112,13 +248,22 @@ export const getBusinessSummary = internalQuery({
         totalIncome += amount;
       } else {
         totalExpenses += amount;
-        const cat = e.category || "uncategorized";
-        categorySpend[cat] = (categorySpend[cat] || 0) + amount;
+        const catCode = e.category || "uncategorized";
+        const catName = resolveCategoryName(catCode, customCategories);
+        categorySpend[catName] = (categorySpend[catName] || 0) + amount;
 
-        const vendorKey = e.vendorName || "Unknown";
-        if (!vendorSpend[vendorKey]) vendorSpend[vendorKey] = { name: vendorKey, amount: 0, count: 0 };
-        vendorSpend[vendorKey].amount += amount;
-        vendorSpend[vendorKey].count++;
+        // Separate AP suppliers from expense-claim merchants
+        const domain = classifyEntryDomain(e);
+        const payeeName = e.vendorName || "Unknown";
+        if (domain === "ap_vendor" || domain === "cogs") {
+          if (!supplierSpend[payeeName]) supplierSpend[payeeName] = { name: payeeName, amount: 0, count: 0 };
+          supplierSpend[payeeName].amount += amount;
+          supplierSpend[payeeName].count++;
+        } else {
+          if (!merchantSpend[payeeName]) merchantSpend[payeeName] = { name: payeeName, amount: 0, count: 0 };
+          merchantSpend[payeeName].amount += amount;
+          merchantSpend[payeeName].count++;
+        }
       }
       if (e.status === "pending" && (e.transactionType === "Expense" || e.transactionType === "Cost of Goods Sold")) {
         pendingPayables += amount;
@@ -128,13 +273,19 @@ export const getBusinessSummary = internalQuery({
       }
     }
 
-    // Top vendors by spend
-    const topVendors = Object.values(vendorSpend)
+    // Top suppliers (AP) by spend
+    const topSuppliers = Object.values(supplierSpend)
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 5)
       .map((v) => `${v.name}: ${v.amount.toLocaleString()} (${v.count} txns)`);
 
-    // Category breakdown
+    // Top merchants (expense claims) by spend
+    const topMerchants = Object.values(merchantSpend)
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5)
+      .map((v) => `${v.name}: ${v.amount.toLocaleString()} (${v.count} txns)`);
+
+    // Category breakdown (already resolved to display names)
     const categories = Object.entries(categorySpend)
       .sort(([, a], [, b]) => b - a)
       .slice(0, 5)
@@ -188,7 +339,9 @@ export const getBusinessSummary = internalQuery({
       totalIncome: Math.round(totalIncome),
       totalExpenses: Math.round(totalExpenses),
       transactionCount: recent.length,
-      topVendors,
+      topVendors: topSuppliers, // backward compat alias
+      topSuppliers,
+      topMerchants,
       categories,
       arOutstanding: Math.round(arOutstanding),
       arOverdueCount,
@@ -430,6 +583,16 @@ async function runAnomalyDetection(
     (e: any) => !e.deletedAt && e.transactionDate && e.transactionDate >= ninetyDaysAgo
   );
 
+  // Load business custom categories for name resolution
+  const business = await ctx.db.get(businessId);
+  const customCategories = ((business as any)?.customExpenseCategories as Array<{ id: string; category_name: string }>) || [];
+
+  // Calculate monthly expenses for materiality threshold
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const monthlyExpenses = recent
+    .filter((e: any) => e.transactionType !== "Income" && e.transactionDate >= thirtyDaysAgo)
+    .reduce((sum: number, e: any) => sum + Math.abs(e.homeCurrencyAmount || e.originalAmount || 0), 0);
+
   // Group by category to calculate stats
   const byCategory: Record<string, number[]> = {};
   for (const txn of recent) {
@@ -464,10 +627,12 @@ async function runAnomalyDetection(
 
     // Find transactions >2σ from mean
     const threshold2Sigma = mean + 2 * stdDev;
-    const threshold3Sigma = mean + 3 * stdDev;
 
     const recentCategoryTxns = recent.filter((t: any) => (t.category || "uncategorized") === category);
     const last7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+    // Resolve category name for display
+    const categoryDisplayName = resolveCategoryName(category, customCategories);
 
     for (const txn of recentCategoryTxns) {
       if (txn.transactionDate < last7Days) continue; // Only alert on recent transactions
@@ -475,7 +640,7 @@ async function runAnomalyDetection(
       const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
       if (amount <= threshold2Sigma) continue;
 
-      // Dedup: skip if an anomaly insight for this transaction exists within 7 days
+      // Dedup: skip if an anomaly insight for this transaction exists within dedup window
       const txnIdStr = txn._id.toString();
       const isDuplicate = existingAnomalyInsights.some(
         (i: any) =>
@@ -486,8 +651,12 @@ async function runAnomalyDetection(
 
       if (isDuplicate) continue;
 
-      const deviation = ((amount - mean) / stdDev).toFixed(1);
-      const priority = amount > threshold3Sigma ? "high" : "medium";
+      const sigmaDeviation = (amount - mean) / stdDev;
+      const deviation = sigmaDeviation.toFixed(1);
+
+      // Apply materiality-based priority scoring
+      const priority = computeMaterialityPriority(amount, monthlyExpenses, sigmaDeviation);
+      if (priority === null) continue; // Below materiality threshold — suppress
 
       // Create insight for each member
       for (const userId of memberUserIds) {
@@ -497,8 +666,8 @@ async function runAnomalyDetection(
           category: "anomaly",
           priority,
           status: "new",
-          title: `Unusual ${category} expense detected`,
-          description: `A ${category} expense of ${amount.toLocaleString()} is ${deviation}σ above your average of ${mean.toLocaleString()}.`,
+          title: `Unusual ${categoryDisplayName} expense detected`,
+          description: `A ${categoryDisplayName} expense of ${amount.toLocaleString()} is ${deviation}σ above your average of ${mean.toLocaleString()}.`,
           affectedEntities: [txn._id.toString()],
           recommendedAction: `Review this transaction to ensure it's legitimate and correctly categorized.`,
           detectedAt: Date.now(),
@@ -506,7 +675,10 @@ async function runAnomalyDetection(
             deviation: parseFloat(deviation),
             baseline: mean,
             category,
+            categoryDisplayName,
             transactionId: txn._id.toString(),
+            sourceDataDomain: classifyEntryDomain(txn),
+            materialityPct: monthlyExpenses > 0 ? amount / monthlyExpenses : undefined,
           },
         });
         insightsCreated++;
@@ -718,89 +890,103 @@ async function runVendorConcentration(
     .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
     .collect();
 
-  const expenses = entries.filter(
+  // DOMAIN SEPARATION: Only analyze AP/COGS entries (has vendorId) — NOT expense claims
+  const apEntries = entries.filter(
     (e: any) =>
       !e.deletedAt &&
-      e.transactionType === "Expense" &&
+      (e.transactionType === "Expense" || e.transactionType === "Cost of Goods Sold") &&
       e.transactionDate &&
       e.transactionDate >= cutoffDate &&
-      e.category
+      e.vendorId // Must have vendorId — this is the AP/supplier domain filter
   );
 
-  if (expenses.length < 10) return 0;
+  if (apEntries.length < 5) return 0;
 
-  // Group by category
-  const byCategory: Record<string, { total: number; byVendor: Record<string, { name: string; amount: number }> }> = {};
+  // Calculate total AP spend for overall concentration
+  const totalAPSpend = apEntries.reduce(
+    (sum: number, e: any) => sum + Math.abs(e.homeCurrencyAmount || e.originalAmount || 0), 0
+  );
 
-  for (const txn of expenses) {
-    const category = txn.category;
-    const vendorKey = txn.vendorId?.toString() || txn.vendorName || "unknown";
-    const vendorName = txn.vendorName || "Unknown Vendor";
+  if (totalAPSpend < 1000) return 0;
+
+  // Group by supplier
+  const bySupplier: Record<string, { name: string; amount: number; count: number }> = {};
+
+  for (const txn of apEntries) {
+    const supplierKey = txn.vendorId.toString();
+    const supplierName = txn.vendorName || "Unknown Supplier";
     const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
 
-    if (!byCategory[category]) {
-      byCategory[category] = { total: 0, byVendor: {} };
+    if (!bySupplier[supplierKey]) {
+      bySupplier[supplierKey] = { name: supplierName, amount: 0, count: 0 };
     }
-    byCategory[category].total += amount;
-
-    if (!byCategory[category].byVendor[vendorKey]) {
-      byCategory[category].byVendor[vendorKey] = { name: vendorName, amount: 0 };
-    }
-    byCategory[category].byVendor[vendorKey].amount += amount;
+    bySupplier[supplierKey].amount += amount;
+    bySupplier[supplierKey].count++;
   }
+
+  // Collect ALL concentrated suppliers into one summary
+  const concentratedSuppliers: Array<{ id: string; name: string; percentage: number; amount: number }> = [];
+
+  for (const [supplierId, data] of Object.entries(bySupplier)) {
+    const percentage = (data.amount / totalAPSpend) * 100;
+    if (percentage >= threshold) {
+      concentratedSuppliers.push({
+        id: supplierId,
+        name: data.name,
+        percentage,
+        amount: data.amount,
+      });
+    }
+  }
+
+  if (concentratedSuppliers.length === 0) return 0;
+
+  // Check for duplicate summary insight
+  const existingInsights = await ctx.db
+    .query("actionCenterInsights")
+    .withIndex("by_category", (q: any) => q.eq("category", "optimization"))
+    .collect();
+
+  const isDuplicate = existingInsights.some(
+    (i: any) =>
+      i.metadata?.insightType === "supplier_concentration" &&
+      i.businessId === businessId.toString() &&
+      i.detectedAt > Date.now() - DEDUP_WINDOW_MS
+  );
+
+  if (isDuplicate) return 0;
+
+  // Create ONE consolidated summary card
+  const maxPct = Math.max(...concentratedSuppliers.map((s) => s.percentage));
+  const priority = maxPct > 80 ? "high" : maxPct > 65 ? "medium" : "low";
+
+  const supplierList = concentratedSuppliers
+    .sort((a, b) => b.percentage - a.percentage)
+    .map((s) => `${s.name}: ${s.percentage.toFixed(0)}% of AP spend`)
+    .join("; ");
 
   let insightsCreated = 0;
 
-  for (const [category, data] of Object.entries(byCategory)) {
-    if (data.total < 1000) continue;
-
-    for (const [vendorId, vendorData] of Object.entries(data.byVendor)) {
-      const percentage = (vendorData.amount / data.total) * 100;
-      if (percentage < threshold) continue;
-
-      // Check for duplicate
-      const existingInsights = await ctx.db
-        .query("actionCenterInsights")
-        .withIndex("by_category", (q: any) => q.eq("category", "optimization"))
-        .collect();
-
-      const isDuplicate = existingInsights.some(
-        (i: any) =>
-          i.metadata?.vendorId === vendorId &&
-          i.metadata?.category === category &&
-          i.metadata?.insightType === "vendor_concentration" &&
-          i.detectedAt > Date.now() - DEDUP_WINDOW_MS
-      );
-
-      if (isDuplicate) continue;
-
-      const priority = percentage > 80 ? "high" : percentage > 65 ? "medium" : "low";
-
-      for (const userId of memberUserIds) {
-        await ctx.db.insert("actionCenterInsights", {
-          userId,
-          businessId: businessId.toString(),
-          category: "optimization",
-          priority,
-          status: "new",
-          title: `Vendor concentration risk: ${vendorData.name}`,
-          description: `${vendorData.name} accounts for ${percentage.toFixed(0)}% of your ${category} spending. Consider diversifying suppliers.`,
-          affectedEntities: [vendorId],
-          recommendedAction: `Review your ${category} vendors and consider adding alternative suppliers.`,
-          detectedAt: Date.now(),
-          // No expiresAt — persists until user acts
-          metadata: {
-            vendorId,
-            vendorName: vendorData.name,
-            category,
-            concentrationPercentage: percentage,
-            totalCategorySpend: data.total,
-            insightType: "vendor_concentration",
-          },
-        });
-        insightsCreated++;
-      }
-    }
+  for (const userId of memberUserIds) {
+    await ctx.db.insert("actionCenterInsights", {
+      userId,
+      businessId: businessId.toString(),
+      category: "optimization",
+      priority,
+      status: "new",
+      title: `Supplier concentration risk: ${concentratedSuppliers.length} supplier${concentratedSuppliers.length > 1 ? "s" : ""} above ${threshold}%`,
+      description: `${supplierList}. High reliance on few suppliers exposes the business to supply-chain risk if any face issues or increase prices.`,
+      affectedEntities: concentratedSuppliers.map((s) => s.id),
+      recommendedAction: `Diversify supplier base to reduce dependency. Negotiate better terms with current suppliers and identify alternatives.`,
+      detectedAt: Date.now(),
+      metadata: {
+        consolidatedEntities: concentratedSuppliers,
+        totalAPSpend,
+        insightType: "supplier_concentration",
+        sourceDataDomain: "ap_vendor",
+      },
+    });
+    insightsCreated++;
   }
 
   return insightsCreated;
@@ -824,88 +1010,101 @@ async function runVendorSpendingChanges(
     .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
     .collect();
 
-  const expenses = entries.filter(
+  // DOMAIN SEPARATION: Only analyze AP entries (has vendorId) — NOT expense claims
+  const apExpenses = entries.filter(
     (e: any) =>
       !e.deletedAt &&
-      e.transactionType === "Expense" &&
+      (e.transactionType === "Expense" || e.transactionType === "Cost of Goods Sold") &&
       e.transactionDate &&
       e.transactionDate >= ninetyDaysAgo &&
-      (e.vendorId || e.vendorName)
+      e.vendorId // AP domain only
   );
 
-  const vendorPeriods: Record<string, { name: string; recent: number; historical: number; historicalCount: number }> = {};
+  const supplierPeriods: Record<string, { name: string; recent: number; historical: number; historicalCount: number }> = {};
 
-  for (const txn of expenses) {
-    const vendorKey = txn.vendorId?.toString() || txn.vendorName || "unknown";
-    const vendorName = txn.vendorName || "Unknown Vendor";
+  for (const txn of apExpenses) {
+    const supplierKey = txn.vendorId.toString();
+    const supplierName = txn.vendorName || "Unknown Supplier";
     const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
     const date = txn.transactionDate || "";
 
-    if (!vendorPeriods[vendorKey]) {
-      vendorPeriods[vendorKey] = { name: vendorName, recent: 0, historical: 0, historicalCount: 0 };
+    if (!supplierPeriods[supplierKey]) {
+      supplierPeriods[supplierKey] = { name: supplierName, recent: 0, historical: 0, historicalCount: 0 };
     }
 
     if (date >= thirtyDaysAgo) {
-      vendorPeriods[vendorKey].recent += amount;
+      supplierPeriods[supplierKey].recent += amount;
     } else if (date >= sixtyDaysAgo) {
-      vendorPeriods[vendorKey].historical += amount;
-      vendorPeriods[vendorKey].historicalCount++;
+      supplierPeriods[supplierKey].historical += amount;
+      supplierPeriods[supplierKey].historicalCount++;
     }
   }
 
-  let insightsCreated = 0;
+  // Collect all significant changes into one summary
+  const significantChanges: Array<{ id: string; name: string; changePercent: number; recent: number; historical: number }> = [];
 
-  for (const [vendorId, data] of Object.entries(vendorPeriods)) {
+  for (const [supplierId, data] of Object.entries(supplierPeriods)) {
     if (data.historicalCount < 2 || data.historical < 100) continue;
 
     const changePercent = ((data.recent - data.historical) / data.historical) * 100;
-    const absoluteChange = Math.abs(changePercent);
+    if (Math.abs(changePercent) < changeThreshold) continue;
 
-    if (absoluteChange < changeThreshold) continue;
+    significantChanges.push({
+      id: supplierId,
+      name: data.name,
+      changePercent,
+      recent: data.recent,
+      historical: data.historical,
+    });
+  }
 
-    const existingInsights = await ctx.db
-      .query("actionCenterInsights")
-      .withIndex("by_category", (q: any) => q.eq("category", "optimization"))
-      .collect();
+  if (significantChanges.length === 0) return 0;
 
-    const isDuplicate = existingInsights.some(
-      (i: any) =>
-        i.metadata?.vendorId === vendorId &&
-        i.metadata?.insightType === "vendor_spending_change" &&
-        i.detectedAt > Date.now() - DEDUP_WINDOW_MS
-    );
+  // Check for duplicate summary insight
+  const existingInsights = await ctx.db
+    .query("actionCenterInsights")
+    .withIndex("by_category", (q: any) => q.eq("category", "optimization"))
+    .collect();
 
-    if (isDuplicate) continue;
+  const isDuplicate = existingInsights.some(
+    (i: any) =>
+      i.metadata?.insightType === "supplier_spending_changes" &&
+      i.businessId === businessId.toString() &&
+      i.detectedAt > Date.now() - DEDUP_WINDOW_MS
+  );
 
-    const isIncrease = changePercent > 0;
-    const priority = absoluteChange > 100 ? "high" : absoluteChange > 75 ? "medium" : "low";
+  if (isDuplicate) return 0;
 
-    for (const userId of memberUserIds) {
-      await ctx.db.insert("actionCenterInsights", {
-        userId,
-        businessId: businessId.toString(),
-        category: "optimization",
-        priority,
-        status: "new",
-        title: `${isIncrease ? "Increased" : "Decreased"} spending with ${data.name}`,
-        description: `Spending with ${data.name} has ${isIncrease ? "increased" : "decreased"} by ${absoluteChange.toFixed(0)}%.`,
-        affectedEntities: [vendorId],
-        recommendedAction: isIncrease
-          ? `Review recent transactions with ${data.name}.`
-          : `Investigate why spending with ${data.name} has dropped.`,
-        detectedAt: Date.now(),
-        // No expiresAt — persists until user acts
-        metadata: {
-          vendorId,
-          vendorName: data.name,
-          recentSpend: data.recent,
-          historicalSpend: data.historical,
-          changePercent,
-          insightType: "vendor_spending_change",
-        },
-      });
-      insightsCreated++;
-    }
+  // Create ONE consolidated summary card
+  const maxChange = Math.max(...significantChanges.map((s) => Math.abs(s.changePercent)));
+  const priority = maxChange > 100 ? "high" : maxChange > 75 ? "medium" : "low";
+
+  const changeList = significantChanges
+    .sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent))
+    .map((s) => `${s.name}: ${s.changePercent > 0 ? "+" : ""}${s.changePercent.toFixed(0)}%`)
+    .join("; ");
+
+  let insightsCreated = 0;
+
+  for (const userId of memberUserIds) {
+    await ctx.db.insert("actionCenterInsights", {
+      userId,
+      businessId: businessId.toString(),
+      category: "optimization",
+      priority,
+      status: "new",
+      title: `Supplier spending changes: ${significantChanges.length} supplier${significantChanges.length > 1 ? "s" : ""} with significant shifts`,
+      description: `${changeList}. Review supplier relationships for cost optimization opportunities.`,
+      affectedEntities: significantChanges.map((s) => s.id),
+      recommendedAction: `Review recent invoices from affected suppliers. Negotiate terms or explore alternatives where costs have increased.`,
+      detectedAt: Date.now(),
+      metadata: {
+        consolidatedEntities: significantChanges,
+        insightType: "supplier_spending_changes",
+        sourceDataDomain: "ap_vendor",
+      },
+    });
+    insightsCreated++;
   }
 
   return insightsCreated;
@@ -968,7 +1167,7 @@ async function runVendorRiskAnalysis(
     // Prospective status
     if (vendor.status === "prospective") {
       riskScore += 15;
-      factors.push("Unverified vendor");
+      factors.push("Unverified supplier");
     }
 
     // Transaction irregularity
@@ -1009,7 +1208,7 @@ async function runVendorRiskAnalysis(
     const isDuplicate = existingInsights.some(
       (i: any) =>
         i.metadata?.vendorId === vendor._id.toString() &&
-        i.metadata?.insightType === "vendor_risk" &&
+        i.metadata?.insightType === "vendor_risk" || i.metadata?.insightType === "supplier_risk" &&
         i.detectedAt > Date.now() - DEDUP_WINDOW_MS
     );
 
@@ -1024,10 +1223,10 @@ async function runVendorRiskAnalysis(
         category: "compliance",
         priority,
         status: "new",
-        title: `High-risk vendor: ${vendor.name}`,
+        title: `High-risk supplier: ${vendor.name}`,
         description: `${vendor.name} has a risk score of ${riskScore}/100. Issues: ${factors.join(", ")}.`,
         affectedEntities: [vendor._id.toString()],
-        recommendedAction: `Review and update vendor information for ${vendor.name}.`,
+        recommendedAction: `Review and update supplier information for ${vendor.name}.`,
         detectedAt: Date.now(),
         // No expiresAt — persists until user acts
         metadata: {
@@ -1035,7 +1234,8 @@ async function runVendorRiskAnalysis(
           vendorName: vendor.name,
           riskScore,
           riskFactors: factors,
-          insightType: "vendor_risk",
+          insightType: "supplier_risk",
+          sourceDataDomain: "ap_vendor",
         },
       });
       insightsCreated++;
@@ -1483,12 +1683,23 @@ export const analyzeNewTransaction = internalMutation({
     const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
     if (amount === 0) return 0;
 
+    // Load business for custom categories + materiality
+    const business = await ctx.db.get(args.businessId);
+    const customCategories = ((business as any)?.customExpenseCategories as Array<{ id: string; category_name: string }>) || [];
+    const categoryDisplayName = resolveCategoryName(category, customCategories);
+
     // Get historical stats for this category (last 90 days)
     const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
     const entries = await ctx.db
       .query("accounting_entries")
       .withIndex("by_businessId", (q: any) => q.eq("businessId", args.businessId))
       .collect();
+
+    // Calculate monthly expenses for materiality threshold
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const monthlyExpenses = entries
+      .filter((e: any) => !e.deletedAt && e.transactionType !== "Income" && e.transactionDate && e.transactionDate >= thirtyDaysAgo)
+      .reduce((sum: number, e: any) => sum + Math.abs(e.homeCurrencyAmount || e.originalAmount || 0), 0);
 
     const categoryExpenses = entries.filter(
       (e: any) =>
@@ -1542,9 +1753,12 @@ export const analyzeNewTransaction = internalMutation({
 
     if (memberUserIds.length === 0) return 0;
 
-    const threshold3Sigma = mean + 3 * stdDev;
-    const deviation = ((amount - mean) / stdDev).toFixed(1);
-    const priority = amount > threshold3Sigma ? "high" : "medium";
+    const sigmaDeviation = (amount - mean) / stdDev;
+    const deviation = sigmaDeviation.toFixed(1);
+
+    // Apply materiality-based priority scoring
+    const priority = computeMaterialityPriority(amount, monthlyExpenses, sigmaDeviation);
+    if (priority === null) return 0; // Below materiality threshold — suppress
 
     let insightsCreated = 0;
     for (const userId of memberUserIds) {
@@ -1552,10 +1766,10 @@ export const analyzeNewTransaction = internalMutation({
         userId,
         businessId: args.businessId.toString(),
         category: "anomaly" as const,
-        priority: priority as "high" | "medium",
+        priority: priority as "high" | "medium" | "low",
         status: "new" as const,
-        title: `Unusual ${category} expense detected`,
-        description: `A ${category} expense of ${amount.toLocaleString()} is ${deviation}σ above your average of ${mean.toLocaleString()}.`,
+        title: `Unusual ${categoryDisplayName} expense detected`,
+        description: `A ${categoryDisplayName} expense of ${amount.toLocaleString()} is ${deviation}σ above your average of ${mean.toLocaleString()}.`,
         affectedEntities: [txnIdStr],
         recommendedAction: `Review this transaction to ensure it's legitimate and correctly categorized.`,
         detectedAt: Date.now(),
@@ -1563,7 +1777,10 @@ export const analyzeNewTransaction = internalMutation({
           deviation: parseFloat(deviation),
           baseline: mean,
           category,
+          categoryDisplayName,
           transactionId: txnIdStr,
+          sourceDataDomain: classifyEntryDomain(txn),
+          materialityPct: monthlyExpenses > 0 ? amount / monthlyExpenses : undefined,
         },
       });
       insightsCreated++;
@@ -1725,6 +1942,13 @@ export const enrichInsight = internalAction({
     const systemPrompt = `You are a financial analyst for a Southeast Asian SME called "${businessName}".
 Enrich this financial alert with business context and specific, actionable advice.
 Be concise (2-3 sentences per field). Use the business's home currency (${homeCurrency}).
+
+IMPORTANT TERMINOLOGY RULES:
+- Use "supplier" for AP/COGS payees (businesses that supply goods/services). NEVER use "vendor".
+- Use "merchant" for expense-claim payees (restaurants, shops, transport — places employees visit).
+- Supplier concentration/risk analysis applies ONLY to AP suppliers, not expense-claim merchants.
+- Do NOT suggest "diversifying merchants" for expense claims — that's not a business risk.
+
 Respond ONLY in valid JSON — no markdown, no explanation outside the JSON.`;
 
     const userPrompt = `Alert: ${insight.title}
@@ -1737,7 +1961,8 @@ ${mcpContext}
 ${summary ? `Business context (last 90 days):
 - Income: ${summary.totalIncome.toLocaleString()} ${homeCurrency}
 - Expenses: ${summary.totalExpenses.toLocaleString()} ${homeCurrency} (${summary.transactionCount} transactions)
-- Top vendors: ${summary.topVendors.join(", ") || "None"}
+- Top suppliers (AP): ${summary.topSuppliers?.join(", ") || summary.topVendors?.join(", ") || "None"}
+- Top merchants (Expense Claims): ${summary.topMerchants?.join(", ") || "None"}
 - Categories: ${summary.categories.join(", ") || "None"}
 - AR outstanding: ${summary.arOutstanding.toLocaleString()} (${summary.arOverdueCount} overdue)
 - AP pending: ${summary.apPending.toLocaleString()} (${(summary.apOverdue || 0).toLocaleString()} overdue)` : ""}
@@ -1810,9 +2035,13 @@ export const getBusinessSummaryByStringId = internalQuery({
       (e: any) => !e.deletedAt && e.transactionDate && e.transactionDate >= ninetyDaysAgo
     );
 
+    // Load business custom categories for name resolution
+    const customCategories = ((business as any)?.customExpenseCategories as Array<{ id: string; category_name: string }>) || [];
+
     let totalIncome = 0;
     let totalExpenses = 0;
-    const vendorSpend: Record<string, { name: string; amount: number; count: number }> = {};
+    const supplierSpend: Record<string, { name: string; amount: number; count: number }> = {};
+    const merchantSpend: Record<string, { name: string; amount: number; count: number }> = {};
     const categorySpend: Record<string, number> = {};
     let pendingPayables = 0;
     let overduePayables = 0;
@@ -1822,18 +2051,27 @@ export const getBusinessSummaryByStringId = internalQuery({
       if (e.transactionType === "Income") totalIncome += amount;
       else {
         totalExpenses += amount;
-        const cat = e.category || "uncategorized";
-        categorySpend[cat] = (categorySpend[cat] || 0) + amount;
-        const vendorKey = e.vendorName || "Unknown";
-        if (!vendorSpend[vendorKey]) vendorSpend[vendorKey] = { name: vendorKey, amount: 0, count: 0 };
-        vendorSpend[vendorKey].amount += amount;
-        vendorSpend[vendorKey].count++;
+        const catCode = e.category || "uncategorized";
+        const catName = resolveCategoryName(catCode, customCategories);
+        categorySpend[catName] = (categorySpend[catName] || 0) + amount;
+        const domain = classifyEntryDomain(e);
+        const payeeName = e.vendorName || "Unknown";
+        if (domain === "ap_vendor" || domain === "cogs") {
+          if (!supplierSpend[payeeName]) supplierSpend[payeeName] = { name: payeeName, amount: 0, count: 0 };
+          supplierSpend[payeeName].amount += amount;
+          supplierSpend[payeeName].count++;
+        } else {
+          if (!merchantSpend[payeeName]) merchantSpend[payeeName] = { name: payeeName, amount: 0, count: 0 };
+          merchantSpend[payeeName].amount += amount;
+          merchantSpend[payeeName].count++;
+        }
       }
       if (e.status === "pending" && (e.transactionType === "Expense" || e.transactionType === "Cost of Goods Sold")) pendingPayables += amount;
       if (e.status === "overdue") overduePayables += amount;
     }
 
-    const topVendors = Object.values(vendorSpend).sort((a, b) => b.amount - a.amount).slice(0, 5).map((v) => `${v.name}: ${v.amount.toLocaleString()} (${v.count} txns)`);
+    const topSuppliers = Object.values(supplierSpend).sort((a, b) => b.amount - a.amount).slice(0, 5).map((v) => `${v.name}: ${v.amount.toLocaleString()} (${v.count} txns)`);
+    const topMerchants = Object.values(merchantSpend).sort((a, b) => b.amount - a.amount).slice(0, 5).map((v) => `${v.name}: ${v.amount.toLocaleString()} (${v.count} txns)`);
     const categories = Object.entries(categorySpend).sort(([, a], [, b]) => b - a).slice(0, 5).map(([cat, amt]) => `${cat}: ${amt.toLocaleString()}`);
 
     const salesInvoices = await ctx.db.query("sales_invoices").filter((q: any) => q.and(q.eq(q.field("businessId"), business._id), q.eq(q.field("deletedAt"), undefined))).collect();
@@ -1850,7 +2088,9 @@ export const getBusinessSummaryByStringId = internalQuery({
       totalIncome: Math.round(totalIncome),
       totalExpenses: Math.round(totalExpenses),
       transactionCount: recent.length,
-      topVendors,
+      topVendors: topSuppliers,
+      topSuppliers,
+      topMerchants,
       categories,
       arOutstanding: Math.round(arOutstanding),
       arOverdueCount,
@@ -2020,10 +2260,17 @@ export const runAIDiscovery = internalAction({
           : "",
       ].filter(Boolean).join("\n\n");
 
-      const systemPrompt = `You are a financial analyst for Southeast Asian SMEs.
-Review this business's MCP intelligence report and find 0-3 actionable insights that the standard detection rules missed.
-Focus on CROSS-DOMAIN patterns — connections between anomalies, cash flow, and vendor risks that individual tools can't see.
-If nothing notable beyond what's already flagged, respond with an empty array.
+      const systemPrompt = `You are a CFO-grade financial analyst for Southeast Asian SMEs.
+Review this business's intelligence report and find 0-3 actionable insights that standard detection rules missed.
+Focus on CROSS-DOMAIN patterns — connections between anomalies, cash flow, and supplier risks that individual tools can't see.
+
+CRITICAL RULES:
+1. TERMINOLOGY: Use "supplier" for AP/COGS payees, "merchant" for expense-claim payees. NEVER use "vendor".
+2. DOMAIN SEPARATION: Supplier concentration/risk analysis applies ONLY to AP suppliers. Do NOT analyze expense-claim merchants for concentration risk — employees can eat at the same restaurant without it being a business risk.
+3. MATERIALITY: Only flag findings that represent >1% of monthly expenses. Ignore trivial amounts regardless of statistical deviation.
+4. NO GENERIC ADVICE: Do not suggest "diversifying merchants" or "reviewing small expenses". Focus on findings a CFO would act on.
+5. If nothing notable beyond what's already flagged, respond with an empty array.
+
 Respond ONLY in valid JSON array — no markdown, no explanation outside the array.`;
 
       const userPrompt = `Business: ${summary.businessName} (${summary.country})
@@ -2036,7 +2283,8 @@ ${mcpIntelligence}
 - Income: ${summary.totalIncome.toLocaleString()} from ${summary.transactionCount} transactions
 - Expenses: ${summary.totalExpenses.toLocaleString()}
 - Categories: ${summary.categories.join(", ") || "None"}
-- Top vendors: ${summary.topVendors.join(", ") || "None"}
+- Top suppliers (AP — supply-chain risk relevant): ${summary.topSuppliers?.join(", ") || summary.topVendors?.join(", ") || "None"}
+- Top merchants (Expense Claims — NOT relevant for concentration risk): ${summary.topMerchants?.join(", ") || "None"}
 - AR outstanding: ${summary.arOutstanding.toLocaleString()} (${summary.arOverdueCount} overdue)
 - AP pending: ${summary.apPending.toLocaleString()} (${(summary.apOverdue || 0).toLocaleString()} overdue)
 - Expense claims: ${summary.claimCount} recent claims

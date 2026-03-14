@@ -79,32 +79,74 @@ export function InsightCard({ insight, onDismiss, onAction, onReview, isHighligh
     setIsDetailOpen(true);
   };
 
+  // Generate context-aware suggestion chips based on insight category
+  const getQuestionChips = (): string[] => {
+    switch (insight.category) {
+      case 'anomaly':
+        return [
+          'Show me the transaction details',
+          'Is this a recurring pattern?',
+          "What's the financial impact?",
+        ];
+      case 'cashflow':
+        return [
+          "What's my projected runway?",
+          'Show me recent income vs expenses',
+          'Which invoices are overdue?',
+        ];
+      case 'optimization':
+        return [
+          'Which suppliers are affected?',
+          'What are my alternatives?',
+          'Show me the spending trend',
+        ];
+      case 'compliance':
+        return [
+          'What are the risk factors?',
+          'What information is missing?',
+          'How do I resolve this?',
+        ];
+      case 'deadline':
+        return [
+          'Show me the payment details',
+          'What happens if I miss this?',
+          'Can I schedule this payment?',
+        ];
+      default:
+        return [
+          'What data supports this?',
+          'What should I do next?',
+          "What's the financial impact?",
+        ];
+    }
+  };
+
   const handleAskAI = (e: React.MouseEvent) => {
     e.stopPropagation();
 
-    // Build an optimized prompt with actionable context and insight ID for MCP lookup
-    const contextMessage = `Investigate this ${insight.priority.toUpperCase()} priority Action Center alert:
+    // Build a concise, human-readable draft prompt (visible + editable in chat input)
+    const draftMessage = `Tell me more about: "${insight.title}". What data supports this finding and what should I do?`;
 
-[INSIGHT REFERENCE]
-- Insight ID: ${insight._id}
-- Type: ${category.label}
-- Detected: ${new Date(insight.detectedAt).toLocaleDateString()}
+    // Also pass the full context as hidden metadata for the AI to use
+    const contextMetadata = {
+      insightId: insight._id,
+      type: category.label,
+      detected: new Date(insight.detectedAt).toLocaleDateString(),
+      title: insight.title,
+      description: insight.description,
+      recommendedAction: insight.recommendedAction,
+      priority: insight.priority,
+    };
 
-[ALERT DETAILS]
-${insight.title}
-
-${insight.description}
-${insight.recommendedAction ? `\nSuggested action: ${insight.recommendedAction}` : ''}
-
-Please:
-1. Look up the source data for this insight (Insight ID: ${insight._id}) to verify the alert
-2. Analyze my recent transactions, invoices, or expense claims related to this issue
-3. Provide specific recommendations with actionable next steps
-4. Flag any related concerns I should address`;
-
-    // Open the global chat widget with the prefilled message
+    // Open the global chat widget with editable draft + suggestion chips
     window.dispatchEvent(
-      new CustomEvent('finanseal:open-chat', { detail: { message: contextMessage } })
+      new CustomEvent('finanseal:open-chat', {
+        detail: {
+          draftMessage,
+          suggestionChips: getQuestionChips(),
+          insightContext: contextMetadata,
+        },
+      })
     );
   };
 

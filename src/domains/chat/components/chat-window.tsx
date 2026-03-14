@@ -25,9 +25,15 @@ interface ChatWindowProps {
   businessId?: string
   initialMessage?: string
   onInitialMessageConsumed?: () => void
+  draftMessage?: string
+  onDraftConsumed?: () => void
+  suggestionChips?: string[]
+  onSuggestionChipsConsumed?: () => void
+  insightContext?: Record<string, unknown>
+  onInsightContextConsumed?: () => void
 }
 
-export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, onInitialMessageConsumed }: ChatWindowProps) {
+export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, onInitialMessageConsumed, draftMessage, onDraftConsumed, suggestionChips, onSuggestionChipsConsumed, insightContext, onInsightContextConsumed }: ChatWindowProps) {
   const [input, setInput] = useState('')
   const [showAiConsent, setShowAiConsent] = useState(() => !hasAiConsent())
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -128,7 +134,11 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
     setUserScrolledUp(!isAtBottom)
   }, [])
 
-  // Focus input on mount and prefill if initialMessage provided
+  // Track active suggestion chips and insight context for the input area
+  const [activeChips, setActiveChips] = useState<string[]>([])
+  const [activeInsightContext, setActiveInsightContext] = useState<Record<string, unknown> | undefined>()
+
+  // Focus input on mount and prefill if initialMessage or draftMessage provided
   useEffect(() => {
     if (initialMessage) {
       setInput(initialMessage)
@@ -137,17 +147,56 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
     inputRef.current?.focus()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Handle draftMessage (editable, not auto-sent) from Action Center "Ask AI"
+  useEffect(() => {
+    if (draftMessage) {
+      setInput(draftMessage)
+      onDraftConsumed?.()
+      inputRef.current?.focus()
+    }
+  }, [draftMessage]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Handle suggestion chips from Action Center insights
+  useEffect(() => {
+    if (suggestionChips && suggestionChips.length > 0) {
+      setActiveChips(suggestionChips)
+      onSuggestionChipsConsumed?.()
+    }
+  }, [suggestionChips]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Handle insight context metadata
+  useEffect(() => {
+    if (insightContext) {
+      setActiveInsightContext(insightContext)
+      onInsightContextConsumed?.()
+    }
+  }, [insightContext]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSubmit = useCallback(
     async (e: FormEvent) => {
       e.preventDefault()
       const trimmed = input.trim()
       if (!trimmed || isLoading) return
 
+      // If there's insight context from Action Center, prepend it as hidden context
+      let messageToSend = trimmed
+      if (activeInsightContext) {
+        const ctx = activeInsightContext
+        messageToSend = `[Action Center Insight Context - ID: ${ctx.insightId}, Type: ${ctx.type}, Priority: ${ctx.priority}, Detected: ${ctx.detected}]
+Title: ${ctx.title}
+Description: ${ctx.description}
+${ctx.recommendedAction ? `Suggested action: ${ctx.recommendedAction}` : ''}
+
+User question: ${trimmed}`
+        setActiveInsightContext(undefined)
+      }
+
       setInput('')
+      setActiveChips([]) // Clear chips after sending
       setUserScrolledUp(false) // Reset scroll lock on new message
-      await sendMessage(trimmed)
+      await sendMessage(messageToSend)
     },
-    [input, isLoading, sendMessage]
+    [input, isLoading, sendMessage, activeInsightContext]
   )
 
   // Handle textarea Enter key (send on Enter, newline on Shift+Enter)
@@ -304,6 +353,25 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
 
       {/* Input Area */}
       <div className="border-t border-border bg-surface px-4 py-3">
+        {/* Suggestion Chips from Action Center "Ask AI" */}
+        {activeChips.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {activeChips.map((chip, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => {
+                  setInput(chip)
+                  setActiveChips([])
+                  inputRef.current?.focus()
+                }}
+                className="text-xs px-2.5 py-1 rounded-full border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 transition-colors"
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="flex items-end gap-2">
           <textarea
             ref={inputRef}
