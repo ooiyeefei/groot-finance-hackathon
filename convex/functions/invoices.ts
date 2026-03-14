@@ -2201,3 +2201,132 @@ export const recordPayment = mutation({
     };
   },
 });
+
+/**
+ * Post invoices to AP (Accounts Payable)
+ * Creates journal entries: Debit Expense, Credit AP (2100)
+ */
+export const postToAP = mutation({
+  args: {
+    invoiceIds: v.array(v.id("invoices")),
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    await requireFinanceAdminForInvoices(ctx, args.businessId);
+
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) throw new Error("User not found");
+
+    const results: Array<{ invoiceId: string; success: boolean; error?: string }> = [];
+
+    for (const invoiceId of args.invoiceIds) {
+      try {
+        const invoice = await ctx.db.get(invoiceId);
+
+        // Validation checks
+        if (!invoice || invoice.businessId !== args.businessId) {
+          results.push({ invoiceId, success: false, error: "Invoice not found" });
+          continue;
+        }
+
+        if (invoice.accountingStatus === "posted") {
+          results.push({ invoiceId, success: false, error: "Already posted" });
+          continue;
+        }
+
+        // Only post completed invoices with extracted data
+        const isCompleted = ["completed", "pending", "paid", "overdue"].includes(invoice.status);
+        if (!isCompleted || !invoice.extractedData) {
+          results.push({ invoiceId, success: false, error: "Invoice not ready for posting" });
+          continue;
+        }
+
+        // Extract invoice data
+        const extractedData = invoice.extractedData as any;
+        const vendorName = extractedData?.vendor_name
+          || extractedData?.document_summary?.vendor_name?.value
+          || "Unknown Vendor";
+        const totalAmount = extractedData?.total_amount
+          || extractedData?.document_summary?.total_amount?.value
+          || 0;
+        const invoiceNumber = extractedData?.document_number
+          || extractedData?.invoice_number
+          || extractedData?.document_summary?.document_number?.value
+          || invoice.fileName;
+
+        if (!totalAmount || totalAmount <= 0) {
+          results.push({ invoiceId, success: false, error: "Invalid amount" });
+          continue;
+        }
+
+        // Get default accounts from chart of accounts
+        const accounts = await ctx.db
+          .query("chart_of_accounts")
+          .withIndex("by_business_code", (q) => q.eq("businessId", args.businessId))
+          .collect();
+
+        const expenseAccount = accounts.find(a => a.accountCode === "5100")
+          || accounts.find(a => a.accountType === "Expense");
+        const apAccount = accounts.find(a => a.accountCode === "2100")
+          || accounts.find(a => a.accountType === "Liability");
+
+        if (!expenseAccount || !apAccount) {
+          results.push({ invoiceId, success: false, error: "Chart of accounts not configured" });
+          continue;
+        }
+
+        // Create journal entry using internal mutation
+        const { entryId: journalEntryId } = await ctx.runMutation(internal.functions.journalEntries.createInternal, {
+          businessId: args.businessId,
+          transactionDate: new Date().toISOString().split('T')[0],
+          description: `AP Invoice - ${vendorName} (Invoice: ${invoiceNumber})`,
+          sourceType: "vendor_invoice" as const,
+          sourceId: invoiceId,
+          lines: [
+            {
+              accountCode: expenseAccount.accountCode,
+              debitAmount: totalAmount,
+              creditAmount: 0,
+              lineDescription: vendorName,
+              entityType: "vendor" as const,
+              entityName: vendorName,
+            },
+            {
+              accountCode: apAccount.accountCode,
+              debitAmount: 0,
+              creditAmount: totalAmount,
+              lineDescription: `Payable - ${vendorName}`,
+              entityType: "vendor" as const,
+              entityName: vendorName,
+            },
+          ],
+        });
+
+        // Update invoice with journal entry link
+        await ctx.db.patch(invoiceId, {
+          journalEntryId,
+          accountingStatus: "posted",
+          updatedAt: Date.now(),
+        });
+
+        results.push({ invoiceId, success: true });
+      } catch (error: any) {
+        results.push({
+          invoiceId,
+          success: false,
+          error: error.message || "Unknown error"
+        });
+      }
+    }
+
+    return {
+      total: args.invoiceIds.length,
+      succeeded: results.filter(r => r.success).length,
+      failed: results.filter(r => !r.success).length,
+      results,
+    };
+  },
+});

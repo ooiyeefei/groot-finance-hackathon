@@ -3,13 +3,15 @@
 import { useState, useEffect, useMemo, useCallback, forwardRef, useImperativeHandle, lazy, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { FileText, Image, File, Play, RotateCcw, Eye, FileSearch, Trash2, Plus, Loader2 } from 'lucide-react'
+import { FileText, Image, File, Play, RotateCcw, Eye, FileSearch, Trash2, Plus, Loader2, CheckSquare, Square } from 'lucide-react'
 import SkeletonLoader from '@/components/ui/skeleton-loader'
 import { useDocuments } from '@/domains/invoices/hooks/use-documents'
 import DocumentStatusBadge from './document-status-badge'
 import ConfidenceScoreMeter from './confidence-score-meter'
-// Accounting entry imports removed — invoices auto-post journal entries on status change
+import { mapDocumentToAccountingEntry, canCreateAccountingEntryFromDocument } from '@/domains/invoices/lib/document-to-accounting-entry-mapper'
+import { CreateAccountingEntryRequest } from '@/domains/accounting-entries/types'
 import { useHomeCurrency } from '@/domains/users/hooks/use-home-currency'
+import { formatCurrency } from '@/lib/utils/format-number'
 import ExtractedInfoTags from './ExtractedInfoTags'
 import VendorContextNote from '@/domains/payables/components/vendor-context-note'
 import { useActiveBusiness } from '@/contexts/business-context'
@@ -17,6 +19,9 @@ import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { ErrorMessageCard } from '@/components/ui/error-message-card'
 import type { ErrorDetails } from '@/domains/invoices/lib/data-access'
+import { useMutation } from 'convex/react'
+import { api } from '@/convex/_generated/api'
+import { Id } from '@/convex/_generated/dataModel'
 
 // Type guard for ErrorDetails
 function isErrorDetails(value: unknown): value is ErrorDetails {
@@ -30,12 +35,12 @@ function isErrorDetails(value: unknown): value is ErrorDetails {
 
 // PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
 const DocumentAnalysisModal = lazy(() => import('./document-analysis-modal'))
-// AccountingEntryFormModal removed — invoices auto-post journal entries
+const AccountingEntryFormModal = lazy(() => import('@/domains/accounting-entries/components/accounting-entry-edit-modal'))
 const ConfirmationDialog = lazy(() => import('@/components/ui/confirmation-dialog'))
 
 // ⚡ OPTIMIZATION: Preload functions for hover-triggered modal loading (improves perceived performance)
 const preloadDocumentAnalysisModal = () => import('./document-analysis-modal')
-// preloadAccountingEntryFormModal removed
+const preloadAccountingEntryFormModal = () => import('@/domains/accounting-entries/components/accounting-entry-edit-modal')
 const preloadConfirmationDialog = () => import('@/components/ui/confirmation-dialog')
 
 
@@ -86,6 +91,11 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
   const [transactionFormDocument, setTransactionFormDocument] = useState<string | null>(null)
   const [editTransactionData, setEditTransactionData] = useState<{documentId: string, transactionId: string} | null>(null)
   const [reprocessedDocuments, setReprocessedDocuments] = useState<Set<string>>(new Set())
+  const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set())
+  const [isPostingToAP, setIsPostingToAP] = useState(false)
+
+  // Mutation for posting to AP
+  const postToAPMutation = useMutation(api.functions.invoices.postToAP)
 
   // Expose refresh method to parent via ref
   useImperativeHandle(ref, () => ({
@@ -172,6 +182,67 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
     })
   }, [])
 
+  // Handle invoice selection toggle
+  const toggleInvoiceSelection = useCallback((invoiceId: string) => {
+    setSelectedInvoices(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(invoiceId)) {
+        newSet.delete(invoiceId)
+      } else {
+        newSet.add(invoiceId)
+      }
+      return newSet
+    })
+  }, [])
+
+  // Handle select all postable invoices
+  const handleSelectAllPostable = useCallback(() => {
+    const postableInvoices = documents.filter(doc => {
+      const isCompleted = ['completed', 'pending', 'paid', 'overdue'].includes(doc.status)
+      const hasData = !!doc.extracted_data
+      const notPosted = (doc as any).accountingStatus !== 'posted'
+      return isCompleted && hasData && notPosted
+    })
+    setSelectedInvoices(new Set(postableInvoices.map(d => d.id)))
+  }, [documents])
+
+  // Handle clear selection
+  const handleClearSelection = useCallback(() => {
+    setSelectedInvoices(new Set())
+  }, [])
+
+  // Handle post to AP
+  const handlePostToAP = useCallback(async () => {
+    if (selectedInvoices.size === 0 || !businessId) return
+
+    setIsPostingToAP(true)
+    try {
+      const result = await postToAPMutation({
+        invoiceIds: Array.from(selectedInvoices) as Id<"invoices">[],
+        businessId: businessId as Id<"businesses">,
+      })
+
+      addToast({
+        type: 'success',
+        title: 'Posted to AP',
+        description: `Successfully posted ${result.succeeded} of ${result.total} invoices to AP`
+      })
+
+      // Clear selection and refresh
+      setSelectedInvoices(new Set())
+      await refreshDocuments()
+    } catch (error) {
+      console.error('Post to AP failed:', error)
+      addToast({
+        type: 'error',
+        title: 'Post failed',
+        description: error instanceof Error ? error.message : 'Unable to post invoices to AP'
+      })
+    } finally {
+      setIsPostingToAP(false)
+    }
+  }, [selectedInvoices, businessId, postToAPMutation, addToast, refreshDocuments])
+
   // Handle viewing extracted data
   const viewExtractedData = (documentId: string) => {
     setSelectedDocument(documentId)
@@ -208,10 +279,86 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
     setEditTransactionData(null)
   }
 
-  // Accounting entry creation/update removed — invoices auto-post journal entries on status change
+  // ⚡ OPTIMIZATION: Memoize transaction handlers
+  // Handle transaction creation from document
+  const handleCreateTransaction = useCallback(async (data: CreateAccountingEntryRequest) => {
+    try {
+      // ✅ POLYMORPHIC: Set both source fields for invoice
+      const transactionData = {
+        ...data,
+        home_currency: data.home_currency || userHomeCurrency || 'USD',
+        source_record_id: data.source_record_id || transactionFormDocument,
+        source_document_type: 'invoice' as const
+      }
+
+      // Transaction data logging removed - API payload sent without verbose logging
+
+      const response = await fetch('/api/v1/accounting-entries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(transactionData)
+      })
+
+      if (!response.ok) {
+        const errorData = await response.text()
+        throw new Error(`Failed to create accounting entry: ${response.status} - ${errorData}`)
+      }
+
+      const result = await response.json()
+
+      if (result.success && result.data.transaction) {
+        // Refresh documents list to update the linked transaction status
+        await refreshDocuments()
+      }
+
+      setTransactionFormDocument(null)
+
+      // Optional: Show success message
+      // You could add a toast notification here
+    } catch (error) {
+      // Transaction creation error handled silently
+    }
+  }, [userHomeCurrency, transactionFormDocument, refreshDocuments])
+
+  // Handle transaction update from reprocessed document
+  const handleUpdateTransaction = useCallback(async (data: CreateAccountingEntryRequest) => {
+    if (!editTransactionData) return
+
+    try {
+      const response = await fetch(`/api/v1/accounting-entries/${editTransactionData.transactionId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...data,
+          // Remove fields that shouldn't be in the update request
+          source_record_id: undefined,
+          source_document_type: undefined,
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update transaction')
+      }
+
+      setEditTransactionData(null)
+      
+      // Remove document from reprocessed set since update is complete
+      setReprocessedDocuments(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(editTransactionData.documentId)
+        return newSet
+      })
+      
+      // Refresh documents list
+      await refreshDocuments()
+
+    } catch (error) {
+      // Transaction update error handled silently
+    }
+  }, [editTransactionData, refreshDocuments])
 
   // Handle saving invoice data directly (without creating accounting entries)
-  const handleSaveInvoice = useCallback(async (data: Partial<Record<string, any>>) => {
+  const handleSaveInvoice = useCallback(async (data: Partial<CreateAccountingEntryRequest>) => {
     if (!transactionFormDocument) return
 
     try {
@@ -259,7 +406,28 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
   // Get transaction by ID (we'll need to fetch it from API)
   const [editTransactionDetails, setEditTransactionDetails] = useState<any>(null)
   
-  // Transaction editing removed — accounting entries deprecated
+  // Fetch transaction details for editing when editTransactionData changes
+  useEffect(() => {
+    if (editTransactionData) {
+      fetchTransactionDetails(editTransactionData.transactionId)
+    } else {
+      setEditTransactionDetails(null)
+    }
+  }, [editTransactionData])
+
+  const fetchTransactionDetails = async (transactionId: string) => {
+    try {
+      const response = await fetch(`/api/v1/accounting-entries/${transactionId}`)
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success) {
+          setEditTransactionDetails(result.data.transaction)
+        }
+      }
+    } catch (error) {
+      // Transaction details fetch error handled silently
+    }
+  }
 
   const getFileIcon = (fileType: string) => {
     if (fileType.startsWith('image/')) {
@@ -288,6 +456,49 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
     })
   }
 
+  // Extract compact title from extracted data
+  const getCompactTitle = (document: any) => {
+    if (!document.extracted_data) return null
+
+    const extractedData = document.extracted_data
+    const vendorName = extractedData?.vendor_name
+      || extractedData?.document_summary?.vendor_name?.value
+      || null
+    const totalAmount = extractedData?.total_amount
+      || extractedData?.document_summary?.total_amount?.value
+      || null
+    const currency = extractedData?.currency
+      || extractedData?.document_summary?.currency?.value
+      || userHomeCurrency
+      || 'MYR'
+    const invoiceNumber = extractedData?.document_number
+      || extractedData?.invoice_number
+      || extractedData?.document_summary?.document_number?.value
+      || null
+
+    if (!vendorName && !totalAmount) return null
+
+    const parts: string[] = []
+    if (vendorName) parts.push(vendorName)
+    if (totalAmount) parts.push(formatCurrency(totalAmount, currency))
+    if (invoiceNumber) parts.push(`Invoice: ${invoiceNumber}`)
+
+    return parts.join(' | ')
+  }
+
+  // Check if invoice can be posted to AP
+  const canPostToAP = (document: any) => {
+    const isCompleted = ['completed', 'pending', 'paid', 'overdue'].includes(document.status)
+    const hasData = !!document.extracted_data
+    const notPosted = (document as any).accountingStatus !== 'posted'
+    return isCompleted && hasData && notPosted
+  }
+
+  // Count postable invoices
+  const postableCount = useMemo(() => {
+    return documents.filter(canPostToAP).length
+  }, [documents])
+
   if (loading) {
     return <SkeletonLoader variant="list" count={5} />
   }
@@ -308,6 +519,55 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
         <h3 className="text-lg font-medium text-foreground">Your Documents</h3>
       </div>
 
+      {/* Bulk Action Bar */}
+      {postableCount > 0 && (
+        <div className="bg-card rounded-lg border border-border p-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <span className="text-sm text-muted-foreground">
+                {selectedInvoices.size} of {postableCount} invoices selected
+              </span>
+              <Button
+                onClick={handleSelectAllPostable}
+                variant="ghost"
+                size="sm"
+                className="text-primary hover:text-primary/80"
+              >
+                Select All Postable
+              </Button>
+              {selectedInvoices.size > 0 && (
+                <Button
+                  onClick={handleClearSelection}
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
+            <Button
+              onClick={handlePostToAP}
+              disabled={selectedInvoices.size === 0 || isPostingToAP}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              size="sm"
+            >
+              {isPostingToAP ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Posting...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Post to AP ({selectedInvoices.size})
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-3">
         {documents.map((document) => (
           <div
@@ -316,16 +576,47 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
           >
             {/* Desktop: single row | Mobile: stacked sections */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
-              {/* File info */}
+              {/* Checkbox + File info */}
               <div className="flex items-center space-x-3 flex-1 min-w-0">
+                {/* Checkbox for postable invoices */}
+                {canPostToAP(document) && (
+                  <button
+                    onClick={() => toggleInvoiceSelection(document.id)}
+                    className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label="Select invoice"
+                  >
+                    {selectedInvoices.has(document.id) ? (
+                      <CheckSquare className="w-5 h-5 text-primary" />
+                    ) : (
+                      <Square className="w-5 h-5" />
+                    )}
+                  </button>
+                )}
+
                 {getFileIcon(document.file_type)}
                 <div className="flex-1 min-w-0">
-                  <h4 className="text-foreground font-medium truncate text-sm sm:text-base">{document.file_name}</h4>
-                  <div className="flex items-center flex-wrap gap-x-3 gap-y-0 text-xs sm:text-sm text-muted-foreground mt-0.5">
-                    <span>{formatFileSize(document.file_size)}</span>
-                    <span>•</span>
-                    <span>{formatDate(document.created_at)}</span>
-                  </div>
+                  {/* Compact title: VENDOR | Amount | Invoice: NUMBER */}
+                  {getCompactTitle(document) ? (
+                    <>
+                      <h4 className="text-foreground font-medium truncate text-sm sm:text-base">
+                        {getCompactTitle(document)}
+                      </h4>
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">
+                        {document.file_name}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <h4 className="text-foreground font-medium truncate text-sm sm:text-base">
+                        {document.file_name}
+                      </h4>
+                      <div className="flex items-center flex-wrap gap-x-3 gap-y-0 text-xs sm:text-sm text-muted-foreground mt-0.5">
+                        <span>{formatFileSize(document.file_size)}</span>
+                        <span>•</span>
+                        <span>{formatDate(document.created_at)}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -337,8 +628,15 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                     errorMessage={document.error_message}
                   />
                   
-                  {/* Show transaction linked status */}
-                  {document.linked_transaction && (
+                  {/* Show posted to AP status */}
+                  {(document as any).accountingStatus === 'posted' && (
+                    <div className="badge-success-status inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors">
+                      ✓ Posted to AP
+                    </div>
+                  )}
+
+                  {/* Show transaction linked status (legacy) */}
+                  {document.linked_transaction && (document as any).accountingStatus !== 'posted' && (
                     <div className="badge-success-status inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors">
                       💰 Record Created
                     </div>
@@ -378,7 +676,50 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                     </Button>
                   )}
 
-                  {/* Transaction creation removed — invoices auto-post journal entries */}
+                  {/* Add/View/Update Transaction button for completed documents with extractable data */}
+                  {isCompletedDocument(document.status) && document.extracted_data && canCreateAccountingEntryFromDocument(document as any) && (
+                    document.linked_transaction ? (
+                      reprocessedDocuments.has(document.id) ? (
+                        // Show Update Transaction for reprocessed documents
+                        <Button
+                          onClick={() => openTransactionEditForm(document.id, document.linked_transaction!.id)}
+                          onMouseEnter={preloadAccountingEntryFormModal}
+                          variant="primary"
+                          size="sm"
+                          title="Update Record"
+                          className="doc-action-btn"
+                        >
+                          <Plus className="w-4 h-4 sm:mr-1.5" />
+                          <span className="hidden sm:inline">Update Record</span>
+                        </Button>
+                      ) : (
+                        // Show View Transaction for normal processed documents
+                        <Button
+                          onClick={() => openTransactionView(document.linked_transaction!.id)}
+                          onMouseEnter={preloadAccountingEntryFormModal}
+                          variant="view"
+                          size="sm"
+                          title="View Record"
+                          className="doc-action-btn"
+                        >
+                          <Eye className="w-4 h-4 sm:mr-1.5" />
+                          <span className="hidden sm:inline">View Record</span>
+                        </Button>
+                      )
+                    ) : (
+                      <Button
+                        onClick={() => openTransactionForm(document.id)}
+                        onMouseEnter={preloadAccountingEntryFormModal}
+                        variant="primary"
+                        size="sm"
+                        title="Create Record"
+                        className="doc-action-btn"
+                      >
+                        <Plus className="w-4 h-4 sm:mr-1.5" />
+                        <span className="hidden sm:inline">Create Record</span>
+                      </Button>
+                    )
+                  )}
 
                   {/* Reprocess button for completed documents */}
                   {isCompletedDocument(document.status) && (
@@ -431,27 +772,6 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
               </div>
             </div>
 
-            {/* Show extracted information for completed documents using cleaner ExtractedInfoTags component */}
-            {isCompletedDocument(document.status) && document.extracted_data && (
-              <div className="mt-4 pt-4 border-t border-border">
-                <h5 className="text-sm font-medium text-muted-foreground mb-2">Extracted Information</h5>
-                <ExtractedInfoTags extractedData={document.extracted_data} />
-                {/* Vendor context: payment terms, outstanding balance when vendor is identified */}
-                {(() => {
-                  const extractedAny = document.extracted_data as any
-                  const vendorName = extractedAny?.vendor_name
-                    || extractedAny?.document_summary?.vendor_name?.value
-                  return vendorName && businessId ? (
-                    <VendorContextNote
-                      vendorName={vendorName}
-                      businessId={businessId}
-                      currency={userHomeCurrency || 'USD'}
-                    />
-                  ) : null
-                })()}
-              </div>
-            )}
-
             {/* Show error details for classification failed documents */}
             {document.status === 'classification_failed' && document.error_message && (() => {
               const errorMsg = document.error_message
@@ -476,6 +796,37 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
           <DocumentAnalysisModal
             document={getDocumentById(selectedDocument)! as any}
             onClose={closeModal}
+          />
+        </Suspense>
+      )}
+
+      {/* Transaction Form Modal with pre-filled data */}
+      {transactionFormDocument && getDocumentById(transactionFormDocument) && (
+        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-8 h-8 animate-spin text-primary-foreground" /></div>}>
+          <AccountingEntryFormModal
+            onClose={closeTransactionForm}
+            onSubmit={handleCreateTransaction}
+            prefilledData={{
+              ...mapDocumentToAccountingEntry(getDocumentById(transactionFormDocument)! as any),
+              // ✅ POLYMORPHIC: Link to invoice record with discriminator
+              source_record_id: transactionFormDocument,
+              source_document_type: 'invoice' as const
+            }}
+          />
+        </Suspense>
+      )}
+
+      {/* Transaction Edit Form Modal for reprocessed documents */}
+      {editTransactionData && getDocumentById(editTransactionData.documentId) && editTransactionDetails && (
+        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-8 h-8 animate-spin text-primary-foreground" /></div>}>
+          <AccountingEntryFormModal
+            transaction={editTransactionDetails}
+            prefilledData={{
+              ...mapDocumentToAccountingEntry(getDocumentById(editTransactionData.documentId)! as any)
+              // Don't include source_record_id for updates
+            }}
+            onClose={closeTransactionEditForm}
+            onSubmit={handleUpdateTransaction}
           />
         </Suspense>
       )}
