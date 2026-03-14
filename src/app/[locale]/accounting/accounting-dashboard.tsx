@@ -37,7 +37,7 @@ export default function AccountingDashboardContent() {
         <h1 className="text-3xl font-bold">Accounting Dashboard</h1>
         <div className="flex items-center space-x-3">
           <Link href="/en/accounting/journal-entries/new">
-            <Button className="bg-primary hover:bg-primary/90">
+            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
               <Plus className="w-4 h-4 mr-2" />
               New Entry
             </Button>

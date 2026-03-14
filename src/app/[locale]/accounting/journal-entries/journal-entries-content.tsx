@@ -116,7 +116,7 @@ export default function JournalEntriesContent() {
         <h1 className="text-3xl font-bold">Journal Entries</h1>
 
         <Link href="/en/accounting/journal-entries/new">
-          <Button className="bg-primary hover:bg-primary/90">
+          <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
             <Plus className="w-4 h-4 mr-2" />
             New Entry
           </Button>
@@ -132,7 +132,7 @@ export default function JournalEntriesContent() {
             <div className="p-12 text-center">
               <p className="text-muted-foreground mb-4">No journal entries found</p>
               <Link href="/en/accounting/journal-entries/new">
-                <Button className="bg-primary hover:bg-primary/90">
+                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
                   <Plus className="w-4 h-4 mr-2" />
                   Create First Entry
                 </Button>

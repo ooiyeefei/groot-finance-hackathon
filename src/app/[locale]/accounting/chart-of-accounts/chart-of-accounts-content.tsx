@@ -25,6 +25,18 @@ import { useChartOfAccounts } from '@/domains/accounting/hooks/use-chart-of-acco
 import { Plus, Edit, Archive } from 'lucide-react'
 import { toast } from 'sonner'
 
+// Tooltip for icon buttons
+function Tooltip({ children, label }: { children: React.ReactNode; label: string }) {
+  return (
+    <span className="relative group">
+      {children}
+      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs bg-popover text-popover-foreground border border-border rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+        {label}
+      </span>
+    </span>
+  )
+}
+
 type AccountType = 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Expense'
 
 const ACCOUNT_TYPE_OPTIONS: { value: AccountType; label: string; range: string; normalBalance: 'debit' | 'credit' }[] = [
@@ -96,14 +108,17 @@ export default function ChartOfAccountsContent() {
     }
   }
 
-  const handleDeactivate = async (accountId: string) => {
-    if (!confirm('Are you sure you want to deactivate this account?')) return
+  const [deactivateTarget, setDeactivateTarget] = useState<string | null>(null)
 
+  const handleDeactivateConfirm = async () => {
+    if (!deactivateTarget) return
     try {
-      await deactivateAccount({ accountId: accountId as any })
+      await deactivateAccount({ accountId: deactivateTarget as any })
       toast.success('Account deactivated successfully')
     } catch (error: any) {
       toast.error(error.message || 'Failed to deactivate account')
+    } finally {
+      setDeactivateTarget(null)
     }
   }
 
@@ -150,7 +165,7 @@ export default function ChartOfAccountsContent() {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Chart of Accounts</h1>
 
-        <Button onClick={() => setIsCreateDialogOpen(true)} className="bg-primary hover:bg-primary/90">
+        <Button onClick={() => setIsCreateDialogOpen(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground">
           <Plus className="w-4 h-4 mr-2" />
           New Account
         </Button>
@@ -235,21 +250,25 @@ export default function ChartOfAccountsContent() {
                           </td>
                           <td className="px-6 py-4 text-sm text-right">
                             <div className="flex items-center justify-end space-x-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => openEditDialog(account)}
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                              {!account.isSystemAccount && account.isActive && (
+                              <Tooltip label="Edit account">
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => handleDeactivate(account._id)}
+                                  onClick={() => openEditDialog(account)}
                                 >
-                                  <Archive className="w-4 h-4" />
+                                  <Edit className="w-4 h-4" />
                                 </Button>
+                              </Tooltip>
+                              {!account.isSystemAccount && account.isActive && (
+                                <Tooltip label="Deactivate account">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setDeactivateTarget(account._id)}
+                                  >
+                                    <Archive className="w-4 h-4" />
+                                  </Button>
+                                </Tooltip>
                               )}
                             </div>
                           </td>
@@ -337,7 +356,7 @@ export default function ChartOfAccountsContent() {
             <Button className="bg-secondary hover:bg-secondary/80 text-secondary-foreground" onClick={() => setIsCreateDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreate} className="bg-primary hover:bg-primary/90">
+            <Button onClick={handleCreate} className="bg-primary hover:bg-primary/90 text-primary-foreground">
               Create Account
             </Button>
           </DialogFooter>
@@ -395,8 +414,28 @@ export default function ChartOfAccountsContent() {
             <Button className="bg-secondary hover:bg-secondary/80 text-secondary-foreground" onClick={() => setIsEditDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleEdit} className="bg-primary hover:bg-primary/90">
+            <Button onClick={handleEdit} className="bg-primary hover:bg-primary/90 text-primary-foreground">
               Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Deactivate Confirmation Dialog */}
+      <Dialog open={!!deactivateTarget} onOpenChange={(open) => !open && setDeactivateTarget(null)}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Deactivate Account</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to deactivate this account? Deactivated accounts won&apos;t appear in dropdowns but existing journal entries are preserved.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button className="bg-secondary hover:bg-secondary/80 text-secondary-foreground" onClick={() => setDeactivateTarget(null)}>
+              Cancel
+            </Button>
+            <Button className="bg-destructive hover:bg-destructive/90 text-destructive-foreground" onClick={handleDeactivateConfirm}>
+              Deactivate
             </Button>
           </DialogFooter>
         </DialogContent>

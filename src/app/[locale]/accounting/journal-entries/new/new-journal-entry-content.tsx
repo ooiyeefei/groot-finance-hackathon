@@ -419,7 +419,7 @@ export default function NewJournalEntryContent() {
               <Button
                 onClick={() => handleSubmit(true)}
                 disabled={isSaving || !balance.isBalanced}
-                className="w-full bg-primary hover:bg-primary/90"
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
               >
                 {isSaving && saveAndPost ? 'Posting...' : 'Save and Post'}
               </Button>
