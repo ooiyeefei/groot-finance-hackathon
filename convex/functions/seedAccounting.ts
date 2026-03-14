@@ -7,7 +7,7 @@
  * @see specs/001-accounting-double-entry/data-model.md
  */
 
-import { mutation } from "../_generated/server";
+import { mutation, internalMutation } from "../_generated/server";
 import { v } from "convex/values";
 
 /**
@@ -450,3 +450,95 @@ export const seedDefaultAccountsForFirstBusiness = mutation({
     };
   },
 });
+
+/**
+ * Internal seed - for CLI/migration use (no auth required)
+ */
+export const seedDefaultAccountsInternal = internalMutation({
+  args: {
+    businessId: v.id("businesses"),
+    force: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { businessId, force }) => {
+    const existingAccounts = await ctx.db
+      .query("chart_of_accounts")
+      .withIndex("by_businessId", (q) => q.eq("businessId", businessId))
+      .collect();
+
+    if (existingAccounts.length > 0 && !force) {
+      // Merge: only add missing system accounts
+      const existingCodes = new Set(existingAccounts.map((a) => a.accountCode));
+      const defaultAccounts = getDefaultAccounts();
+      const missing = defaultAccounts.filter((a) => !existingCodes.has(a.accountCode));
+
+      if (missing.length === 0) {
+        return { success: true, message: "All default accounts already exist", accountsCreated: 0 };
+      }
+
+      const now = Date.now();
+      let created = 0;
+      for (const account of missing) {
+        await ctx.db.insert("chart_of_accounts", {
+          businessId,
+          accountCode: account.accountCode,
+          accountName: account.accountName,
+          accountType: account.accountType,
+          accountSubtype: account.accountSubtype,
+          normalBalance: account.normalBalance,
+          parentAccountId: undefined,
+          level: 0,
+          isActive: true,
+          isSystemAccount: true,
+          description: account.description,
+          tags: ["default", "system"],
+          createdBy: "system-migration",
+          createdAt: now,
+        });
+        created++;
+      }
+      return { success: true, accountsCreated: created, existingCount: existingAccounts.length };
+    }
+
+    const now = Date.now();
+    const defaultAccounts = getDefaultAccounts();
+    const accountIds: string[] = [];
+    for (const account of defaultAccounts) {
+      const id = await ctx.db.insert("chart_of_accounts", {
+        businessId,
+        accountCode: account.accountCode,
+        accountName: account.accountName,
+        accountType: account.accountType,
+        accountSubtype: account.accountSubtype,
+        normalBalance: account.normalBalance,
+        parentAccountId: undefined,
+        level: 0,
+        isActive: true,
+        isSystemAccount: true,
+        description: account.description,
+        tags: ["default", "system"],
+        createdBy: "system-migration",
+        createdAt: now,
+      });
+      accountIds.push(id);
+    }
+    return { success: true, accountsCreated: accountIds.length };
+  },
+});
+
+function getDefaultAccounts() {
+  return [
+    { accountCode: "1000", accountName: "Cash", accountType: "Asset" as const, accountSubtype: "Current Asset", normalBalance: "debit" as const, description: "Cash on hand and in bank accounts." },
+    { accountCode: "1200", accountName: "Accounts Receivable", accountType: "Asset" as const, accountSubtype: "Current Asset", normalBalance: "debit" as const, description: "Money owed by customers for sales made on credit." },
+    { accountCode: "1500", accountName: "Inventory", accountType: "Asset" as const, accountSubtype: "Current Asset", normalBalance: "debit" as const, description: "Goods available for sale." },
+    { accountCode: "2100", accountName: "Accounts Payable", accountType: "Liability" as const, accountSubtype: "Current Liability", normalBalance: "credit" as const, description: "Money owed to vendors for purchases made on credit." },
+    { accountCode: "2200", accountName: "Sales Tax Payable", accountType: "Liability" as const, accountSubtype: "Current Liability", normalBalance: "credit" as const, description: "Sales tax collected from customers and owed to government." },
+    { accountCode: "3000", accountName: "Owner's Equity", accountType: "Equity" as const, accountSubtype: "Capital", normalBalance: "credit" as const, description: "Owner's investment in the business." },
+    { accountCode: "3100", accountName: "Retained Earnings", accountType: "Equity" as const, accountSubtype: "Retained Earnings", normalBalance: "credit" as const, description: "Accumulated profits retained in the business." },
+    { accountCode: "4100", accountName: "Sales Revenue", accountType: "Revenue" as const, accountSubtype: "Operating Revenue", normalBalance: "credit" as const, description: "Income from primary business operations." },
+    { accountCode: "4900", accountName: "Other Income", accountType: "Revenue" as const, accountSubtype: "Non-Operating Revenue", normalBalance: "credit" as const, description: "Income from non-primary activities." },
+    { accountCode: "5100", accountName: "Cost of Goods Sold", accountType: "Expense" as const, accountSubtype: "Direct Cost", normalBalance: "debit" as const, description: "Direct costs of producing goods sold." },
+    { accountCode: "5200", accountName: "Operating Expenses", accountType: "Expense" as const, accountSubtype: "Operating Expense", normalBalance: "debit" as const, description: "General business expenses." },
+    { accountCode: "5800", accountName: "Platform Fees", accountType: "Expense" as const, accountSubtype: "Operating Expense", normalBalance: "debit" as const, description: "Fees charged by e-commerce platforms." },
+    { accountCode: "5900", accountName: "Other Expenses", accountType: "Expense" as const, accountSubtype: "Non-Operating Expense", normalBalance: "debit" as const, description: "Non-primary expenses." },
+  ];
+}
