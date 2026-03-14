@@ -2102,11 +2102,19 @@ Respond in this exact JSON format:
       return;
     }
 
-    // 5. Patch insight in-place
+    // 5. Sanitize LLM output: replace "vendor" with correct domain term
+    let sanitizedDescription = result.description;
+    let sanitizedRecommendation = result.recommendation || insight.recommendedAction;
+    sanitizedDescription = sanitizedDescription.replace(/\bvendor\b/gi, "supplier");
+    sanitizedDescription = sanitizedDescription.replace(/\bvendors\b/gi, "suppliers");
+    sanitizedRecommendation = sanitizedRecommendation.replace(/\bvendor\b/gi, "supplier");
+    sanitizedRecommendation = sanitizedRecommendation.replace(/\bvendors\b/gi, "suppliers");
+
+    // 6. Patch insight in-place
     await ctx.runMutation(internal.functions.actionCenterJobs.patchInsightEnrichment, {
       insightId: args.insightId,
-      enrichedDescription: result.description,
-      enrichedRecommendation: result.recommendation || insight.recommendedAction,
+      enrichedDescription: sanitizedDescription,
+      enrichedRecommendation: sanitizedRecommendation,
       originalDescription: insight.description,
       originalRecommendation: insight.recommendedAction,
       connectedSignal: result.connectedSignal || undefined,
@@ -2435,6 +2443,29 @@ Respond with JSON array (0-3 items):
 
       for (const disc of discoveries.slice(0, 3)) {
         if (!disc.title || !disc.description) continue;
+
+        // POST-LLM VALIDATION: Reject insights that violate domain separation rules
+        // LLMs sometimes ignore prompt instructions, so we enforce rules programmatically
+        const combinedText = `${disc.title} ${disc.description} ${disc.recommendation || ""}`.toLowerCase();
+        const hasForbiddenVendorTerms = /\bvendor\b/.test(combinedText) && (
+          combinedText.includes("expense") ||
+          combinedText.includes("meal") ||
+          combinedText.includes("merchant") ||
+          combinedText.includes("claim")
+        );
+        if (hasForbiddenVendorTerms) {
+          console.log(`[Layer2b] Rejected LLM insight (vendor term in expense context): "${disc.title}"`);
+          continue;
+        }
+        // Reject insights about individual small expense amounts (not CFO-grade)
+        const smallAmountMatch = combinedText.match(/(\d+\.?\d*)\s*myr/);
+        if (smallAmountMatch) {
+          const mentionedAmount = parseFloat(smallAmountMatch[1]);
+          if (mentionedAmount < 500 && summary.totalExpenses > 0) {
+            console.log(`[Layer2b] Rejected LLM insight (trivial amount ${mentionedAmount} MYR): "${disc.title}"`);
+            continue;
+          }
+        }
 
         const category = validCategories.includes(disc.category || "") ? disc.category! : "optimization";
         const priority = validPriorities.includes(disc.priority || "") ? disc.priority! : "medium";
