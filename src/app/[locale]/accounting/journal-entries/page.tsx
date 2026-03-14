@@ -16,7 +16,7 @@ import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { formatBusinessDate } from '@/lib/utils'
 import { toast } from 'sonner'
-import type { Id } from '../../../../convex/_generated/dataModel'
+import type { Id } from '../../../../../convex/_generated/dataModel'
 
 export default function JournalEntriesPage() {
   const { entries: entriesRaw, isLoading, postEntry, reverseEntry } = useJournalEntries()
