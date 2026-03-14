@@ -1,9 +1,17 @@
 /**
  * Accounting Entries Data Access Layer
+ *
+ * ⚠️ DEPRECATED: This module provides backward compatibility for legacy API routes
+ * that still use the deprecated `accounting_entries` table. New code should use
+ * the double-entry `journal_entries` system instead.
+ *
  * Centralized business logic for accounting entries CRUD operations
  * Consolidates logic from both /api/accounting-entries and /api/transactions
  *
  * Migrated to Convex from Supabase
+ *
+ * Migration path: Update API consumers to use journal_entries endpoints, then
+ * deprecate this module and the /api/v1/transactions routes.
  */
 
 import { getAuthenticatedConvex } from '@/lib/convex'

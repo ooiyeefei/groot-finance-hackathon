@@ -40,7 +40,7 @@ function BulkActionBar({ actions, cardType, isHistorical }: BulkActionBarProps) 
   })
 
   const approveExpense = useMutation(api.functions.expenseSubmissions.approve)
-  const createEntry = useMutation(api.functions.accountingEntries.create)
+  // Note: Invoice posting now handled through invoice status update which creates journal entries automatically
 
   const actionIds = actions.map((a) => a.id || `bulk-${actions.indexOf(a)}`)
 
@@ -80,16 +80,9 @@ function BulkActionBar({ actions, cardType, isHistorical }: BulkActionBarProps) 
         if (cardType === 'expense_approval') {
           await approveExpense({ id: data.submissionId })
         } else if (cardType === 'invoice_posting') {
-          await createEntry({
-            transactionType: 'Expense',
-            originalAmount: data.amount,
-            originalCurrency: data.currency,
-            transactionDate: data.invoiceDate,
-            vendorName: data.vendorName,
-            sourceRecordId: data.invoiceId,
-            sourceDocumentType: 'invoice',
-            createdByMethod: 'ocr',
-          })
+          // TODO: Invoice posting now creates journal entries automatically when invoice status changes
+          // This needs to be updated to use the invoice updateStatus flow
+          throw new Error('Bulk invoice posting temporarily disabled during accounting migration')
         }
         statuses.set(actionId, 'done')
         success++

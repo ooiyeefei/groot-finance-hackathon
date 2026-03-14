@@ -2826,7 +2826,10 @@ export default defineSchema({
       v.literal("manual"),
       v.literal("sales_invoice"),
       v.literal("expense_claim"),
+      v.literal("vendor_invoice"),
+      v.literal("payment"),
       v.literal("ar_reconciliation"),
+      v.literal("bank_reconciliation"),
       v.literal("migrated")
     )),
     sourceId: v.optional(v.string()),                 // ID of source document

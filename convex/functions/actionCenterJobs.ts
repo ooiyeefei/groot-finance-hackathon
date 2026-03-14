@@ -1844,18 +1844,30 @@ async function runExpenseClaimPatternDetection(
  */
 export const analyzeNewTransaction = internalMutation({
   args: {
-    transactionId: v.id("accounting_entries"),
+    transactionId: v.id("journal_entries"),
     businessId: v.id("businesses"),
   },
   handler: async (ctx, args) => {
-    const txn = await ctx.db.get(args.transactionId);
-    if (!txn || txn.deletedAt) return 0;
+    // Get journal entry
+    const journalEntry = await ctx.db.get(args.transactionId);
+    if (!journalEntry || journalEntry.status === "voided") return 0;
 
-    // Only check expenses for anomalies
-    if (txn.transactionType !== "Expense") return 0;
+    // Get journal entry lines
+    const lines = await ctx.db
+      .query("journal_entry_lines")
+      .withIndex("by_journal_entry", (q: any) => q.eq("journalEntryId", args.transactionId))
+      .collect();
 
-    const category = txn.category || "uncategorized";
-    const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
+    // Only check expenses for anomalies (account codes 5000-5999)
+    const expenseLines = lines.filter(
+      (line: any) => line.accountCode >= "5000" && line.accountCode < "6000" && line.debitAmount > 0
+    );
+
+    if (expenseLines.length === 0) return 0; // Not an expense transaction
+
+    // Use account name as category and sum debit amounts
+    const category = expenseLines[0]?.accountName || "uncategorized";
+    const amount = expenseLines.reduce((sum: number, line: any) => sum + line.debitAmount, 0);
     if (amount === 0) return 0;
 
     // Load business for custom categories + materiality
@@ -1865,33 +1877,47 @@ export const analyzeNewTransaction = internalMutation({
 
     // Get historical stats for this category (last 90 days)
     const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-    const entries = await ctx.db
-      .query("accounting_entries")
+
+    // Get all journal entries for this business
+    const allJournalEntries = await ctx.db
+      .query("journal_entries")
       .withIndex("by_businessId", (q: any) => q.eq("businessId", args.businessId))
       .collect();
 
-    // Calculate monthly expenses for materiality threshold
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-    const monthlyExpenses = entries
-      .filter((e: any) => !e.deletedAt && e.transactionType !== "Income" && e.transactionDate && e.transactionDate >= thirtyDaysAgo)
-      .reduce((sum: number, e: any) => sum + Math.abs(e.homeCurrencyAmount || e.originalAmount || 0), 0);
-
-    const categoryExpenses = entries.filter(
+    // Filter for posted expense entries in date range
+    const recentExpenseEntries = allJournalEntries.filter(
       (e: any) =>
-        !e.deletedAt &&
-        e.transactionType === "Expense" &&
-        (e.category || "uncategorized") === category &&
+        e.status === "posted" &&
         e.transactionDate &&
         e.transactionDate >= ninetyDaysAgo &&
         e._id.toString() !== args.transactionId.toString() // exclude this txn from baseline
     );
 
-    if (categoryExpenses.length < 3) return 0; // Not enough history
+    // Get lines for these entries and filter by same account
+    const categoryAmounts: number[] = [];
+    for (const entry of recentExpenseEntries) {
+      const entryLines = await ctx.db
+        .query("journal_entry_lines")
+        .withIndex("by_journal_entry", (q: any) => q.eq("journalEntryId", entry._id))
+        .collect();
 
-    const amounts = categoryExpenses.map((e: any) => Math.abs(e.homeCurrencyAmount || e.originalAmount || 0));
-    const mean = amounts.reduce((sum: number, a: number) => sum + a, 0) / amounts.length;
-    const squaredDiffs = amounts.map((a: number) => Math.pow(a - mean, 2));
-    const variance = squaredDiffs.reduce((sum: number, d: number) => sum + d, 0) / amounts.length;
+      const entryExpenseLines = entryLines.filter(
+        (line: any) =>
+          line.accountName === category && // Same account/category
+          line.debitAmount > 0
+      );
+
+      if (entryExpenseLines.length > 0) {
+        const entryAmount = entryExpenseLines.reduce((sum: number, line: any) => sum + line.debitAmount, 0);
+        categoryAmounts.push(entryAmount);
+      }
+    }
+
+    if (categoryAmounts.length < 3) return 0; // Not enough history
+
+    const mean = categoryAmounts.reduce((sum: number, a: number) => sum + a, 0) / categoryAmounts.length;
+    const squaredDiffs = categoryAmounts.map((a: number) => Math.pow(a - mean, 2));
+    const variance = squaredDiffs.reduce((sum: number, d: number) => sum + d, 0) / categoryAmounts.length;
     const stdDev = Math.sqrt(variance);
 
     if (stdDev === 0) return 0;

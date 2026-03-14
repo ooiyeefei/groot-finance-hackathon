@@ -48,34 +48,17 @@ function InvoicePostingCard({ action, isHistorical }: ActionCardProps) {
   const [invoiceDocument, setInvoiceDocument] = useState<any>(null)
   const [documentLoading, setDocumentLoading] = useState(false)
 
-  const createEntry = useMutation(api.functions.accountingEntries.create)
+  // Note: Invoice posting now creates journal entries automatically through invoice status update
+  // TODO: Update this to use the invoice updateStatus flow instead of direct accounting entry creation
 
   const handlePost = async () => {
     setCardState('posting')
     setErrorMsg('')
 
     try {
-      await createEntry({
-        transactionType: 'Expense',
-        originalAmount: data.amount,
-        originalCurrency: data.currency,
-        transactionDate: data.invoiceDate,
-        vendorName: data.vendorName,
-        referenceNumber: data.invoiceNumber,
-        dueDate: data.dueDate,
-        sourceRecordId: data.invoiceId,
-        sourceDocumentType: 'invoice',
-        createdByMethod: 'ocr',
-        lineItems: data.lineItems?.map((item, idx) => ({
-          itemDescription: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          totalAmount: item.totalAmount,
-          currency: data.currency,
-          lineOrder: idx + 1,
-        })),
-      })
-      setCardState('posted')
+      // TODO: Call invoice updateStatus mutation to trigger journal entry creation
+      // For now, disable posting until this flow is updated
+      throw new Error('Invoice posting temporarily disabled during accounting migration. Please post invoices directly from the Invoices page.')
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to post invoice')
       setCardState('failed')

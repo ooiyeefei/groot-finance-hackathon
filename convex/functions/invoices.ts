@@ -1100,7 +1100,7 @@ export const internalUpdateExtraction = internalMutation({
               businessId: invoice.businessId!,
               transactionDate: invoiceDate,
               description,
-              sourceType: "expense_claim", // TODO: Add "vendor_invoice" to schema sourceType union
+              sourceType: "vendor_invoice",
               sourceId: invoice._id,
               lines: lines.map((l, index) => ({
                 accountCode: l.accountCode,

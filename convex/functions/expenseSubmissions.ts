@@ -831,8 +831,13 @@ async function approveOneClaim(
     }
   );
 
-  // NOTE: Real-time anomaly detection (analyzeNewTransaction) temporarily disabled during migration.
-  // Action Center jobs will be updated to work with journal_entries in a separate task.
+  // Schedule real-time anomaly detection
+  if (journalEntryId) {
+    await ctx.scheduler.runAfter(0, internal.functions.actionCenterJobs.analyzeNewTransaction, {
+      transactionId: journalEntryId,
+      businessId: claim.businessId,
+    });
+  }
 
   // Update claim
   await ctx.db.patch(claim._id, {
