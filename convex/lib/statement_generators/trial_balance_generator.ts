@@ -3,6 +3,9 @@
  *
  * Lists all accounts with their debit/credit balances.
  * Proves that total debits = total credits (fundamental accounting equation).
+ *
+ * Performance: Uses 3 queries total (accounts + entries + lines) instead of
+ * O(accounts × entries) N+1 pattern.
  */
 
 import { QueryCtx } from "../../_generated/server";
@@ -41,7 +44,7 @@ export async function generateTrialBalance(
     throw new Error("Business not found");
   }
 
-  // Get all active accounts
+  // Step 1: Get all active accounts
   const accounts = await ctx.db
     .query("chart_of_accounts")
     .withIndex("by_business_active", (q) =>
@@ -49,75 +52,80 @@ export async function generateTrialBalance(
     )
     .collect();
 
-  // Calculate balance for each account
-  const balances = await Promise.all(
-    accounts.map(async (account) => {
-      // Get all lines for this account up to asOfDate
-      const allEntries = await ctx.db
-        .query("journal_entries")
-        .withIndex("by_businessId", (q) => q.eq("businessId", businessId))
-        .collect();
+  // Step 2: Get posted entry IDs up to asOfDate (one query)
+  const allEntries = await ctx.db
+    .query("journal_entries")
+    .withIndex("by_businessId", (q) => q.eq("businessId", businessId))
+    .collect();
 
-      // Filter by date and status in memory
-      const entries = allEntries.filter(
-        (e) => e.transactionDate <= asOfDate && e.status === "posted"
-      );
-
-      const entryIds = entries.map((e) => e._id);
-
-      const lines = await Promise.all(
-        entryIds.map(async (entryId) => {
-          return await ctx.db
-            .query("journal_entry_lines")
-            .withIndex("by_journal_entry", (q) =>
-              q.eq("journalEntryId", entryId)
-            )
-            .filter((q) => q.eq(q.field("accountId"), account._id))
-            .collect();
-        })
-      );
-
-      const accountLines = lines.flat();
-
-      // Sum debits and credits
-      const totalDebits = accountLines.reduce(
-        (sum, l) => sum + l.debitAmount,
-        0
-      );
-      const totalCredits = accountLines.reduce(
-        (sum, l) => sum + l.creditAmount,
-        0
-      );
-
-      // Calculate net balance based on normal balance
-      let debitBalance = 0;
-      let creditBalance = 0;
-
-      if (account.normalBalance === "debit") {
-        const netBalance = totalDebits - totalCredits;
-        if (netBalance >= 0) {
-          debitBalance = netBalance;
-        } else {
-          creditBalance = Math.abs(netBalance);
-        }
-      } else {
-        const netBalance = totalCredits - totalDebits;
-        if (netBalance >= 0) {
-          creditBalance = netBalance;
-        } else {
-          debitBalance = Math.abs(netBalance);
-        }
-      }
-
-      return {
-        accountCode: account.accountCode,
-        accountName: account.accountName,
-        accountType: account.accountType,
-        debitBalance,
-        creditBalance,
-      };
-    })
+  const postedEntryIds = new Set(
+    allEntries
+      .filter((e) => e.transactionDate <= asOfDate && e.status === "posted")
+      .map((e) => e._id)
   );
+
+  // Step 3: Get ALL lines for this business (one query — eliminates O(accounts × entries) N+1)
+  const allLines = await ctx.db
+    .query("journal_entry_lines")
+    .withIndex("by_businessId", (q) => q.eq("businessId", businessId))
+    .collect();
+
+  // Filter to lines from posted entries in date range
+  const postedLines = allLines.filter((line) =>
+    postedEntryIds.has(line.journalEntryId)
+  );
+
+  // Group lines by accountId and sum debits/credits
+  const accountTotals = new Map<
+    string,
+    { totalDebits: number; totalCredits: number }
+  >();
+
+  for (const line of postedLines) {
+    const accountIdStr = line.accountId as string;
+    const existing = accountTotals.get(accountIdStr) || {
+      totalDebits: 0,
+      totalCredits: 0,
+    };
+    existing.totalDebits += line.debitAmount;
+    existing.totalCredits += line.creditAmount;
+    accountTotals.set(accountIdStr, existing);
+  }
+
+  // Step 4: Calculate balances per account
+  const balances = accounts.map((account) => {
+    const totals = accountTotals.get(account._id as string) || {
+      totalDebits: 0,
+      totalCredits: 0,
+    };
+
+    let debitBalance = 0;
+    let creditBalance = 0;
+
+    if (account.normalBalance === "debit") {
+      const netBalance = totals.totalDebits - totals.totalCredits;
+      if (netBalance >= 0) {
+        debitBalance = netBalance;
+      } else {
+        creditBalance = Math.abs(netBalance);
+      }
+    } else {
+      const netBalance = totals.totalCredits - totals.totalDebits;
+      if (netBalance >= 0) {
+        creditBalance = netBalance;
+      } else {
+        debitBalance = Math.abs(netBalance);
+      }
+    }
+
+    return {
+      accountCode: account.accountCode,
+      accountName: account.accountName,
+      accountType: account.accountType,
+      debitBalance,
+      creditBalance,
+    };
+  });
 
   // Filter out zero balances
   const nonZeroBalances = balances.filter(

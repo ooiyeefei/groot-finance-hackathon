@@ -96,7 +96,10 @@ export class CdnStack extends cdk.Stack {
           defaultTtl: cdk.Duration.days(1),
           maxTtl: cdk.Duration.days(7),
           minTtl: cdk.Duration.hours(1),
-          // Don't cache based on query strings (signed URL params are in query)
+          // Correct: ignore query strings for cache key. Signed URL params (Policy,
+          // Signature, Key-Pair-Id) are validated by CloudFront BEFORE cache lookup,
+          // so the same S3 object shares one edge cache entry regardless of signature.
+          // Using all() here would create separate entries per signature, defeating caching.
           queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
           headerBehavior: cloudfront.CacheHeaderBehavior.none(),
           cookieBehavior: cloudfront.CacheCookieBehavior.none(),

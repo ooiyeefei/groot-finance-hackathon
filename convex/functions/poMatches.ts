@@ -352,29 +352,61 @@ export const list = query({
     // Sort by creation date descending
     matches.sort((a: any, b: any) => b.createdAt - a.createdAt);
 
-    // Enrich with PO number, vendor name, invoice number
-    const enriched = await Promise.all(
-      matches.map(async (match: any) => {
-        const po = await ctx.db.get(match.purchaseOrderId) as any;
-        const vendor = po ? await ctx.db.get(po.vendorId) as any : null;
+    // Batch-fetch related documents to eliminate N+1 queries
+    // Collect unique IDs first
+    const poIds = [...new Set(matches.map((m: any) => m.purchaseOrderId).filter(Boolean))];
+    const invoiceIds = [...new Set(matches.map((m: any) => m.invoiceId).filter(Boolean))];
 
-        let invoiceNumber: string | undefined;
-        if (match.invoiceId) {
-          const invoice = await ctx.db.get(match.invoiceId) as any;
-          if (invoice?.extractedData) {
-            const extracted = invoice.extractedData as any;
-            invoiceNumber = extracted?.invoiceNumber ?? extracted?.invoice_number;
-          }
-        }
+    // Batch fetch POs and invoices in parallel (2 rounds instead of 3N)
+    const [poResults, invoiceResults] = await Promise.all([
+      Promise.all(poIds.map((id: any) => ctx.db.get(id))),
+      Promise.all(invoiceIds.map((id: any) => ctx.db.get(id))),
+    ]);
 
-        return {
-          ...match,
-          poNumber: po?.poNumber ?? "Unknown",
-          vendorName: vendor?.name ?? "Unknown Vendor",
-          invoiceNumber,
-        };
-      })
+    // Build lookup maps
+    const poMap = new Map<string, any>();
+    for (const po of poResults) {
+      if (po) poMap.set(po._id as string, po);
+    }
+
+    const invoiceMap = new Map<string, any>();
+    for (const inv of invoiceResults) {
+      if (inv) invoiceMap.set(inv._id as string, inv);
+    }
+
+    // Batch fetch vendors from POs
+    const vendorIds = [...new Set(
+      [...poMap.values()].map((po: any) => po.vendorId).filter(Boolean)
+    )];
+    const vendorResults = await Promise.all(
+      vendorIds.map((id: any) => ctx.db.get(id))
     );
+    const vendorMap = new Map<string, any>();
+    for (const v of vendorResults) {
+      if (v) vendorMap.set(v._id as string, v);
+    }
+
+    // Enrich matches using lookup maps (zero additional queries)
+    const enriched = matches.map((match: any) => {
+      const po = poMap.get(match.purchaseOrderId as string);
+      const vendor = po ? vendorMap.get(po.vendorId as string) : null;
+
+      let invoiceNumber: string | undefined;
+      if (match.invoiceId) {
+        const invoice = invoiceMap.get(match.invoiceId as string);
+        if (invoice?.extractedData) {
+          const extracted = invoice.extractedData as any;
+          invoiceNumber = extracted?.invoiceNumber ?? extracted?.invoice_number;
+        }
+      }
+
+      return {
+        ...match,
+        poNumber: po?.poNumber ?? "Unknown",
+        vendorName: vendor?.name ?? "Unknown Vendor",
+        invoiceNumber,
+      };
+    });
 
     return enriched;
   },
@@ -483,23 +515,30 @@ export const getUnmatched = query({
         (po: any) => ["issued", "partially_received", "fully_received"].includes(po.status)
       );
 
-      const unmatchedPos = [];
-      for (const po of activePos) {
-        const matches = await ctx.db
-          .query("po_matches")
-          .withIndex("by_purchaseOrderId", (q: any) => q.eq("purchaseOrderId", po._id))
-          .first();
+      // Batch fetch all matches for this business (1 query instead of N)
+      const allMatches = await ctx.db
+        .query("po_matches")
+        .withIndex("by_businessId", (q: any) => q.eq("businessId", args.businessId))
+        .collect();
 
-        if (!matches) {
-          const vendor = await ctx.db.get(po.vendorId);
-          unmatchedPos.push({
-            ...po,
-            vendorName: vendor?.name ?? "Unknown Vendor",
-          });
-        }
+      const matchedPoIds = new Set(allMatches.map((m: any) => m.purchaseOrderId as string));
+
+      const unmatchedActivePos = activePos.filter(
+        (po: any) => !matchedPoIds.has(po._id as string)
+      );
+
+      // Batch fetch vendors (1 round instead of N)
+      const vendorIds = [...new Set(unmatchedActivePos.map((po: any) => po.vendorId).filter(Boolean))];
+      const vendors = await Promise.all(vendorIds.map((id: any) => ctx.db.get(id)));
+      const vendorMap = new Map<string, any>();
+      for (const v of vendors) {
+        if (v) vendorMap.set(v._id as string, v);
       }
 
-      return unmatchedPos;
+      return unmatchedActivePos.map((po: any) => ({
+        ...po,
+        vendorName: vendorMap.get(po.vendorId as string)?.name ?? "Unknown Vendor",
+      }));
     }
 
     if (args.tab === "invoices_without_pos") {
@@ -529,23 +568,30 @@ export const getUnmatched = query({
         )
         .collect();
 
-      const unmatchedPos = [];
-      for (const po of pos) {
-        const grns = await ctx.db
-          .query("goods_received_notes")
-          .withIndex("by_purchaseOrderId", (q: any) => q.eq("purchaseOrderId", po._id))
-          .first();
+      // Batch fetch all GRNs for this business (1 query instead of N)
+      const allGrns = await ctx.db
+        .query("goods_received_notes")
+        .withIndex("by_businessId", (q: any) => q.eq("businessId", args.businessId))
+        .collect();
 
-        if (!grns) {
-          const vendor = await ctx.db.get(po.vendorId);
-          unmatchedPos.push({
-            ...po,
-            vendorName: vendor?.name ?? "Unknown Vendor",
-          });
-        }
+      const poIdsWithGrns = new Set(allGrns.map((g: any) => g.purchaseOrderId as string));
+
+      const unmatchedPosRaw = pos.filter(
+        (po: any) => !poIdsWithGrns.has(po._id as string)
+      );
+
+      // Batch fetch vendors (1 round instead of N)
+      const vendorIds = [...new Set(unmatchedPosRaw.map((po: any) => po.vendorId).filter(Boolean))];
+      const vendors = await Promise.all(vendorIds.map((id: any) => ctx.db.get(id)));
+      const vendorMap = new Map<string, any>();
+      for (const v of vendors) {
+        if (v) vendorMap.set(v._id as string, v);
       }
 
-      return unmatchedPos;
+      return unmatchedPosRaw.map((po: any) => ({
+        ...po,
+        vendorName: vendorMap.get(po.vendorId as string)?.name ?? "Unknown Vendor",
+      }));
     }
 
     return [];

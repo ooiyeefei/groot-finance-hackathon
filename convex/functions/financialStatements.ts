@@ -66,32 +66,33 @@ export const dashboardMetrics = query({
 
     let cashBalance = 0;
     if (cashAccount) {
+      // Get posted entry IDs up to dateTo
       const allEntries = await ctx.db
         .query("journal_entries")
         .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
         .collect();
 
-      // Filter by date and status in memory
-      const entries = allEntries.filter(
-        (e) => e.transactionDate <= dateTo && e.status === "posted"
+      const postedEntryIds = new Set(
+        allEntries
+          .filter((e) => e.transactionDate <= dateTo && e.status === "posted")
+          .map((e) => e._id)
       );
 
-      const entryIds = entries.map((e) => e._id);
-      const lines = await Promise.all(
-        entryIds.map(async (entryId) => {
-          return await ctx.db
-            .query("journal_entry_lines")
-            .withIndex("by_journal_entry", (q) =>
-              q.eq("journalEntryId", entryId)
-            )
-            .filter((q) => q.eq(q.field("accountId"), cashAccount._id))
-            .collect();
-        })
+      // Query cash account lines directly (eliminates N+1: 1 query instead of N)
+      const cashLines = await ctx.db
+        .query("journal_entry_lines")
+        .withIndex("by_businessId_accountId", (q) =>
+          q.eq("businessId", args.businessId).eq("accountId", cashAccount._id)
+        )
+        .collect();
+
+      // Filter to posted entries only
+      const postedCashLines = cashLines.filter((l) =>
+        postedEntryIds.has(l.journalEntryId)
       );
 
-      const cashLines = lines.flat();
-      const totalDebits = cashLines.reduce((sum, l) => sum + l.debitAmount, 0);
-      const totalCredits = cashLines.reduce(
+      const totalDebits = postedCashLines.reduce((sum, l) => sum + l.debitAmount, 0);
+      const totalCredits = postedCashLines.reduce(
         (sum, l) => sum + l.creditAmount,
         0
       );

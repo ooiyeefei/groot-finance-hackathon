@@ -80,7 +80,7 @@ async function createJournalEntryHelper(
     // Check if period is closed
     const period = await ctx.db
       .query("accounting_periods")
-      .withIndex("by_business", (q) =>
+      .withIndex("by_business_period", (q) =>
         q
           .eq("businessId", args.businessId)
           .eq("fiscalYear", fiscalYear)

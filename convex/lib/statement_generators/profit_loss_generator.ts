@@ -6,6 +6,9 @@
  * - Expenses (debit balances on 5xxx accounts)
  * - Net Profit = Revenue - Expenses
  *
+ * Performance: Uses single query on journal_entry_lines by_businessId index
+ * instead of N+1 pattern (one query per journal entry).
+ *
  * @see specs/001-accounting-double-entry/data-model.md
  */
 
@@ -51,6 +54,9 @@ export interface ProfitLossStatement {
 
 /**
  * Generate Profit & Loss Statement for a date range
+ *
+ * Optimized: Fetches posted entry IDs first, then queries all lines by business
+ * and filters to matching entries in memory. This is O(2) queries instead of O(N+1).
  */
 export async function generateProfitLossStatement(
   ctx: QueryCtx,
@@ -68,33 +74,31 @@ export async function generateProfitLossStatement(
     throw new Error("Business not found");
   }
 
-  // Query all entries for the business
+  // Step 1: Get posted entry IDs in date range
   const allEntries = await ctx.db
     .query("journal_entries")
     .withIndex("by_businessId", (q) => q.eq("businessId", businessId))
     .collect();
 
-  // Filter by date range and status in memory
-  const entries = allEntries.filter(
-    (e) =>
-      e.transactionDate >= dateFrom &&
-      e.transactionDate <= dateTo &&
-      e.status === "posted"
+  const postedEntryIds = new Set(
+    allEntries
+      .filter(
+        (e) =>
+          e.transactionDate >= dateFrom &&
+          e.transactionDate <= dateTo &&
+          e.status === "posted"
+      )
+      .map((e) => e._id)
   );
 
-  const entryIds = entries.map((e) => e._id);
+  // Step 2: Get ALL lines for this business in one query (eliminates N+1)
+  const allLines = await ctx.db
+    .query("journal_entry_lines")
+    .withIndex("by_businessId", (q) => q.eq("businessId", businessId))
+    .collect();
 
-  // Get all lines for these entries
-  const allLines = await Promise.all(
-    entryIds.map(async (entryId) => {
-      return await ctx.db
-        .query("journal_entry_lines")
-        .withIndex("by_journal_entry", (q) => q.eq("journalEntryId", entryId))
-        .collect();
-    })
-  );
-
-  const lines = allLines.flat();
+  // Filter to lines belonging to posted entries in the date range
+  const lines = allLines.filter((line) => postedEntryIds.has(line.journalEntryId));
 
   // Group by account and calculate net amounts
   const accountBalances = new Map<

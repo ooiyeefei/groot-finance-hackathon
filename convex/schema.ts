@@ -391,6 +391,131 @@ export default defineSchema({
     .index("by_businessId_vendorId_status", ["businessId", "vendorId", "status"]),
 
   // ============================================
+  // DOUBLE-ENTRY ACCOUNTING: Journal Entries & Lines
+  // ============================================
+
+  chart_of_accounts: defineTable({
+    businessId: v.id("businesses"),
+    accountCode: v.string(),
+    accountName: v.string(),
+    accountType: v.string(), // Asset, Liability, Equity, Revenue, Expense
+    accountSubtype: v.optional(v.string()), // Cash, Bank, AR, AP, Fixed Asset, etc.
+    normalBalance: v.string(), // debit or credit
+    parentAccountId: v.optional(v.id("chart_of_accounts")),
+    level: v.number(), // Hierarchy depth: 0 for top-level, 1 for children, etc.
+    description: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())), // Custom tags for categorization
+    isActive: v.boolean(),
+    isSystemAccount: v.boolean(), // true for default accounts, false for user-created
+    taxCode: v.optional(v.string()),
+    createdBy: v.string(), // User ID who created this account
+    createdAt: v.number(),
+    updatedBy: v.optional(v.string()), // User ID who last updated this account
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_business_code", ["businessId", "accountCode"])
+    .index("by_business_active", ["businessId", "isActive"])
+    .index("by_business_type", ["businessId", "accountType", "isActive"]),
+
+  journal_entries: defineTable({
+    businessId: v.id("businesses"),
+    entryNumber: v.string(),
+    transactionDate: v.string(),
+    postingDate: v.string(),
+    description: v.string(),
+    memo: v.optional(v.string()),
+    status: v.string(), // draft, posted, voided, reversed
+    sourceType: v.optional(v.string()), // manual, sales_invoice, expense_claim, etc.
+    sourceId: v.optional(v.string()),
+    fiscalYear: v.number(),
+    fiscalPeriod: v.string(), // YYYY-MM format
+    homeCurrency: v.optional(v.string()),
+    totalDebit: v.number(),
+    totalCredit: v.number(),
+    lineCount: v.number(),
+    isPeriodLocked: v.optional(v.boolean()),
+    accountingPeriodId: v.optional(v.id("accounting_periods")),
+    reversalOf: v.optional(v.id("journal_entries")), // If this is a reversal entry, points to original
+    reversedBy: v.optional(v.id("journal_entries")), // If this entry was reversed, points to reversal
+    createdBy: v.string(),
+    createdAt: v.number(),
+    postedBy: v.optional(v.string()), // User ID who posted this entry
+    postedAt: v.optional(v.number()), // Timestamp when entry was posted
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_business", ["businessId"])
+    .index("by_business_entry_number", ["businessId", "entryNumber"])
+    .index("by_business_date", ["businessId", "transactionDate"])
+    .index("by_business_status", ["businessId", "status"])
+    .index("by_business_period", ["businessId", "fiscalPeriod"])
+    .index("by_source", ["sourceType", "sourceId"]),
+
+  journal_entry_lines: defineTable({
+    journalEntryId: v.id("journal_entries"),
+    businessId: v.id("businesses"),
+    lineOrder: v.number(),
+    accountId: v.id("chart_of_accounts"),
+    accountCode: v.string(),
+    accountName: v.string(),
+    accountType: v.string(),
+    debitAmount: v.number(),
+    creditAmount: v.number(),
+    homeCurrencyAmount: v.optional(v.number()),
+    lineDescription: v.optional(v.string()),
+    entityType: v.optional(v.string()),
+    entityId: v.optional(v.string()),
+    entityName: v.optional(v.string()),
+    bankReconciled: v.optional(v.boolean()),
+    createdAt: v.number(),
+  })
+    .index("by_journal_entry", ["journalEntryId"])
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_accountId", ["businessId", "accountId"]),
+
+  accounting_periods: defineTable({
+    businessId: v.id("businesses"),
+    periodCode: v.string(), // YYYY-MM format
+    periodName: v.string(),
+    fiscalYear: v.number(),
+    fiscalQuarter: v.optional(v.number()),
+    startDate: v.string(),
+    endDate: v.string(),
+    status: v.string(), // open, closed
+    journalEntryCount: v.number(),
+    totalDebits: v.number(),
+    totalCredits: v.number(),
+    closedAt: v.optional(v.number()),
+    closedBy: v.optional(v.string()),
+    closingNotes: v.optional(v.string()),
+    createdBy: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_business", ["businessId"])
+    .index("by_business_period", ["businessId", "fiscalYear", "periodCode"])
+    .index("by_business_status", ["businessId", "status"]),
+
+  manual_exchange_rates: defineTable({
+    businessId: v.id("businesses"),
+    fromCurrency: v.string(),
+    toCurrency: v.string(),
+    rate: v.number(),
+    effectiveDate: v.string(), // YYYY-MM-DD
+    reason: v.optional(v.string()), // Why this rate was entered
+    source: v.optional(v.string()), // Where the rate came from
+    enteredBy: v.string(), // User ID who entered this rate
+    createdAt: v.number(),
+    updatedBy: v.optional(v.string()), // User ID who last updated this rate
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_business", ["businessId"])
+    .index("by_pair", ["fromCurrency", "toCurrency"])
+    .index("by_business_currencies", ["businessId", "fromCurrency", "toCurrency"])
+    .index("by_business_pair_date", ["businessId", "fromCurrency", "toCurrency", "effectiveDate"]),
+
+  // ============================================
   // EXPENSE CLAIMS DOMAIN
   // ============================================
 

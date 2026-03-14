@@ -41,7 +41,7 @@ export const create = mutation({
     // Check for duplicate period
     const existing = await ctx.db
       .query("accounting_periods")
-      .withIndex("by_business", (q) =>
+      .withIndex("by_business_period", (q) =>
         q
           .eq("businessId", args.businessId)
           .eq("fiscalYear", args.fiscalYear)
