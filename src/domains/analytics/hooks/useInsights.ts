@@ -41,22 +41,10 @@ interface UseInsightsReturn {
 export function useInsights(options: UseInsightsOptions): UseInsightsReturn {
   const { businessId, status, category, priority, limit } = options;
 
-  // Query insights list
-  const insightsResult = useQuery(
+  // Single consolidated query — replaces 3 separate useQuery calls
+  const result = useQuery(
     api.functions.actionCenterInsights.list,
     { businessId, status, category, priority, limit }
-  );
-
-  // Query pending count
-  const pendingResult = useQuery(
-    api.functions.actionCenterInsights.getPendingCount,
-    { businessId }
-  );
-
-  // Query summary
-  const summaryResult = useQuery(
-    api.functions.actionCenterInsights.getSummary,
-    { businessId }
   );
 
   // Mutations
@@ -75,11 +63,11 @@ export function useInsights(options: UseInsightsOptions): UseInsightsReturn {
   }, [batchMarkReviewedMutation, businessId]);
 
   return {
-    insights: insightsResult?.insights ?? [],
-    totalCount: insightsResult?.totalCount ?? 0,
-    isLoading: insightsResult === undefined,
-    pendingCount: pendingResult ?? { count: 0, byCritical: 0, byHigh: 0 },
-    summary: summaryResult ?? null,
+    insights: result?.insights ?? [],
+    totalCount: result?.totalCount ?? 0,
+    isLoading: result === undefined,
+    pendingCount: result?.pendingCount ?? { count: 0, byCritical: 0, byHigh: 0 },
+    summary: result?.summary ?? null,
     updateStatus,
     markAllReviewed,
   };

@@ -84,6 +84,7 @@ export const list = query({
     const limit = args.limit ?? 50;
 
     // Query insights for this business using priority index for efficient sorting
+    // Single query — replaces the old getPendingCount + getSummary separate queries
     let insights = await ctx.db
       .query("actionCenterInsights")
       .withIndex("by_business_priority", (q) => q.eq("businessId", business._id.toString()))
@@ -93,35 +94,64 @@ export const list = query({
     const userIdStr = user._id.toString();
     insights = insights.filter((i) => i.userId === userIdStr);
 
-    // Apply filters
-    if (args.status) {
-      insights = insights.filter((i) => i.status === args.status);
-    }
-    if (args.category) {
-      insights = insights.filter((i) => i.category === args.category);
-    }
-    if (args.priority) {
-      insights = insights.filter((i) => i.priority === args.priority);
-    }
-
     // Filter out expired insights
     const now = Date.now();
     insights = insights.filter((i) => !i.expiresAt || i.expiresAt > now);
 
+    // Compute pending count + summary from the same data (avoids 2 extra queries)
+    const newInsights = insights.filter((i) => i.status === "new");
+    const pendingCount = {
+      count: newInsights.length,
+      byCritical: newInsights.filter((i) => i.priority === "critical").length,
+      byHigh: newInsights.filter((i) => i.priority === "high").length,
+    };
+
+    const byStatus: Record<string, number> = { new: 0, reviewed: 0, dismissed: 0, actioned: 0 };
+    const byCategory: Record<string, number> = {};
+    const byPriority: Record<string, number> = { critical: 0, high: 0, medium: 0, low: 0 };
+    for (const insight of insights) {
+      byStatus[insight.status] = (byStatus[insight.status] || 0) + 1;
+      byCategory[insight.category] = (byCategory[insight.category] || 0) + 1;
+      byPriority[insight.priority] = (byPriority[insight.priority] || 0) + 1;
+    }
+    const totalResolved = byStatus.dismissed + byStatus.actioned;
+    const actionableRate = totalResolved > 0 ? Math.round((byStatus.actioned / totalResolved) * 100) : 0;
+    const summary = {
+      total: insights.length,
+      byStatus,
+      byCategory,
+      byPriority,
+      actionableRate,
+    };
+
+    // Apply user-requested filters for the paginated list
+    let filteredInsights = insights;
+    if (args.status) {
+      filteredInsights = filteredInsights.filter((i) => i.status === args.status);
+    }
+    if (args.category) {
+      filteredInsights = filteredInsights.filter((i) => i.category === args.category);
+    }
+    if (args.priority) {
+      filteredInsights = filteredInsights.filter((i) => i.priority === args.priority);
+    }
+
     // Sort by priority (critical first) then by detected time (newest first)
     const priorityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-    insights.sort((a, b) => {
+    filteredInsights.sort((a, b) => {
       const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority];
       if (priorityDiff !== 0) return priorityDiff;
       return b.detectedAt - a.detectedAt;
     });
 
     // Apply limit
-    const paginatedInsights = insights.slice(0, limit);
+    const paginatedInsights = filteredInsights.slice(0, limit);
 
     return {
       insights: paginatedInsights,
-      totalCount: insights.length,
+      totalCount: filteredInsights.length,
+      pendingCount,
+      summary,
     };
   },
 });

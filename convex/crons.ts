@@ -32,9 +32,9 @@ const crons = cronJobs();
  *
  * Creates actionCenterInsights for any issues detected.
  */
-crons.interval(
+crons.daily(
   "proactive-analysis",
-  { hours: 4 },
+  { hourUTC: 6, minuteUTC: 30 },
   internal.functions.actionCenterJobs.runProactiveAnalysis
 );
 
@@ -89,7 +89,7 @@ crons.daily(
  */
 crons.interval(
   "cleanup-expired-mcp-proposals",
-  { minutes: 5 },
+  { hours: 1 },
   internal.functions.mcpProposals.cleanupExpiredProposals
 );
 
@@ -234,9 +234,9 @@ crons.daily(
  * This enables the system to self-improve by catching new error types
  * as merchants update their forms or new merchants are added.
  */
-crons.interval(
+crons.daily(
   "einvoice-monitoring",
-  { hours: 2 },
+  { hourUTC: 8, minuteUTC: 30 },
   internal.functions.einvoiceMonitoring.runMonitoringCycle
 );
 

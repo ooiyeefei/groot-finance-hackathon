@@ -119,28 +119,20 @@ export const getMyBusinessesWithMemberships = query({
       (b.lastAccessedAt || 0) - (a.lastAccessedAt || 0)
     );
 
-    // Fetch business details with ownership check
+    // Fetch business details — ownership checked from user's own membership role
+    // (avoids N+1 query of loading all memberships per business)
     const businessesWithMemberships = await Promise.all(
       sortedMemberships.map(async (membership) => {
         const business = await ctx.db.get(membership.businessId);
         if (!business) return null;
 
-        // Check if owner by looking for owner role in memberships
-        // (Convex doesn't support .filter() after .withIndex() - use JS filter)
-        const bizMemberships = await ctx.db
-          .query("business_memberships")
-          .withIndex("by_businessId", (q) => q.eq("businessId", membership.businessId))
-          .collect();
-
-        const ownerMembership = bizMemberships.find((m) => m.role === "owner");
-
-        const isOwner = ownerMembership?.userId === user._id;
+        const isOwner = membership.role === "owner";
 
         return {
           id: business._id,
           name: business.name,
           slug: business.slug,
-          ownerId: ownerMembership?.userId,
+          ownerId: isOwner ? user._id : undefined,
           countryCode: business.countryCode,
           homeCurrency: business.homeCurrency,
           logoUrl: business.logoStoragePath,

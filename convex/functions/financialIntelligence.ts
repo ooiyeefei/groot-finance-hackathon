@@ -144,7 +144,7 @@ export const detectAnomalies = query({
     const journalEntryIds = journalEntries.map((e) => e._id);
 
     // Get all expense lines (account codes 5000-5999, debit side)
-    const allLines = await ctx.db.query("journal_entry_lines").collect();
+    const allLines = await ctx.db.query("journal_entry_lines").withIndex("by_business_account", (q) => q.eq("businessId", business._id)).collect();
     const expenseLines = allLines.filter((line) => {
       if (!journalEntryIds.includes(line.journalEntryId)) return false;
       if (line.debitAmount === 0) return false; // Expenses increase with debits
@@ -262,7 +262,7 @@ export const analyzeCashFlow = query({
     const journalEntryIds = journalEntries.map((e) => e._id);
 
     // Get all lines for these entries
-    const allLines = await ctx.db.query("journal_entry_lines").collect();
+    const allLines = await ctx.db.query("journal_entry_lines").withIndex("by_business_account", (q) => q.eq("businessId", business._id)).collect();
     const relevantLines = allLines.filter((line) => journalEntryIds.includes(line.journalEntryId));
 
     // Calculate totals - THE INTELLIGENCE
@@ -396,7 +396,7 @@ export const analyzeVendorRisk = query({
     const journalEntryIds = journalEntries.map((e) => e._id);
 
     // Get all expense lines (account codes 5000-5999, debit side)
-    const allLines = await ctx.db.query("journal_entry_lines").collect();
+    const allLines = await ctx.db.query("journal_entry_lines").withIndex("by_business_account", (q) => q.eq("businessId", business._id)).collect();
     const expenseLines = allLines.filter((line) => {
       if (!journalEntryIds.includes(line.journalEntryId)) return false;
       if (line.debitAmount === 0) return false;
@@ -551,7 +551,7 @@ export const analyzeVendorConcentration = query({
     const journalEntryIds = journalEntries.map((e) => e._id);
 
     // Get all expense lines (account codes 5000-5999, debit side)
-    const allLines = await ctx.db.query("journal_entry_lines").collect();
+    const allLines = await ctx.db.query("journal_entry_lines").withIndex("by_business_account", (q) => q.eq("businessId", business._id)).collect();
     const expenseLines = allLines.filter((line) => {
       if (!journalEntryIds.includes(line.journalEntryId)) return false;
       if (line.debitAmount === 0) return false;
@@ -675,7 +675,7 @@ export const detectDuplicates = query({
     const journalEntryIds = journalEntries.map((e) => e._id);
 
     // Get all expense lines (account codes 5000-5999, debit side)
-    const allLines = await ctx.db.query("journal_entry_lines").collect();
+    const allLines = await ctx.db.query("journal_entry_lines").withIndex("by_business_account", (q) => q.eq("businessId", business._id)).collect();
     const expenseLines = allLines.filter((line) => {
       if (!journalEntryIds.includes(line.journalEntryId)) return false;
       if (line.debitAmount === 0) return false;
@@ -900,7 +900,7 @@ export const getEmployeeExpensesForManager = query({
     const journalEntryIds = journalEntries.map((e) => e._id);
 
     // Get all lines for these entries
-    const allLines = await ctx.db.query("journal_entry_lines").collect();
+    const allLines = await ctx.db.query("journal_entry_lines").withIndex("by_business_account", (q) => q.eq("businessId", business._id)).collect();
     let relevantLines = allLines.filter((line) => {
       if (!journalEntryIds.includes(line.journalEntryId)) return false;
       // Filter by employee entity
@@ -1108,7 +1108,7 @@ export const getTeamExpenseSummary = query({
     const journalEntryIds = journalEntries.map((e) => e._id);
 
     // Get all lines for these entries
-    const allLines = await ctx.db.query("journal_entry_lines").collect();
+    const allLines = await ctx.db.query("journal_entry_lines").withIndex("by_business_account", (q) => q.eq("businessId", business._id)).collect();
     let relevantLines = allLines.filter((line) => {
       if (!journalEntryIds.includes(line.journalEntryId)) return false;
       // Filter to target employee IDs
@@ -1289,7 +1289,7 @@ export const getMcpTeamExpenses = query({
     const journalEntryIds = journalEntries.map((e) => e._id);
 
     // Get all lines for these entries
-    const allLines = await ctx.db.query("journal_entry_lines").collect();
+    const allLines = await ctx.db.query("journal_entry_lines").withIndex("by_business_account", (q) => q.eq("businessId", business._id)).collect();
     let relevantLines = allLines.filter((line) => {
       if (!journalEntryIds.includes(line.journalEntryId)) return false;
       // Filter to target employee IDs
@@ -1360,7 +1360,7 @@ export const getMcpAccountingEntries = query({
     const journalEntryIds = journalEntries.map((e) => e._id);
 
     // Get all lines for these entries
-    const allLines = await ctx.db.query("journal_entry_lines").collect();
+    const allLines = await ctx.db.query("journal_entry_lines").withIndex("by_business_account", (q) => q.eq("businessId", business._id)).collect();
     const relevantLines = allLines.filter((line) => journalEntryIds.includes(line.journalEntryId));
 
     // Return lines with only the fields needed for analysis
