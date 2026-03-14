@@ -94,7 +94,7 @@ export async function generateProfitLossStatement(
   // Step 2: Get ALL lines for this business in one query (eliminates N+1)
   const allLines = await ctx.db
     .query("journal_entry_lines")
-    .withIndex("by_businessId", (q) => q.eq("businessId", businessId))
+    .withIndex("by_business_account", (q) => q.eq("businessId", businessId))
     .collect();
 
   // Filter to lines belonging to posted entries in the date range

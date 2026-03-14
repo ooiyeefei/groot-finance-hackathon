@@ -683,18 +683,9 @@ export const create = mutation({
       }
     }
 
-    // Schedule real-time anomaly detection for this transaction
-    // Surfaces insights immediately instead of waiting for the 4h cron
-    if (args.businessId) {
-      await ctx.scheduler.runAfter(0, internal.functions.actionCenterJobs.analyzeNewTransaction, {
-        transactionId: entryId,
-        businessId: args.businessId,
-      });
-      // Layer 2: Schedule LLM enrichment for any new insights (runs after detection)
-      await ctx.scheduler.runAfter(5000, internal.functions.actionCenterJobs.enrichRecentInsights, {
-        businessId: args.businessId.toString(),
-      });
-    }
+    // NOTE: Real-time anomaly detection disabled for deprecated accounting_entries table
+    // Only journal_entries trigger anomaly detection (see expenseSubmissions.approve, invoices.updateStatus)
+    // This table is kept for backward compatibility only
 
     return entryId;
   },

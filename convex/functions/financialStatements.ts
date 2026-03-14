@@ -81,8 +81,8 @@ export const dashboardMetrics = query({
       // Query cash account lines directly (eliminates N+1: 1 query instead of N)
       const cashLines = await ctx.db
         .query("journal_entry_lines")
-        .withIndex("by_businessId_accountId", (q) =>
-          q.eq("businessId", args.businessId).eq("accountId", cashAccount._id)
+        .withIndex("by_business_account", (q) =>
+          q.eq("businessId", args.businessId).eq("accountCode", cashAccount.accountCode)
         )
         .collect();
 

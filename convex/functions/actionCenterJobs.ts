@@ -1957,9 +1957,8 @@ export const analyzeNewTransaction = internalMutation({
     const sigmaDeviation = (amount - mean) / stdDev;
     const deviation = sigmaDeviation.toFixed(1);
 
-    // Apply materiality-based priority scoring
-    const priority = computeMaterialityPriority(amount, monthlyExpenses, sigmaDeviation);
-    if (priority === null) return 0; // Below materiality threshold — suppress
+    // Simple amount-based priority (vendor surge detection removed for journal entries)
+    const priority = amount >= 10000 ? "high" : amount >= 1000 ? "medium" : "low";
 
     let insightsCreated = 0;
     for (const userId of memberUserIds) {
@@ -1967,7 +1966,7 @@ export const analyzeNewTransaction = internalMutation({
         userId,
         businessId: args.businessId.toString(),
         category: "anomaly" as const,
-        priority: priority as "high" | "medium" | "low",
+        priority,
         status: "new" as const,
         title: `Unusual expense detected in "${categoryDisplayName}"`,
         description: `An expense of ${amount.toLocaleString()} in "${categoryDisplayName}" is ${deviation}σ above your average of ${mean.toLocaleString()}.`,
@@ -1980,8 +1979,7 @@ export const analyzeNewTransaction = internalMutation({
           category,
           categoryDisplayName,
           transactionId: txnIdStr,
-          sourceDataDomain: classifyEntryDomain(txn),
-          materialityPct: monthlyExpenses > 0 ? amount / monthlyExpenses : undefined,
+          sourceDataDomain: journalEntry.sourceType || "manual",
         },
       });
       insightsCreated++;
@@ -1993,92 +1991,7 @@ export const analyzeNewTransaction = internalMutation({
       );
     }
 
-    // --- VENDOR PRICING SURGE DETECTION ---
-    // Check if this vendor's price has spiked vs their historical average
-    const vendorName = txn.vendorName;
-    const vendorId = txn.vendorId;
-
-    if (vendorName || vendorId) {
-      const vendorKey = vendorId?.toString() || vendorName || "";
-
-      // Get historical expenses from this vendor (last 90 days, excluding this transaction)
-      const vendorExpenses = entries.filter(
-        (e: any) =>
-          !e.deletedAt &&
-          e.transactionType === "Expense" &&
-          e.transactionDate &&
-          e.transactionDate >= ninetyDaysAgo &&
-          e._id.toString() !== args.transactionId.toString() &&
-          ((e.vendorId && e.vendorId.toString() === vendorKey) ||
-           (!e.vendorId && e.vendorName === vendorName))
-      );
-
-      if (vendorExpenses.length >= 3) { // Need enough history
-        const historicalAmounts = vendorExpenses.map(
-          (e: any) => Math.abs(e.homeCurrencyAmount || e.originalAmount || 0)
-        );
-        const vendorMean = historicalAmounts.reduce((s: number, a: number) => s + a, 0) / historicalAmounts.length;
-
-        if (vendorMean > 0) {
-          const surgePercent = ((amount - vendorMean) / vendorMean) * 100;
-
-          // Alert if price surged >30% vs historical average for this vendor
-          if (surgePercent > 30) {
-            // Dedup: check existing pricing surge insights
-            const existingOptInsights = await ctx.db
-              .query("actionCenterInsights")
-              .withIndex("by_category", (q: any) => q.eq("category", "optimization"))
-              .collect();
-
-            const dedupCutoffMs = Date.now() - DEDUP_WINDOW_MS;
-            const surgeDuplicate = existingOptInsights.some(
-              (i: any) =>
-                i.metadata?.vendorKey === vendorKey &&
-                i.metadata?.insightType === "vendor_pricing_surge" &&
-                i.businessId === args.businessId.toString() &&
-                i.detectedAt > dedupCutoffMs
-            );
-
-            if (!surgeDuplicate) {
-              const surgePriority = surgePercent > 100 ? "high" : surgePercent > 50 ? "medium" : "low";
-              const displayName = vendorName || "Unknown Vendor";
-
-              for (const userId of memberUserIds) {
-                await ctx.db.insert("actionCenterInsights", {
-                  userId,
-                  businessId: args.businessId.toString(),
-                  category: "optimization" as const,
-                  priority: surgePriority as "high" | "medium" | "low",
-                  status: "new" as const,
-                  title: `Pricing surge from ${displayName}`,
-                  description: `A charge of ${amount.toLocaleString()} from ${displayName} is ${surgePercent.toFixed(0)}% above their historical average of ${vendorMean.toLocaleString()}.`,
-                  affectedEntities: [txnIdStr],
-                  recommendedAction: `Review this charge and verify pricing with ${displayName}. Compare against previous invoices.`,
-                  detectedAt: Date.now(),
-                  // No expiresAt — persists until user acts
-                  metadata: {
-                    vendorKey,
-                    vendorName: displayName,
-                    currentAmount: amount,
-                    historicalAverage: vendorMean,
-                    surgePercent,
-                    transactionId: txnIdStr,
-                    insightType: "vendor_pricing_surge",
-                  },
-                });
-                insightsCreated++;
-              }
-
-              if (insightsCreated > 0) {
-                console.log(
-                  `[ActionCenterJobs] Vendor pricing surge: ${displayName} +${surgePercent.toFixed(0)}% → ${insightsCreated} insights`
-                );
-              }
-            }
-          }
-        }
-      }
-    }
+    // Vendor surge detection skipped for journal entries (vendor info is in source documents)
 
     return insightsCreated;
   },

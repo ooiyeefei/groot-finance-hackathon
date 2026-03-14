@@ -67,7 +67,7 @@ export async function generateTrialBalance(
   // Step 3: Get ALL lines for this business (one query — eliminates O(accounts × entries) N+1)
   const allLines = await ctx.db
     .query("journal_entry_lines")
-    .withIndex("by_businessId", (q) => q.eq("businessId", businessId))
+    .withIndex("by_business_account", (q) => q.eq("businessId", businessId))
     .collect();
 
   // Filter to lines from posted entries in date range

@@ -422,61 +422,6 @@ export default defineSchema({
     .index("by_business_active", ["businessId", "isActive"])
     .index("by_business_type", ["businessId", "accountType", "isActive"]),
 
-  journal_entries: defineTable({
-    businessId: v.id("businesses"),
-    entryNumber: v.string(),
-    transactionDate: v.string(),
-    postingDate: v.string(),
-    description: v.string(),
-    memo: v.optional(v.string()),
-    status: v.string(), // draft, posted, voided, reversed
-    sourceType: v.optional(v.string()), // manual, sales_invoice, expense_claim, etc.
-    sourceId: v.optional(v.string()),
-    fiscalYear: v.number(),
-    fiscalPeriod: v.string(), // YYYY-MM format
-    homeCurrency: v.optional(v.string()),
-    totalDebit: v.number(),
-    totalCredit: v.number(),
-    lineCount: v.number(),
-    isPeriodLocked: v.optional(v.boolean()),
-    accountingPeriodId: v.optional(v.id("accounting_periods")),
-    reversalOf: v.optional(v.id("journal_entries")), // If this is a reversal entry, points to original
-    reversedBy: v.optional(v.id("journal_entries")), // If this entry was reversed, points to reversal
-    createdBy: v.string(),
-    createdAt: v.number(),
-    postedBy: v.optional(v.string()), // User ID who posted this entry
-    postedAt: v.optional(v.number()), // Timestamp when entry was posted
-    updatedAt: v.optional(v.number()),
-  })
-    .index("by_businessId", ["businessId"])
-    .index("by_business_entry_number", ["businessId", "entryNumber"])
-    .index("by_business_date", ["businessId", "transactionDate"])
-    .index("by_business_status", ["businessId", "status"])
-    .index("by_business_period", ["businessId", "fiscalPeriod"])
-    .index("by_source", ["sourceType", "sourceId"]),
-
-  journal_entry_lines: defineTable({
-    journalEntryId: v.id("journal_entries"),
-    businessId: v.id("businesses"),
-    lineOrder: v.number(),
-    accountId: v.id("chart_of_accounts"),
-    accountCode: v.string(),
-    accountName: v.string(),
-    accountType: v.string(),
-    debitAmount: v.number(),
-    creditAmount: v.number(),
-    homeCurrencyAmount: v.optional(v.number()),
-    lineDescription: v.optional(v.string()),
-    entityType: v.optional(v.string()),
-    entityId: v.optional(v.string()),
-    entityName: v.optional(v.string()),
-    bankReconciled: v.optional(v.boolean()),
-    createdAt: v.number(),
-  })
-    .index("by_journal_entry", ["journalEntryId"])
-    .index("by_businessId", ["businessId"])
-    .index("by_businessId_accountId", ["businessId", "accountId"]),
-
   accounting_periods: defineTable({
     businessId: v.id("businesses"),
     periodCode: v.string(), // YYYY-MM format
