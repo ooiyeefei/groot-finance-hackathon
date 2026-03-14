@@ -179,6 +179,12 @@ All AWS infrastructure is defined in `infra/lib/`. Any new AWS resource MUST be 
 - Three roles available: `TEST_USER_ADMIN`, `TEST_USER_MANAGER`, `TEST_USER_EMPLOYEE` (each with `_PW` suffix for password)
 - Production URL: `https://finance.hellogroot.com`
 
+### Page Layout Pattern (MANDATORY)
+- **All pages under `src/app/[locale]/`** must include `<Sidebar />` and `<HeaderWithUser />` — follow the pattern in `expense-claims/page.tsx`
+- Pages must be **server components** (no `'use client'`) that wrap client content components
+- Pattern: `export const dynamic = 'force-dynamic'` → `auth()` check → `<ClientProviders>` → `<Sidebar />` + `<HeaderWithUser>` + `<main>` → `<ClientComponent />`
+- **Never create standalone client-only pages** that render without the app shell (sidebar + header)
+
 ### Prefer Modification Over Creation
 - Do not create new files without approval
 - Check if existing files can be modified first
@@ -192,9 +198,10 @@ All AWS infrastructure is defined in `infra/lib/`. Any new AWS resource MUST be 
 - **Check first**: `src/components/ui/`, `src/app/globals.css`
 
 ### Button Styling (MANDATORY)
-- **Action buttons** (Save, Submit, Confirm, etc.): `bg-primary hover:bg-primary/90 text-primary-foreground` (blue bg, white text)
-- **Destructive buttons** (Delete, Remove, etc.): `bg-destructive hover:bg-destructive/90 text-destructive-foreground` (red bg, white text)
-- **Cancel buttons**: `bg-secondary hover:bg-secondary/80 text-secondary-foreground` (gray bg, white text)
+- **Action buttons** (Save, Submit, Confirm, Create, Post, etc.): `bg-primary hover:bg-primary/90 text-primary-foreground` (blue bg, white text)
+- **Destructive buttons** (Delete, Remove, Reverse, etc.): `bg-destructive hover:bg-destructive/90 text-destructive-foreground` (red bg, white text)
+- **Cancel/Neutral buttons** (Cancel, Close, Draft, secondary actions): `bg-secondary hover:bg-secondary/80 text-secondary-foreground` (gray bg, white text)
+- **Never use `variant="outline"` or `variant="ghost"` for visible action/cancel buttons** — only use ghost for small inline icon-only buttons (e.g., table row actions). All user-facing text buttons must use explicit bg classes above.
 - Never use gray/secondary styling for action buttons
 
 ### Number Formatting
