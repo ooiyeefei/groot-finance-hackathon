@@ -125,6 +125,7 @@ export const close = mutation({
       )
       .collect();
 
+    // Filter for posted entries only
     const entries = allEntries.filter((e) => e.status === "posted");
 
     // Calculate totals

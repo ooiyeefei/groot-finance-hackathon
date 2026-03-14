@@ -52,89 +52,77 @@ export const getDashboardAnalytics = query({
       return null;
     }
 
-    // Fetch business to get category names
-    const business = await ctx.db.get(args.businessId);
-
-    // Build category lookup map (ID -> display name)
-    const categoryLookup: Record<string, string> = {};
-    if (business?.customExpenseCategories) {
-      const categories = business.customExpenseCategories as Array<{
-        id: string;
-        category_name: string;
-      }>;
-      for (const cat of categories) {
-        categoryLookup[cat.id] = cat.category_name;
-      }
-    }
-
-    // Fetch all transactions for the period
-    const entries = await ctx.db
-      .query("accounting_entries")
+    // Fetch all journal entries for the business
+    const allJournalEntries = await ctx.db
+      .query("journal_entries")
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
       .collect();
 
     console.log(`[Analytics] Query params: businessId=${args.businessId}, startDate=${args.startDate}, endDate=${args.endDate}`);
-    console.log(`[Analytics] Found ${entries.length} entries for businessId`);
+    console.log(`[Analytics] Found ${allJournalEntries.length} journal entries for businessId`);
 
-    // Filter by date range and active status
-    const transactions = entries.filter((entry) => {
-      if (entry.deletedAt) {
-        console.log(`[Analytics] Entry ${entry._id} filtered: deletedAt=${entry.deletedAt}`);
-        return false;
-      }
-      if (!entry.transactionDate) {
-        console.log(`[Analytics] Entry ${entry._id} filtered: missing transactionDate`);
-        return false;
-      }
+    // Filter journal entries by date range and status
+    const journalEntries = allJournalEntries.filter((entry) => {
+      if (entry.status !== "posted") return false;
+      if (!entry.transactionDate) return false;
       const inRange = entry.transactionDate >= args.startDate && entry.transactionDate <= args.endDate;
-      if (!inRange) {
-        console.log(`[Analytics] Entry ${entry._id} filtered: transactionDate=${entry.transactionDate} not in range ${args.startDate} to ${args.endDate}`);
-      }
       return inRange;
     });
 
-    console.log(`[Analytics] After filtering: ${transactions.length} transactions in date range`);
+    console.log(`[Analytics] After filtering: ${journalEntries.length} journal entries in date range`);
 
-    // Calculate totals
+    // Fetch all journal entry lines for these entries
+    const journalEntryIds = new Set(journalEntries.map((e) => e._id));
+
+    // Get all lines for these journal entries
+    // Since we can't directly query by journalEntryId list, we need to fetch each entry's lines
+    const allLines = await Promise.all(
+      journalEntries.map(async (entry) => {
+        const lines = await ctx.db
+          .query("journal_entry_lines")
+          .withIndex("by_journal_entry", (q) => q.eq("journalEntryId", entry._id))
+          .collect();
+        return lines;
+      })
+    );
+
+    const lines = allLines.flat();
+
+    console.log(`[Analytics] Found ${lines.length} journal entry lines for filtered entries`);
+
+    // Get business to determine home currency
+    const business = await ctx.db.get(args.businessId);
+    const homeCurrency = business?.homeCurrency || "MYR";
+
+    // Calculate totals from journal entry lines
     let totalIncome = 0;
     let totalExpenses = 0;
     let totalCogs = 0;
-    const currencyBreakdown: Record<string, number> = {};
+    const currencyBreakdown: Record<string, number> = { [homeCurrency]: 0 };
     const categoryBreakdown: Record<string, number> = {};
 
-    for (const txn of transactions) {
-      const amount = txn.homeCurrencyAmount || txn.originalAmount || 0;
-      const currency = txn.homeCurrency || txn.originalCurrency || "MYR";
-      const category = txn.category || "uncategorized";
+    for (const line of lines) {
+      const accountCode = line.accountCode;
 
-      console.log(`[Analytics] Processing txn ${txn._id}: type="${txn.transactionType}", amount=${amount}, homeCurrencyAmount=${txn.homeCurrencyAmount}, originalAmount=${txn.originalAmount}`);
-
-      if (txn.transactionType === "Income") {
-        totalIncome += amount;
-      } else if (txn.transactionType === "Expense") {
-        totalExpenses += Math.abs(amount);
-      } else if (txn.transactionType === "Cost of Goods Sold") {
-        totalCogs += Math.abs(amount);
-      } else {
-        console.log(`[Analytics] WARNING: Unknown transactionType "${txn.transactionType}" for txn ${txn._id}`);
+      // Revenue accounts (4000-4999) - credit side increases revenue
+      if (accountCode >= "4000" && accountCode < "5000") {
+        totalIncome += line.creditAmount;
+        currencyBreakdown[homeCurrency] += line.creditAmount;
       }
+      // Expense accounts (5000-5999) - debit side increases expenses
+      else if (accountCode >= "5000" && accountCode < "6000") {
+        totalExpenses += line.debitAmount;
+        currencyBreakdown[homeCurrency] -= line.debitAmount;
 
-      // Currency breakdown (net by currency)
-      if (!currencyBreakdown[currency]) {
-        currencyBreakdown[currency] = 0;
-      }
-      currencyBreakdown[currency] +=
-        txn.transactionType === "Income" ? amount : -Math.abs(amount);
-
-      // Category breakdown (expenses + COGS only)
-      // Look up display name from categoryLookup, fallback to category value
-      if (txn.transactionType === "Expense" || txn.transactionType === "Cost of Goods Sold") {
-        const displayName = categoryLookup[category] || category;
-        if (!categoryBreakdown[displayName]) {
-          categoryBreakdown[displayName] = 0;
+        // Category breakdown by account name
+        const categoryName = line.accountName;
+        if (!categoryBreakdown[categoryName]) {
+          categoryBreakdown[categoryName] = 0;
         }
-        categoryBreakdown[displayName] += Math.abs(amount);
+        categoryBreakdown[categoryName] += line.debitAmount;
       }
+      // COGS accounts (if they exist, typically 5xxx range, but let's handle them separately if needed)
+      // For now, COGS is included in expenses (5000-5999 range)
     }
 
     const netProfit = totalIncome - totalExpenses - totalCogs;
@@ -147,7 +135,7 @@ export const getDashboardAnalytics = query({
       totalExpenses,
       totalCogs,
       netProfit,
-      transactionCount: transactions.length,
+      transactionCount: journalEntries.length,
       currencyBreakdown,
       categoryBreakdown,
       calculatedAt: Date.now(),
@@ -157,6 +145,9 @@ export const getDashboardAnalytics = query({
 
 /**
  * Get aged receivables (income transactions that are pending/overdue)
+ * NOTE: This function queries accounting_entries because AR aging requires
+ * invoice-level metadata (dueDate, status) that isn't stored in journal entries.
+ * Journal entries are for posted transactions only.
  */
 export const getAgedReceivables = query({
   args: {
@@ -185,7 +176,9 @@ export const getAgedReceivables = query({
       return null;
     }
 
-    // Fetch income transactions with pending/overdue status
+    // NOTE: Still using accounting_entries for AR aging because we need invoice metadata
+    // (dueDate, status) that isn't stored in journal entries.
+    // TODO: Migrate to sales_invoices table with proper AR tracking
     const entries = await ctx.db
       .query("accounting_entries")
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
@@ -274,6 +267,9 @@ export const getAgedReceivables = query({
 
 /**
  * Get aged payables (expense transactions that are pending/overdue)
+ * NOTE: This function queries accounting_entries because AP aging requires
+ * invoice-level metadata (dueDate, status, vendorId) that isn't stored in journal entries.
+ * Journal entries are for posted transactions only.
  */
 export const getAgedPayables = query({
   args: {
@@ -302,7 +298,9 @@ export const getAgedPayables = query({
       return null;
     }
 
-    // Fetch expense transactions with pending/overdue status
+    // NOTE: Still using accounting_entries for AP aging because we need invoice metadata
+    // (dueDate, status, vendorId) that isn't stored in journal entries.
+    // TODO: Migrate to invoices table with proper AP tracking
     const entries = await ctx.db
       .query("accounting_entries")
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
@@ -397,6 +395,7 @@ export const getAgedPayables = query({
 
 /**
  * Get overdue receivables for cash flow monitoring
+ * NOTE: Still uses accounting_entries for invoice-level metadata.
  */
 export const getOverdueReceivables = query({
   args: {
@@ -428,7 +427,7 @@ export const getOverdueReceivables = query({
 
     const agingThreshold = args.agingThresholdDays ?? 45;
 
-    // Fetch income transactions with pending/overdue status
+    // NOTE: Still using accounting_entries for AR with invoice metadata
     const entries = await ctx.db
       .query("accounting_entries")
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
@@ -478,6 +477,7 @@ export const getOverdueReceivables = query({
 
 /**
  * Get upcoming payment deadlines
+ * NOTE: Still uses accounting_entries for invoice-level metadata.
  */
 export const getUpcomingPayments = query({
   args: {
@@ -509,7 +509,7 @@ export const getUpcomingPayments = query({
 
     const windowDays = args.windowDays ?? 7;
 
-    // Fetch expense transactions with pending status
+    // NOTE: Still using accounting_entries for AP with invoice metadata
     const entries = await ctx.db
       .query("accounting_entries")
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
@@ -562,6 +562,7 @@ export const getUpcomingPayments = query({
 
 /**
  * Get currency exposure breakdown
+ * NOTE: Still uses accounting_entries for pending transactions with currency metadata.
  */
 export const getCurrencyExposure = query({
   args: {
@@ -590,7 +591,7 @@ export const getCurrencyExposure = query({
       return null;
     }
 
-    // Fetch transactions with pending status
+    // NOTE: Still using accounting_entries for pending transactions
     const entries = await ctx.db
       .query("accounting_entries")
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
@@ -644,6 +645,7 @@ export const getCurrencyExposure = query({
 
 /**
  * Get cash flow projection data
+ * NOTE: Still uses accounting_entries for pending transactions with due dates.
  */
 export const getCashFlowProjection = query({
   args: {
@@ -679,7 +681,7 @@ export const getCashFlowProjection = query({
     const currentDateStr = currentDate.toISOString().split("T")[0];
     const periodEndStr = periodEnd.toISOString().split("T")[0];
 
-    // Fetch transactions with due dates in the period
+    // NOTE: Still using accounting_entries for pending transactions with due dates
     const entries = await ctx.db
       .query("accounting_entries")
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
@@ -728,6 +730,7 @@ export const getCashFlowProjection = query({
 /**
  * Get aged payables grouped by vendor with aging bucket breakdown.
  * Includes "Unassigned Vendor" row for entries without vendorId.
+ * NOTE: Still uses accounting_entries for vendor-level AP aging.
  */
 export const getAgedPayablesByVendor = query({
   args: {
@@ -755,6 +758,7 @@ export const getAgedPayablesByVendor = query({
       return null;
     }
 
+    // NOTE: Still using accounting_entries for AP with vendor metadata
     const entries = await ctx.db
       .query("accounting_entries")
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
@@ -842,6 +846,7 @@ export const getAgedPayablesByVendor = query({
 
 /**
  * Get individual unpaid entries for a specific vendor (drilldown).
+ * NOTE: Still uses accounting_entries for vendor-level AP details.
  */
 export const getVendorPayablesDrilldown = query({
   args: {
@@ -870,6 +875,7 @@ export const getVendorPayablesDrilldown = query({
       return [];
     }
 
+    // NOTE: Still using accounting_entries for AP vendor details
     const entries = await ctx.db
       .query("accounting_entries")
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
@@ -922,6 +928,7 @@ export const getVendorPayablesDrilldown = query({
 /**
  * Get pending payables due within a specified window (upcoming payments).
  * Includes overdue entries at the top.
+ * NOTE: Still uses accounting_entries for AP with due dates.
  */
 export const getAPUpcomingPayments = query({
   args: {
@@ -950,6 +957,7 @@ export const getAPUpcomingPayments = query({
       return [];
     }
 
+    // NOTE: Still using accounting_entries for AP with due dates
     const entries = await ctx.db
       .query("accounting_entries")
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
@@ -1010,6 +1018,7 @@ export const getAPUpcomingPayments = query({
 /**
  * Get vendor spend analytics for a selectable period.
  * Returns top vendors, category breakdown, monthly trend, and total spend.
+ * NOTE: Still uses accounting_entries for vendor spend tracking.
  */
 export const getVendorSpendAnalytics = query({
   args: {
@@ -1042,6 +1051,7 @@ export const getVendorSpendAnalytics = query({
       .toISOString()
       .split("T")[0];
 
+    // NOTE: Still using accounting_entries for vendor spend analytics
     const entries = await ctx.db
       .query("accounting_entries")
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
