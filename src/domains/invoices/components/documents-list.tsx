@@ -8,8 +8,7 @@ import SkeletonLoader from '@/components/ui/skeleton-loader'
 import { useDocuments } from '@/domains/invoices/hooks/use-documents'
 import DocumentStatusBadge from './document-status-badge'
 import ConfidenceScoreMeter from './confidence-score-meter'
-import { mapDocumentToAccountingEntry, canCreateAccountingEntryFromDocument } from '@/domains/invoices/lib/document-to-accounting-entry-mapper'
-import { CreateAccountingEntryRequest } from '@/domains/accounting-entries/types'
+// Accounting entry imports removed — invoices auto-post journal entries on status change
 import { useHomeCurrency } from '@/domains/users/hooks/use-home-currency'
 import ExtractedInfoTags from './ExtractedInfoTags'
 import VendorContextNote from '@/domains/payables/components/vendor-context-note'
@@ -31,12 +30,12 @@ function isErrorDetails(value: unknown): value is ErrorDetails {
 
 // PERFORMANCE OPTIMIZATION: Dynamic imports for heavy components (only load when needed)
 const DocumentAnalysisModal = lazy(() => import('./document-analysis-modal'))
-const AccountingEntryFormModal = lazy(() => import('@/domains/accounting-entries/components/accounting-entry-edit-modal'))
+// AccountingEntryFormModal removed — invoices auto-post journal entries
 const ConfirmationDialog = lazy(() => import('@/components/ui/confirmation-dialog'))
 
 // ⚡ OPTIMIZATION: Preload functions for hover-triggered modal loading (improves perceived performance)
 const preloadDocumentAnalysisModal = () => import('./document-analysis-modal')
-const preloadAccountingEntryFormModal = () => import('@/domains/accounting-entries/components/accounting-entry-edit-modal')
+// preloadAccountingEntryFormModal removed
 const preloadConfirmationDialog = () => import('@/components/ui/confirmation-dialog')
 
 
@@ -209,86 +208,10 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
     setEditTransactionData(null)
   }
 
-  // ⚡ OPTIMIZATION: Memoize transaction handlers
-  // Handle transaction creation from document
-  const handleCreateTransaction = useCallback(async (data: CreateAccountingEntryRequest) => {
-    try {
-      // ✅ POLYMORPHIC: Set both source fields for invoice
-      const transactionData = {
-        ...data,
-        home_currency: data.home_currency || userHomeCurrency || 'USD',
-        source_record_id: data.source_record_id || transactionFormDocument,
-        source_document_type: 'invoice' as const
-      }
-
-      // Transaction data logging removed - API payload sent without verbose logging
-
-      const response = await fetch('/api/v1/accounting-entries', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(transactionData)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.text()
-        throw new Error(`Failed to create accounting entry: ${response.status} - ${errorData}`)
-      }
-
-      const result = await response.json()
-
-      if (result.success && result.data.transaction) {
-        // Refresh documents list to update the linked transaction status
-        await refreshDocuments()
-      }
-
-      setTransactionFormDocument(null)
-
-      // Optional: Show success message
-      // You could add a toast notification here
-    } catch (error) {
-      // Transaction creation error handled silently
-    }
-  }, [userHomeCurrency, transactionFormDocument, refreshDocuments])
-
-  // Handle transaction update from reprocessed document
-  const handleUpdateTransaction = useCallback(async (data: CreateAccountingEntryRequest) => {
-    if (!editTransactionData) return
-
-    try {
-      const response = await fetch(`/api/v1/accounting-entries/${editTransactionData.transactionId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...data,
-          // Remove fields that shouldn't be in the update request
-          source_record_id: undefined,
-          source_document_type: undefined,
-        })
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to update transaction')
-      }
-
-      setEditTransactionData(null)
-      
-      // Remove document from reprocessed set since update is complete
-      setReprocessedDocuments(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(editTransactionData.documentId)
-        return newSet
-      })
-      
-      // Refresh documents list
-      await refreshDocuments()
-
-    } catch (error) {
-      // Transaction update error handled silently
-    }
-  }, [editTransactionData, refreshDocuments])
+  // Accounting entry creation/update removed — invoices auto-post journal entries on status change
 
   // Handle saving invoice data directly (without creating accounting entries)
-  const handleSaveInvoice = useCallback(async (data: Partial<CreateAccountingEntryRequest>) => {
+  const handleSaveInvoice = useCallback(async (data: Partial<Record<string, any>>) => {
     if (!transactionFormDocument) return
 
     try {
@@ -336,28 +259,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
   // Get transaction by ID (we'll need to fetch it from API)
   const [editTransactionDetails, setEditTransactionDetails] = useState<any>(null)
   
-  // Fetch transaction details for editing when editTransactionData changes
-  useEffect(() => {
-    if (editTransactionData) {
-      fetchTransactionDetails(editTransactionData.transactionId)
-    } else {
-      setEditTransactionDetails(null)
-    }
-  }, [editTransactionData])
-
-  const fetchTransactionDetails = async (transactionId: string) => {
-    try {
-      const response = await fetch(`/api/v1/accounting-entries/${transactionId}`)
-      if (response.ok) {
-        const result = await response.json()
-        if (result.success) {
-          setEditTransactionDetails(result.data.transaction)
-        }
-      }
-    } catch (error) {
-      // Transaction details fetch error handled silently
-    }
-  }
+  // Transaction editing removed — accounting entries deprecated
 
   const getFileIcon = (fileType: string) => {
     if (fileType.startsWith('image/')) {
@@ -476,50 +378,7 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                     </Button>
                   )}
 
-                  {/* Add/View/Update Transaction button for completed documents with extractable data */}
-                  {isCompletedDocument(document.status) && document.extracted_data && canCreateAccountingEntryFromDocument(document as any) && (
-                    document.linked_transaction ? (
-                      reprocessedDocuments.has(document.id) ? (
-                        // Show Update Transaction for reprocessed documents
-                        <Button
-                          onClick={() => openTransactionEditForm(document.id, document.linked_transaction!.id)}
-                          onMouseEnter={preloadAccountingEntryFormModal}
-                          variant="primary"
-                          size="sm"
-                          title="Update Record"
-                          className="doc-action-btn"
-                        >
-                          <Plus className="w-4 h-4 sm:mr-1.5" />
-                          <span className="hidden sm:inline">Update Record</span>
-                        </Button>
-                      ) : (
-                        // Show View Transaction for normal processed documents
-                        <Button
-                          onClick={() => openTransactionView(document.linked_transaction!.id)}
-                          onMouseEnter={preloadAccountingEntryFormModal}
-                          variant="view"
-                          size="sm"
-                          title="View Record"
-                          className="doc-action-btn"
-                        >
-                          <Eye className="w-4 h-4 sm:mr-1.5" />
-                          <span className="hidden sm:inline">View Record</span>
-                        </Button>
-                      )
-                    ) : (
-                      <Button
-                        onClick={() => openTransactionForm(document.id)}
-                        onMouseEnter={preloadAccountingEntryFormModal}
-                        variant="primary"
-                        size="sm"
-                        title="Create Record"
-                        className="doc-action-btn"
-                      >
-                        <Plus className="w-4 h-4 sm:mr-1.5" />
-                        <span className="hidden sm:inline">Create Record</span>
-                      </Button>
-                    )
-                  )}
+                  {/* Transaction creation removed — invoices auto-post journal entries */}
 
                   {/* Reprocess button for completed documents */}
                   {isCompletedDocument(document.status) && (
@@ -617,37 +476,6 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
           <DocumentAnalysisModal
             document={getDocumentById(selectedDocument)! as any}
             onClose={closeModal}
-          />
-        </Suspense>
-      )}
-
-      {/* Transaction Form Modal with pre-filled data */}
-      {transactionFormDocument && getDocumentById(transactionFormDocument) && (
-        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-8 h-8 animate-spin text-primary-foreground" /></div>}>
-          <AccountingEntryFormModal
-            onClose={closeTransactionForm}
-            onSubmit={handleCreateTransaction}
-            prefilledData={{
-              ...mapDocumentToAccountingEntry(getDocumentById(transactionFormDocument)! as any),
-              // ✅ POLYMORPHIC: Link to invoice record with discriminator
-              source_record_id: transactionFormDocument,
-              source_document_type: 'invoice' as const
-            }}
-          />
-        </Suspense>
-      )}
-
-      {/* Transaction Edit Form Modal for reprocessed documents */}
-      {editTransactionData && getDocumentById(editTransactionData.documentId) && editTransactionDetails && (
-        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><Loader2 className="w-8 h-8 animate-spin text-primary-foreground" /></div>}>
-          <AccountingEntryFormModal
-            transaction={editTransactionDetails}
-            prefilledData={{
-              ...mapDocumentToAccountingEntry(getDocumentById(editTransactionData.documentId)! as any)
-              // Don't include source_record_id for updates
-            }}
-            onClose={closeTransactionEditForm}
-            onSubmit={handleUpdateTransaction}
           />
         </Suspense>
       )}

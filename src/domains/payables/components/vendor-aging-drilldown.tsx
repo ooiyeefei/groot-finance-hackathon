@@ -6,8 +6,8 @@ import { formatCurrency } from '@/lib/utils/format-number'
 import { formatBusinessDate } from '@/lib/utils'
 
 interface DrilldownEntry {
-  entryId: string
-  referenceNumber?: string
+  invoiceId: string
+  referenceNumber?: string | null
   originalAmount: number
   originalCurrency: string
   homeCurrencyAmount: number
@@ -17,7 +17,8 @@ interface DrilldownEntry {
   dueDate: string
   daysOverdue: number
   status: 'pending' | 'overdue'
-  category?: string
+  category?: string | null
+  notes?: string | null
 }
 
 interface VendorAgingDrilldownProps {
@@ -25,7 +26,7 @@ interface VendorAgingDrilldownProps {
   entries: DrilldownEntry[]
   isLoading: boolean
   onClose: () => void
-  onRecordPayment: (entryId: string) => void
+  onRecordPayment: (invoiceId: string) => void
   currency?: string
 }
 
@@ -83,7 +84,7 @@ export default function VendorAgingDrilldown({
                 </thead>
                 <tbody>
                   {entries.map((entry) => (
-                    <tr key={entry.entryId} className="border-b border-border hover:bg-muted/30 transition-colors">
+                    <tr key={entry.invoiceId} className="border-b border-border hover:bg-muted/30 transition-colors">
                       <td className="px-4 py-2.5">
                         <div className="text-foreground">{entry.referenceNumber || '—'}</div>
                         <div className="text-xs text-muted-foreground">{formatBusinessDate(entry.transactionDate)}</div>
@@ -112,7 +113,7 @@ export default function VendorAgingDrilldown({
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => onRecordPayment(entry.entryId)}
+                          onClick={() => onRecordPayment(entry.invoiceId)}
                         >
                           <CreditCard className="w-3 h-3" />
                           Pay

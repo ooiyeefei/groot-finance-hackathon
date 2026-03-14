@@ -420,6 +420,7 @@ export const internalCreate = internalMutation({
       low: "info",
     };
 
+    // @ts-ignore — Convex type instantiation depth limit (pre-existing, not related to accounting migration)
     await ctx.scheduler.runAfter(0, internal.functions.notifications.createForRole, {
       businessId: args.businessId as Id<"businesses">,
       targetRoles: ["owner", "finance_admin"],

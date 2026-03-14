@@ -27,7 +27,7 @@ export default function APDashboard() {
   const spend = useSpendAnalytics()
 
   // State for dialogs
-  const [paymentEntryId, setPaymentEntryId] = useState<string | null>(null)
+  const [paymentInvoiceId, setPaymentInvoiceId] = useState<string | null>(null)
 
   // Compute summary card values from aging and upcoming data
   const summaryValues = useMemo(() => {
@@ -57,8 +57,8 @@ export default function APDashboard() {
     return vendor?.vendorName ?? 'Vendor'
   }, [aging.selectedVendorId, aging.vendors])
 
-  const handleRecordPayment = (entryId: string) => {
-    setPaymentEntryId(entryId)
+  const handleRecordPayment = (invoiceId: string) => {
+    setPaymentInvoiceId(invoiceId)
   }
 
   return (
@@ -131,9 +131,9 @@ export default function APDashboard() {
 
       {/* Payment Recorder Dialog */}
       <PaymentRecorderDialog
-        entryId={paymentEntryId}
-        isOpen={paymentEntryId !== null}
-        onClose={() => setPaymentEntryId(null)}
+        invoiceId={paymentInvoiceId}
+        isOpen={paymentInvoiceId !== null}
+        onClose={() => setPaymentInvoiceId(null)}
       />
     </div>
   )

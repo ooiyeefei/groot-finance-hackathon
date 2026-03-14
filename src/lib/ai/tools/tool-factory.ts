@@ -7,7 +7,7 @@ import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, Mo
 import { DocumentSearchTool } from './document-search-tool'
 import { TransactionLookupTool } from './transaction-lookup-tool'
 import { GetVendorsTool } from './get-vendors-tool'
-import { CrossBorderTaxComplianceTool } from './cross-border-tax-compliance-tool'
+// CrossBorderTaxComplianceTool removed — deprecated
 import { RegulatoryKnowledgeTool } from './regulatory-knowledge-tool'
 // Category 3 Domain Intelligence Tools
 import { DetectAnomaliesTool } from './detect-anomalies-tool'
@@ -26,7 +26,6 @@ export type ToolName =
   | 'search_documents'
   | 'get_transactions'
   | 'get_vendors'
-  | 'analyze_cross_border_compliance'
   | 'searchRegulatoryKnowledgeBase'
   // Category 3: Domain intelligence tools (server-side analysis)
   | 'detect_anomalies'
@@ -54,7 +53,6 @@ export class ToolFactory {
     this.registerTool('search_documents', () => new DocumentSearchTool())
     this.registerTool('get_transactions', () => new TransactionLookupTool())
     this.registerTool('get_vendors', () => new GetVendorsTool())
-    this.registerTool('analyze_cross_border_compliance', () => new CrossBorderTaxComplianceTool())
     this.registerTool('searchRegulatoryKnowledgeBase', () => new RegulatoryKnowledgeTool())
 
     // Category 3: Domain Intelligence Tools

@@ -923,6 +923,24 @@ export default defineSchema({
       v.literal("voided")
     )),
 
+    // AP Subledger: Payment tracking (invoices = AP subledger)
+    paidAmount: v.optional(v.number()),
+    paymentStatus: v.optional(v.union(
+      v.literal("unpaid"),
+      v.literal("partial"),
+      v.literal("paid")
+    )),
+    dueDate: v.optional(v.string()),
+    paymentHistory: v.optional(v.array(v.object({
+      amount: v.number(),
+      paymentDate: v.string(),
+      paymentMethod: v.string(),
+      journalEntryId: v.id("journal_entries"),
+      notes: v.optional(v.string()),
+      recordedBy: v.string(),
+      recordedAt: v.number(),
+    }))),
+
     // Timestamps
     processingStartedAt: v.optional(v.number()),
     processedAt: v.optional(v.number()),
@@ -949,7 +967,9 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_legacyId", ["legacyId"])
     // LHDN self-bill index
-    .index("by_businessId_lhdnStatus", ["businessId", "lhdnStatus"]),
+    .index("by_businessId_lhdnStatus", ["businessId", "lhdnStatus"])
+    // AP subledger: payment status queries
+    .index("by_business_payment_status", ["businessId", "paymentStatus"]),
 
   // ============================================
   // CHAT DOMAIN (Real-time enabled)

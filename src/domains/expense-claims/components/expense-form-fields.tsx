@@ -31,7 +31,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { BulkSuggestions } from './field-suggestion'
-import { formatCurrency } from '@/domains/accounting-entries/hooks/use-accounting-entries'
+import { formatCurrency } from '@/lib/utils/format-number'
 import { SupportedCurrency } from '@/domains/accounting-entries/types'
 import { ExpenseFormData, ReceiptInfo, AISuggestion } from '@/domains/expense-claims/hooks/use-expense-form'
 

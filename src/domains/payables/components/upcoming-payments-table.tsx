@@ -7,7 +7,7 @@ import { formatBusinessDate } from '@/lib/utils'
 
 interface UpcomingPayment {
   entryId: string
-  vendorId?: string
+  vendorId?: string | null
   vendorName: string
   originalAmount: number
   originalCurrency: string
@@ -16,7 +16,7 @@ interface UpcomingPayment {
   dueDate: string
   daysRemaining: number
   status: 'pending' | 'overdue'
-  referenceNumber?: string
+  referenceNumber?: string | null
 }
 
 interface UpcomingPaymentsTableProps {

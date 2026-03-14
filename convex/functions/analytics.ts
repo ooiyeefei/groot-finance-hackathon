@@ -144,10 +144,8 @@ export const getDashboardAnalytics = query({
 });
 
 /**
- * Get aged receivables (income transactions that are pending/overdue)
- * NOTE: This function queries accounting_entries because AR aging requires
- * invoice-level metadata (dueDate, status) that isn't stored in journal entries.
- * Journal entries are for posted transactions only.
+ * Get aged receivables from sales_invoices (outstanding invoices by aging bucket).
+ * Queries sales_invoices with status in ("sent", "overdue", "partially_paid").
  */
 export const getAgedReceivables = query({
   args: {
@@ -176,18 +174,15 @@ export const getAgedReceivables = query({
       return null;
     }
 
-    // NOTE: Still using accounting_entries for AR aging because we need invoice metadata
-    // (dueDate, status) that isn't stored in journal entries.
-    // TODO: Migrate to sales_invoices table with proper AR tracking
-    const entries = await ctx.db
-      .query("accounting_entries")
+    // Query outstanding sales invoices
+    const invoices = await ctx.db
+      .query("sales_invoices")
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
       .collect();
 
-    const receivables = entries.filter((entry) => {
-      if (entry.deletedAt) return false;
-      if (entry.transactionType !== "Income") return false;
-      return ["pending", "overdue"].includes(entry.status);
+    const receivables = invoices.filter((inv) => {
+      if (inv.deletedAt) return false;
+      return ["sent", "overdue", "partially_paid"].includes(inv.status);
     });
 
     const currentDate = new Date();
@@ -200,15 +195,11 @@ export const getAgedReceivables = query({
     let highRiskCount = 0;
     const riskScores: number[] = [];
 
-    for (const txn of receivables) {
-      const amount = txn.homeCurrencyAmount || txn.originalAmount || 0;
+    for (const inv of receivables) {
+      const amount = inv.balanceDue;
 
-      // Calculate days past due
-      const transactionDate = new Date(txn.transactionDate);
-      const dueDate = txn.dueDate
-        ? new Date(txn.dueDate)
-        : new Date(transactionDate.getTime() + 30 * 24 * 60 * 60 * 1000); // Default 30 days
-
+      // Calculate days past due from dueDate
+      const dueDate = new Date(inv.dueDate);
       const daysPastDue = Math.floor(
         (currentDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
       );
@@ -266,10 +257,8 @@ export const getAgedReceivables = query({
 });
 
 /**
- * Get aged payables (expense transactions that are pending/overdue)
- * NOTE: This function queries accounting_entries because AP aging requires
- * invoice-level metadata (dueDate, status, vendorId) that isn't stored in journal entries.
- * Journal entries are for posted transactions only.
+ * Get aged payables (AP invoices that are unpaid or partially paid)
+ * Queries the invoices table with payment tracking fields.
  */
 export const getAgedPayables = query({
   args: {
@@ -298,21 +287,31 @@ export const getAgedPayables = query({
       return null;
     }
 
-    // NOTE: Still using accounting_entries for AP aging because we need invoice metadata
-    // (dueDate, status, vendorId) that isn't stored in journal entries.
-    // TODO: Migrate to invoices table with proper AP tracking
-    const entries = await ctx.db
-      .query("accounting_entries")
+    // Query invoices table for AP (supplier invoices with posted accounting status, not fully paid)
+    const allInvoices = await ctx.db
+      .query("invoices")
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
       .collect();
 
-    const payables = entries.filter((entry) => {
-      if (entry.deletedAt) return false;
-      if (entry.sourceDocumentType === "expense_claim") return false; // AP = supplier invoices only
-      if (entry.transactionType !== "Expense" && entry.transactionType !== "Cost of Goods Sold")
-        return false;
-      return ["pending", "overdue"].includes(entry.status);
+    const payables = allInvoices.filter((inv) => {
+      if (inv.deletedAt) return false;
+      if (inv.accountingStatus !== "posted") return false;
+      if (inv.paymentStatus === "paid") return false;
+      // Only AP invoices (not expense claim receipts)
+      if (inv.documentDomain === "expense_claims") return false;
+      return true;
     });
+
+    // Batch-fetch journal entries for amount calculation
+    const journalEntryIds = payables
+      .map((inv) => inv.journalEntryId)
+      .filter(Boolean) as Array<any>;
+    const journalEntries = await Promise.all(
+      journalEntryIds.map((id) => ctx.db.get(id))
+    );
+    const journalEntryMap = new Map(
+      journalEntries.filter(Boolean).map((je) => [je!._id.toString(), je!])
+    );
 
     const currentDate = new Date();
     let current = 0;
@@ -324,14 +323,26 @@ export const getAgedPayables = query({
     let highRiskCount = 0;
     const riskScores: number[] = [];
 
-    for (const txn of payables) {
-      const amount = Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0);
+    for (const inv of payables) {
+      // Get total amount: prefer journal entry totalDebit, fallback to extractedData
+      const extracted = (inv as any).extractedData;
+      let totalAmount = 0;
+      if (inv.journalEntryId) {
+        const je = journalEntryMap.get(inv.journalEntryId.toString());
+        totalAmount = (je as any)?.totalDebit ?? 0;
+      }
+      if (!totalAmount && extracted) {
+        const rawTotal = extracted.total_amount?.value ?? extracted.total_amount;
+        totalAmount = typeof rawTotal === "number" ? rawTotal : parseFloat(rawTotal) || 0;
+      }
+
+      const paidAmount = inv.paidAmount ?? 0;
+      const outstanding = Math.abs(totalAmount - paidAmount);
 
       // Calculate days past due
-      const transactionDate = new Date(txn.transactionDate);
-      const dueDate = txn.dueDate
-        ? new Date(txn.dueDate)
-        : new Date(transactionDate.getTime() + 30 * 24 * 60 * 60 * 1000); // Default 30 days
+      const dueDate = inv.dueDate
+        ? new Date(inv.dueDate)
+        : new Date(inv._creationTime + 30 * 24 * 60 * 60 * 1000); // Default 30 days from creation
 
       const daysPastDue = Math.floor(
         (currentDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
@@ -339,16 +350,16 @@ export const getAgedPayables = query({
 
       // Categorize by age
       if (daysPastDue <= 30) {
-        current += amount;
+        current += outstanding;
       } else if (daysPastDue <= 60) {
-        late31_60 += amount;
+        late31_60 += outstanding;
       } else if (daysPastDue <= 90) {
-        late61_90 += amount;
+        late61_90 += outstanding;
       } else {
-        late90Plus += amount;
+        late90Plus += outstanding;
       }
 
-      totalOutstanding += amount;
+      totalOutstanding += outstanding;
 
       // Calculate risk score (0-100)
       let riskScore = 0;
@@ -359,7 +370,7 @@ export const getAgedPayables = query({
       else riskScore = 95;
 
       // Adjust by amount
-      if (amount > 10000) riskScore = Math.min(100, riskScore + 10);
+      if (outstanding > 10000) riskScore = Math.min(100, riskScore + 10);
 
       riskScores.push(riskScore);
 
@@ -394,8 +405,9 @@ export const getAgedPayables = query({
 // ============================================
 
 /**
- * Get overdue receivables for cash flow monitoring
- * NOTE: Still uses accounting_entries for invoice-level metadata.
+ * Get overdue receivables for cash flow monitoring.
+ * Queries sales_invoices with status in ("sent", "overdue", "partially_paid")
+ * and filters by aging threshold. Joins to customers table for customer info.
  */
 export const getOverdueReceivables = query({
   args: {
@@ -427,17 +439,23 @@ export const getOverdueReceivables = query({
 
     const agingThreshold = args.agingThresholdDays ?? 45;
 
-    // NOTE: Still using accounting_entries for AR with invoice metadata
-    const entries = await ctx.db
-      .query("accounting_entries")
+    // Query outstanding sales invoices
+    const invoices = await ctx.db
+      .query("sales_invoices")
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
       .collect();
 
-    const receivables = entries.filter((entry) => {
-      if (entry.deletedAt) return false;
-      if (entry.transactionType !== "Income") return false;
-      return ["pending", "overdue"].includes(entry.status);
+    const receivables = invoices.filter((inv) => {
+      if (inv.deletedAt) return false;
+      return ["sent", "overdue", "partially_paid"].includes(inv.status);
     });
+
+    // Batch-fetch customer names for all receivables with a customerId
+    const customerIds = [...new Set(receivables.map((inv) => inv.customerId).filter(Boolean))];
+    const customers = await Promise.all(customerIds.map((id) => ctx.db.get(id!)));
+    const customerMap = new Map(
+      customers.filter(Boolean).map((c) => [c!._id.toString(), c!.businessName])
+    );
 
     const currentDate = new Date();
     const overdueItems: Array<{
@@ -449,22 +467,23 @@ export const getOverdueReceivables = query({
       daysPastDue: number;
     }> = [];
 
-    for (const txn of receivables) {
-      const transactionDate = new Date(txn.transactionDate);
-      const dueDate = txn.dueDate
-        ? new Date(txn.dueDate)
-        : new Date(transactionDate.getTime() + 30 * 24 * 60 * 60 * 1000);
-
+    for (const inv of receivables) {
+      const dueDate = new Date(inv.dueDate);
       const daysPastDue = Math.floor(
         (currentDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
       );
 
       if (daysPastDue > agingThreshold) {
+        // Resolve customer name: prefer customers table, fallback to snapshot
+        const customerName = inv.customerId
+          ? (customerMap.get(inv.customerId.toString()) ?? inv.customerSnapshot.businessName)
+          : inv.customerSnapshot.businessName;
+
         overdueItems.push({
-          id: txn._id,
-          vendorName: txn.vendorName || null,
-          amount: txn.homeCurrencyAmount || txn.originalAmount || 0,
-          currency: txn.homeCurrency || txn.originalCurrency || "MYR",
+          id: inv._id,
+          vendorName: customerName || null,
+          amount: inv.balanceDue,
+          currency: inv.currency,
           dueDate: dueDate.toISOString(),
           daysPastDue,
         });
@@ -476,8 +495,8 @@ export const getOverdueReceivables = query({
 });
 
 /**
- * Get upcoming payment deadlines
- * NOTE: Still uses accounting_entries for invoice-level metadata.
+ * Get upcoming payment deadlines from invoices table.
+ * Returns AP invoices with due dates within the specified window.
  */
 export const getUpcomingPayments = query({
   args: {
@@ -509,18 +528,18 @@ export const getUpcomingPayments = query({
 
     const windowDays = args.windowDays ?? 7;
 
-    // NOTE: Still using accounting_entries for AP with invoice metadata
-    const entries = await ctx.db
-      .query("accounting_entries")
+    // Query invoices table for unpaid/partial AP invoices
+    const allInvoices = await ctx.db
+      .query("invoices")
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
       .collect();
 
-    const payables = entries.filter((entry) => {
-      if (entry.deletedAt) return false;
-      if (entry.sourceDocumentType === "expense_claim") return false; // AP = supplier invoices only
-      if (entry.transactionType !== "Expense" && entry.transactionType !== "Cost of Goods Sold")
-        return false;
-      return ["pending"].includes(entry.status);
+    const payables = allInvoices.filter((inv) => {
+      if (inv.deletedAt) return false;
+      if (inv.documentDomain === "expense_claims") return false;
+      if (inv.paymentStatus === "paid") return false;
+      if (!inv.dueDate) return false;
+      return true;
     });
 
     const currentDate = new Date();
@@ -535,21 +554,27 @@ export const getUpcomingPayments = query({
       daysUntilDue: number;
     }> = [];
 
-    for (const txn of payables) {
-      if (!txn.dueDate) continue;
-
-      const dueDate = new Date(txn.dueDate);
+    for (const inv of payables) {
+      const dueDate = new Date(inv.dueDate!);
 
       if (dueDate >= currentDate && dueDate <= windowEnd) {
         const daysUntilDue = Math.floor(
           (dueDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24)
         );
 
+        // Extract vendor name and amount from extractedData
+        const extracted = (inv as any).extractedData;
+        const vendorName = extracted?.vendor_name?.value ?? extracted?.vendor_name ?? null;
+        const rawTotal = extracted?.total_amount?.value ?? extracted?.total_amount;
+        const totalAmount = typeof rawTotal === "number" ? rawTotal : parseFloat(rawTotal) || 0;
+        const outstanding = totalAmount - (inv.paidAmount ?? 0);
+        const currency = extracted?.currency?.value ?? extracted?.currency ?? "MYR";
+
         upcomingPayments.push({
-          id: txn._id,
-          vendorName: txn.vendorName || null,
-          amount: Math.abs(txn.homeCurrencyAmount || txn.originalAmount || 0),
-          currency: txn.homeCurrency || txn.originalCurrency || "MYR",
+          id: inv._id,
+          vendorName: typeof vendorName === "string" ? vendorName : null,
+          amount: Math.abs(outstanding),
+          currency: typeof currency === "string" ? currency : "MYR",
           dueDate: dueDate.toISOString(),
           daysUntilDue,
         });
@@ -729,8 +754,8 @@ export const getCashFlowProjection = query({
 
 /**
  * Get aged payables grouped by vendor with aging bucket breakdown.
- * Includes "Unassigned Vendor" row for entries without vendorId.
- * NOTE: Still uses accounting_entries for vendor-level AP aging.
+ * Queries the invoices table and extracts vendor name from extractedData.
+ * Includes "Unassigned Vendor" row for invoices without a vendor name.
  */
 export const getAgedPayablesByVendor = query({
   args: {
@@ -758,21 +783,41 @@ export const getAgedPayablesByVendor = query({
       return null;
     }
 
-    // NOTE: Still using accounting_entries for AP with vendor metadata
-    const entries = await ctx.db
-      .query("accounting_entries")
+    // Query invoices table for unpaid/partial AP invoices
+    const allInvoices = await ctx.db
+      .query("invoices")
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
       .collect();
 
-    const payables = entries.filter(
-      (e) =>
-        !e.deletedAt &&
-        e.sourceDocumentType !== "expense_claim" && // AP = supplier invoices only
-        (e.status === "pending" || e.status === "overdue") &&
-        (e.transactionType === "Expense" || e.transactionType === "Cost of Goods Sold")
+    const payables = allInvoices.filter((inv) => {
+      if (inv.deletedAt) return false;
+      if (inv.documentDomain === "expense_claims") return false;
+      if (inv.accountingStatus !== "posted") return false;
+      if (inv.paymentStatus === "paid") return false;
+      return true;
+    });
+
+    // Batch-fetch journal entries for amount calculation
+    const journalEntryIds = payables
+      .map((inv) => inv.journalEntryId)
+      .filter(Boolean) as Array<any>;
+    const journalEntries = await Promise.all(
+      journalEntryIds.map((id) => ctx.db.get(id))
+    );
+    const journalEntryMap = new Map(
+      journalEntries.filter(Boolean).map((je) => [je!._id.toString(), je!])
     );
 
-    // Group by vendorId
+    // Fetch all vendors for this business for name -> vendorId lookup
+    const allVendors = await ctx.db
+      .query("vendors")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+    const vendorByName = new Map(
+      allVendors.map((v) => [v.name.toLowerCase(), v])
+    );
+
+    // Group by vendor name (extracted from invoice)
     const vendorGroups = new Map<
       string,
       { current: number; days1to30: number; days31to60: number; days61to90: number; days90plus: number; totalOutstanding: number; entryCount: number }
@@ -780,14 +825,25 @@ export const getAgedPayablesByVendor = query({
 
     const today = new Date();
 
-    // Fetch all vendors for name lookup and payment terms
-    const vendorIds = [...new Set(payables.map((e) => e.vendorId).filter(Boolean))];
-    const vendors = await Promise.all(vendorIds.map((id) => ctx.db.get(id!)));
-    const vendorMap = new Map(vendors.filter(Boolean).map((v) => [v!._id.toString(), v!]));
+    for (const inv of payables) {
+      const extracted = (inv as any).extractedData;
+      const rawVendorName = extracted?.vendor_name?.value ?? extracted?.vendor_name;
+      const vendorName = typeof rawVendorName === "string" ? rawVendorName : null;
+      const vendorKey = vendorName ? vendorName.toLowerCase() : "__unassigned__";
 
-    for (const entry of payables) {
-      const vendorKey = entry.vendorId ? entry.vendorId.toString() : "__unassigned__";
-      const outstanding = (entry.homeCurrencyAmount ?? entry.originalAmount) - (entry.paidAmount ?? 0);
+      // Get total amount from journal entry or extractedData
+      let totalAmount = 0;
+      if (inv.journalEntryId) {
+        const je = journalEntryMap.get(inv.journalEntryId.toString());
+        totalAmount = (je as any)?.totalDebit ?? 0;
+      }
+      if (!totalAmount && extracted) {
+        const rawTotal = extracted.total_amount?.value ?? extracted.total_amount;
+        totalAmount = typeof rawTotal === "number" ? rawTotal : parseFloat(rawTotal) || 0;
+      }
+
+      const paidAmount = inv.paidAmount ?? 0;
+      const outstanding = Math.abs(totalAmount - paidAmount);
 
       if (!vendorGroups.has(vendorKey)) {
         vendorGroups.set(vendorKey, {
@@ -801,7 +857,7 @@ export const getAgedPayablesByVendor = query({
       group.entryCount++;
 
       // Calculate days overdue from dueDate
-      const dueDate = entry.dueDate ? new Date(entry.dueDate) : null;
+      const dueDate = inv.dueDate ? new Date(inv.dueDate) : null;
       const daysOverdue = dueDate
         ? Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
         : 0;
@@ -813,12 +869,12 @@ export const getAgedPayablesByVendor = query({
       else group.days90plus += outstanding;
     }
 
-    // Build vendor array
+    // Build vendor array with vendorId lookup
     const vendorArray = Array.from(vendorGroups.entries()).map(([key, data]) => {
-      const vendor = key !== "__unassigned__" ? vendorMap.get(key) : null;
+      const vendor = key !== "__unassigned__" ? vendorByName.get(key) : null;
       return {
-        vendorId: key !== "__unassigned__" ? key : null,
-        vendorName: vendor?.name ?? "Unassigned Vendor",
+        vendorId: vendor ? vendor._id.toString() : null,
+        vendorName: vendor?.name ?? (key !== "__unassigned__" ? key : "Unassigned Vendor"),
         paymentTerms: vendor?.paymentTerms,
         ...data,
       };
@@ -845,8 +901,9 @@ export const getAgedPayablesByVendor = query({
 });
 
 /**
- * Get individual unpaid entries for a specific vendor (drilldown).
- * NOTE: Still uses accounting_entries for vendor-level AP details.
+ * Get individual unpaid invoices for a specific vendor (drilldown).
+ * Queries the invoices table, matching vendor by name from extractedData or vendorId.
+ * Returns invoiceId (not entryId) for the payment dialog.
  */
 export const getVendorPayablesDrilldown = query({
   args: {
@@ -875,50 +932,113 @@ export const getVendorPayablesDrilldown = query({
       return [];
     }
 
-    // NOTE: Still using accounting_entries for AP vendor details
-    const entries = await ctx.db
-      .query("accounting_entries")
+    // Query invoices table for unpaid/partial AP invoices
+    const allInvoices = await ctx.db
+      .query("invoices")
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
       .collect();
 
+    // Look up vendor name if vendorId is provided
+    let targetVendorName: string | null = null;
+    if (args.vendorId) {
+      try {
+        const vendor = await ctx.db.get(args.vendorId as any);
+        targetVendorName = (vendor as any)?.name?.toLowerCase() ?? null;
+      } catch {
+        // vendorId might be a raw string name, not a Convex ID
+        targetVendorName = args.vendorId.toLowerCase();
+      }
+    }
+
     const today = new Date();
 
-    const filtered = entries.filter((e) => {
-      if (e.deletedAt) return false;
-      if (e.sourceDocumentType === "expense_claim") return false; // AP = supplier invoices only
-      if (e.status !== "pending" && e.status !== "overdue") return false;
-      if (e.transactionType !== "Expense" && e.transactionType !== "Cost of Goods Sold") return false;
+    // Filter to posted, unpaid AP invoices
+    const postedInvoices = allInvoices.filter((inv) => {
+      if (inv.deletedAt) return false;
+      if (inv.documentDomain === "expense_claims") return false;
+      if (inv.accountingStatus !== "posted") return false;
+      if (inv.paymentStatus === "paid") return false;
+      return true;
+    });
 
-      // Match vendorId (null/undefined for unassigned)
+    // Batch-fetch journal entries for amount calculation
+    const journalEntryIds = postedInvoices
+      .map((inv) => inv.journalEntryId)
+      .filter(Boolean) as Array<any>;
+    const journalEntries = await Promise.all(
+      journalEntryIds.map((id) => ctx.db.get(id))
+    );
+    const journalEntryMap = new Map(
+      journalEntries.filter(Boolean).map((je) => [je!._id.toString(), je!])
+    );
+
+    // Filter by vendor
+    const filtered = postedInvoices.filter((inv) => {
+      const extracted = (inv as any).extractedData;
+      const rawVendorName = extracted?.vendor_name?.value ?? extracted?.vendor_name;
+      const invoiceVendorName = typeof rawVendorName === "string" ? rawVendorName.toLowerCase() : null;
+
       if (args.vendorId) {
-        return e.vendorId?.toString() === args.vendorId;
+        return invoiceVendorName === targetVendorName;
       } else {
-        return !e.vendorId;
+        // Unassigned: no vendor name in extractedData
+        return !invoiceVendorName;
       }
     });
 
     return filtered
-      .map((e) => {
-        const outstanding = e.originalAmount - (e.paidAmount ?? 0);
-        const dueDate = e.dueDate ? new Date(e.dueDate) : null;
+      .map((inv) => {
+        const extracted = (inv as any).extractedData;
+
+        // Get total amount from journal entry or extractedData
+        let totalAmount = 0;
+        if (inv.journalEntryId) {
+          const je = journalEntryMap.get(inv.journalEntryId.toString());
+          totalAmount = (je as any)?.totalDebit ?? 0;
+        }
+        if (!totalAmount && extracted) {
+          const rawTotal = extracted.total_amount?.value ?? extracted.total_amount;
+          totalAmount = typeof rawTotal === "number" ? rawTotal : parseFloat(rawTotal) || 0;
+        }
+
+        const paidAmount = inv.paidAmount ?? 0;
+        const outstanding = Math.abs(totalAmount - paidAmount);
+        const dueDate = inv.dueDate ? new Date(inv.dueDate) : null;
         const daysOverdue = dueDate
           ? Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
           : 0;
 
+        // Extract reference number from extractedData
+        const referenceNumber =
+          extracted?.invoice_number?.value ??
+          extracted?.invoice_number ??
+          extracted?.reference_number?.value ??
+          extracted?.reference_number ??
+          null;
+
+        // Extract currency
+        const currency = extracted?.currency?.value ?? extracted?.currency ?? "MYR";
+
+        // Determine status based on dueDate
+        const isOverdue = dueDate ? dueDate < today : false;
+        const status: "pending" | "overdue" = isOverdue ? "overdue" : "pending";
+
         return {
-          entryId: e._id,
-          referenceNumber: e.referenceNumber,
-          originalAmount: e.originalAmount,
-          originalCurrency: e.originalCurrency,
-          homeCurrencyAmount: e.homeCurrencyAmount ?? e.originalAmount,
-          paidAmount: e.paidAmount ?? 0,
+          invoiceId: inv._id,
+          referenceNumber: typeof referenceNumber === "string" ? referenceNumber : null,
+          originalAmount: totalAmount,
+          originalCurrency: typeof currency === "string" ? currency : "MYR",
+          homeCurrencyAmount: totalAmount,
+          paidAmount,
           outstandingBalance: outstanding,
-          transactionDate: e.transactionDate,
-          dueDate: e.dueDate ?? "",
+          transactionDate: inv._creationTime
+            ? new Date(inv._creationTime).toISOString().split("T")[0]
+            : "",
+          dueDate: inv.dueDate ?? "",
           daysOverdue,
-          status: e.status as "pending" | "overdue",
-          category: e.category,
-          notes: e.notes,
+          status,
+          category: null as string | null,
+          notes: null as string | null,
         };
       })
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
@@ -927,8 +1047,8 @@ export const getVendorPayablesDrilldown = query({
 
 /**
  * Get pending payables due within a specified window (upcoming payments).
- * Includes overdue entries at the top.
- * NOTE: Still uses accounting_entries for AP with due dates.
+ * Includes overdue invoices at the top.
+ * Queries the invoices table for AP data.
  */
 export const getAPUpcomingPayments = query({
   args: {
@@ -957,50 +1077,97 @@ export const getAPUpcomingPayments = query({
       return [];
     }
 
-    // NOTE: Still using accounting_entries for AP with due dates
-    const entries = await ctx.db
-      .query("accounting_entries")
+    // Query invoices table for unpaid/partial AP invoices with due dates
+    const allInvoices = await ctx.db
+      .query("invoices")
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
       .collect();
 
     const today = new Date();
     const windowEnd = new Date(today.getTime() + args.daysAhead * 24 * 60 * 60 * 1000);
     const windowEndStr = windowEnd.toISOString().split("T")[0];
-    const todayStr = today.toISOString().split("T")[0];
 
-    const payables = entries.filter((e) => {
-      if (e.deletedAt) return false;
-      if (e.sourceDocumentType === "expense_claim") return false; // AP = supplier invoices only
-      if (e.status !== "pending" && e.status !== "overdue") return false;
-      if (e.transactionType !== "Expense" && e.transactionType !== "Cost of Goods Sold") return false;
-      if (!e.dueDate) return false;
+    const payables = allInvoices.filter((inv) => {
+      if (inv.deletedAt) return false;
+      if (inv.documentDomain === "expense_claims") return false;
+      if (inv.accountingStatus !== "posted") return false;
+      if (inv.paymentStatus === "paid") return false;
+      if (!inv.dueDate) return false;
       // Include overdue (dueDate < today) and upcoming (dueDate <= windowEnd)
-      return e.dueDate <= windowEndStr;
+      return inv.dueDate <= windowEndStr;
     });
 
-    // Fetch vendor names
-    const vendorIds = [...new Set(payables.map((e) => e.vendorId).filter(Boolean))];
-    const vendors = await Promise.all(vendorIds.map((id) => ctx.db.get(id!)));
-    const vendorMap = new Map(vendors.filter(Boolean).map((v) => [v!._id.toString(), v!.name]));
+    // Batch-fetch journal entries for amount calculation
+    const journalEntryIds = payables
+      .map((inv) => inv.journalEntryId)
+      .filter(Boolean) as Array<any>;
+    const journalEntries = await Promise.all(
+      journalEntryIds.map((id) => ctx.db.get(id))
+    );
+    const journalEntryMap = new Map(
+      journalEntries.filter(Boolean).map((je) => [je!._id.toString(), je!])
+    );
 
-    const result = payables.map((e) => {
-      const dueDate = new Date(e.dueDate!);
+    // Fetch all vendors for this business for name -> vendorId lookup
+    const allVendors = await ctx.db
+      .query("vendors")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+    const vendorByName = new Map(
+      allVendors.map((v) => [v.name.toLowerCase(), v])
+    );
+
+    const result = payables.map((inv) => {
+      const extracted = (inv as any).extractedData;
+      const dueDate = new Date(inv.dueDate!);
       const daysRemaining = Math.floor(
         (dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
       );
 
+      // Get total amount from journal entry or extractedData
+      let totalAmount = 0;
+      if (inv.journalEntryId) {
+        const je = journalEntryMap.get(inv.journalEntryId.toString());
+        totalAmount = (je as any)?.totalDebit ?? 0;
+      }
+      if (!totalAmount && extracted) {
+        const rawTotal = extracted.total_amount?.value ?? extracted.total_amount;
+        totalAmount = typeof rawTotal === "number" ? rawTotal : parseFloat(rawTotal) || 0;
+      }
+
+      const paidAmount = inv.paidAmount ?? 0;
+      const outstanding = Math.abs(totalAmount - paidAmount);
+
+      // Extract vendor name and look up vendorId
+      const rawVendorName = extracted?.vendor_name?.value ?? extracted?.vendor_name;
+      const vendorName = typeof rawVendorName === "string" ? rawVendorName : null;
+      const vendor = vendorName ? vendorByName.get(vendorName.toLowerCase()) : null;
+
+      // Extract currency and reference number
+      const currency = extracted?.currency?.value ?? extracted?.currency ?? "MYR";
+      const referenceNumber =
+        extracted?.invoice_number?.value ??
+        extracted?.invoice_number ??
+        extracted?.reference_number?.value ??
+        extracted?.reference_number ??
+        null;
+
+      // Determine status based on dueDate
+      const isOverdue = dueDate < today;
+      const status: "pending" | "overdue" = isOverdue ? "overdue" : "pending";
+
       return {
-        entryId: e._id,
-        vendorId: e.vendorId,
-        vendorName: e.vendorId ? (vendorMap.get(e.vendorId.toString()) ?? "Unknown Vendor") : "Unassigned Vendor",
-        originalAmount: e.originalAmount,
-        originalCurrency: e.originalCurrency,
-        homeCurrencyAmount: e.homeCurrencyAmount ?? e.originalAmount,
-        outstandingBalance: e.originalAmount - (e.paidAmount ?? 0),
-        dueDate: e.dueDate!,
+        entryId: inv._id,
+        vendorId: vendor ? vendor._id : null,
+        vendorName: vendorName ?? "Unassigned Vendor",
+        originalAmount: totalAmount,
+        originalCurrency: typeof currency === "string" ? currency : "MYR",
+        homeCurrencyAmount: totalAmount,
+        outstandingBalance: outstanding,
+        dueDate: inv.dueDate!,
         daysRemaining,
-        status: e.status as "pending" | "overdue",
-        referenceNumber: e.referenceNumber,
+        status,
+        referenceNumber: typeof referenceNumber === "string" ? referenceNumber : null,
       };
     });
 
@@ -1018,7 +1185,7 @@ export const getAPUpcomingPayments = query({
 /**
  * Get vendor spend analytics for a selectable period.
  * Returns top vendors, category breakdown, monthly trend, and total spend.
- * NOTE: Still uses accounting_entries for vendor spend tracking.
+ * Queries journal_entry_lines with vendor entity type for spend data.
  */
 export const getVendorSpendAnalytics = query({
   args: {
@@ -1051,64 +1218,116 @@ export const getVendorSpendAnalytics = query({
       .toISOString()
       .split("T")[0];
 
-    // NOTE: Still using accounting_entries for vendor spend analytics
-    const entries = await ctx.db
-      .query("accounting_entries")
+    // Query journal entries for the business within the period
+    const allJournalEntries = await ctx.db
+      .query("journal_entries")
       .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
       .collect();
 
-    const spendEntries = entries.filter(
-      (e) =>
-        !e.deletedAt &&
-        e.sourceDocumentType !== "expense_claim" && // AP = supplier invoices only
-        (e.transactionType === "Expense" || e.transactionType === "Cost of Goods Sold") &&
-        (e.status === "paid" || e.status === "pending" || e.status === "overdue") &&
-        e.transactionDate >= cutoffDate
+    const relevantEntries = allJournalEntries.filter(
+      (je) =>
+        je.status === "posted" &&
+        je.transactionDate >= cutoffDate &&
+        (je.sourceType === "vendor_invoice" || je.sourceType === "payment")
     );
 
-    // Fetch vendor names
-    const vendorIds = [...new Set(spendEntries.map((e) => e.vendorId).filter(Boolean))];
-    const vendors = await Promise.all(vendorIds.map((id) => ctx.db.get(id!)));
-    const vendorMap = new Map(vendors.filter(Boolean).map((v) => [v!._id.toString(), v!.name]));
+    // Fetch all lines for relevant journal entries
+    const allLines = await Promise.all(
+      relevantEntries.map(async (entry) => {
+        const lines = await ctx.db
+          .query("journal_entry_lines")
+          .withIndex("by_journal_entry", (q) => q.eq("journalEntryId", entry._id))
+          .collect();
+        return lines.map((line) => ({ ...line, transactionDate: entry.transactionDate }));
+      })
+    );
+
+    // Filter to expense account lines (5000-5999 = expense/COGS accounts, debit side)
+    const expenseLines = allLines.flat().filter(
+      (line) => line.accountCode >= "5000" && line.accountCode < "6000" && line.debitAmount > 0
+    );
+
+    // Also query invoices to map journal entries back to vendor names
+    const allInvoices = await ctx.db
+      .query("invoices")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    // Build a map of journalEntryId -> vendor name from invoices
+    const jeToVendorName = new Map<string, string>();
+    for (const inv of allInvoices) {
+      if (inv.journalEntryId) {
+        const extracted = (inv as any).extractedData;
+        const rawVendorName = extracted?.vendor_name?.value ?? extracted?.vendor_name;
+        if (typeof rawVendorName === "string") {
+          jeToVendorName.set(inv.journalEntryId.toString(), rawVendorName);
+        }
+      }
+    }
+
+    // Fetch all vendors for this business for name -> vendorId lookup
+    const allVendors = await ctx.db
+      .query("vendors")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+    const vendorByName = new Map(
+      allVendors.map((v) => [v.name.toLowerCase(), v])
+    );
 
     // Aggregate by vendor
     const vendorSpend = new Map<string, { totalSpend: number; transactionCount: number }>();
     let totalSpend = 0;
 
-    for (const e of spendEntries) {
-      const amount = e.homeCurrencyAmount ?? e.originalAmount;
+    // Aggregate by category (account name)
+    const categorySpend = new Map<string, { totalSpend: number; transactionCount: number }>();
+
+    // Monthly trend
+    const monthlySpend = new Map<string, { totalSpend: number; transactionCount: number }>();
+
+    for (const line of expenseLines) {
+      const amount = line.debitAmount;
       totalSpend += amount;
 
-      const vendorKey = e.vendorId?.toString() ?? "__unassigned__";
-      const existing = vendorSpend.get(vendorKey) ?? { totalSpend: 0, transactionCount: 0 };
-      existing.totalSpend += amount;
-      existing.transactionCount++;
-      vendorSpend.set(vendorKey, existing);
+      // Vendor grouping: look up vendor name from journal entry -> invoice mapping
+      const vendorName = jeToVendorName.get(line.journalEntryId.toString()) ?? null;
+      const vendorKey = vendorName ? vendorName.toLowerCase() : "__unassigned__";
+
+      const existingVendor = vendorSpend.get(vendorKey) ?? { totalSpend: 0, transactionCount: 0 };
+      existingVendor.totalSpend += amount;
+      existingVendor.transactionCount++;
+      vendorSpend.set(vendorKey, existingVendor);
+
+      // Category breakdown by account name
+      const category = line.accountName ?? "Uncategorized";
+      const existingCategory = categorySpend.get(category) ?? { totalSpend: 0, transactionCount: 0 };
+      existingCategory.totalSpend += amount;
+      existingCategory.transactionCount++;
+      categorySpend.set(category, existingCategory);
+
+      // Monthly trend
+      const month = (line as any).transactionDate?.substring(0, 7) ?? "Unknown"; // "YYYY-MM"
+      const existingMonth = monthlySpend.get(month) ?? { totalSpend: 0, transactionCount: 0 };
+      existingMonth.totalSpend += amount;
+      existingMonth.transactionCount++;
+      monthlySpend.set(month, existingMonth);
     }
 
     // Top 10 vendors
     const topVendors = Array.from(vendorSpend.entries())
-      .map(([key, data]) => ({
-        vendorId: key !== "__unassigned__" ? key : null,
-        vendorName: key !== "__unassigned__" ? (vendorMap.get(key) ?? "Unknown Vendor") : "Unassigned Vendor",
-        totalSpend: data.totalSpend,
-        transactionCount: data.transactionCount,
-        percentOfTotal: totalSpend > 0 ? (data.totalSpend / totalSpend) * 100 : 0,
-      }))
+      .map(([key, data]) => {
+        const vendor = key !== "__unassigned__" ? vendorByName.get(key) : null;
+        return {
+          vendorId: vendor ? vendor._id.toString() : null,
+          vendorName: vendor?.name ?? (key !== "__unassigned__" ? key : "Unassigned Vendor"),
+          totalSpend: data.totalSpend,
+          transactionCount: data.transactionCount,
+          percentOfTotal: totalSpend > 0 ? (data.totalSpend / totalSpend) * 100 : 0,
+        };
+      })
       .sort((a, b) => b.totalSpend - a.totalSpend)
       .slice(0, 10);
 
     // Category breakdown
-    const categorySpend = new Map<string, { totalSpend: number; transactionCount: number }>();
-    for (const e of spendEntries) {
-      const category = e.category ?? "Uncategorized";
-      const amount = e.homeCurrencyAmount ?? e.originalAmount;
-      const existing = categorySpend.get(category) ?? { totalSpend: 0, transactionCount: 0 };
-      existing.totalSpend += amount;
-      existing.transactionCount++;
-      categorySpend.set(category, existing);
-    }
-
     const categoryBreakdown = Array.from(categorySpend.entries())
       .map(([category, data]) => ({
         category,
@@ -1119,16 +1338,6 @@ export const getVendorSpendAnalytics = query({
       .sort((a, b) => b.totalSpend - a.totalSpend);
 
     // Monthly trend (last 12 months)
-    const monthlySpend = new Map<string, { totalSpend: number; transactionCount: number }>();
-    for (const e of spendEntries) {
-      const month = e.transactionDate.substring(0, 7); // "YYYY-MM"
-      const amount = e.homeCurrencyAmount ?? e.originalAmount;
-      const existing = monthlySpend.get(month) ?? { totalSpend: 0, transactionCount: 0 };
-      existing.totalSpend += amount;
-      existing.transactionCount++;
-      monthlySpend.set(month, existing);
-    }
-
     const monthlyTrend = Array.from(monthlySpend.entries())
       .map(([month, data]) => ({
         month,

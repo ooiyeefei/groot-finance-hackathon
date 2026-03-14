@@ -8,9 +8,10 @@ import { Button } from '@/components/ui/button'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { usePaymentRecorder } from '../hooks/use-payment-recorder'
 import { PAYMENT_METHODS_ENUM } from '@/lib/constants/statuses'
+import type { Id } from '../../../../convex/_generated/dataModel'
 
 interface PaymentRecorderDialogProps {
-  entryId: string | null
+  invoiceId: string | null
   isOpen: boolean
   onClose: () => void
   onSuccess?: () => void
@@ -25,16 +26,16 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
 }
 
 export default function PaymentRecorderDialog({
-  entryId,
+  invoiceId,
   isOpen,
   onClose,
   onSuccess,
 }: PaymentRecorderDialogProps) {
   const { recordPayment, isRecording, error, clearError } = usePaymentRecorder()
 
-  const entry = useQuery(
-    api.functions.accountingEntries.getById,
-    entryId ? { id: entryId } : "skip"
+  const invoice = useQuery(
+    api.functions.invoices.getById,
+    invoiceId ? { id: invoiceId } : "skip"
   )
 
   const [amount, setAmount] = useState('')
@@ -43,18 +44,28 @@ export default function PaymentRecorderDialog({
   const [notes, setNotes] = useState('')
   const [validationError, setValidationError] = useState<string | null>(null)
 
+  // Extract data from invoice
+  const extracted = (invoice as any)?.extractedData || {}
+  const vendorName = extracted.vendor_name?.value || extracted.vendor_name || extracted.vendorName || 'Unknown'
+  const invoiceNumber = extracted.invoice_number?.value || extracted.invoice_number || ''
+  const currency = extracted.currency?.value || extracted.currency || (invoice as any)?.homeCurrency || 'MYR'
+
+  // Calculate outstanding from journal entry totalDebit - paidAmount
+  const totalAmount = (invoice as any)?.journalEntryId ? (extracted.total_amount?.value || extracted.total_amount || 0) : 0
+  const paidAmount = (invoice as any)?.paidAmount ?? 0
+  const outstanding = totalAmount - paidAmount
+
   // Reset form when dialog opens
   useEffect(() => {
-    if (isOpen && entry) {
-      const outstanding = entry.originalAmount - (entry.paidAmount ?? 0)
-      setAmount(outstanding.toFixed(2))
+    if (isOpen && invoice) {
+      setAmount(outstanding > 0 ? outstanding.toFixed(2) : '0.00')
       setPaymentDate(new Date().toISOString().split('T')[0])
       setPaymentMethod('bank_transfer')
       setNotes('')
       setValidationError(null)
       clearError()
     }
-  }, [isOpen, entry])
+  }, [isOpen, invoice])
 
   // Handle ESC key
   useEffect(() => {
@@ -73,21 +84,20 @@ export default function PaymentRecorderDialog({
 
   if (!isOpen) return null
 
-  const outstanding = entry ? entry.originalAmount - (entry.paidAmount ?? 0) : 0
   const parsedAmount = parseFloat(amount)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setValidationError(null)
 
-    if (!entryId || !entry) return
+    if (!invoiceId || !invoice) return
 
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       setValidationError('Amount must be greater than 0')
       return
     }
-    if (parsedAmount > outstanding) {
-      setValidationError(`Amount cannot exceed outstanding balance (${formatCurrency(outstanding, entry.originalCurrency)})`)
+    if (parsedAmount > outstanding + 0.01) {
+      setValidationError(`Amount cannot exceed outstanding balance (${formatCurrency(outstanding, currency)})`)
       return
     }
     if (!paymentDate) {
@@ -96,7 +106,7 @@ export default function PaymentRecorderDialog({
     }
 
     try {
-      await recordPayment(entryId, parsedAmount, paymentDate, paymentMethod, notes || undefined)
+      await recordPayment(invoiceId, parsedAmount, paymentDate, paymentMethod, notes || undefined)
       onSuccess?.()
       onClose()
     } catch {
@@ -127,25 +137,25 @@ export default function PaymentRecorderDialog({
 
           {/* Content */}
           <form onSubmit={handleSubmit} className="p-4 space-y-4">
-            {/* Entry context */}
-            {entry && (
+            {/* Invoice context */}
+            {invoice && (
               <div className="bg-muted rounded-md p-3 space-y-1">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Vendor</span>
-                  <span className="text-foreground font-medium">{entry.vendorName || 'Unknown'}</span>
+                  <span className="text-foreground font-medium">{vendorName}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Original Amount</span>
-                  <span className="text-foreground">{formatCurrency(entry.originalAmount, entry.originalCurrency)}</span>
+                  <span className="text-muted-foreground">Total Amount</span>
+                  <span className="text-foreground">{formatCurrency(totalAmount, currency)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Outstanding</span>
-                  <span className="text-foreground font-semibold">{formatCurrency(outstanding, entry.originalCurrency)}</span>
+                  <span className="text-foreground font-semibold">{formatCurrency(outstanding, currency)}</span>
                 </div>
-                {entry.referenceNumber && (
+                {invoiceNumber && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Reference</span>
-                    <span className="text-foreground">{entry.referenceNumber}</span>
+                    <span className="text-muted-foreground">Invoice #</span>
+                    <span className="text-foreground">{invoiceNumber}</span>
                   </div>
                 )}
               </div>
@@ -215,10 +225,10 @@ export default function PaymentRecorderDialog({
 
             {/* Actions */}
             <div className="flex gap-3 justify-end pt-2">
-              <Button type="button" variant="default" onClick={onClose} disabled={isRecording}>
+              <Button type="button" className="bg-secondary hover:bg-secondary/80 text-secondary-foreground" onClick={onClose} disabled={isRecording}>
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" disabled={isRecording}>
+              <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isRecording}>
                 {isRecording ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />

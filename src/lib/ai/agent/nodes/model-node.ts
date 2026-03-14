@@ -341,29 +341,7 @@ async function handleOpenAIResponse(state: AgentState, messages: any[], tools: a
       };
     }
 
-    // CRITICAL FIX 4: Block fake transaction IDs in compliance tool calls
-    if (toolName === 'analyze_cross_border_compliance') {
-      const args = JSON.parse(toolCall.function.arguments || '{}');
-      const transactionId = args.transaction_id;
-
-      // Detect fake transaction IDs (pattern matching common fake UUIDs)
-      const fakeTxPatterns = [
-        /^a1b2c3d4-e5f6-7890-abcd-ef[0-9a-f]{12}$/i,
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-      ];
-
-      const isFakeId = fakeTxPatterns.some(pattern => pattern.test(transactionId)) ||
-                       transactionId === 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' ||
-                       transactionId?.includes('1234567890') ||
-                       transactionId?.includes('abcd-ef');
-
-      if (isFakeId) {
-        console.error(`[CallModel] 🚨 BLOCKED FAKE TRANSACTION ID: ${transactionId}`);
-        return {
-          messages: [...state.messages, new AIMessage('I cannot analyze compliance for fabricated transaction IDs. Please use the get_transactions tool first to retrieve real transaction data, then I can analyze specific transactions for compliance.')],
-        };
-      }
-    }
+    // Cross-border compliance tool removed — deprecated accounting_entries dependency
 
     const aiMessageWithToolCall = new AIMessage({
       content: '',

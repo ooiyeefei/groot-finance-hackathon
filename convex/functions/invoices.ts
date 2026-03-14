@@ -13,7 +13,7 @@ import { query, mutation, internalMutation, internalQuery } from "../_generated/
 import { Id } from "../_generated/dataModel";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 import { internal } from "../_generated/api";
-import { createInvoiceJournalEntry } from "../lib/journal_entry_helpers";
+import { createInvoiceJournalEntry, createPaymentJournalEntry } from "../lib/journal_entry_helpers";
 
 // Helper: require finance admin role (owner/finance_admin/manager)
 async function requireFinanceAdminForInvoices(
@@ -2086,5 +2086,163 @@ export const cancelLhdnSubmission = mutation({
     });
 
     return { documentUuid: invoice.lhdnDocumentUuid };
+  },
+});
+
+/**
+ * Record a payment against a vendor invoice (AP subledger).
+ *
+ * Creates a double-entry journal entry:
+ *   Debit  AP (2100)  — reduces liability
+ *   Credit Cash (1000) — reduces asset
+ *
+ * Updates invoice payment tracking (paidAmount, paymentStatus, paymentHistory).
+ */
+export const recordPayment = mutation({
+  args: {
+    invoiceId: v.id("invoices"),
+    amount: v.number(),
+    paymentDate: v.string(),
+    paymentMethod: v.string(),
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<{
+    success: boolean;
+    paymentJournalEntryId: Id<"journal_entries">;
+    newStatus: "unpaid" | "partial" | "paid";
+    outstandingBalance: number;
+    totalPaid: number;
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) throw new Error("User not found");
+
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice || invoice.deletedAt) throw new Error("Invoice not found");
+    if (!invoice.businessId) throw new Error("Invoice has no business context");
+
+    // Auth check
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q: any) =>
+        q.eq("userId", user._id).eq("businessId", invoice.businessId!)
+      )
+      .first();
+    if (!membership || membership.status !== "active") {
+      throw new Error("Not authorized");
+    }
+
+    // Must be posted to accept payments
+    if (invoice.accountingStatus !== "posted") {
+      throw new Error("Invoice must be posted before recording payments");
+    }
+
+    // Validate amount
+    if (args.amount <= 0) throw new Error("Payment amount must be greater than 0");
+
+    const journalEntry = invoice.journalEntryId
+      ? await ctx.db.get(invoice.journalEntryId)
+      : null;
+    const totalAmount = journalEntry?.totalDebit ?? 0;
+    const currentPaid = invoice.paidAmount ?? 0;
+    const outstanding = totalAmount - currentPaid;
+
+    if (outstanding <= 0) throw new Error("Invoice is already fully paid");
+    if (args.amount > outstanding + 0.01) {
+      throw new Error(`Payment amount (${args.amount}) exceeds outstanding balance (${outstanding.toFixed(2)})`);
+    }
+
+    // Look up AP and Cash accounts
+    const apAccount = await ctx.db
+      .query("chart_of_accounts")
+      .withIndex("by_business_code", (q: any) =>
+        q.eq("businessId", invoice.businessId!).eq("accountCode", "2100")
+      )
+      .first();
+    if (!apAccount) throw new Error("AP account 2100 not found");
+
+    const cashAccount = await ctx.db
+      .query("chart_of_accounts")
+      .withIndex("by_business_code", (q: any) =>
+        q.eq("businessId", invoice.businessId!).eq("accountCode", "1000")
+      )
+      .first();
+    if (!cashAccount) throw new Error("Cash account 1000 not found");
+
+    // Extract vendor info from invoice
+    const extracted = (invoice as any).extractedData || {};
+    const vendorName =
+      extracted.vendor_name?.value || extracted.vendor_name || extracted.vendorName || "Vendor";
+    const description = `Payment to ${vendorName} - ${extracted.invoice_number?.value || extracted.invoice_number || "Invoice"}`;
+
+    // Create payment journal entry lines
+    const lines = createPaymentJournalEntry({
+      amount: args.amount,
+      apAccountId: apAccount._id,
+      apAccountCode: apAccount.accountCode,
+      apAccountName: apAccount.accountName,
+      description,
+      cashAccountId: cashAccount._id,
+      cashAccountCode: cashAccount.accountCode,
+      cashAccountName: cashAccount.accountName,
+    });
+
+    // Create journal entry via internal API
+    const result = await ctx.runMutation(
+      internal.functions.journalEntries.createInternal,
+      {
+        businessId: invoice.businessId!,
+        transactionDate: args.paymentDate,
+        description,
+        sourceType: "payment" as const,
+        sourceId: args.invoiceId,
+        lines: lines.map((l) => ({
+          accountCode: l.accountCode,
+          debitAmount: l.debitAmount,
+          creditAmount: l.creditAmount,
+          lineDescription: l.lineDescription,
+        })),
+      }
+    );
+    const paymentJournalEntryId = result.entryId;
+
+    // Update invoice payment state
+    const newPaidAmount = currentPaid + args.amount;
+    const newPaymentStatus: "unpaid" | "partial" | "paid" =
+      newPaidAmount >= totalAmount ? "paid" : newPaidAmount > 0 ? "partial" : "unpaid";
+
+    const paymentRecord = {
+      amount: args.amount,
+      paymentDate: args.paymentDate,
+      paymentMethod: args.paymentMethod,
+      journalEntryId: paymentJournalEntryId,
+      notes: args.notes,
+      recordedBy: user._id.toString(),
+      recordedAt: Date.now(),
+    };
+
+    const existingHistory = invoice.paymentHistory ?? [];
+
+    await ctx.db.patch(args.invoiceId, {
+      paidAmount: newPaidAmount,
+      paymentStatus: newPaymentStatus,
+      paymentHistory: [...existingHistory, paymentRecord],
+      updatedAt: Date.now(),
+    });
+
+    // If fully paid, update invoice status
+    if (newPaymentStatus === "paid") {
+      await ctx.db.patch(args.invoiceId, { status: "paid" as any });
+    }
+
+    return {
+      success: true,
+      paymentJournalEntryId,
+      newStatus: newPaymentStatus,
+      outstandingBalance: totalAmount - newPaidAmount,
+      totalPaid: newPaidAmount,
+    };
   },
 });

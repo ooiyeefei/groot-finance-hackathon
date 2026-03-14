@@ -6,12 +6,12 @@ import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
 
 export function usePaymentRecorder() {
-  const recordPaymentMutation = useMutation(api.functions.accountingEntries.recordPayment)
+  const recordPaymentMutation = useMutation(api.functions.invoices.recordPayment)
   const [isRecording, setIsRecording] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const recordPayment = async (
-    entryId: string,
+    invoiceId: string,
     amount: number,
     paymentDate: string,
     paymentMethod: string,
@@ -21,7 +21,7 @@ export function usePaymentRecorder() {
     setError(null)
     try {
       const result = await recordPaymentMutation({
-        entryId: entryId as Id<"accounting_entries">,
+        invoiceId: invoiceId as Id<"invoices">,
         amount,
         paymentDate,
         paymentMethod,
