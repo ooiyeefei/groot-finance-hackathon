@@ -102,6 +102,7 @@ import type * as lib_statement_generators_trial_balance_generator from "../lib/s
 import type * as lib_validation from "../lib/validation.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as migrations from "../migrations.js";
+import type * as migrations_cleanupMigratedAccounts from "../migrations/cleanupMigratedAccounts.js";
 import type * as types from "../types.js";
 
 import type {
@@ -205,6 +206,7 @@ declare const fullApi: ApiFromModules<{
   "lib/validation": typeof lib_validation;
   "lib/validators": typeof lib_validators;
   migrations: typeof migrations;
+  "migrations/cleanupMigratedAccounts": typeof migrations_cleanupMigratedAccounts;
   types: typeof types;
 }>;
 
