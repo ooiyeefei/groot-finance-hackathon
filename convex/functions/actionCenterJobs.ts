@@ -32,14 +32,6 @@ const DEDUP_WINDOW_MS = 90 * 24 * 60 * 60 * 1000; // 90 days (3 months)
 /** Dedup window for deadline-specific alerts (shorter — re-alert as deadlines approach) */
 const DEADLINE_DEDUP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
-/** Stopwords for Jaccard similarity (common English words to ignore) */
-const STOPWORDS = new Set([
-  "a", "an", "the", "in", "of", "to", "for", "with", "on", "at", "by",
-  "is", "are", "was", "were", "be", "been", "being", "has", "have", "had",
-  "do", "does", "did", "and", "or", "but", "not", "this", "that", "these",
-  "those", "it", "its", "may", "could", "should", "would", "can", "will",
-]);
-
 // IFRS category code → human-readable display name
 const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
   travel_expenses: "Travel Expenses",
@@ -143,27 +135,6 @@ function computeMaterialityPriority(
  * Compute Jaccard similarity between two titles for semantic dedup.
  * Tokenizes, removes stopwords, and computes |intersection| / |union|.
  */
-function computeJaccardSimilarity(title1: string, title2: string): number {
-  const tokenize = (t: string) => {
-    const tokens = t.toLowerCase().replace(/[^\w\s]/g, "").split(/\s+/).filter(Boolean);
-    return new Set(tokens.filter((w) => !STOPWORDS.has(w)));
-  };
-
-  const set1 = tokenize(title1);
-  const set2 = tokenize(title2);
-
-  if (set1.size === 0 && set2.size === 0) return 1;
-  if (set1.size === 0 || set2.size === 0) return 0;
-
-  let intersection = 0;
-  for (const word of set1) {
-    if (set2.has(word)) intersection++;
-  }
-
-  const union = set1.size + set2.size - intersection;
-  return union > 0 ? intersection / union : 0;
-}
-
 // ============================================
 // INTERNAL QUERIES (for use in actions)
 // ============================================
@@ -666,8 +637,8 @@ async function runAnomalyDetection(
           category: "anomaly",
           priority,
           status: "new",
-          title: `Unusual ${categoryDisplayName} expense detected`,
-          description: `A ${categoryDisplayName} expense of ${amount.toLocaleString()} is ${deviation}σ above your average of ${mean.toLocaleString()}.`,
+          title: `Unusual expense detected in "${categoryDisplayName}"`,
+          description: `An expense of ${amount.toLocaleString()} in "${categoryDisplayName}" is ${deviation}σ above your average of ${mean.toLocaleString()}.`,
           affectedEntities: [txn._id.toString()],
           recommendedAction: `Review this transaction to ensure it's legitimate and correctly categorized.`,
           detectedAt: Date.now(),
@@ -1208,7 +1179,7 @@ async function runVendorRiskAnalysis(
     const isDuplicate = existingInsights.some(
       (i: any) =>
         i.metadata?.vendorId === vendor._id.toString() &&
-        i.metadata?.insightType === "vendor_risk" || i.metadata?.insightType === "supplier_risk" &&
+        (i.metadata?.insightType === "vendor_risk" || i.metadata?.insightType === "supplier_risk") &&
         i.detectedAt > Date.now() - DEDUP_WINDOW_MS
     );
 
@@ -1768,8 +1739,8 @@ export const analyzeNewTransaction = internalMutation({
         category: "anomaly" as const,
         priority: priority as "high" | "medium" | "low",
         status: "new" as const,
-        title: `Unusual ${categoryDisplayName} expense detected`,
-        description: `A ${categoryDisplayName} expense of ${amount.toLocaleString()} is ${deviation}σ above your average of ${mean.toLocaleString()}.`,
+        title: `Unusual expense detected in "${categoryDisplayName}"`,
+        description: `An expense of ${amount.toLocaleString()} in "${categoryDisplayName}" is ${deviation}σ above your average of ${mean.toLocaleString()}.`,
         affectedEntities: [txnIdStr],
         recommendedAction: `Review this transaction to ensure it's legitimate and correctly categorized.`,
         detectedAt: Date.now(),

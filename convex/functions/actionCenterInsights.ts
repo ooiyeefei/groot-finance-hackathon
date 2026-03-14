@@ -358,7 +358,7 @@ export const internalCreate = internalMutation({
     }
 
     // Semantic dedup via Jaccard similarity (for LLM-generated insights)
-    const isAIGenerated = (args.metadata as any)?.aiDiscovered === true;
+    const isAIGenerated = (args.metadata as any)?.aiDiscovered === true || (args.metadata as any)?.aiGenerated === true;
     if (isAIGenerated) {
       const JACCARD_THRESHOLD = 0.6;
       const tokenize = (t: string) => {
