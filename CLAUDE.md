@@ -308,21 +308,25 @@ const arBalance = arLines.reduce((sum, line) =>
 ```
 
 ### Deprecated System (DO NOT USE)
-- **Table**: `accounting_entries` (single-entry, no balanced debits/credits)
-- **Status**: Read-only for historical data. All new writes go to `journal_entries`.
-- **Removal**: Table will be dropped after 90-day verification period (2026-06-12)
+- **Table**: `accounting_entries` — read-only historical data, zero write paths remain
+- **Status**: All write mutations deleted. All AP/AR aging queries migrated. REST API routes deleted.
+- **Remaining readers**: `vendors.ts`, `payments.ts`, `poMatches.ts`, `exportCodeMappings.ts` (read-only joins for historical data)
+- **Types module**: `src/domains/accounting-entries/types/` still exported (`SupportedCurrency`, `CURRENCY_SYMBOLS`) — used by 30+ files
+- **Next step**: Migrate remaining read-only consumers, then drop table and move types to `src/lib/types/`
 
-### Migration Status
-- **Write operations**: 100% migrated (18 Convex functions)
-- **Read operations**: 100% migrated (12 frontend files)
-- **Verification period**: 2026-03-14 to 2026-06-12 (90 days)
-- **Next step**: Monitor for any missed edge cases, then drop `accounting_entries` table
+### AP Subledger (Payment Tracking)
+- **Invoices table** = AP subledger with `paidAmount`, `paymentStatus`, `dueDate`, `paymentHistory[]`
+- **Payment recording**: `invoices.recordPayment` mutation creates double-entry journal entry (Debit AP 2100, Credit Cash 1000)
+- **AP aging**: Queries `invoices` table directly (not accounting_entries)
+- **AR aging**: Queries `sales_invoices` table directly (has its own payment system)
 
 **When adding new accounting features:**
-1. Always use `journal_entries` + `journal_entry_lines`
+1. Always use `journal_entries` + `journal_entry_lines` for GL entries
 2. Use helper functions for common patterns (expense, invoice, payment)
-3. Query `journal_entry_lines` with account code filters
-4. Never write to `accounting_entries` — it's deprecated
+3. AP payment recording: Use `invoices.recordPayment` (creates journal entry + updates invoice)
+4. AP queries: Query `invoices` table with `paymentStatus` and `accountingStatus` filters
+5. AR queries: Query `sales_invoices` table directly
+6. Never write to `accounting_entries` — all write mutations are deleted
 
 ---
 

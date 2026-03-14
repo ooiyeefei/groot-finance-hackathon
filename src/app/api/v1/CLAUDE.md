@@ -257,108 +257,10 @@ Disable COGS category (soft delete).
 
 ## Accounting Entries APIs
 
-Core financial transaction management with IFRS-compliant categorization.
-
-### Transaction CRUD
-
-#### `GET /api/v1/accounting-entries`
-List accounting entries with filtering and pagination.
-
-**Query Params:**
-- `page: number` - Page number (default: 1)
-- `limit: number` - Items per page (default: 20, max: 100)
-- `transaction_type: 'Income' | 'Cost of Goods Sold' | 'Expense'`
-- `category: string` - Filter by category code
-- `date_from: string` - Start date (ISO 8601)
-- `date_to: string` - End date (ISO 8601)
-- `search: string` - Search description, vendor, or reference
-- `sort_by: 'transaction_date' | 'amount' | 'created_at'` (default: transaction_date)
-- `sort_order: 'asc' | 'desc'` (default: desc)
-
-**Response:**
-```typescript
-{
-  success: true,
-  data: {
-    entries: AccountingEntry[];
-    pagination: {
-      page: number;
-      limit: number;
-      total: number;
-      total_pages: number;
-    }
-  }
-}
-```
-
-#### `POST /api/v1/accounting-entries`
-Create new accounting entry.
-
-**Request:**
-```typescript
-{
-  transaction_type: 'Income' | 'Cost of Goods Sold' | 'Expense';
-  description: string;
-  original_amount: number;
-  original_currency: string;
-  home_currency: string;
-  transaction_date: string;
-  category: string;
-  vendor_name?: string;
-  reference_number?: string;
-  document_type?: string;
-  status?: 'pending' | 'paid' | 'cancelled';
-  line_items?: LineItem[];
-  source_document_id?: string;
-}
-```
-
-#### `GET /api/v1/accounting-entries/[entryId]`
-Get single accounting entry details.
-
-**Response:**
-```typescript
-{
-  success: true,
-  data: {
-    entry: AccountingEntry;
-    line_items: LineItem[];
-  }
-}
-```
-
-#### `PATCH /api/v1/accounting-entries/[entryId]`
-Update accounting entry.
-
-#### `DELETE /api/v1/accounting-entries/[entryId]`
-Delete accounting entry (soft delete).
-
----
-
-### Entry Management
-
-#### `PATCH /api/v1/accounting-entries/[entryId]/status`
-Update transaction status.
-
-**Request:**
-```typescript
-{
-  status: 'pending' | 'paid' | 'cancelled' | 'overdue';
-  payment_date?: string;
-  payment_method?: string;
-}
-```
-
-#### `PATCH /api/v1/accounting-entries/[entryId]/category`
-Recategorize transaction.
-
-**Request:**
-```typescript
-{
-  category: string;
-  reason?: string;
-}
-```
+> **DEPRECATED (2026-03-14):** All `/api/v1/accounting-entries` REST routes have been deleted.
+> Financial transactions now use the double-entry `journal_entries` system via Convex mutations.
+> AP payment recording uses `invoices.recordPayment` (Convex mutation, not REST).
+> Historical data is still readable via Convex queries (`accountingEntries.list`, `accountingEntries.getById`).
 
 ---
 
@@ -1288,27 +1190,8 @@ API-Version: v1
 
 **Endpoint Testing:**
 ```typescript
-// Example: Testing accounting entries endpoint
-import { POST } from '@/app/api/v1/accounting-entries/route'
-
-const request = new Request('http://localhost:3000/api/v1/accounting-entries', {
-  method: 'POST',
-  body: JSON.stringify({
-    transaction_type: 'Expense',
-    description: 'Test Expense',
-    original_amount: 100,
-    original_currency: 'USD',
-    home_currency: 'USD',
-    transaction_date: '2025-01-13',
-    category: 'OFFICE_SUPPLIES'
-  })
-})
-
-const response = await POST(request)
-const data = await response.json()
-
-expect(data.success).toBe(true)
-expect(response.status).toBe(201)
+// Accounting entries endpoints removed (2026-03-14).
+// Use Convex mutations directly for financial transactions.
 ```
 
 ---
@@ -1318,7 +1201,8 @@ expect(response.status).toBe(201)
 ### From Legacy API (if applicable)
 
 **Deprecated Endpoints:**
-- `/api/transactions` → `/api/v1/accounting-entries`
+- `/api/transactions` → REMOVED (use Convex journal_entries)
+- `/api/v1/accounting-entries` → REMOVED (use Convex journal_entries)
 - `/api/documents/process` → `/api/v1/invoices/[id]/process`
 
 **Breaking Changes:**
