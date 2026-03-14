@@ -173,11 +173,6 @@ export default function JournalEntriesPage() {
                 </thead>
                 <tbody>
                   {entries.map((entry: any) => {
-                    const totalDebits = entry.lines?.reduce(
-                      (sum: number, line: any) => sum + (line.debitAmount || 0),
-                      0
-                    ) || 0
-
                     return (
                       <tr
                         key={entry._id}
@@ -202,7 +197,7 @@ export default function JournalEntriesPage() {
                           )}
                         </td>
                         <td className="px-6 py-4 text-sm text-right text-foreground font-medium">
-                          {formatCurrency(totalDebits, 'MYR')}
+                          {formatCurrency(entry.totalDebit || 0, 'MYR')}
                         </td>
                         <td className="px-6 py-4 text-center">
                           <Badge className={getStatusBadge(entry.status)}>
