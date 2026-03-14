@@ -70,7 +70,11 @@ export interface EmployeeProfile {
 // Core expense claim interface
 export interface ExpenseClaim {
   id: string
-  accounting_entry_id: string | null  // Links to accounting_entries.id after approval (NULL until approved)
+  /**
+   * @deprecated Use journalEntryId instead. Legacy field for backward compatibility.
+   */
+  accounting_entry_id?: string | null  // Legacy: Links to accounting_entries.id (deprecated)
+  journalEntryId?: string | null      // NEW: Links to journal_entries._id after approval (NULL until approved)
   user_id: string
   business_id: string
 

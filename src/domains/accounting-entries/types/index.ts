@@ -1,6 +1,11 @@
 /**
  * Transaction Management Types for Groot Finance MVP
  * Supporting Southeast Asian SME multi-currency operations
+ *
+ * @deprecated This file contains types for the legacy single-entry accounting system.
+ * The system is migrating to double-entry bookkeeping using JournalEntry and JournalEntryLine.
+ * @see /specs/001-accounting-double-entry/ for the new accounting system
+ * @see src/types/database.types.ts for JournalEntry and JournalEntryLine interfaces
  */
 
 // Core P&L transaction types - Following accounting standards (Income Statement only for P&L focus)
@@ -50,7 +55,20 @@ export interface TransactionCategories {
   }
 }
 
-// Core AccountingEntry interface
+/**
+ * Core AccountingEntry interface
+ *
+ * @deprecated Use JournalEntry and JournalEntryLine from src/types/database.types.ts instead.
+ * This single-entry accounting interface is being phased out in favor of double-entry bookkeeping.
+ * The new system provides:
+ * - GAAP/IFRS/MAS-8 compliance
+ * - Balanced debits and credits
+ * - Better audit trail
+ * - Multi-currency support
+ *
+ * Migration status: READ OPERATIONS ONLY. All new write operations should create JournalEntry records.
+ * @see /specs/001-accounting-double-entry/ for migration documentation
+ */
 export interface AccountingEntry {
   id: string
   user_id: string

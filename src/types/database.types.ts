@@ -1155,3 +1155,169 @@ export const Constants = {
     },
   },
 } as const
+
+// ============================================================================
+// CONVEX TYPES: Double-Entry Accounting (001-accounting-double-entry)
+// ============================================================================
+
+/**
+ * Journal Entry (Header) - Double-entry bookkeeping transaction
+ * Replaces AccountingEntry in the new accounting system
+ */
+export interface JournalEntry {
+  _id: string
+  businessId: string
+  entryNumber: string              // "JE-2026-00001"
+
+  // Dates
+  transactionDate: string          // YYYY-MM-DD (business date)
+  postingDate: string              // YYYY-MM-DD (system date)
+
+  // Description
+  description: string
+  memo?: string
+
+  // Status
+  status: 'draft' | 'posted' | 'reversed' | 'voided'
+
+  // Source tracking
+  sourceType: 'manual' | 'sales_invoice' | 'expense_claim' | 'ar_reconciliation' | 'migrated'
+  sourceId?: string
+
+  // Fiscal period
+  fiscalYear: number
+  fiscalPeriod: string             // "2026-01"
+
+  // Currency
+  homeCurrency: string
+
+  // Balancing validation (denormalized)
+  totalDebit: number
+  totalCredit: number
+  lineCount: number
+
+  // Reversal tracking
+  reversedBy?: string              // ID of reversing entry
+  reversalOf?: string              // ID of original entry being reversed
+
+  // Audit trail
+  createdBy: string
+  createdAt: number
+  postedBy?: string
+  postedAt?: number
+
+  // Locking
+  accountingPeriodId?: string
+  isPeriodLocked: boolean
+
+  // Convex system fields
+  _creationTime: number
+}
+
+/**
+ * Journal Entry Line - Individual debit/credit line in a journal entry
+ */
+export interface JournalEntryLine {
+  _id: string
+  journalEntryId: string
+  businessId: string
+
+  // Line ordering
+  lineOrder: number
+
+  // Account reference (denormalized)
+  accountId: string
+  accountCode: string
+  accountName: string
+  accountType: string
+
+  // Amounts (one must be 0, the other non-zero)
+  debitAmount: number              // Must be 0 if creditAmount > 0
+  creditAmount: number             // Must be 0 if debitAmount > 0
+  homeCurrencyAmount: number
+
+  // Foreign currency support
+  foreignCurrency?: string
+  foreignAmount?: number
+  exchangeRate?: number
+  rateSource?: 'api' | 'manual' | 'fallback'
+
+  // Line description
+  lineDescription?: string
+
+  // Entity tracking
+  entityType?: 'customer' | 'vendor' | 'employee'
+  entityId?: string
+  entityName?: string
+
+  // "Against Account" (ERPNext pattern)
+  againstAccountCode?: string
+  againstAccountName?: string
+
+  // Tax tracking
+  taxCode?: string
+  taxRate?: number
+  taxAmount?: number
+
+  // Bank reconciliation
+  bankReconciled: boolean
+  bankReconciledDate?: string
+
+  // Audit
+  createdAt: number
+
+  // Convex system fields
+  _creationTime: number
+}
+
+/**
+ * @deprecated Use JournalEntry instead. AccountingEntry is being phased out in favor of double-entry bookkeeping.
+ * This interface is maintained for backward compatibility during migration.
+ * @see JournalEntry for the new double-entry accounting system
+ */
+export interface AccountingEntry {
+  id: string
+  user_id: string
+  business_id: string | null
+
+  // Source tracking
+  source_record_id?: string
+  source_document_type?: 'invoice' | 'expense_claim'
+
+  // Classification
+  transaction_type: string
+  category: string | null
+  subcategory?: string | null
+  description: string | null
+  reference_number?: string | null
+
+  // Multi-currency amounts
+  original_currency: string
+  original_amount: number
+  home_currency: string | null
+  home_currency_amount: number | null
+  exchange_rate: number | null
+  exchange_rate_date: string | null
+
+  // Business context
+  transaction_date: string
+  vendor_name?: string | null
+  vendor_id?: string | null
+
+  // Transaction status
+  status?: string | null
+  due_date?: string | null
+  payment_date?: string | null
+  payment_method?: string | null
+  notes?: string | null
+
+  // Metadata
+  document_metadata?: Json | null
+  processing_metadata?: Json | null
+
+  // Audit
+  created_at: string | null
+  updated_at: string | null
+  created_by_method: string | null
+  deleted_at?: string | null
+}
