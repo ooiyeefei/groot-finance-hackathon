@@ -94,6 +94,7 @@ import type * as functions_vendorPriceHistory from "../functions/vendorPriceHist
 import type * as functions_vendors from "../functions/vendors.js";
 import type * as functions_webhooks from "../functions/webhooks.js";
 import type * as functions_workSchedules from "../functions/workSchedules.js";
+import type * as lib_journal_entry_helpers from "../lib/journal_entry_helpers.js";
 import type * as lib_llm from "../lib/llm.js";
 import type * as lib_mcpClient from "../lib/mcpClient.js";
 import type * as lib_resolvers from "../lib/resolvers.js";
@@ -198,6 +199,7 @@ declare const fullApi: ApiFromModules<{
   "functions/vendors": typeof functions_vendors;
   "functions/webhooks": typeof functions_webhooks;
   "functions/workSchedules": typeof functions_workSchedules;
+  "lib/journal_entry_helpers": typeof lib_journal_entry_helpers;
   "lib/llm": typeof lib_llm;
   "lib/mcpClient": typeof lib_mcpClient;
   "lib/resolvers": typeof lib_resolvers;

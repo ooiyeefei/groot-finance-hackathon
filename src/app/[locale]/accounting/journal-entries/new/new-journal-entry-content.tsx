@@ -147,7 +147,7 @@ export default function NewJournalEntryContent() {
           lineDescription: line.lineDescription || undefined,
         }))
 
-      const entryId = await createEntry({
+      const { entryId } = await createEntry({
         businessId: businessId as any,
         transactionDate: formData.transactionDate,
         description: formData.description,

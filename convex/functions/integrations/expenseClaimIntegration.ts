@@ -47,7 +47,7 @@ export const createJournalEntryOnApproval = internalMutation({
     const glAccountCode = categoryToAccountMap[claim.expenseCategory || ""] || "5200";
 
     // Create journal entry
-    const entryId = await ctx.runMutation(
+    const { entryId } = await ctx.runMutation(
       "functions/journalEntries:createInternal" as any,
       {
         businessId: claim.businessId,
@@ -109,7 +109,7 @@ export const createJournalEntryOnReimbursement = internalMutation({
     const reimbursementDate = new Date().toISOString().split("T")[0];
 
     // Create payment journal entry
-    const paymentEntryId = await ctx.runMutation(
+    const { entryId: paymentEntryId } = await ctx.runMutation(
       "functions/journalEntries:createInternal" as any,
       {
         businessId: claim.businessId,

@@ -189,7 +189,7 @@ async function createJournalEntryHelper(
       });
     }
 
-    return entryId;
+    return { entryId, entryNumber };
   }
 
 /**
@@ -357,7 +357,7 @@ export const reverse = mutation({
       lineDescription: `Reversal: ${line.lineDescription || ""}`,
     }));
 
-    const reversalEntryId = await createJournalEntryHelper(
+    const { entryId: reversalEntryId } = await createJournalEntryHelper(
       ctx,
       {
         businessId: entry.businessId,
@@ -552,7 +552,7 @@ export const createInternal = internalMutation({
   handler: async (ctx, args) => {
     // Call helper directly with system user
     // This will be called by integration hooks with internal auth context
-    return await createJournalEntryHelper(
+    const { entryId, entryNumber } = await createJournalEntryHelper(
       ctx,
       {
         businessId: args.businessId,
@@ -564,5 +564,7 @@ export const createInternal = internalMutation({
       },
       "system" // Internal mutations use system user
     );
+
+    return { entryId, entryNumber };
   },
 });

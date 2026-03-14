@@ -63,7 +63,7 @@ export const createJournalEntriesFromReconciliation = internalMutation({
 
         // Entry 1: Platform Fees Expense (if platform fee exists)
         if (order.platformFee && order.platformFee > 0) {
-          const feeEntryId = await ctx.runMutation(
+          const { entryId: feeEntryId } = await ctx.runMutation(
             "functions/journalEntries:createInternal" as any,
             {
               businessId: args.businessId,
@@ -95,7 +95,7 @@ export const createJournalEntriesFromReconciliation = internalMutation({
         const netAmount = order.netAmount || order.grossAmount - (order.platformFee || 0);
 
         if (netAmount > 0) {
-          const cashEntryId = await ctx.runMutation(
+          const { entryId: cashEntryId } = await ctx.runMutation(
             "functions/journalEntries:createInternal" as any,
             {
               businessId: args.businessId,
@@ -134,7 +134,7 @@ export const createJournalEntriesFromReconciliation = internalMutation({
             // Variance is a gain if order amount > invoice amount
             const isGain = order.varianceAmount > 0;
 
-            const varianceEntryId = await ctx.runMutation(
+            const { entryId: varianceEntryId } = await ctx.runMutation(
               "functions/journalEntries:createInternal" as any,
               {
                 businessId: args.businessId,

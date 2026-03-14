@@ -71,7 +71,7 @@ export const createJournalEntryOnInvoiceCreation = internalMutation({
     }
 
     // Create journal entry
-    const entryId = await ctx.runMutation(
+    const { entryId } = await ctx.runMutation(
       "functions/journalEntries:createInternal" as any,
       {
         businessId: invoice.businessId,
@@ -116,7 +116,7 @@ export const createJournalEntryOnInvoicePayment = internalMutation({
       args.paymentDate || new Date().toISOString().split("T")[0];
 
     // Create payment journal entry
-    const paymentEntryId = await ctx.runMutation(
+    const { entryId: paymentEntryId } = await ctx.runMutation(
       "functions/journalEntries:createInternal" as any,
       {
         businessId: invoice.businessId,
