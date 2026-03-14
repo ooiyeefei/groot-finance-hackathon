@@ -614,44 +614,63 @@ export const send = mutation({
       updatedAt: Date.now(),
     });
 
-    // Create accounting entry (AR - Accounts Receivable)
-    const entryId = await ctx.db.insert("accounting_entries", {
-      businessId: args.businessId,
-      userId: user._id,
-      transactionType: "Income",
-      originalAmount: invoice.totalAmount,
-      originalCurrency: invoice.currency,
-      transactionDate: invoice.invoiceDate,
-      description: `Sales Invoice ${invoice.invoiceNumber} - ${invoice.customerSnapshot.businessName}`,
-      category: "Sales Revenue",
-      status: "pending",
-      sourceDocumentType: "sales_invoice",
-      createdByMethod: "manual",
-      updatedAt: Date.now(),
+    // Create journal entry (AR - Accounts Receivable / Sales Revenue)
+    const lines: Array<{
+      accountCode: string;
+      debitAmount: number;
+      creditAmount: number;
+      lineDescription?: string;
+      entityType?: "customer" | "vendor" | "employee";
+      entityId?: string;
+      entityName?: string;
+    }> = [];
+
+    // Line 1: Debit Accounts Receivable (full amount)
+    lines.push({
+      accountCode: "1200", // Accounts Receivable
+      debitAmount: invoice.totalAmount,
+      creditAmount: 0,
+      lineDescription: `Invoice #${invoice.invoiceNumber}`,
+      entityType: "customer",
+      entityId: customerId,
+      entityName: invoice.customerSnapshot.businessName,
     });
 
-    // Link accounting entry to invoice
-    await ctx.db.patch(args.id, {
-      accountingEntryId: entryId,
+    // Line 2: Credit Sales Revenue (subtotal before tax)
+    lines.push({
+      accountCode: "4100", // Sales Revenue
+      debitAmount: 0,
+      creditAmount: invoice.subtotal,
+      lineDescription: "Sales revenue",
     });
 
-    // Schedule real-time anomaly detection for this income entry
-    await ctx.scheduler.runAfter(0, internal.functions.actionCenterJobs.analyzeNewTransaction, {
-      transactionId: entryId,
-      businessId: args.businessId,
-    });
-
-
-    // Double-entry accounting integration
-    try {
-      await ctx.runMutation(
-        internal.functions.integrations.salesInvoiceIntegration.createJournalEntryOnInvoiceCreation,
-        { invoiceId: args.id }
-      );
-    } catch (error: any) {
-      console.error(`[Sales Invoice] Failed to create journal entry on send:`, error);
-      // Continue even if journal entry fails
+    // Line 3: Credit Sales Tax Payable (if tax included)
+    if (invoice.totalTax && invoice.totalTax > 0) {
+      lines.push({
+        accountCode: "2200", // Sales Tax Payable
+        debitAmount: 0,
+        creditAmount: invoice.totalTax,
+        lineDescription: "Sales tax",
+      });
     }
+
+    // Create journal entry via internal mutation
+    const { entryId: journalEntryId } = await ctx.runMutation(
+      internal.functions.journalEntries.createInternal,
+      {
+        businessId: args.businessId,
+        transactionDate: invoice.invoiceDate,
+        description: `Sales Invoice ${invoice.invoiceNumber} - ${invoice.customerSnapshot.businessName}`,
+        sourceType: "sales_invoice",
+        sourceId: args.id,
+        lines,
+      }
+    );
+
+    // Link journal entry to invoice
+    await ctx.db.patch(args.id, {
+      journalEntryId,
+    });
     return args.id;
   },
 });
