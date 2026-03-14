@@ -445,7 +445,6 @@ export default defineSchema({
     updatedAt: v.optional(v.number()),
   })
     .index("by_businessId", ["businessId"])
-    .index("by_business", ["businessId"])
     .index("by_business_entry_number", ["businessId", "entryNumber"])
     .index("by_business_date", ["businessId", "transactionDate"])
     .index("by_business_status", ["businessId", "status"])
@@ -510,7 +509,6 @@ export default defineSchema({
     updatedAt: v.optional(v.number()),
   })
     .index("by_businessId", ["businessId"])
-    .index("by_business", ["businessId"])
     .index("by_pair", ["fromCurrency", "toCurrency"])
     .index("by_business_currencies", ["businessId", "fromCurrency", "toCurrency"])
     .index("by_business_pair_date", ["businessId", "fromCurrency", "toCurrency", "effectiveDate"]),

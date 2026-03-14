@@ -196,7 +196,7 @@ export const list = query({
       // Get all rates for business
       rates = await ctx.db
         .query("manual_exchange_rates")
-        .withIndex("by_business", (q) => q.eq("businessId", args.businessId))
+        .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
         .collect();
     }
 
