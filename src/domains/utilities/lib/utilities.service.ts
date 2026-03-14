@@ -10,8 +10,8 @@
  */
 
 import { currencyService } from '@/lib/services/currency-service'
-import { SupportedCurrency, CurrencyConversion } from '@/domains/accounting-entries/types'
-import { CURRENCY_SYMBOLS, CURRENCY_NAMES } from '@/domains/accounting-entries/types'
+import { SupportedCurrency, CurrencyConversion } from '@/lib/types/currency'
+import { CURRENCY_SYMBOLS, CURRENCY_NAMES } from '@/lib/types/currency'
 
 // ============================================================================
 // Types

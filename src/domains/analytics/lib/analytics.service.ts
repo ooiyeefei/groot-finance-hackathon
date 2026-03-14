@@ -13,7 +13,7 @@
 import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
 import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
-import { SupportedCurrency } from '@/domains/accounting-entries/types'
+import { SupportedCurrency } from '@/lib/types/currency'
 import {
   calculateFinancialAnalytics as calculateAnalyticsEngine,
   calculateAnalyticsTrends as calculateTrendsEngine,

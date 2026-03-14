@@ -3,7 +3,7 @@
  * Supporting multi-currency Southeast Asian SME operations
  */
 
-import { SupportedCurrency } from '@/domains/accounting-entries/types';
+import { SupportedCurrency } from '@/lib/types/currency';
 import { EnhancedAgedReceivables, EnhancedAgedPayables, ComplianceAlert } from '@/domains/analytics/lib/engine';
 
 export interface AgedReceivables {

@@ -1,11 +1,8 @@
 /**
- * Transaction Management Types for Groot Finance MVP
+ * Currency & Financial Types for Groot Finance
  * Supporting Southeast Asian SME multi-currency operations
  *
- * @deprecated This file contains types for the legacy single-entry accounting system.
- * The system is migrating to double-entry bookkeeping using JournalEntry and JournalEntryLine.
- * @see /specs/001-accounting-double-entry/ for the new accounting system
- * @see src/types/database.types.ts for JournalEntry and JournalEntryLine interfaces
+ * Moved from src/domains/accounting-entries/types/ (2026-03-14)
  */
 
 // Core P&L transaction types - Following accounting standards (Income Statement only for P&L focus)

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { TrendingUp, TrendingDown, DollarSign, Minus, PiggyBank, CreditCard } from 'lucide-react';
-import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/domains/accounting-entries/types';
+import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/lib/types/currency';
 import { AnalyticsData, AnalyticsTrends, MetricCardProps } from '@/domains/analytics/types/analytics';
 
 interface MetricsOverviewProps {

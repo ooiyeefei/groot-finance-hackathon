@@ -4,7 +4,7 @@
  * Based on SOX, GAAP, IFRS compliance requirements
  */
 
-import { SupportedCurrency } from '@/domains/accounting-entries/types'
+import { SupportedCurrency } from '@/lib/types/currency'
 import { ExpenseCategory } from './expense-claims'
 
 // ============================================================================

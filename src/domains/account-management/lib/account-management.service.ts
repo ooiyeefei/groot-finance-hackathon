@@ -43,7 +43,7 @@ import { emailService } from '@/lib/services/email-service'
 import { createInvitationToken } from './invitation-tokens'
 import { getDefaultExpenseCategories } from '@/domains/expense-claims/lib/default-expense-categories'
 import { getDefaultCOGSCategories } from '@/domains/invoices/lib/default-cogs-categories'
-import { SupportedCurrency } from '@/domains/accounting-entries/types'
+import { SupportedCurrency } from '@/lib/types/currency'
 import { canAddTeamMember, getTeamLimit, type PlanKey } from '@/lib/stripe/plans'
 
 // ============================================================================

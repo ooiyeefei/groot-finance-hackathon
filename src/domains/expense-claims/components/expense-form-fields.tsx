@@ -32,7 +32,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { BulkSuggestions } from './field-suggestion'
 import { formatCurrency } from '@/lib/utils/format-number'
-import { SupportedCurrency } from '@/domains/accounting-entries/types'
+import { SupportedCurrency } from '@/lib/types/currency'
 import { ExpenseFormData, ReceiptInfo, AISuggestion } from '@/domains/expense-claims/hooks/use-expense-form'
 
 const SUPPORTED_CURRENCIES: SupportedCurrency[] = [

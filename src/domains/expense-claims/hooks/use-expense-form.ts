@@ -12,7 +12,7 @@ import { useExpenseClaimRealtime } from './use-expense-claims-realtime'
 import { useDuplicateDetection } from './use-duplicate-detection'
 import { useHomeCurrency } from '@/domains/users/hooks/use-home-currency'
 import { formatCurrency } from '@/lib/utils/format-number'
-import { SupportedCurrency } from '@/domains/accounting-entries/types'
+import { SupportedCurrency } from '@/lib/types/currency'
 import { AIExtractionResult, AdditionalCharge } from '@/domains/expense-claims/types/expense-extraction'
 import type { DuplicateDetectionResult } from '../types/duplicate-detection'
 

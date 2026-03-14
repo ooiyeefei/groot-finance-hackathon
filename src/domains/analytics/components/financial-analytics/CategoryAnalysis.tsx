@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/domains/accounting-entries/types';
+import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/lib/types/currency';
 import { CategoryChartData, DARK_THEME_COLORS } from '@/domains/analytics/types/analytics';
 
 interface CategoryAnalysisProps {

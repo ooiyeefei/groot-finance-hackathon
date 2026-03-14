@@ -5,7 +5,7 @@ import { useAuth } from '@clerk/nextjs';
 import { AlertTriangle, TrendingDown, TrendingUp, CheckCircle, CreditCard, PiggyBank, AlertCircle, Calendar, Clock } from 'lucide-react';
 import ActionButton from '@/components/ui/action-button';
 import { AnalyticsData, AnalyticsTrends, ActionItem } from '@/domains/analytics/types/analytics';
-import { AccountingEntry } from '@/domains/accounting-entries/types';
+import { AccountingEntry } from '@/lib/types/currency';
 
 interface ActionCenterProps {
   analytics: AnalyticsData | null;

@@ -3,7 +3,7 @@
  * Consolidated types for the new v1 API
  */
 
-import { SupportedCurrency } from '@/domains/accounting-entries/types'
+import { SupportedCurrency } from '@/lib/types/currency'
 
 // Re-export duplicate detection types
 export * from './duplicate-detection'

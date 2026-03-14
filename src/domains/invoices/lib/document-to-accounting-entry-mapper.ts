@@ -3,7 +3,7 @@
  * Maps extracted document entities to accounting entry form data
  */
 
-import { CreateAccountingEntryRequest, CreateLineItemRequest, SupportedCurrency } from '@/domains/accounting-entries/types'
+import { CreateAccountingEntryRequest, CreateLineItemRequest, SupportedCurrency } from '@/lib/types/currency'
 import { createLogger } from '@/lib/utils/logger'
 
 const log = createLogger('AccountingEntry:Mapper')

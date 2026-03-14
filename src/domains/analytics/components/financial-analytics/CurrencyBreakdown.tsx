@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/domains/accounting-entries/types';
+import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/lib/types/currency';
 import { CurrencyChartData, DARK_THEME_COLORS } from '@/domains/analytics/types/analytics';
 
 interface CurrencyBreakdownProps {

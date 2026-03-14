@@ -19,7 +19,7 @@ import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
 import { getCurrentUserContextWithBusiness, updateUserRole as rbacUpdateUserRole } from '@/domains/security/lib/rbac'
 import { clerkClient } from '@clerk/nextjs/server'
-import { SupportedCurrency } from '@/domains/accounting-entries/types'
+import { SupportedCurrency } from '@/lib/types/currency'
 
 export interface UserProfile {
   id: string

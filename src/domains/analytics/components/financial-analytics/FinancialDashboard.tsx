@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { TrendingUp, TrendingDown, DollarSign, Minus, RefreshCw } from 'lucide-react';
-import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/domains/accounting-entries/types';
+import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/lib/types/currency';
 import ActionButton from '@/components/ui/action-button';
 import useFinancialAnalytics from '@/domains/analytics/hooks/use-financial-analytics';
 import { DashboardProps } from '@/domains/analytics/types/analytics';

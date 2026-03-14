@@ -3,7 +3,7 @@
  * Based on expert recommendations from Otto, Mel, and Kevin
  */
 
-import { SupportedCurrency, AccountingEntry } from '@/domains/accounting-entries/types'
+import { SupportedCurrency, AccountingEntry } from '@/lib/types/currency'
 
 // JSONB error message structure for structured error handling
 export interface ExpenseClaimErrorMessage {

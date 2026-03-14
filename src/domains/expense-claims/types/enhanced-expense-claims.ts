@@ -4,7 +4,7 @@
  * 100% backward compatible with existing expense-claims.ts
  */
 
-import { SupportedCurrency, AccountingEntry } from '@/domains/accounting-entries/types'
+import { SupportedCurrency, AccountingEntry } from '@/lib/types/currency'
 import { ExpenseClaimStatus, ComplianceFlag } from './expense-claims' // ✅ Use unified status type
 import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'

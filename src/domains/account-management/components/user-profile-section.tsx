@@ -12,7 +12,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { DollarSign, Clock, Bell, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
 import { useBusinessContext } from '@/contexts/business-context'
-import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/domains/accounting-entries/types'
+import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/lib/types/currency'
 import { useToast } from '@/components/ui/toast'
 import { NotificationPreferencesForm } from '@/domains/notifications/components/notification-preferences-form'
 

@@ -24,7 +24,7 @@ import {
   type ConvertCurrencyRequest,
   type ExchangeRateRequest
 } from '@/domains/utilities/lib/utilities.service'
-import { SupportedCurrency } from '@/domains/accounting-entries/types'
+import { SupportedCurrency } from '@/lib/types/currency'
 
 // POST - Convert amount between currencies
 export async function POST(request: NextRequest) {

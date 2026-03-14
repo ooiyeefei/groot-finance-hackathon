@@ -3,7 +3,7 @@
  * Handles exchange rates for Southeast Asian SME transactions
  */
 
-import { SupportedCurrency, CurrencyConversion, ExchangeRateService, CURRENCY_SYMBOLS } from '@/domains/accounting-entries/types'
+import { SupportedCurrency, CurrencyConversion, ExchangeRateService, CURRENCY_SYMBOLS } from '@/lib/types/currency'
 
 // Exchange rate cache interface
 interface CachedRate {

@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Clock, TrendingDown, AlertTriangle, CreditCard } from 'lucide-react';
-import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/domains/accounting-entries/types';
+import { SupportedCurrency, CURRENCY_SYMBOLS } from '@/lib/types/currency';
 import { DARK_THEME_COLORS } from '@/domains/analytics/types/analytics';
 import { EnhancedAgedPayables } from '@/domains/analytics/lib/engine';
 

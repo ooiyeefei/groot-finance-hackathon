@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from 'react'
 import { useAuth } from '@clerk/nextjs'
-import { SupportedCurrency } from '@/domains/accounting-entries/types'
+import { SupportedCurrency } from '@/lib/types/currency'
 
 const SUPPORTED_CURRENCIES: { code: SupportedCurrency; name: string }[] = [
   { code: 'USD', name: 'US Dollar (USD)' },

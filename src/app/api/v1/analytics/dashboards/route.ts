@@ -24,7 +24,7 @@ import {
   calculateFinancialAnalytics,
   calculateAnalyticsTrends
 } from '@/domains/analytics/lib/analytics.service'
-import { SupportedCurrency } from '@/domains/accounting-entries/types'
+import { SupportedCurrency } from '@/lib/types/currency'
 import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 // GET - Retrieve financial analytics with optional trends

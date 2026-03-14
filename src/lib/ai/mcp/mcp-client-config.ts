@@ -120,31 +120,7 @@ export interface McpConfig {
  * These are the servers Groot Finance can connect to out of the box
  */
 export const DEFAULT_MCP_SERVERS: McpServerConfig[] = [
-  // Supabase MCP Server (if deployed)
-  {
-    id: 'supabase',
-    name: 'Supabase',
-    description: 'Database operations via Supabase MCP',
-    transport: {
-      type: 'http',
-      url: process.env.MCP_SUPABASE_URL || ''
-    },
-    auth: {
-      type: 'bearer',
-      tokenEnvVar: 'MCP_SUPABASE_TOKEN'
-    },
-    connection: {
-      timeoutMs: 30000,
-      maxRetries: 3,
-      retryDelayMs: 1000
-    },
-    tools: {
-      allowAll: true
-    },
-    enabled: !!process.env.MCP_SUPABASE_URL,
-    priority: 10,
-    tags: ['database', 'storage']
-  },
+  // Supabase MCP server removed — migrated to Convex
 
   // Context7 MCP Server (documentation search)
   {

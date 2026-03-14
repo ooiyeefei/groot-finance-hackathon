@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { ArrowRightLeft, RefreshCw } from 'lucide-react'
-import { SupportedCurrency } from '@/domains/accounting-entries/types'
+import { SupportedCurrency } from '@/lib/types/currency'
 
 interface CurrencyConverterProps {
   amount: number

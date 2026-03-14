@@ -3,7 +3,7 @@
  * Based on Otto's recommendations for contextual risk assessment
  */
 
-import { SupportedCurrency } from '@/domains/accounting-entries/types';
+import { SupportedCurrency } from '@/lib/types/currency';
 
 export interface RiskScoreConfig {
   // Payment terms context

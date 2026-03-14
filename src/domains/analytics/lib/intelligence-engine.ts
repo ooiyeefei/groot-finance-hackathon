@@ -5,7 +5,7 @@
 
 import { FinancialAnalytics, ComplianceAlert } from './engine';
 import { RiskScore, calculateRiskScore, TransactionRiskContext, DEFAULT_RISK_CONFIG } from './risk-scoring';
-import { SupportedCurrency } from '@/domains/accounting-entries/types';
+import { SupportedCurrency } from '@/lib/types/currency';
 import { ActionItem, AnalyticsData } from '@/domains/analytics/types/analytics';
 
 export interface IntelligentInsight {

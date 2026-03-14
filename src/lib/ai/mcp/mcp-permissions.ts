@@ -65,17 +65,6 @@ const MCP_SERVER_PERMISSIONS: McpServerPermission[] = [
     accessLevel: 'public'
   },
   {
-    serverId: 'supabase',
-    minPlan: 'starter',
-    allowedRoles: ['owner', 'admin', 'manager'], // Not employees
-    accessLevel: 'internal',
-    toolOverrides: {
-      // Database mutation tools require higher permissions
-      'execute_sql': { minPlan: 'pro', allowedRoles: ['owner', 'admin'] },
-      'apply_migration': { minPlan: 'enterprise', allowedRoles: ['owner'] }
-    }
-  },
-  {
     serverId: 'finanseal-intel',
     minPlan: 'pro',
     allowedRoles: ['owner', 'admin', 'manager'],

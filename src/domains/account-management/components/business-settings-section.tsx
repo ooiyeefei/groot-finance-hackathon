@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Building2, DollarSign, Tag, Shield, CheckCircle, AlertCircle, ArrowRight, Users, Settings, FileText } from 'lucide-react'
 import { useBusinessContext } from '@/contexts/business-context'
 import { usePermissions } from '@/contexts/business-context'
-import { SupportedCurrency, CURRENCY_SYMBOLS, CURRENCY_NAMES } from '@/domains/accounting-entries/types'
+import { SupportedCurrency, CURRENCY_SYMBOLS, CURRENCY_NAMES } from '@/lib/types/currency'
 import Link from 'next/link'
 
 // Create array of all supported currencies from the centralized type definition

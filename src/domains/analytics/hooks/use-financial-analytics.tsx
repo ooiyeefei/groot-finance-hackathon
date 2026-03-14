@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { SupportedCurrency } from '@/domains/accounting-entries/types';
+import { SupportedCurrency } from '@/lib/types/currency';
 import { AnalyticsResponse, AnalyticsData, AnalyticsTrends } from '../types/analytics';
 import { useActiveBusiness } from '@/contexts/business-context';
 

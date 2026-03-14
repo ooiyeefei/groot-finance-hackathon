@@ -14,7 +14,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { LineItem } from '@/domains/accounting-entries/hooks/use-line-items'
+import { LineItem } from '@/lib/hooks/use-line-items'
 import { roundCurrency } from '@/lib/utils/format-number'
 import type { AdditionalCharge } from '@/domains/expense-claims/types/expense-extraction'
 
