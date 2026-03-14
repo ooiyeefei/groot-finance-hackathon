@@ -429,6 +429,9 @@ export const getFinancialSummary = query({
 
 /**
  * Create a new accounting entry
+ *
+ * @deprecated Use journal_entries system instead. This mutation exists for backward compatibility only.
+ * New code should call internal.functions.journalEntries.createInternal()
  */
 export const create = mutation({
   args: {

@@ -11,6 +11,7 @@ import { query, mutation, internalMutation, type MutationCtx } from "../_generat
 import { internal } from "../_generated/api";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 import { Id } from "../_generated/dataModel";
+import { createExpenseJournalEntry } from "../lib/journal_entry_helpers";
 
 // Role hierarchy for permission checks
 const ROLE_HIERARCHY: Record<string, number> = {
@@ -718,7 +719,7 @@ async function approveOneClaim(
   approverUserId: Id<"users">,
   homeCurrency: string,
   now: number
-): Promise<Id<"accounting_entries"> | null> {
+): Promise<Id<"journal_entries"> | null> {
   // Validate required fields
   if (!claim.totalAmount || !claim.currency || !claim.transactionDate) {
     console.log(`[Submission Approve] Skipping accounting entry for claim ${claim._id}: missing financial data`);
@@ -769,66 +770,80 @@ async function approveOneClaim(
       lineOrder: item.line_order ?? index + 1,
     }));
 
-  // Create accounting entry
-  const accountingEntryId = await ctx.db.insert("accounting_entries", {
-    businessId: claim.businessId,
-    userId: claim.userId,
-    transactionType: "Expense",
-    description: claim.businessPurpose || claim.description || "Expense claim",
-    originalAmount: claim.totalAmount,
-    originalCurrency: claim.currency,
-    homeCurrency: claim.homeCurrency || homeCurrency,
-    homeCurrencyAmount: claim.homeCurrencyAmount || claim.totalAmount,
-    exchangeRate: claim.exchangeRate || 1,
-    transactionDate: claim.transactionDate,
-    category: claim.expenseCategory,
-    vendorName: claim.vendorName,
-    referenceNumber: claim.referenceNumber,
-    status: "pending",
-    createdByMethod: "document_extract",
-    sourceRecordId: claim._id,
-    sourceDocumentType: "expense_claim",
-    processingMetadata: claim.processingMetadata,
-    lineItems: lineItems.length > 0 ? lineItems : undefined,
-    updatedAt: now,
-  });
+  // Query chart of accounts for expense and cash accounts
+  const expenseAccount = await ctx.db
+    .query("chart_of_accounts")
+    .withIndex("by_business_code", (q) =>
+      q.eq("businessId", claim.businessId).eq("accountCode", "5200")
+    )
+    .first();
 
-  // Schedule real-time anomaly detection for this expense
-  await ctx.scheduler.runAfter(0, internal.functions.actionCenterJobs.analyzeNewTransaction, {
-    transactionId: accountingEntryId,
-    businessId: claim.businessId,
-  });
+  const cashAccount = await ctx.db
+    .query("chart_of_accounts")
+    .withIndex("by_business_code", (q) =>
+      q.eq("businessId", claim.businessId).eq("accountCode", "1000")
+    )
+    .first();
 
-  // Vendor linking (expense claims) — link accounting entry to vendor record if found,
-  // but do NOT promote expense claim merchants to "active" vendor status.
-  // Active vendors should only come from actual AP supplier invoices, not employee receipts.
-  if (claim.vendorName) {
-    try {
-      const vendor = await ctx.runQuery(internal.functions.vendors.getByName, {
-        businessId: claim.businessId,
-        vendorName: claim.vendorName,
-      });
-
-      if (vendor) {
-        await ctx.db.patch(accountingEntryId, { vendorId: vendor._id });
-        // NOTE: promoteIfProspective intentionally NOT called here.
-        // Expense claim merchants stay "prospective" — only supplier invoices create active vendors.
-      }
-    } catch (e) {
-      console.log(`[Submission Approve] Vendor link skipped for "${claim.vendorName}": ${e}`);
-    }
+  if (!expenseAccount || !cashAccount) {
+    console.log(
+      `[Submission Approve] Skipping journal entry for claim ${claim._id}: missing expense (5200) or cash (1000) accounts`
+    );
+    await ctx.db.patch(claim._id, {
+      status: "approved",
+      approvedBy: approverUserId,
+      approvedAt: now,
+      updatedAt: now,
+    });
+    return null;
   }
+
+  // Create journal entry using helper
+  const description = claim.businessPurpose || claim.description || "Expense claim";
+  const lines = createExpenseJournalEntry({
+    amount: claim.homeCurrencyAmount || claim.totalAmount,
+    expenseAccountId: expenseAccount._id,
+    expenseAccountCode: expenseAccount.accountCode,
+    expenseAccountName: expenseAccount.accountName,
+    description,
+    cashAccountId: cashAccount._id,
+    cashAccountCode: cashAccount.accountCode,
+    cashAccountName: cashAccount.accountName,
+  });
+
+  // Call internal journal entry creation
+  const { entryId: journalEntryId } = await ctx.runMutation(
+    internal.functions.journalEntries.createInternal,
+    {
+      businessId: claim.businessId,
+      transactionDate: claim.transactionDate,
+      description,
+      sourceType: "expense_claim",
+      sourceId: claim._id,
+      lines: lines.map((line) => ({
+        accountCode: line.accountCode,
+        debitAmount: line.debitAmount,
+        creditAmount: line.creditAmount,
+        lineDescription: line.lineDescription,
+        entityType: claim.vendorName ? ("vendor" as const) : undefined,
+        entityName: claim.vendorName,
+      })),
+    }
+  );
+
+  // NOTE: Real-time anomaly detection (analyzeNewTransaction) temporarily disabled during migration.
+  // Action Center jobs will be updated to work with journal_entries in a separate task.
 
   // Update claim
   await ctx.db.patch(claim._id, {
     status: "approved",
     approvedBy: approverUserId,
     approvedAt: now,
-    accountingEntryId,
+    journalEntryId,
     updatedAt: now,
   });
 
-  return accountingEntryId;
+  return journalEntryId;
 }
 
 /**
