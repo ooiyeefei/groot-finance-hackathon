@@ -297,6 +297,10 @@ export default defineSchema({
   // ACCOUNTING DOMAIN: Transactions & Line Items
   // ============================================
 
+  // DEPRECATED (2026-03-14): This table is being replaced by the journal_entries + journal_entry_lines system.
+  // New accounting transactions should use journal entries for proper double-entry bookkeeping.
+  // This table remains for historical data and read operations only.
+  // Migration: See docs/plans/2026-03-14-accounting-entries-to-journal-entries-migration.md
   accounting_entries: defineTable({
     // Identity
     legacyId: v.optional(v.string()),
