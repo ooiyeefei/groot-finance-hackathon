@@ -17,7 +17,7 @@
  */
 
 import { v } from "convex/values";
-import { action, internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { callLLMJson } from "../lib/llm";
 import { callMCPToolsBatch } from "../lib/mcpClient";
@@ -524,6 +524,10 @@ export const runDetectionAlgorithms = internalMutation({
     // 6. Stale Payable Detection — AP entries aging without dueDate or payment activity
     const stalePayableInsights = await runStalePayableDetection(ctx, args.businessId, args.memberUserIds);
     insightsCreated += stalePayableInsights;
+
+    // 7. Expense Claim Pattern Detection — domain-specific detection for employee expenses
+    const claimPatternInsights = await runExpenseClaimPatternDetection(ctx, args.businessId, args.memberUserIds);
+    insightsCreated += claimPatternInsights;
 
     console.log(`[ActionCenterJobs] Business ${args.businessId}: Created ${insightsCreated} insights`);
     return insightsCreated;
@@ -1626,6 +1630,206 @@ async function runStalePayableDetection(
   return insightsCreated;
 }
 
+/**
+ * Expense Claim Pattern Detection — domain-specific analysis for employee expenses
+ *
+ * Detects patterns that finance managers and auditors actually care about:
+ * 1. Potential split claims — multiple small claims from same employee on same day
+ *    that collectively exceed a threshold (possible approval-threshold avoidance)
+ * 2. Employee expense spikes — sudden increase in an employee's claim volume
+ *    compared to their historical average
+ *
+ * NOT flagged (normal patterns):
+ * - Same merchant repeatedly (coffee shop, phone plan — personal preference)
+ * - Consistent monthly amounts (recurring business expenses)
+ */
+async function runExpenseClaimPatternDetection(
+  ctx: any,
+  businessId: any,
+  memberUserIds: string[]
+): Promise<number> {
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+  const claims = await ctx.db
+    .query("expense_claims")
+    .filter((q: any) =>
+      q.and(
+        q.eq(q.field("businessId"), businessId),
+        q.eq(q.field("deletedAt"), undefined)
+      )
+    )
+    .collect();
+
+  const recentClaims = claims.filter(
+    (c: any) => c.transactionDate && c.transactionDate >= ninetyDaysAgo
+  );
+
+  if (recentClaims.length < 5) return 0; // Not enough data
+
+  let insightsCreated = 0;
+
+  // --- 1. SPLIT CLAIM DETECTION ---
+  // Multiple claims from same employee on same day that add up to a large amount
+  // This is the #1 expense fraud pattern — splitting to stay under approval thresholds
+  const byEmployeeDay: Record<string, { claims: any[]; total: number }> = {};
+
+  for (const claim of recentClaims) {
+    if (!claim.transactionDate) continue;
+    // Only check claims from last 30 days for split detection
+    if (claim.transactionDate < thirtyDaysAgo) continue;
+    const key = `${claim.userId}_${claim.transactionDate}`;
+    const amount = Math.abs(claim.homeCurrencyAmount || claim.totalAmount || 0);
+    if (!byEmployeeDay[key]) byEmployeeDay[key] = { claims: [], total: 0 };
+    byEmployeeDay[key].claims.push(claim);
+    byEmployeeDay[key].total += amount;
+  }
+
+  // Collect potential split claims (3+ claims on same day, total > 500)
+  const splitCandidates: Array<{ userId: string; date: string; count: number; total: number; merchants: string[] }> = [];
+
+  for (const [key, data] of Object.entries(byEmployeeDay)) {
+    if (data.claims.length < 3) continue; // Need 3+ claims on same day
+    if (data.total < 500) continue; // Total must be material
+
+    const [userId, date] = key.split("_");
+    const merchants = [...new Set(data.claims.map((c: any) => c.vendorName).filter(Boolean))];
+
+    splitCandidates.push({ userId, date, count: data.claims.length, total: data.total, merchants });
+  }
+
+  if (splitCandidates.length > 0) {
+    // Dedup check
+    const existingInsights = await ctx.db
+      .query("actionCenterInsights")
+      .withIndex("by_category", (q: any) => q.eq("category", "compliance"))
+      .collect();
+
+    const isDuplicate = existingInsights.some(
+      (i: any) =>
+        i.metadata?.insightType === "split_claims" &&
+        i.businessId === businessId.toString() &&
+        i.detectedAt > Date.now() - DEDUP_WINDOW_MS
+    );
+
+    if (!isDuplicate) {
+      const summary = splitCandidates
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 5)
+        .map((s) => `${s.count} claims on ${s.date} totaling ${s.total.toLocaleString()}`)
+        .join("; ");
+
+      const priority = splitCandidates.some((s) => s.total > 2000) ? "high" : "medium";
+
+      for (const userId of memberUserIds) {
+        await ctx.db.insert("actionCenterInsights", {
+          userId,
+          businessId: businessId.toString(),
+          category: "compliance" as const,
+          priority: priority as "high" | "medium",
+          status: "new" as const,
+          title: `Potential split claims: ${splitCandidates.length} instance${splitCandidates.length > 1 ? "s" : ""} detected`,
+          description: `${summary}. Multiple small claims on the same day may indicate split submissions to stay under approval thresholds.`,
+          affectedEntities: splitCandidates.flatMap((s) => s.userId ? [s.userId] : []),
+          recommendedAction: `Review these claims to verify they are legitimate separate expenses and not split to avoid approval limits.`,
+          detectedAt: Date.now(),
+          metadata: {
+            consolidatedEntities: splitCandidates,
+            insightType: "split_claims",
+            sourceDataDomain: "expense_claim",
+          },
+        });
+        insightsCreated++;
+      }
+    }
+  }
+
+  // --- 2. EMPLOYEE EXPENSE SPIKE DETECTION ---
+  // Compare each employee's last 30 days vs their 60-90 day average
+  const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+  const byEmployee: Record<string, { recent: number; historical: number; historicalMonths: number; recentCount: number }> = {};
+
+  for (const claim of recentClaims) {
+    const empId = claim.userId?.toString();
+    if (!empId) continue;
+    const amount = Math.abs(claim.homeCurrencyAmount || claim.totalAmount || 0);
+    const date = claim.transactionDate || "";
+
+    if (!byEmployee[empId]) byEmployee[empId] = { recent: 0, historical: 0, historicalMonths: 2, recentCount: 0 };
+
+    if (date >= thirtyDaysAgo) {
+      byEmployee[empId].recent += amount;
+      byEmployee[empId].recentCount++;
+    } else if (date >= sixtyDaysAgo) {
+      byEmployee[empId].historical += amount;
+    }
+  }
+
+  // Find employees with significant spikes (>100% increase and material amount)
+  const spikeEmployees: Array<{ userId: string; recent: number; monthlyAvg: number; increase: number }> = [];
+
+  for (const [empId, data] of Object.entries(byEmployee)) {
+    if (data.recentCount < 2) continue; // Need at least 2 recent claims
+    const monthlyAvg = data.historical / data.historicalMonths;
+    if (monthlyAvg < 100) continue; // Not enough historical spend to compare
+
+    const increase = monthlyAvg > 0 ? ((data.recent - monthlyAvg) / monthlyAvg) * 100 : 0;
+    if (increase < 100) continue; // Less than 2x spike — not significant
+    if (data.recent < 500) continue; // Total must be material
+
+    spikeEmployees.push({ userId: empId, recent: data.recent, monthlyAvg, increase });
+  }
+
+  if (spikeEmployees.length > 0) {
+    const existingInsights = await ctx.db
+      .query("actionCenterInsights")
+      .withIndex("by_category", (q: any) => q.eq("category", "anomaly"))
+      .collect();
+
+    const isDuplicate = existingInsights.some(
+      (i: any) =>
+        i.metadata?.insightType === "employee_expense_spike" &&
+        i.businessId === businessId.toString() &&
+        i.detectedAt > Date.now() - DEDUP_WINDOW_MS
+    );
+
+    if (!isDuplicate) {
+      const summary = spikeEmployees
+        .sort((a, b) => b.increase - a.increase)
+        .slice(0, 5)
+        .map((s) => `${s.recent.toLocaleString()} this month vs ${s.monthlyAvg.toLocaleString()} avg (+${s.increase.toFixed(0)}%)`)
+        .join("; ");
+
+      const maxIncrease = Math.max(...spikeEmployees.map((s) => s.increase));
+      const priority = maxIncrease > 300 ? "high" : "medium";
+
+      for (const userId of memberUserIds) {
+        await ctx.db.insert("actionCenterInsights", {
+          userId,
+          businessId: businessId.toString(),
+          category: "anomaly" as const,
+          priority: priority as "high" | "medium",
+          status: "new" as const,
+          title: `Employee expense spike: ${spikeEmployees.length} employee${spikeEmployees.length > 1 ? "s" : ""} with unusual increase`,
+          description: `${summary}. Sudden increases in employee claims may warrant review to verify legitimacy.`,
+          affectedEntities: spikeEmployees.map((s) => s.userId),
+          recommendedAction: `Review recent expense claims from these employees. Verify the increase is due to legitimate business activity (e.g., travel, events).`,
+          detectedAt: Date.now(),
+          metadata: {
+            consolidatedEntities: spikeEmployees,
+            insightType: "employee_expense_spike",
+            sourceDataDomain: "expense_claim",
+          },
+        });
+        insightsCreated++;
+      }
+    }
+  }
+
+  return insightsCreated;
+}
+
 // ============================================
 // EVENT-DRIVEN INSIGHT GENERATION
 // ============================================
@@ -2388,8 +2592,9 @@ export const checkInsightExists = internalQuery({
 /**
  * Test action for running proactive analysis on a specific business
  * Use for manual testing: npx convex run functions/actionCenterJobs:testRunAnalysis '{"businessId":"..."}'
+ * Internal-only — not exposed to frontend clients.
  */
-export const testRunAnalysis = action({
+export const testRunAnalysis = internalAction({
   args: {
     businessId: v.id("businesses"),
   },
