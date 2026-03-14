@@ -245,6 +245,87 @@ After making changes to any system (e-invoice, expense claims, chat, etc.), **al
 | LHDN E-Invoice | `src/domains/expense-claims/einvoice/CLAUDE.md` |
 | App Patterns | `src/app/CLAUDE.md` |
 
+## Accounting System Architecture (2026-03-14 Migration)
+
+**CRITICAL:** The accounting system has been migrated to proper double-entry bookkeeping. Follow these rules:
+
+### Current System (USE THIS)
+- **Tables**: `journal_entries` (header) + `journal_entry_lines` (line items)
+- **Structure**: Double-entry bookkeeping — every transaction has balanced debits and credits
+- **Creation**: Use helper functions from `convex/lib/journal-entry-helpers.ts` + `journal-entries/createInternal.ts`
+- **Querying**: Query `journal_entry_lines` with account code filters (e.g., `accountCode: "1200"` for AR)
+
+**Helper Functions** (`convex/lib/journal-entry-helpers.ts`):
+```typescript
+// Expense claim: Debit expense account, Credit cash/payables
+createExpenseJournalEntry({ amount, expenseAccountCode, description })
+
+// Purchase invoice (AP): Debit expense/inventory, Credit AP
+createInvoiceJournalEntry({ amount, expenseAccountCode, vendorId, description })
+
+// Sales invoice (AR): Debit AR, Credit revenue
+createSalesInvoiceJournalEntry({ amount, customerId, description })
+
+// Payment: Debit/Credit cash + opposite for AR/AP
+createPaymentJournalEntry({ amount, accountCode, isCashIn, description })
+```
+
+**Example: Create a journal entry**
+```typescript
+import { internal } from "./_generated/api";
+import { createExpenseJournalEntry } from "./lib/journal-entry-helpers";
+
+// In your mutation/action:
+const lines = createExpenseJournalEntry({
+  amount: 100.50,
+  expenseAccountCode: "5100",
+  description: "Office supplies"
+});
+
+await ctx.runMutation(internal.journal-entries.createInternal, {
+  businessId,
+  entryDate: "2026-03-14",
+  description: "Office supplies purchase",
+  referenceType: "expense_claim",
+  referenceId: claimId,
+  lines
+});
+```
+
+**Example: Query journal entries**
+```typescript
+// Get AR balance (all debits to AR account)
+const arLines = await ctx.db
+  .query("journal_entry_lines")
+  .withIndex("by_account_business", (q) =>
+    q.eq("accountCode", "1200").eq("businessId", businessId)
+  )
+  .collect();
+
+const arBalance = arLines.reduce((sum, line) =>
+  sum + line.debitAmount - line.creditAmount, 0
+);
+```
+
+### Deprecated System (DO NOT USE)
+- **Table**: `accounting_entries` (single-entry, no balanced debits/credits)
+- **Status**: Read-only for historical data. All new writes go to `journal_entries`.
+- **Removal**: Table will be dropped after 90-day verification period (2026-06-12)
+
+### Migration Status
+- **Write operations**: 100% migrated (18 Convex functions)
+- **Read operations**: 100% migrated (12 frontend files)
+- **Verification period**: 2026-03-14 to 2026-06-12 (90 days)
+- **Next step**: Monitor for any missed edge cases, then drop `accounting_entries` table
+
+**When adding new accounting features:**
+1. Always use `journal_entries` + `journal_entry_lines`
+2. Use helper functions for common patterns (expense, invoice, payment)
+3. Query `journal_entry_lines` with account code filters
+4. Never write to `accounting_entries` — it's deprecated
+
+---
+
 ## Active Technologies
 - TypeScript 5.9.3, Next.js 15.5.7 + Convex 1.31.3, React 19.1.2, Clerk 6.30.0, Zod 3.23.8
 - Convex (document database with real-time sync)
