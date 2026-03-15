@@ -1,10 +1,12 @@
 FROM public.ecr.aws/lambda/python:3.11
 
-# Install build tools needed by sentry-sdk native extension
-RUN yum install -y gcc gcc-c++ && yum clean all
+# Upgrade pip to get latest wheel resolution
+RUN pip install --upgrade pip
 
 COPY requirements.txt ${LAMBDA_TASK_ROOT}/
-RUN pip install --no-cache-dir -r requirements.txt
+
+# Install Python deps — prefer binary wheels to avoid compilation issues
+RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
 
 COPY . ${LAMBDA_TASK_ROOT}/
 
