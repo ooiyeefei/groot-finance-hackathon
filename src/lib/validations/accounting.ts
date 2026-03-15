@@ -206,13 +206,6 @@ export const listAccountingEntriesQuerySchema = paginationSchema.extend({
 })
 
 /**
- * Accounting entry ID parameter schema
- */
-export const accountingEntryIdParamSchema = z.object({
-  entryId: documentIdSchema
-})
-
-/**
  * Bulk operation schema
  */
 export const bulkOperationSchema = z.object({

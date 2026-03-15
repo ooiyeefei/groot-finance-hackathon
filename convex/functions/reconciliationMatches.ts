@@ -227,11 +227,12 @@ export const getByBankTransaction = query({
 
     if (!activeMatch) return null;
 
-    const accountingEntry = await ctx.db.get((activeMatch as any).accountingEntryId);
+    const jeId = (activeMatch as any).accountingEntryId;
+    const journalEntry = jeId ? await ctx.db.get(jeId as any) : null;
 
     return {
       ...activeMatch,
-      accountingEntry,
+      accountingEntry: journalEntry,
     };
   },
 });

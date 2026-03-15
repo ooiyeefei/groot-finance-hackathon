@@ -582,7 +582,7 @@ export const createInternal = internalMutation({
 /**
  * Search journal entries for AI tools
  *
- * Similar to accountingEntries.searchForAI but queries journal_entry_lines
+ * Queries journal_entry_lines for AI search
  * to extract transaction data from double-entry bookkeeping.
  */
 export const searchForAI = query({

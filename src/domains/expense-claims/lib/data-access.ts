@@ -762,7 +762,7 @@ export async function getExpenseClaim(
       processing_metadata: claim.processingMetadata,
       extracted_data: claim.processingMetadata || null,
       transaction: {
-        id: claim.accountingEntryId,
+        id: (claim as any).journalEntryId || claim.accountingEntryId,
         description: claim.description,
         original_amount: claim.totalAmount,
         original_currency: claim.currency,
@@ -966,11 +966,7 @@ export async function updateExpenseClaim(
             reviewerNotes: request.comment
           })
 
-          // Update accounting entry if exists
-          if (existingClaim.accountingEntryId) {
-            // Note: This would need a Convex mutation for accounting_entries
-            console.log(`[Reimbursement] Accounting entry ${existingClaim.accountingEntryId} marked as paid`)
-          }
+          // Journal entry updates handled by Convex mutations
           break
 
         case 'draft':
