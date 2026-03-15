@@ -2591,6 +2591,7 @@ export default defineSchema({
     previousVersion: v.optional(v.number()),
     optimizerType: v.string(),    // "bootstrap_fewshot" | "miprov2"
     trainedAt: v.number(),
+    lastCorrectionId: v.optional(v.string()),  // _id of last correction consumed — prevents re-optimizing same data
   })
     .index("by_platform_status", ["platform", "status"])
     .index("by_platform_version", ["platform", "version"]),

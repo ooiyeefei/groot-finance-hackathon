@@ -307,7 +307,8 @@ crons.daily(
 crons.weekly(
   "dspy-fee-optimization",
   { dayOfWeek: "sunday", hourUTC: 2, minuteUTC: 0 },
-  internal.functions.dspyOptimization.weeklyOptimization
+  internal.functions.dspyOptimization.weeklyOptimization,
+  { force: false }
 );
 
 export default crons;
