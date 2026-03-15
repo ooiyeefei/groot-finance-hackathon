@@ -298,4 +298,16 @@ crons.daily(
   internal.functions.retentionJobs.hardDeleteExpiredUsers
 );
 
+/**
+ * DSPy Fee Classifier — Weekly Optimization
+ *
+ * Runs every Sunday at 2:00 AM UTC to optimize fee classification models
+ * using MIPROv2 on accumulated user corrections (≥100 per platform).
+ */
+crons.weekly(
+  "dspy-fee-optimization",
+  { dayOfWeek: "sunday", hourUTC: 2, minuteUTC: 0 },
+  internal.functions.dspyOptimization.weeklyOptimization
+);
+
 export default crons;

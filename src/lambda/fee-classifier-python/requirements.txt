@@ -1,0 +1,4 @@
+dspy>=2.6.0
+litellm>=1.50.0
+boto3>=1.35.0
+sentry-sdk>=2.0.0

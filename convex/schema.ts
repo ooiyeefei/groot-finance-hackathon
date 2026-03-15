@@ -2409,7 +2409,7 @@ export default defineSchema({
     currency: v.string(),
     paymentMethod: v.optional(v.string()),
 
-    // Fee breakdown (commission, shipping, marketing, refund, other)
+    // Fee breakdown (commission, shipping, marketing, refund, other) — legacy fixed structure
     feeBreakdown: v.optional(v.object({
       commissionFee: v.optional(v.number()),
       shippingFee: v.optional(v.number()),
@@ -2417,6 +2417,20 @@ export default defineSchema({
       refundAmount: v.optional(v.number()),
       otherFee: v.optional(v.number()),
     })),
+
+    // Classified fees — dynamic array with confidence scores (hybrid fee detection)
+    classifiedFees: v.optional(v.array(v.object({
+      feeName: v.string(),
+      amount: v.number(),
+      accountCode: v.string(),
+      accountName: v.string(),
+      confidence: v.number(),
+      tier: v.number(),       // 1 = rules-based, 2 = AI-classified
+      isNew: v.boolean(),     // true if fee name never seen before
+    }))),
+    feeClassificationStatus: v.optional(v.string()), // "classified" | "partial" | "unclassified" | "reviewed"
+    balanceValidationStatus: v.optional(v.string()), // "balanced" | "unbalanced"
+    balanceDiscrepancy: v.optional(v.number()),
 
     // Matching
     matchStatus: salesOrderMatchStatusValidator,
@@ -2532,6 +2546,70 @@ export default defineSchema({
     .index("by_bankTransactionId", ["bankTransactionId"])
     .index("by_accountingEntryId", ["accountingEntryId"])
     .index("by_bankTransactionId_status", ["bankTransactionId", "status"]),
+
+  // ============================================
+  // FEE CLASSIFICATION (Hybrid Fee Detection)
+  // ============================================
+
+  fee_classification_rules: defineTable({
+    businessId: v.id("businesses"),
+    platform: v.string(),       // "shopee", "lazada", "tiktok_shop", "stripe", "grabpay", "all", or custom
+    keyword: v.string(),        // Case-insensitive keyword pattern
+    accountCode: v.string(),    // GL account code e.g. "5801"
+    accountName: v.string(),    // Human-readable e.g. "Commission Fees"
+    priority: v.optional(v.number()),  // Higher = preferred when multiple match
+    isActive: v.boolean(),
+    createdBy: v.optional(v.string()),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_platform", ["businessId", "platform"]),
+
+  fee_classification_corrections: defineTable({
+    businessId: v.id("businesses"),
+    originalFeeName: v.string(),
+    originalAccountCode: v.string(),
+    correctedAccountCode: v.string(),
+    platform: v.string(),
+    salesOrderId: v.optional(v.id("sales_orders")),
+    correctedBy: v.string(),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_platform", ["businessId", "platform"]),
+
+  // ============================================
+  // DSPY MODEL VERSIONS (Fee Classification AI)
+  // ============================================
+
+  dspy_model_versions: defineTable({
+    platform: v.string(),
+    version: v.number(),
+    s3Key: v.string(),
+    status: v.string(),           // "active" | "inactive" | "failed"
+    trainingExamples: v.number(),
+    accuracy: v.number(),
+    previousVersion: v.optional(v.number()),
+    optimizerType: v.string(),    // "bootstrap_fewshot" | "miprov2"
+    trainedAt: v.number(),
+  })
+    .index("by_platform_status", ["platform", "status"])
+    .index("by_platform_version", ["platform", "version"]),
+
+  dspy_optimization_logs: defineTable({
+    platform: v.string(),
+    optimizerType: v.string(),
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    status: v.string(),           // "running" | "completed" | "failed"
+    beforeAccuracy: v.optional(v.number()),
+    afterAccuracy: v.optional(v.number()),
+    trainingExamples: v.optional(v.number()),
+    testSetSize: v.optional(v.number()),
+    errorMessage: v.optional(v.string()),
+    modelVersionId: v.optional(v.id("dspy_model_versions")),
+  })
+    .index("by_platform", ["platform"])
+    .index("by_status", ["status"]),
 
 
   purchase_orders: defineTable({
