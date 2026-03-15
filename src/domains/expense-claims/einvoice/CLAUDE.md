@@ -102,36 +102,48 @@ convex/functions/
 ├── einvoiceJobs.ts              # Internal mutation: email ref matching (for email processing)
 ├── einvoiceJobsNode.ts          # "use node" action: incoming email processing
 ├── einvoiceReceivedDocuments.ts  # Query: list unmatched documents for admin review
-└── system.ts                    # getBusinessesForLhdnPolling query + processLhdnReceivedDocuments mutation
+└── system.ts                    # reportEinvoiceFormFillResult, getEinvoiceMetricsByMerchant,
+                                 # updateHintEffectiveness, getBusinessesForLhdnPolling,
+                                 # processLhdnReceivedDocuments, saveMerchantFormConfig
 
-src/lambda/
-├── lhdn-polling/
-│   └── handler.ts               # Lambda: EventBridge → Convex query → SSM → LHDN → Convex mutation
-└── einvoice-form-fill/
-    └── handler.ts               # Lambda: Stagehand + Browserbase form fill
+src/lambda/einvoice-form-fill-python/
+├── handler.py                   # Main 3-tier form fill (3136+ lines) with DSPy integration
+├── dspy_modules/                # DSPy module definitions (001-dspy-cua-optimization)
+│   ├── module_loader.py         # S3 cache: download optimized modules from finanseal-bucket
+│   ├── troubleshooter.py        # MIPROv2-optimized FormDiagnosis
+│   ├── recon.py                 # BootstrapFewShot recon-to-instructions
+│   ├── instruction_guard.py     # Assert/Suggest CUA instruction constraints
+│   ├── confidence_gate.py       # Tier 1 confidence prediction (threshold 0.7)
+│   └── buyer_matcher.py         # ChainOfThought buyer profile matching
+├── optimization/                # Offline optimization pipeline
+│   ├── data_collector.py        # Extract training data from Convex logs
+│   ├── optimizer.py             # MIPROv2 + BootstrapFewShot training
+│   └── evaluator.py             # Per-merchant scorecards
+└── optimization_handler.py      # Optimizer Lambda entry point (EventBridge every 3 days)
 
-src/app/api/v1/
-├── expense-claims/[id]/
-│   ├── request-einvoice/
-│   │   └── route.ts             # User-initiated: invoke form fill Lambda
-│   ├── upload-einvoice/
-│   │   └── route.ts             # Manual e-invoice upload
-│   └── resolve-match/
-│       └── route.ts             # Admin: resolve Tier 3 fuzzy match
-└── account-management/businesses/
-    └── lhdn-secret/
-        └── route.ts             # SSM: save/check LHDN client secret (Vercel OIDC)
+src/lambda/einvoice-form-fill-browser-use/
+└── handler.py                   # Tier 2B fallback (browser-use, for CUA 429 rate limits)
 
-src/domains/expense-claims/components/
-├── einvoice-section.tsx          # E-invoice status section in expense claim detail
-├── einvoice-status-badge.tsx     # Status badge component
-└── einvoice-match-review.tsx     # Admin review UI for Tier 3 matches
+src/lambda/lhdn-polling/
+└── handler.ts                   # Lambda: EventBridge (5min) → Convex query → SSM → LHDN → Convex
 
 src/lambda/document-processor-python/
-└── steps/detect_qr.py           # QR code detection for auto e-invoice request
+└── steps/detect_qr.py           # Multi-tier QR detection (zxingcpp → pyzbar → vision localize+crop)
+
+src/app/api/v1/expense-claims/[id]/
+├── request-einvoice/route.ts    # User-initiated: invoke form fill Lambda
+├── upload-einvoice/route.ts     # Manual e-invoice upload
+└── resolve-match/route.ts       # Admin: resolve Tier 3 fuzzy match
+
+src/domains/expense-claims/components/
+├── einvoice-section.tsx         # E-invoice status section in expense claim detail
+├── einvoice-status-badge.tsx    # Status badge component
+└── einvoice-match-review.tsx    # Admin review UI for Tier 3 matches
 
 infra/lib/
-└── document-processing-stack.ts  # CDK: Lambda + EventBridge rule + SSM permissions
+└── document-processing-stack.ts # CDK: All Lambdas + EventBridge rules + SSM permissions
+                                 # Includes: document-processor, form-fill, lhdn-polling,
+                                 # email-processor, dspy-optimizer (every 3 days)
 ```
 
 ## Env Vars Required

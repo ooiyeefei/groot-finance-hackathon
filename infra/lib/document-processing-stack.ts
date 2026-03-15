@@ -481,6 +481,56 @@ export class DocumentProcessingStack extends cdk.Stack {
       exportName: `${id}-LogGroupName`,
     });
 
+    // ========================================================================
+    // DSPy Optimizer Lambda (001-dspy-cua-optimization)
+    // Runs MIPROv2 + BootstrapFewShot optimization every 3 days
+    // Uses same Docker image as form fill (shares dspy_modules/ + optimization/)
+    // ========================================================================
+    const optimizerLogGroup = new logs.LogGroup(this, 'DspyOptimizerLogs', {
+      logGroupName: `/aws/lambda/finanseal-dspy-optimizer`,
+      retention: logs.RetentionDays.ONE_MONTH,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const optimizerFunction = new lambda.DockerImageFunction(this, 'DspyOptimizer', {
+      code: lambda.DockerImageCode.fromImageAsset(
+        path.join(__dirname, '../../src/lambda/einvoice-form-fill-python'),
+        {
+          cmd: ['optimization_handler.handler'],  // Override handler to use optimizer
+        }
+      ),
+      architecture: lambda.Architecture.X86_64,
+      functionName: 'finanseal-dspy-optimizer',
+      description: 'DSPy optimization pipeline — MIPROv2 troubleshooter + BootstrapFewShot recon (every 3 days)',
+      memorySize: 1024,
+      timeout: cdk.Duration.minutes(15),  // Optimization can take several minutes
+      logGroup: optimizerLogGroup,
+      environment: {
+        GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+        NEXT_PUBLIC_CONVEX_URL: 'https://kindhearted-lynx-129.convex.cloud',
+        S3_BUCKET_NAME: 'finanseal-bucket',
+        DSPY_CACHEDIR: '/tmp/dspy_cache',
+        // Tuneable optimization frequency (stored here for visibility, EventBridge controls actual schedule)
+        OPTIMIZATION_FREQUENCY_DAYS: '3',
+      },
+    });
+
+    // S3 read/write for dspy-modules/
+    bucket.grantReadWrite(optimizerFunction);
+
+    // EventBridge rule: every 3 days
+    const optimizerRule = new events.Rule(this, 'DspyOptimizerSchedule', {
+      ruleName: 'finanseal-dspy-optimizer-schedule',
+      schedule: events.Schedule.rate(cdk.Duration.days(3)),
+      description: 'Trigger DSPy optimization pipeline every 3 days (001-dspy-cua-optimization)',
+    });
+    optimizerRule.addTarget(new targets.LambdaFunction(optimizerFunction));
+
+    new cdk.CfnOutput(this, 'DspyOptimizerArn', {
+      value: optimizerFunction.functionArn,
+      description: 'DSPy optimizer Lambda ARN',
+    });
+
     new cdk.CfnOutput(this, 'FormFillFunctionArn', {
       value: formFillFunction.functionArn,
       description: 'E-Invoice form fill Lambda ARN',

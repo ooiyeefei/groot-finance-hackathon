@@ -9,7 +9,7 @@
 import { Clock, Trash2, Calendar, CalendarDays, Loader2, Power, PowerOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { ExportFrequency } from '../types';
+import type { ExportFrequency, ExportModule } from '../types';
 import type { Id } from '../../../../convex/_generated/dataModel';
 
 const MODULE_LABELS: Record<string, string> = {

@@ -2286,6 +2286,17 @@ def troubleshoot(screenshot_b64: str, error: str, merchant: str) -> dict:
             })
             print(f"[Troubleshoot] Saved {len(fields)} fix suggestions")
 
+        # DSPy: Save generated hint and failure category to state (001-dspy-cua-optimization)
+        if result.cua_hints:
+            _dspy_state["generatedHint"] = result.cua_hints[:500]
+        _dspy_state["failureCategory"] = {
+            "use_browserbase": "connectivity",
+            "invalid_url": "connectivity",
+            "wrong_url": "session",
+            "manual_only": "captcha",
+            "none": "form_validation",
+        }.get(infra_action, "unknown")
+
     except Exception as e:
         print(f"[Troubleshoot] Failed: {e}")
         traceback.print_exc()

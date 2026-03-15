@@ -678,6 +678,11 @@ export default defineSchema({
       cuaHints: v.optional(v.string()),                // Extra CUA instructions for edge cases
       successCount: v.optional(v.number()),            // Times this config worked
       lastFailureReason: v.optional(v.string()),       // Last known failure for troubleshooter
+      // ── DSPy optimization tracking (001-dspy-cua-optimization) ──
+      tier1FailureCount: v.optional(v.number()),       // Consecutive Tier 1 failures
+      lastReconDescription: v.optional(v.string()),    // Most recent successful recon output
+      lastOptimizedAt: v.optional(v.number()),         // Timestamp of last MIPROv2 run
+      formChangeDetectedAt: v.optional(v.number()),    // When confidence gate detected form change
     })),
   })
     .index("by_country", ["country", "isActive"])
@@ -729,7 +734,8 @@ export default defineSchema({
     })),
   })
     .index("by_expenseClaimId", ["expenseClaimId"])
-    .index("by_businessId_status", ["businessId", "status"]),
+    .index("by_businessId_status", ["businessId", "status"])
+    .index("by_merchantName_status", ["merchantName", "status"]),
 
   // ============================================
   // DUPLICATE MATCHES TABLE (007-duplicate-expense-detection)
@@ -860,6 +866,20 @@ export default defineSchema({
       target: v.optional(v.string()),
     }))),
     lhdnDocumentHash: v.optional(v.string()),
+
+    // AP Accounting (post-migration fields)
+    accountingStatus: v.optional(v.string()),            // "posted" | "unposted"
+    journalEntryId: v.optional(v.string()),              // Linked journal entry
+    paidAmount: v.optional(v.number()),                  // Amount paid so far
+    paymentStatus: v.optional(v.string()),               // "unpaid" | "partial" | "paid"
+    dueDate: v.optional(v.string()),                     // Payment due date
+    paymentHistory: v.optional(v.array(v.object({
+      amount: v.number(),
+      date: v.string(),
+      method: v.optional(v.string()),
+      reference: v.optional(v.string()),
+      journalEntryId: v.optional(v.string()),
+    }))),
 
     deletedAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),

@@ -2064,3 +2064,148 @@ export const isSesEmailVerified = query({
   },
 });
 
+// ============================================
+// DSPY EVALUATION & HINT EFFECTIVENESS (001-dspy-cua-optimization)
+// ============================================
+
+/**
+ * Get per-merchant e-invoice metrics for evaluation dashboard.
+ * Aggregates einvoice_request_logs by merchantName.
+ */
+export const getEinvoiceMetricsByMerchant = query({
+  args: {
+    businessId: v.optional(v.id("businesses")),
+    minAttempts: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    let logs = await ctx.db.query("einvoice_request_logs").collect();
+
+    if (args.businessId) {
+      logs = logs.filter((l) => l.businessId === args.businessId);
+    }
+
+    // Group by merchantName
+    const byMerchant: Record<string, typeof logs> = {};
+    for (const log of logs) {
+      const name = log.merchantName || "unknown";
+      if (!byMerchant[name]) byMerchant[name] = [];
+      byMerchant[name].push(log);
+    }
+
+    const minAttempts = args.minAttempts ?? 1;
+    const results = [];
+
+    for (const [merchant, merchantLogs] of Object.entries(byMerchant)) {
+      if (merchantLogs.length < minAttempts) continue;
+
+      const completed = merchantLogs.filter((l) => l.status === "success" || l.status === "failed");
+      const successes = completed.filter((l) => l.status === "success");
+      const successRate = completed.length > 0 ? successes.length / completed.length : 0;
+
+      // Tier distribution
+      const tierDist: Record<string, number> = {};
+      for (const log of completed) {
+        const tier = log.tierReached || "unknown";
+        tierDist[tier] = (tierDist[tier] || 0) + 1;
+      }
+
+      // Average cost
+      const costs = completed
+        .map((l) => l.cost?.totalCostUsd)
+        .filter((c): c is number => c !== undefined && c !== null);
+      const avgCost = costs.length > 0 ? costs.reduce((a, b) => a + b, 0) / costs.length : 0;
+
+      // Average duration
+      const durations = completed
+        .map((l) => l.durationMs)
+        .filter((d): d is number => d !== undefined && d !== null);
+      const avgDuration = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : 0;
+
+      // Hint effectiveness
+      const hintsWithOutcome = merchantLogs.filter(
+        (l) => l.hintEffectivenessOutcome === "helped" || l.hintEffectivenessOutcome === "not_helped"
+      );
+      const hintsHelped = hintsWithOutcome.filter((l) => l.hintEffectivenessOutcome === "helped");
+      const hintEffectivenessRate = hintsWithOutcome.length > 0
+        ? hintsHelped.length / hintsWithOutcome.length
+        : null;
+
+      // Failure categories
+      const failureCats: Record<string, number> = {};
+      for (const log of completed.filter((l) => l.status === "failed")) {
+        const cat = log.failureCategory || "unknown";
+        failureCats[cat] = (failureCats[cat] || 0) + 1;
+      }
+
+      // Confidence gate accuracy
+      const gatedLogs = merchantLogs.filter((l) => l.confidenceGateDecision);
+      const correctPredictions = gatedLogs.filter((l) => {
+        if (l.confidenceGateDecision === "proceed" && l.tierReached === "tier1" && l.status === "success") return true;
+        if (l.confidenceGateDecision === "skip" && (l.tierReached !== "tier1" || l.status === "failed")) return true;
+        return false;
+      });
+      const gateAccuracy = gatedLogs.length > 0 ? correctPredictions.length / gatedLogs.length : null;
+
+      results.push({
+        merchantName: merchant,
+        totalAttempts: merchantLogs.length,
+        completedAttempts: completed.length,
+        successRate: Math.round(successRate * 100),
+        avgCostUsd: Math.round(avgCost * 100) / 100,
+        avgDurationMs: Math.round(avgDuration),
+        tierDistribution: tierDist,
+        hintEffectivenessRate: hintEffectivenessRate !== null ? Math.round(hintEffectivenessRate * 100) : null,
+        failureCategoryBreakdown: failureCats,
+        confidenceGateAccuracy: gateAccuracy !== null ? Math.round(gateAccuracy * 100) : null,
+      });
+    }
+
+    // Sort by total attempts descending
+    results.sort((a, b) => b.totalAttempts - a.totalAttempts);
+    return results;
+  },
+});
+
+/**
+ * Update hint effectiveness for a merchant's most recent pending hint.
+ * Called at the START of each new form fill attempt to close the feedback loop.
+ */
+export const updateHintEffectiveness = internalMutation({
+  args: {
+    merchantName: v.string(),
+    currentAttemptSucceeded: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    // Find the most recent log with hintEffectivenessOutcome="pending" for this merchant
+    const logs = await ctx.db
+      .query("einvoice_request_logs")
+      .withIndex("by_merchantName_status")
+      .collect();
+
+    const pendingHintLog = logs
+      .filter(
+        (l) =>
+          l.merchantName === args.merchantName &&
+          l.hintEffectivenessOutcome === "pending" &&
+          l.generatedHint
+      )
+      .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
+
+    if (!pendingHintLog) {
+      return { updated: false, reason: "no_pending_hint" };
+    }
+
+    await ctx.db.patch(pendingHintLog._id, {
+      hintEffectivenessOutcome: args.currentAttemptSucceeded ? "helped" : "not_helped",
+    });
+
+    console.log(
+      `[DSPy] Hint effectiveness updated: merchant=${args.merchantName}, ` +
+      `hint="${pendingHintLog.generatedHint?.substring(0, 50)}...", ` +
+      `outcome=${args.currentAttemptSucceeded ? "helped" : "not_helped"}`
+    );
+
+    return { updated: true, outcome: args.currentAttemptSucceeded ? "helped" : "not_helped" };
+  },
+});
+
