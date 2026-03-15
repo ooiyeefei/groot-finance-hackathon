@@ -21,6 +21,7 @@ import type * as functions_attendanceRecords from "../functions/attendanceRecord
 import type * as functions_audit from "../functions/audit.js";
 import type * as functions_bankAccounts from "../functions/bankAccounts.js";
 import type * as functions_bankImportSessions from "../functions/bankImportSessions.js";
+import type * as functions_bankReconCorrections from "../functions/bankReconCorrections.js";
 import type * as functions_bankTransactions from "../functions/bankTransactions.js";
 import type * as functions_businesses from "../functions/businesses.js";
 import type * as functions_catalogItems from "../functions/catalogItems.js";
@@ -98,6 +99,8 @@ import type * as functions_vendorPriceHistory from "../functions/vendorPriceHist
 import type * as functions_vendors from "../functions/vendors.js";
 import type * as functions_webhooks from "../functions/webhooks.js";
 import type * as functions_workSchedules from "../functions/workSchedules.js";
+import type * as lib_bankReconClassifier from "../lib/bankReconClassifier.js";
+import type * as lib_bankReconGLPoster from "../lib/bankReconGLPoster.js";
 import type * as lib_feeClassifier from "../lib/feeClassifier.js";
 import type * as lib_journal_entry_helpers from "../lib/journal_entry_helpers.js";
 import type * as lib_llm from "../lib/llm.js";
@@ -130,6 +133,7 @@ declare const fullApi: ApiFromModules<{
   "functions/audit": typeof functions_audit;
   "functions/bankAccounts": typeof functions_bankAccounts;
   "functions/bankImportSessions": typeof functions_bankImportSessions;
+  "functions/bankReconCorrections": typeof functions_bankReconCorrections;
   "functions/bankTransactions": typeof functions_bankTransactions;
   "functions/businesses": typeof functions_businesses;
   "functions/catalogItems": typeof functions_catalogItems;
@@ -207,6 +211,8 @@ declare const fullApi: ApiFromModules<{
   "functions/vendors": typeof functions_vendors;
   "functions/webhooks": typeof functions_webhooks;
   "functions/workSchedules": typeof functions_workSchedules;
+  "lib/bankReconClassifier": typeof lib_bankReconClassifier;
+  "lib/bankReconGLPoster": typeof lib_bankReconGLPoster;
   "lib/feeClassifier": typeof lib_feeClassifier;
   "lib/journal_entry_helpers": typeof lib_journal_entry_helpers;
   "lib/llm": typeof lib_llm;
