@@ -150,7 +150,7 @@ export default function ChartOfAccountsContent() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <AccountingTabs activeTab="chart-of-accounts" />
-        <Button onClick={() => setIsCreateDialogOpen(true)} className="bg-primary hover:bg-primary/90">
+        <Button onClick={() => setIsCreateDialogOpen(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground">
           <Plus className="w-4 h-4 mr-2" />
           New Account
         </Button>
@@ -337,7 +337,7 @@ export default function ChartOfAccountsContent() {
             <Button className="bg-secondary hover:bg-secondary/80 text-secondary-foreground" onClick={() => setIsCreateDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreate} className="bg-primary hover:bg-primary/90">
+            <Button onClick={handleCreate} className="bg-primary hover:bg-primary/90 text-primary-foreground">
               Create Account
             </Button>
           </DialogFooter>
@@ -395,7 +395,7 @@ export default function ChartOfAccountsContent() {
             <Button className="bg-secondary hover:bg-secondary/80 text-secondary-foreground" onClick={() => setIsEditDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleEdit} className="bg-primary hover:bg-primary/90">
+            <Button onClick={handleEdit} className="bg-primary hover:bg-primary/90 text-primary-foreground">
               Save Changes
             </Button>
           </DialogFooter>

@@ -20,7 +20,7 @@ export function FeedbackWidget() {
     <>
       <Button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-4 right-4 z-50 rounded-full h-12 w-12 p-0 shadow-lg bg-primary hover:bg-primary/90"
+        className="fixed bottom-4 right-4 z-50 rounded-full h-12 w-12 p-0 shadow-lg bg-primary hover:bg-primary/90 text-primary-foreground"
         aria-label="Send feedback"
       >
         <MessageCircle className="h-5 w-5" />
