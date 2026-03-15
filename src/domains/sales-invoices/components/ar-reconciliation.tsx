@@ -674,10 +674,10 @@ export default function ARReconciliation() {
             </Button>
           ))}
           <Button
-            variant={feeReviewFilter ? 'default' : 'outline'}
+            variant="outline"
             size="sm"
             onClick={() => setFeeReviewFilter(!feeReviewFilter)}
-            className="text-xs ml-1"
+            className={`text-xs ml-1 ${feeReviewFilter ? 'bg-amber-100 border-amber-300 text-amber-700 hover:bg-amber-200 dark:bg-amber-500/20 dark:border-amber-500/40 dark:text-amber-400 dark:hover:bg-amber-500/30' : ''}`}
             title="Show only orders with fees needing review (confidence < 90%)"
           >
             <AlertTriangle className="h-3 w-3 mr-1" />
