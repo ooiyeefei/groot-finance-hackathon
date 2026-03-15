@@ -105,7 +105,7 @@ All AWS infrastructure is defined in `infra/lib/`. Any new AWS resource MUST be 
 
 | Stack | File | Resources |
 |-------|------|-----------|
-| **DocumentProcessing** | `document-processing-stack.ts` | `finanseal-document-processor` (Python Docker, 1024MB, x86_64), `finanseal-einvoice-form-fill` (Node.js 20, 512MB, ARM_64), `finanseal-lhdn-polling` (Node.js 20, 256MB, ARM_64) |
+| **DocumentProcessing** | `document-processing-stack.ts` | `finanseal-document-processor` (Python Docker, 1024MB, x86_64), `finanseal-einvoice-form-fill` (Python Docker, 2048MB, x86_64), `finanseal-lhdn-polling` (Node.js 20, 256MB, ARM_64), `finanseal-dspy-optimizer` (Python Docker, 1024MB, x86_64, EventBridge every 3 days), `finanseal-einvoice-email-processor` (Node.js 20) |
 | **CDN** | `cdn-stack.ts` | CloudFront distribution (OAC → `finanseal-bucket`), signed URL key pair, SSM params for key-pair-id/domain |
 | **SystemEmail** | `system-email-stack.ts` | `finanseal-welcome-workflow` (Node.js 22, Durable Function), SES domain identity (`notifications.hellogroot.com`), SES config set, SNS topics, CloudWatch alarms (bounce/complaint rates) |
 | **MCPServer** | `mcp-server-stack.ts` | `finanseal-mcp-server` (Node.js 20, 512MB, ARM_64), API Gateway REST `/mcp` endpoint |

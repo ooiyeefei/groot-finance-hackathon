@@ -407,6 +407,9 @@ cost_tracker = CostTracker()
 # Per-invocation state for debug reporting
 _run_state: dict = {}
 
+# Per-invocation DSPy state (001-dspy-cua-optimization)
+_dspy_state: dict = {}
+
 def _debug_fields() -> dict:
     """Build debug fields dict for Convex reportEinvoiceFormFillResult."""
     fields: dict = {}
@@ -425,6 +428,23 @@ def _debug_fields() -> dict:
     cost_data = cost_tracker.to_dict()
     if cost_data.get("totalCostUsd", 0) > 0:
         fields["cost"] = cost_data
+    # DSPy self-learning fields (001-dspy-cua-optimization)
+    if _dspy_state.get("reconDescription"):
+        fields["reconDescription"] = _dspy_state["reconDescription"][:2000]
+    if _dspy_state.get("generatedHint"):
+        fields["generatedHint"] = _dspy_state["generatedHint"][:500]
+    if _dspy_state.get("confidenceGateScore") is not None:
+        fields["confidenceGateScore"] = _dspy_state["confidenceGateScore"]
+    if _dspy_state.get("confidenceGateDecision"):
+        fields["confidenceGateDecision"] = _dspy_state["confidenceGateDecision"]
+    if _dspy_state.get("failureCategory"):
+        fields["failureCategory"] = _dspy_state["failureCategory"]
+    if _dspy_state.get("perFieldResults"):
+        fields["perFieldResults"] = _dspy_state["perFieldResults"]
+    if _dspy_state.get("buyerProfileMatchResult"):
+        fields["buyerProfileMatchResult"] = _dspy_state["buyerProfileMatchResult"]
+    if _dspy_state.get("dspyModuleVersion"):
+        fields["dspyModuleVersion"] = _dspy_state["dspyModuleVersion"]
     return fields
 
 
@@ -2268,6 +2288,17 @@ def troubleshoot(screenshot_b64: str, error: str, merchant: str) -> dict:
             })
             print(f"[Troubleshoot] Saved {len(fields)} fix suggestions")
 
+        # DSPy: Save generated hint and failure category to state (001-dspy-cua-optimization)
+        if result.cua_hints:
+            _dspy_state["generatedHint"] = result.cua_hints[:500]
+        _dspy_state["failureCategory"] = {
+            "use_browserbase": "connectivity",
+            "invalid_url": "connectivity",
+            "wrong_url": "session",
+            "manual_only": "captcha",
+            "none": "form_validation",
+        }.get(infra_action, "unknown")
+
     except Exception as e:
         print(f"[Troubleshoot] Failed: {e}")
         traceback.print_exc()
@@ -2451,9 +2482,10 @@ def handler(event: dict, context=None) -> dict:
         return download_einvoice(event)
 
     start = time.time()
-    global cost_tracker, _run_state
+    global cost_tracker, _run_state, _dspy_state
     cost_tracker = CostTracker()
     _run_state = {"tier": "prefill", "browser_type": "local", "cua_actions": 0}
+    _dspy_state = {}  # Reset DSPy state for this invocation
     browser: Optional[Browser] = None
     claim_id = event["expenseClaimId"]
     url = event["merchantFormUrl"]
@@ -2750,7 +2782,29 @@ def handler(event: dict, context=None) -> dict:
             receipt_uploaded = upload_receipt_image(page, receipt_image_local)
 
         # ── Tier 1: Check for saved formConfig (merchant config already fetched above) ──
+        tier1_allowed = True
         if merchant and fc and fc.get("fields") and (fc.get("successCount", 0) > 0):
+            # DSPy Confidence Gate: predict if Tier 1 will succeed (001-dspy-cua-optimization)
+            try:
+                from dspy_modules.confidence_gate import evaluate_tier1_confidence
+                import json as _json
+                page_html = page.content()[:2000]  # First 2KB of page HTML
+                selectors_json = _json.dumps([f.get("selector", "") for f in fc.get("fields", [])])
+                gate_result = evaluate_tier1_confidence(
+                    saved_selectors=selectors_json,
+                    page_html_snippet=page_html,
+                    merchant_name=merchant,
+                    success_count=fc.get("successCount", 0),
+                )
+                _dspy_state["confidenceGateScore"] = gate_result["confidence"]
+                _dspy_state["confidenceGateDecision"] = gate_result["decision"]
+                if gate_result["decision"] == "skip":
+                    tier1_allowed = False
+                    print(f"[Form Fill] DSPy confidence gate: SKIP Tier 1 (confidence={gate_result['confidence']:.2f}, reason={gate_result['reasoning'][:80]})")
+            except Exception as gate_err:
+                print(f"[Form Fill] DSPy confidence gate error (non-fatal): {gate_err}")
+
+        if merchant and fc and fc.get("fields") and (fc.get("successCount", 0) > 0) and tier1_allowed:
             _run_state["tier"] = "tier1"
             print(f"[Form Fill] ⚡ Tier 1: {len(fc['fields'])} fields, {fc['successCount']} successes")
             if run_tier1(page, fc, buyer):
@@ -2961,6 +3015,15 @@ def handler(event: dict, context=None) -> dict:
             **({"errorMessage": error_msg} if error_msg else {}),
             **_debug_fields(),
         })
+        # DSPy: Update hint effectiveness for previous attempt's hint (feedback loop)
+        if merchant:
+            try:
+                convex_mutation("functions/system:updateHintEffectiveness", {
+                    "merchantName": merchant,
+                    "currentAttemptSucceeded": verified_success,
+                })
+            except Exception:
+                pass
         return {"success": verified_success, "verified": True, "evidence": evidence, "durationMs": dur, "cost": cost_tracker.to_dict()}
 
     except Exception as e:

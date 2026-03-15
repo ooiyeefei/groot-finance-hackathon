@@ -10,9 +10,12 @@
 
 FROM public.ecr.aws/lambda/python:3.11
 
-# Install Poppler for PDF conversion (as root)
+# Install system dependencies (as root)
 USER root
-RUN yum install -y poppler-utils && yum clean all
+RUN yum install -y \
+    poppler-utils \
+    zbar \
+    && yum clean all
 
 # Copy requirements and install dependencies
 COPY requirements.txt ${LAMBDA_TASK_ROOT}/
@@ -22,7 +25,7 @@ RUN pip install --upgrade pip
 
 # Install Python packages — pre-built wheels for native extensions
 RUN pip install --no-cache-dir \
-    --only-binary=numpy,tiktoken,zxing-cpp,pillow-heif \
+    --only-binary=numpy,tiktoken,zxing-cpp,pillow-heif,pyzbar \
     -r requirements.txt
 
 # Copy function code

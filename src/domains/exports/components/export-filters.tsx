@@ -61,6 +61,9 @@ const STATUS_OPTIONS: Record<ExportModule, { value: string; label: string }[]> =
     { value: 'draft', label: 'Draft' },
     { value: 'sent', label: 'Sent' },
   ],
+  "master-data": [
+    { value: 'all', label: 'All statuses' },
+  ],
 };
 
 const DATE_PRESETS = [

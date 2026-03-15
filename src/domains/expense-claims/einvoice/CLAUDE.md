@@ -102,36 +102,48 @@ convex/functions/
 ├── einvoiceJobs.ts              # Internal mutation: email ref matching (for email processing)
 ├── einvoiceJobsNode.ts          # "use node" action: incoming email processing
 ├── einvoiceReceivedDocuments.ts  # Query: list unmatched documents for admin review
-└── system.ts                    # getBusinessesForLhdnPolling query + processLhdnReceivedDocuments mutation
+└── system.ts                    # reportEinvoiceFormFillResult, getEinvoiceMetricsByMerchant,
+                                 # updateHintEffectiveness, getBusinessesForLhdnPolling,
+                                 # processLhdnReceivedDocuments, saveMerchantFormConfig
 
-src/lambda/
-├── lhdn-polling/
-│   └── handler.ts               # Lambda: EventBridge → Convex query → SSM → LHDN → Convex mutation
-└── einvoice-form-fill/
-    └── handler.ts               # Lambda: Stagehand + Browserbase form fill
+src/lambda/einvoice-form-fill-python/
+├── handler.py                   # Main 3-tier form fill (3136+ lines) with DSPy integration
+├── dspy_modules/                # DSPy module definitions (001-dspy-cua-optimization)
+│   ├── module_loader.py         # S3 cache: download optimized modules from finanseal-bucket
+│   ├── troubleshooter.py        # MIPROv2-optimized FormDiagnosis
+│   ├── recon.py                 # BootstrapFewShot recon-to-instructions
+│   ├── instruction_guard.py     # Assert/Suggest CUA instruction constraints
+│   ├── confidence_gate.py       # Tier 1 confidence prediction (threshold 0.7)
+│   └── buyer_matcher.py         # ChainOfThought buyer profile matching
+├── optimization/                # Offline optimization pipeline
+│   ├── data_collector.py        # Extract training data from Convex logs
+│   ├── optimizer.py             # MIPROv2 + BootstrapFewShot training
+│   └── evaluator.py             # Per-merchant scorecards
+└── optimization_handler.py      # Optimizer Lambda entry point (EventBridge every 3 days)
 
-src/app/api/v1/
-├── expense-claims/[id]/
-│   ├── request-einvoice/
-│   │   └── route.ts             # User-initiated: invoke form fill Lambda
-│   ├── upload-einvoice/
-│   │   └── route.ts             # Manual e-invoice upload
-│   └── resolve-match/
-│       └── route.ts             # Admin: resolve Tier 3 fuzzy match
-└── account-management/businesses/
-    └── lhdn-secret/
-        └── route.ts             # SSM: save/check LHDN client secret (Vercel OIDC)
+src/lambda/einvoice-form-fill-browser-use/
+└── handler.py                   # Tier 2B fallback (browser-use, for CUA 429 rate limits)
 
-src/domains/expense-claims/components/
-├── einvoice-section.tsx          # E-invoice status section in expense claim detail
-├── einvoice-status-badge.tsx     # Status badge component
-└── einvoice-match-review.tsx     # Admin review UI for Tier 3 matches
+src/lambda/lhdn-polling/
+└── handler.ts                   # Lambda: EventBridge (5min) → Convex query → SSM → LHDN → Convex
 
 src/lambda/document-processor-python/
-└── steps/detect_qr.py           # QR code detection for auto e-invoice request
+└── steps/detect_qr.py           # Multi-tier QR detection (zxingcpp → pyzbar → vision localize+crop)
+
+src/app/api/v1/expense-claims/[id]/
+├── request-einvoice/route.ts    # User-initiated: invoke form fill Lambda
+├── upload-einvoice/route.ts     # Manual e-invoice upload
+└── resolve-match/route.ts       # Admin: resolve Tier 3 fuzzy match
+
+src/domains/expense-claims/components/
+├── einvoice-section.tsx         # E-invoice status section in expense claim detail
+├── einvoice-status-badge.tsx    # Status badge component
+└── einvoice-match-review.tsx    # Admin review UI for Tier 3 matches
 
 infra/lib/
-└── document-processing-stack.ts  # CDK: Lambda + EventBridge rule + SSM permissions
+└── document-processing-stack.ts # CDK: All Lambdas + EventBridge rules + SSM permissions
+                                 # Includes: document-processor, form-fill, lhdn-polling,
+                                 # email-processor, dspy-optimizer (every 3 days)
 ```
 
 ## Env Vars Required
@@ -152,9 +164,9 @@ infra/lib/
 | Table | Purpose |
 |-------|---------|
 | `einvoice_received_documents` | Stores LHDN received documents with match status |
-| `einvoice_request_logs` | Audit log for e-invoice requests (form fill attempts) |
-| `expense_claims` (fields) | `einvoiceRequestStatus`, `einvoiceAttached`, `lhdnReceivedDocumentUuid`, `lhdnReceivedStatus`, etc. |
-| `merchant_einvoice` | Merchant-specific config: URL, formConfig (CSS selectors), cuaHints (learned instructions), matchPatterns |
+| `einvoice_request_logs` | Audit log for e-invoice requests + DSPy self-learning fields (reconDescription, generatedHint, hintEffectivenessOutcome, confidenceGateScore, failureCategory, perFieldResults, buyerProfileMatchResult, dspyModuleVersion) |
+| `expense_claims` (fields) | `einvoiceRequestStatus`, `einvoiceAttached`, `lhdnReceivedDocumentUuid`, `lhdnReceivedStatus`, `merchantFormUrl`, etc. |
+| `merchant_einvoice` | Merchant-specific config: URL, formConfig (fields, cuaHints, successCount, tier1FailureCount, lastReconDescription, lastOptimizedAt, formChangeDetectedAt), matchPatterns |
 
 ## CUA Form Fill Architecture (Self-Evolving Agent)
 
@@ -163,14 +175,19 @@ infra/lib/
 - **Gemini 3.1 Flash-Lite Preview**: Recon, troubleshoot, verify, DSPy diagnosis. $0.25/$1.50 per M tokens. **Always use this for non-CUA Gemini calls.**
 - **CapSolver API**: reCAPTCHA v2 ($0.80/1k) + Cloudflare Turnstile ($1.20/1k).
 
-### Two Lambdas
+### E-Invoice Lambdas
 
-| Lambda | File | Purpose | Model |
-|--------|------|---------|-------|
-| `finanseal-einvoice-form-fill` | `src/lambda/einvoice-form-fill-python/handler.py` | Main 3-tier form fill + troubleshooter | CUA + Flash-Lite |
-| `finanseal-einvoice-form-fill-bu` | `src/lambda/einvoice-form-fill-browser-use/handler.py` | Tier 2B fallback (CUA 429 rate limit) | Flash-Lite via browser-use |
+| Lambda | File | Purpose | Trigger |
+|--------|------|---------|---------|
+| `finanseal-einvoice-form-fill` | `src/lambda/einvoice-form-fill-python/handler.py` | Main 3-tier form fill + DSPy self-learning | Vercel API (OIDC) |
+| `finanseal-einvoice-form-fill-bu` | `src/lambda/einvoice-form-fill-browser-use/handler.py` | Tier 2B fallback (CUA 429 rate limit) | Invoked by form-fill Lambda |
+| `finanseal-dspy-optimizer` | `src/lambda/einvoice-form-fill-python/optimization_handler.py` | MIPROv2 + BootstrapFewShot optimization | EventBridge (every 3 days) |
+| `finanseal-lhdn-polling` | `src/lambda/lhdn-polling/handler.ts` | Poll LHDN API for received documents | EventBridge (every 5 min) |
+| `finanseal-einvoice-email-processor` | (Node.js) | Process incoming e-invoice emails from SES | SES receipt rule |
 
-Lambda 2 exists because `browser-use` library uses asyncio internally, which conflicts with the main Lambda's `sync_playwright` + `nest_asyncio`.
+Lambda 2 (browser-use) exists because `browser-use` library uses asyncio internally, which conflicts with the main Lambda's `sync_playwright` + `nest_asyncio`.
+
+Lambda 3 (dspy-optimizer) shares the same Docker image as form-fill but uses `optimization_handler.handler` as entry point. Runs offline every 3 days — frequency is tuneable.
 
 ### Browser Selection
 - **Local Playwright Chromium** (default): Fast, free, works for 80% of merchants.
@@ -183,25 +200,37 @@ User clicks "Request E-Invoice"
   → Next.js API validates claim + composes buyerDetails
   → Invokes Lambda 1 (async)
 
-Lambda 1:
+Lambda 1 (with DSPy enhancements):
   1. SETUP: Build buyer/receipt, fetch merchant config (cuaHints)
   2. BROWSER: Browserbase if cuaHints says so, else local Chromium
      → Runtime: detect managed Turnstile → switch to Browserbase
   3. PRE-FILL: Company toggle → Validate gate → Phone → Text → Dropdowns
   4. CAPTCHA: reCAPTCHA/Turnstile/hCaptcha → CapSolver API
-  5. TIER 1: Saved formConfig (CSS selectors, ~5s)
-  6. TIER 2: Gemini CUA visual fill (~120s, $0.10-0.50)
+  5. DSPy CONFIDENCE GATE: Predict Tier 1 success (skip if <0.7)
+  6. TIER 1: Saved formConfig (CSS selectors, ~5s) — skipped if gate says no
+  7. DSPy INSTRUCTION GUARD: Assert required fields + Suggest selectors
+  8. TIER 2: Gemini CUA visual fill (~120s, $0.10-0.50)
      → 429? → invoke Lambda 2 (Tier 2B)
-  7. VERIFY: Flash-Lite checks screenshot for success/error
-  8. TIER 3: On failure → DSPy troubleshoot → learn cuaHints
-  9. COST LOG: Actual tokens + CapSolver + Browserbase
+  9. VERIFY: Flash-Lite checks screenshot for success/error
+  10. TIER 3: On failure → DSPy troubleshoot → learn cuaHints → save generatedHint
+  11. DSPy FEEDBACK: Update previous hint's effectiveness (helped/not_helped)
+  12. COST LOG: Actual tokens + CapSolver + Browserbase + DSPy fields
 
 Merchant sends e-invoice email
   → SES receives at einvoice+{ref}@einv.hellogroot.com
-  → Lambda 3 (email processor): match → download PDF → forward to user
+  → Lambda (email processor): match → download PDF → forward to user
+
+Every 3 days (EventBridge):
+  → Lambda (dspy-optimizer):
+    1. Collect training data from einvoice_request_logs
+    2. MIPROv2: optimize troubleshooter prompts (hint effectiveness metric)
+    3. BootstrapFewShot: learn recon patterns from successful fills
+    4. Evaluate: compare optimized vs baseline scores
+    5. If better: upload to S3 (finanseal-bucket/dspy-modules/)
+    6. Form fill Lambda picks up new module on next cold start
 ```
 
-### Self-Evolving Loop
+### Self-Evolving Loop (Enhanced with DSPy — 001-dspy-cua-optimization)
 
 ```
 merchant_einvoice.formConfig:
@@ -209,10 +238,121 @@ merchant_einvoice.formConfig:
   cuaHints: "Click Company tab..."  ← Learned from Tier 3
   successCount: N                   ← Tier 1 confidence
   lastFailureReason: "..."          ← Tier 3 diagnosis
+  tier1FailureCount: N              ← Consecutive Tier 1 failures
+  lastReconDescription: "..."       ← Most recent successful recon
+  lastOptimizedAt: timestamp        ← Last MIPROv2 run
+  formChangeDetectedAt: timestamp   ← When confidence gate detected change
 
 Each failure → troubleshoot → new cuaHints → next run smarter
 Each success → save formConfig → next run uses Tier 1 (fast)
+Hint effectiveness tracked: did the hint actually help on the next attempt?
 ```
+
+### DSPy Self-Improving Pipeline (001-dspy-cua-optimization)
+
+**Architecture**: 6 DSPy enhancements layered on top of the existing 3-tier form fill system. All enhancements have fallback to non-optimized behavior.
+
+**Design Decision**: DSPy modules are lazily imported (not at Lambda cold start) to avoid 10s penalty. Optimized modules cached in S3, downloaded on first use per container.
+
+#### 6 Features
+
+| # | Feature | DSPy Primitive | Priority | Status |
+|---|---------|---------------|----------|--------|
+| 1 | Troubleshooter optimization | MIPROv2 | P0 | Deployed |
+| 2 | Cross-merchant recon intelligence | BootstrapFewShot | P1 | Deployed |
+| 3 | Performance measurement | dspy.Evaluate | P1 | Deployed |
+| 4 | Self-healing CUA instructions | dspy.Assert + dspy.Suggest | P2 | Deployed |
+| 5 | Smart Tier 1 skip | Confidence prediction | P2 | Deployed |
+| 6 | Intelligent buyer profile matching | dspy.ChainOfThought | P3 | Deployed |
+
+#### How It Works
+
+```
+Form Fill Attempt:
+  1. Confidence gate predicts Tier 1 success (skip if <0.7)
+  2. CUA instructions guarded by Assert (required fields) + Suggest (selectors)
+  3. Recon includes BootstrapFewShot examples from successful merchants
+  4. On failure: troubleshooter generates hint → saved with "pending" effectiveness
+  5. On next attempt: previous hint's effectiveness updated ("helped"/"not_helped")
+  6. Every 3 days: optimizer retrains troubleshooter + recon from accumulated data
+
+Data Flow:
+  einvoice_request_logs (extended with DSPy fields)
+    → Training data for MIPROv2 (hint effectiveness pairs)
+    → Training data for BootstrapFewShot (recon-success pairs)
+    → Per-merchant evaluation scorecards (computed on-demand)
+```
+
+#### Key Design Decisions
+
+1. **Optimization runs offline every 3 days** (not during form fill). EventBridge triggers `finanseal-dspy-optimizer` Lambda. Frequency stored as tuneable parameter.
+2. **Optimized modules stored in S3** (`finanseal-bucket/dspy-modules/{module_name}/latest.json`). Downloaded by form fill Lambda on cold start (~200ms). Decoupled from Lambda deployment.
+3. **Schema consolidation** — extended existing `einvoice_request_logs` table with DSPy fields (reconDescription, generatedHint, hintEffectivenessOutcome, confidenceGateScore, failureCategory, etc.) instead of creating new tables.
+4. **Evaluation reports are computed queries** — `getEinvoiceMetricsByMerchant` aggregates logs on-the-fly. No separate storage needed.
+5. **All DSPy modules have fallback** — if S3 module missing, optimization not run, or DSPy import fails, system falls back to baseline behavior. Zero risk of breaking existing flow.
+6. **Gemini 3.1 Flash-Lite** used for all DSPy calls (troubleshooter, recon, confidence gate, buyer matcher). CUA model only for Tier 2 visual form fill.
+
+#### DSPy Module Files
+
+```
+src/lambda/einvoice-form-fill-python/
+├── dspy_modules/
+│   ├── __init__.py
+│   ├── module_loader.py          # S3 module cache: download, /tmp/ cache, fallback
+│   ├── troubleshooter.py         # MIPROv2-optimized FormDiagnosis signature
+│   ├── recon.py                  # BootstrapFewShot ReconToInstructions
+│   ├── instruction_guard.py      # Assert (required fields) + Suggest (CSS selectors)
+│   ├── confidence_gate.py        # Tier 1 success prediction (threshold: 0.7)
+│   └── buyer_matcher.py          # ChainOfThought: TIN match → fuzzy name → recency
+├── optimization/
+│   ├── __init__.py
+│   ├── data_collector.py         # Extract training data from Convex logs
+│   ├── optimizer.py              # MIPROv2 + BootstrapFewShot training
+│   └── evaluator.py              # Per-merchant scorecards
+└── optimization_handler.py       # Optimizer Lambda entry point (EventBridge)
+```
+
+#### Checking Evaluation Scorecards
+
+**Convex Dashboard**: Functions → `system:getEinvoiceMetricsByMerchant` → Run with `{"minAttempts": 1}`
+
+**CLI**: `aws lambda invoke --function-name finanseal-dspy-optimizer --payload '{"source":"manual"}' --profile groot-finanseal --region us-west-2 /tmp/result.json && cat /tmp/result.json | python3 -m json.tool`
+
+#### DSPy Fields on einvoice_request_logs
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `reconDescription` | string | Recon step output (form field descriptions) |
+| `generatedHint` | string | cuaHint text generated by troubleshooter |
+| `hintEffectivenessOutcome` | "helped"\|"not_helped"\|"pending" | Feedback loop: did the hint help? |
+| `confidenceGateScore` | number (0-1) | Tier 1 confidence prediction |
+| `confidenceGateDecision` | "proceed"\|"skip" | Tier 1 gate outcome |
+| `failureCategory` | "connectivity"\|"form_validation"\|"session"\|"captcha"\|"unknown" | Classified failure type |
+| `perFieldResults` | array | Per-field fill outcomes [{fieldName, filled, selector, error}] |
+| `buyerProfileMatchResult` | object | Buyer profile selection {profileSelected, reasoning, matchType} |
+| `dspyModuleVersion` | string | Version ID of optimized module used |
+
+### QR Code Detection (Multi-Tier with Vision Localization)
+
+**Problem solved**: zxingcpp missed dense QR codes on dark backgrounds (e.g., Sterling Station receipts with 2 QR codes but only 1 detected).
+
+**Architecture**: Smart fast-path with progressive fallback.
+
+```
+Tier 1: zxingcpp on original image (fast path, ~100ms)
+  ↓ if <2 QRs found
+Tier 2: Image preprocessing (contrast, brightness, sharpen, grayscale)
+  + zxingcpp + pyzbar on 5 variants (~400ms)
+  ↓ if still <2 QRs
+Tier 3: Gemini Vision localization → crop → decode (~2s)
+  Vision returns bounding boxes → crop to QR region → run decoders on crop
+```
+
+**Key design decision**: Use Gemini Vision to LOCATE QR codes (bounding boxes), then crop and decode. Vision is good at spatial localization but bad at QR decoding. Decoders are good at decoding but need focused input. Combining both is 200x more efficient than brute-force scanning.
+
+**Performance**: 80% of receipts use fast path (Tier 1 only, ~2s total). Only difficult cases activate Tier 2/3.
+
+**Files**: `src/lambda/document-processor-python/steps/detect_qr.py`, `Dockerfile` (added pyzbar + libzbar)
 
 ### Merchant-Specific Patterns
 

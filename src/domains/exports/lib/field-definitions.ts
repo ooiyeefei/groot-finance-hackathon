@@ -148,6 +148,7 @@ const FIELDS_BY_MODULE: Record<ExportModule, FieldDefinition[]> = {
   invoice: INVOICE_FIELDS,
   leave: LEAVE_FIELDS,
   accounting: ACCOUNTING_FIELDS,
+  "master-data": [],  // No field definitions yet for master-data exports
 };
 
 export function getFieldsByModule(module: ExportModule): FieldDefinition[] {

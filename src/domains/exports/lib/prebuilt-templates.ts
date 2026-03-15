@@ -1145,6 +1145,7 @@ const TEMPLATES_BY_MODULE: Record<ExportModule, PrebuiltTemplate[]> = {
   invoice: INVOICE_TEMPLATES,
   leave: LEAVE_TEMPLATES,
   accounting: ACCOUNTING_TEMPLATES,
+  "master-data": [],  // No prebuilt templates yet for master-data
 };
 
 export function getPrebuiltTemplatesByModule(

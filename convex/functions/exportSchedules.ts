@@ -81,7 +81,7 @@ export const list = query({
     const enrichedSchedules = await Promise.all(
       schedules.map(async (schedule) => {
         let templateName = "Unknown Template";
-        let module: "expense" | "invoice" | "leave" | "accounting" = "expense";
+        let module: "expense" | "invoice" | "leave" | "accounting" | "master-data" = "expense";
 
         if (schedule.templateId) {
           const template = await ctx.db.get(schedule.templateId);
@@ -493,7 +493,7 @@ export const runScheduledExports = internalMutation({
     for (const schedule of dueSchedules) {
       try {
         // Get module from template
-        let module: "expense" | "invoice" | "leave" | "accounting" = "expense";
+        let module: "expense" | "invoice" | "leave" | "accounting" | "master-data" = "expense";
         let templateName = "Scheduled Export";
         if (schedule.templateId) {
           const template = await ctx.db.get(schedule.templateId);

@@ -284,7 +284,7 @@ export const getById = query({
       ? await ctx.db.get(claim.approvedBy)
       : null;
     const accountingEntry = claim.accountingEntryId
-      ? await ctx.db.get(claim.accountingEntryId)
+      ? await ctx.db.get(claim.accountingEntryId as any)
       : null;
 
     return {
@@ -1275,7 +1275,7 @@ export const updateStatus = mutation({
         // Update the linked accounting entry status to 'paid'
         if (claim.accountingEntryId) {
           const isoDate = new Date(now).toISOString().split("T")[0];
-          await ctx.db.patch(claim.accountingEntryId, {
+          await ctx.db.patch(claim.accountingEntryId as any, {
             status: "paid",
             paymentDate: isoDate,
             updatedAt: now,
@@ -1842,7 +1842,7 @@ export const getFormattedReportData = query({
       claims.map(async (claim) => {
         const employee = await ctx.db.get(claim.userId);
         const accountingEntry = claim.accountingEntryId
-          ? await ctx.db.get(claim.accountingEntryId)
+          ? await ctx.db.get(claim.accountingEntryId as any)
           : null;
 
         return {
