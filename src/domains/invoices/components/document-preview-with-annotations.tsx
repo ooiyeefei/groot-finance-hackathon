@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 
 interface BoundingBox {
@@ -56,6 +56,11 @@ export default function DocumentPreviewWithAnnotations({
   const [imageLoaded, setImageLoaded] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
+
+  // Reset imageLoaded when imageUrl changes to ensure fresh load state
+  useEffect(() => {
+    setImageLoaded(false)
+  }, [imageUrl])
 
   const handleImageLoad = () => {
     setImageLoaded(true)

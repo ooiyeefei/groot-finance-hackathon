@@ -290,31 +290,46 @@ export default function EditExpenseModalNew({
 
   // Generate signed URL when receipt info is loaded
   // Uses lightweight /api/v1/signed-url endpoint (skips redundant Convex query)
+  // Cancellation token prevents stale fetch responses from corrupting state
   useEffect(() => {
-    const generateSignedUrl = async () => {
-      if (!receiptInfo.storagePath) return
+    if (!receiptInfo.storagePath) return
 
+    let cancelled = false
+
+    const generateSignedUrl = async () => {
       try {
         setImageLoading(true)
         const s3Key = `expense_claims/${receiptInfo.storagePath}`
         const response = await fetch(`/api/v1/signed-url?path=${encodeURIComponent(s3Key)}`)
+
+        if (cancelled) return
 
         if (!response.ok) {
           throw new Error('Failed to generate signed URL')
         }
 
         const result = await response.json()
-        setSignedImageUrl(result?.data?.imageUrl || null)
+        if (!cancelled) {
+          setSignedImageUrl(result?.data?.imageUrl || null)
+        }
       } catch (error) {
-        console.error('[Edit Modal] Failed to generate signed URL:', error)
-        setSignedImageUrl(null)
+        if (!cancelled) {
+          console.error('[Edit Modal] Failed to generate signed URL:', error)
+          setSignedImageUrl(null)
+        }
       } finally {
-        setImageLoading(false)
+        if (!cancelled) {
+          setImageLoading(false)
+        }
       }
     }
 
     generateSignedUrl()
-  }, [receiptInfo.storagePath, expenseClaimId])
+
+    return () => {
+      cancelled = true
+    }
+  }, [receiptInfo.storagePath])
 
   // Handle reprocess with proper callback integration
   const handleReprocessWrapper = useCallback(async () => {
