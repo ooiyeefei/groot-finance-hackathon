@@ -3,7 +3,6 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as logs from 'aws-cdk-lib/aws-logs';
-import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { Construct } from 'constructs';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -37,22 +36,10 @@ export class FeeClassifierStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    // Get Gemini API key from SSM
-    const geminiApiKey = ssm.StringParameter.valueForStringParameter(
-      this,
-      '/finanseal/gemini-api-key'
-    );
-
-    // Get MCP internal service key from SSM
-    const mcpServiceKey = ssm.StringParameter.valueForStringParameter(
-      this,
-      '/finanseal/mcp-internal-service-key'
-    );
-
-    // Environment variables
+    // Environment variables — loaded from .env.local (same pattern as document-processing-stack)
     const envVars: Record<string, string> = {
-      GEMINI_API_KEY: geminiApiKey,
-      MCP_INTERNAL_SERVICE_KEY: mcpServiceKey,
+      GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+      MCP_INTERNAL_SERVICE_KEY: process.env.MCP_INTERNAL_SERVICE_KEY || '',
       S3_BUCKET: 'finanseal-bucket',
       SENTRY_DSN: process.env.SENTRY_DSN ?? '',
     };
