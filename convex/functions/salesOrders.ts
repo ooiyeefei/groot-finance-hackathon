@@ -10,6 +10,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { resolveUserByClerkId } from "../lib/resolvers";
 import {
   salesOrderMatchStatusValidator,
@@ -842,11 +843,11 @@ export const closePeriod = mutation({
       }
     }
 
-    return { closed, disputed, total: inRange.length };
     // Create journal entries for matched orders (accounting integration)
+    let accounting: any = null;
     try {
-      const accountingResult = await ctx.runMutation(
-        "functions/integrations/arReconciliationIntegration:createJournalEntriesFromReconciliation" as any,
+      accounting = await ctx.runMutation(
+        internal.functions.integrations.arReconciliationIntegration.createJournalEntriesFromReconciliation,
         {
           businessId: args.businessId,
           dateFrom: args.dateFrom,
@@ -854,28 +855,12 @@ export const closePeriod = mutation({
           closedBy: args.closedBy,
         }
       );
-
-      return {
-        closed,
-        disputed,
-        total: inRange.length,
-        accounting: accountingResult,
-      };
     } catch (error: any) {
       console.error("[AR Recon] Failed to create accounting entries:", error);
-      // Return success for period close even if accounting fails
-      // User can manually create entries or retry
-      return {
-        closed,
-        disputed,
-        total: inRange.length,
-        accounting: {
-          error: error.message,
-          ordersProcessed: 0,
-          entriesCreated: 0,
-        },
-      };
+      accounting = { error: error.message, ordersProcessed: 0, entriesCreated: 0 };
     }
+
+    return { closed, disputed, total: inRange.length, accounting };
   },
 });
 

@@ -769,7 +769,39 @@ export const voidInvoice = mutation({
       updatedAt: Date.now(),
     });
 
-    // accounting_entries cancellation removed — table dropped
+    // Reverse the journal entry if one exists (proper audit trail)
+    if (invoice.journalEntryId) {
+      const originalJE = await ctx.db.get(invoice.journalEntryId);
+      if (originalJE && (originalJE as any).status === "posted") {
+        // Get original lines and reverse them
+        const originalLines = await ctx.db
+          .query("journal_entry_lines")
+          .withIndex("by_journal_entry", (q: any) => q.eq("journalEntryId", invoice.journalEntryId))
+          .collect();
+
+        if (originalLines.length > 0) {
+          await ctx.runMutation(internal.functions.journalEntries.createInternal, {
+            businessId: args.businessId,
+            transactionDate: new Date().toISOString().split("T")[0],
+            description: `REVERSAL: ${(originalJE as any).description}${args.reason ? ` — ${args.reason}` : ""}`,
+            sourceType: "sales_invoice" as const,
+            sourceId: args.id,
+            lines: originalLines.map((line: any) => ({
+              accountCode: line.accountCode,
+              debitAmount: line.creditAmount,   // Swap debit/credit to reverse
+              creditAmount: line.debitAmount,
+              lineDescription: `Void reversal: ${line.lineDescription || ""}`,
+            })),
+          });
+
+          // Mark original as reversed
+          await ctx.db.patch(invoice.journalEntryId, {
+            status: "reversed",
+            updatedAt: Date.now(),
+          } as any);
+        }
+      }
+    }
 
     return args.id;
   },
@@ -1690,6 +1722,41 @@ export const createCreditNote = mutation({
     // Generate credit note number: CN-{originalInvoiceNumber}-{sequence}
     const sequence = existingCreditNotes.filter((cn) => !cn.deletedAt).length + 1;
     const creditNoteNumber = `CN-${originalInvoice.invoiceNumber}-${sequence}`;
+
+    // Create reversal journal entry for credit note (Debit Revenue, Credit AR)
+    const arAccount = await ctx.db
+      .query("chart_of_accounts")
+      .withIndex("by_business_code", (q: any) => q.eq("businessId", args.businessId).eq("accountCode", "1200"))
+      .first();
+    const revenueAccount = await ctx.db
+      .query("chart_of_accounts")
+      .withIndex("by_business_code", (q: any) => q.eq("businessId", args.businessId).eq("accountCode", "4100"))
+      .first();
+
+    if (arAccount && revenueAccount) {
+      const creditNoteNumber = `CN-${originalInvoice.invoiceNumber}-${existingCreditNotes.filter((cn) => !cn.deletedAt).length + 1}`;
+      await ctx.runMutation(internal.functions.journalEntries.createInternal, {
+        businessId: args.businessId,
+        transactionDate: new Date().toISOString().split("T")[0],
+        description: `Credit Note ${creditNoteNumber} - ${args.creditNoteReason}`,
+        sourceType: "sales_invoice" as const,
+        sourceId: args.originalInvoiceId,
+        lines: [
+          {
+            accountCode: "4100",
+            debitAmount: totalAmount,
+            creditAmount: 0,
+            lineDescription: `Credit note reversal - ${args.creditNoteReason}`,
+          },
+          {
+            accountCode: "1200",
+            debitAmount: 0,
+            creditAmount: totalAmount,
+            lineDescription: `Credit note reversal - reduce AR`,
+          },
+        ],
+      });
+    }
 
     // Create credit note
     const creditNoteId = await ctx.db.insert("sales_invoices", {
