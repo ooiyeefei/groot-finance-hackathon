@@ -1,5 +1,11 @@
 /**
  * Bank Recon GL Poster — Creates draft journal entries from bank transaction classifications
+ *
+ * Validates double-entry integrity:
+ * 1. Both account IDs exist in chart_of_accounts
+ * 2. Accounts are not inactive/soft-deleted
+ * 3. Debit and credit accounts are different
+ * 4. Amount is positive (debit total == credit total)
  */
 
 import { MutationCtx } from "../_generated/server";
@@ -16,18 +22,74 @@ interface PostGLEntryArgs {
   createdBy: string;
 }
 
+/**
+ * Validate posting inputs before creating journal entry.
+ * Returns an error message if validation fails, null if valid.
+ */
+export async function validatePosting(
+  ctx: MutationCtx,
+  args: Pick<PostGLEntryArgs, "businessId" | "debitAccountId" | "creditAccountId" | "amount">
+): Promise<string | null> {
+  // Validation 1: Debit and credit accounts must be different
+  if (args.debitAccountId === args.creditAccountId) {
+    return "Debit and credit accounts must be different for a valid journal entry.";
+  }
+
+  // Validation 2: Amount must be positive
+  if (!args.amount || args.amount <= 0) {
+    return `Transaction amount must be positive. Got: ${args.amount}`;
+  }
+
+  // Validation 3: Both accounts must exist
+  const debitAccount = await ctx.db.get(args.debitAccountId);
+  if (!debitAccount) {
+    return `Debit account not found: ${args.debitAccountId}`;
+  }
+
+  const creditAccount = await ctx.db.get(args.creditAccountId);
+  if (!creditAccount) {
+    return `Credit account not found: ${args.creditAccountId}`;
+  }
+
+  // Validation 4: Accounts must belong to the same business
+  if (debitAccount.businessId.toString() !== args.businessId.toString()) {
+    return `Debit account "${debitAccount.accountCode}" does not belong to this business.`;
+  }
+  if (creditAccount.businessId.toString() !== args.businessId.toString()) {
+    return `Credit account "${creditAccount.accountCode}" does not belong to this business.`;
+  }
+
+  // Validation 5: Accounts must be active
+  if (debitAccount.isActive === false) {
+    return `Debit account "${debitAccount.accountCode} - ${debitAccount.accountName}" is inactive.`;
+  }
+  if (creditAccount.isActive === false) {
+    return `Credit account "${creditAccount.accountCode} - ${creditAccount.accountName}" is inactive.`;
+  }
+
+  return null; // All validations passed
+}
+
 export async function createDraftJournalEntry(
   ctx: MutationCtx,
   args: PostGLEntryArgs
 ): Promise<Id<"journal_entries">> {
-  // Validate accounts exist
+  // Run validations
+  const validationError = await validatePosting(ctx, {
+    businessId: args.businessId,
+    debitAccountId: args.debitAccountId,
+    creditAccountId: args.creditAccountId,
+    amount: args.amount,
+  });
+  if (validationError) {
+    throw new Error(validationError);
+  }
+
+  // Re-fetch accounts (validated above)
   const debitAccount = await ctx.db.get(args.debitAccountId);
   const creditAccount = await ctx.db.get(args.creditAccountId);
-
-  if (!debitAccount) throw new Error(`Debit account not found: ${args.debitAccountId}`);
-  if (!creditAccount) throw new Error(`Credit account not found: ${args.creditAccountId}`);
-  if (args.debitAccountId === args.creditAccountId) {
-    throw new Error("Debit and credit accounts must be different");
+  if (!debitAccount || !creditAccount) {
+    throw new Error("Account lookup failed after validation");
   }
 
   const amount = Math.abs(args.amount);
