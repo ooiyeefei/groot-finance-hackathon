@@ -117,15 +117,7 @@ export default function JournalEntriesContent() {
 
       <Card>
         <CardHeader className="border-b border-border">
-          <div className="flex items-center justify-between">
-            <CardTitle>All Journal Entries</CardTitle>
-            <Link href="/en/accounting/journal-entries/new">
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                <Plus className="w-4 h-4 mr-2" />
-                New Entry
-              </Button>
-            </Link>
-          </div>
+          <CardTitle>All Journal Entries</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {entries.length === 0 ? (

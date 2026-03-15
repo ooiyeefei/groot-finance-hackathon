@@ -148,8 +148,8 @@ export default function ChartOfAccountsContent() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <AccountingTabs activeTab="chart-of-accounts" />
+      <AccountingTabs activeTab="chart-of-accounts" hideNewEntryButton />
+      <div className="flex justify-end -mt-2">
         <Button onClick={() => setIsCreateDialogOpen(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground">
           <Plus className="w-4 h-4 mr-2" />
           New Account

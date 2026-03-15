@@ -6,8 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useDashboardMetrics } from '@/domains/accounting/hooks/use-dashboard-metrics'
 import { useFinancialStatements } from '@/domains/accounting/hooks/use-financial-statements'
 import { formatCurrency } from '@/lib/utils/format-number'
-import { BookOpen, FileText, Plus, TrendingUp, TrendingDown } from 'lucide-react'
-import Link from 'next/link'
+import { TrendingUp, TrendingDown } from 'lucide-react'
 import AccountingTabs from './accounting-tabs'
 
 export default function AccountingDashboardContent() {
@@ -34,51 +33,6 @@ export default function AccountingDashboardContent() {
   return (
     <div className="space-y-6">
       <AccountingTabs activeTab="dashboard" />
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Link href="/en/accounting/chart-of-accounts">
-          <Card className="hover:bg-card-hover cursor-pointer transition-colors">
-            <CardContent className="p-6 flex items-center space-x-4">
-              <div className="bg-primary/10 p-3 rounded-lg">
-                <BookOpen className="w-6 h-6 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-foreground">Chart of Accounts</h3>
-                <p className="text-sm text-muted-foreground">Manage GL accounts</p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Link href="/en/accounting/journal-entries">
-          <Card className="hover:bg-card-hover cursor-pointer transition-colors">
-            <CardContent className="p-6 flex items-center space-x-4">
-              <div className="bg-primary/10 p-3 rounded-lg">
-                <FileText className="w-6 h-6 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-foreground">Journal Entries</h3>
-                <p className="text-sm text-muted-foreground">View all entries</p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Link href="/en/accounting/journal-entries/new">
-          <Card className="hover:bg-card-hover cursor-pointer transition-colors">
-            <CardContent className="p-6 flex items-center space-x-4">
-              <div className="bg-primary/10 p-3 rounded-lg">
-                <Plus className="w-6 h-6 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-foreground">New Entry</h3>
-                <p className="text-sm text-muted-foreground">Create journal entry</p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-      </div>
 
       {/* Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
