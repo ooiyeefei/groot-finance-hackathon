@@ -72,8 +72,7 @@ export const triggerOptimization = internalAction({
   },
   handler: async (ctx, args) => {
     // 1. Get all corrections for this platform
-    // @ts-expect-error — Convex type recursion limit with self-referencing module
-    const corrections: Array<{ feeName: string; originalAccountCode: string; correctedAccountCode: string; platform: string }> = await ctx.runQuery(internal.functions.dspyOptimization.getAllCorrectionsForPlatform, { platform: args.platform });
+    const corrections = await ctx.runQuery(internal.functions.dspyOptimization.getAllCorrectionsForPlatform as any, { platform: args.platform });
 
     if (corrections.length < MIN_CORRECTIONS_FOR_OPTIMIZATION) {
       console.log(`[DSPy] Skipping ${args.platform}: only ${corrections.length} corrections (need ${MIN_CORRECTIONS_FOR_OPTIMIZATION})`);

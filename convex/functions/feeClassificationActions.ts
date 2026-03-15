@@ -197,8 +197,7 @@ export const classifyUnknownFees = internalAction({
   },
   handler: async (ctx, args): Promise<{ classified: number; skipped: number }> => {
     // 1. Get unclassified fees
-    // @ts-expect-error — Convex type recursion limit with self-referencing module
-    const unclassified: Array<{ orderId: string; feeIndex: number; feeName: string; amount: number; platform: string; grossAmount: number; netAmount: number | undefined }> = await ctx.runQuery(internal.functions.feeClassificationActions.getUnclassifiedFees, { businessId: args.businessId, importBatchId: args.importBatchId });
+    const unclassified = await ctx.runQuery(internal.functions.feeClassificationActions.getUnclassifiedFees as any, { businessId: args.businessId, importBatchId: args.importBatchId });
 
     if (unclassified.length === 0) {
       return { classified: 0, skipped: 0 };
