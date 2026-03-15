@@ -68,7 +68,7 @@ export class FeeClassifierStack extends cdk.Stack {
           },
         }
       ),
-      architecture: lambda.Architecture.ARM_64,
+      architecture: lambda.Architecture.X86_64,
       memorySize: 512,
       timeout: cdk.Duration.minutes(15), // 15 min for MIPROv2 optimization
       environment: envVars,
