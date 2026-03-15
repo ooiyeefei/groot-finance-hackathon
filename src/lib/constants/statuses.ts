@@ -722,6 +722,8 @@ export const RECONCILIATION_STATUSES = {
   SUGGESTED: "suggested",
   RECONCILED: "reconciled",
   CATEGORIZED: "categorized",
+  CLASSIFIED: "classified",
+  POSTED: "posted",
 } as const;
 
 export type ReconciliationStatus = typeof RECONCILIATION_STATUSES[keyof typeof RECONCILIATION_STATUSES];

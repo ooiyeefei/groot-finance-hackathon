@@ -2484,6 +2484,8 @@ export default defineSchema({
     transactionCount: v.number(),
     createdBy: v.id("users"),
     deletedAt: v.optional(v.number()),
+    // bank-recon: Link to Chart of Accounts (Cash at Bank GL account)
+    glAccountId: v.optional(v.id("chart_of_accounts")),
   })
     .index("by_businessId", ["businessId"])
     .index("by_businessId_status", ["businessId", "status"]),
@@ -2505,6 +2507,15 @@ export default defineSchema({
     reconciliationStatus: reconciliationStatusValidator,
     category: v.optional(bankTransactionCategoryValidator),
     deletedAt: v.optional(v.number()),
+    // bank-recon: DSPy classification fields
+    suggestedDebitAccountId: v.optional(v.id("chart_of_accounts")),
+    suggestedCreditAccountId: v.optional(v.id("chart_of_accounts")),
+    classificationConfidence: v.optional(v.number()),
+    classificationTier: v.optional(v.number()),
+    classificationReasoning: v.optional(v.string()),
+    journalEntryId: v.optional(v.id("journal_entries")),
+    classifiedAt: v.optional(v.number()),
+    classifiedBy: v.optional(v.string()),
   })
     .index("by_businessId", ["businessId"])
     .index("by_bankAccountId", ["bankAccountId"])
@@ -2592,6 +2603,7 @@ export default defineSchema({
     optimizerType: v.string(),    // "bootstrap_fewshot" | "miprov2"
     trainedAt: v.number(),
     lastCorrectionId: v.optional(v.string()),  // _id of last correction consumed — prevents re-optimizing same data
+    domain: v.optional(v.string()),            // "fee_classification" | "bank_recon" — distinguishes model types
   })
     .index("by_platform_status", ["platform", "status"])
     .index("by_platform_version", ["platform", "version"]),
@@ -2867,5 +2879,42 @@ export default defineSchema({
     .index("by_business_account", ["businessId", "accountCode"])
     .index("by_entity", ["entityType", "entityId"])
     .index("by_bank_reconciled", ["businessId", "bankReconciled"]),
+
+  // ============================================
+  // BANK RECON CORRECTIONS (DSPy Bank Recon)
+  // ============================================
+
+  bank_recon_corrections: defineTable({
+    businessId: v.id("businesses"),
+    bankTransactionDescription: v.string(),
+    bankName: v.string(),
+    originalDebitAccountCode: v.string(),
+    originalCreditAccountCode: v.string(),
+    correctedDebitAccountCode: v.string(),
+    correctedCreditAccountCode: v.string(),
+    correctionType: v.string(),
+    createdBy: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_createdAt", ["businessId", "createdAt"]),
+
+  // ============================================
+  // BANK RECON CLASSIFICATION RULES (DSPy Bank Recon)
+  // ============================================
+
+  bank_recon_classification_rules: defineTable({
+    businessId: v.id("businesses"),
+    keyword: v.string(),
+    debitAccountId: v.id("chart_of_accounts"),
+    creditAccountId: v.id("chart_of_accounts"),
+    platform: v.string(),
+    priority: v.optional(v.number()),
+    isActive: v.boolean(),
+    createdBy: v.string(),
+    createdAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"]),
 
 });
