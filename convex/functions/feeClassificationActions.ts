@@ -197,7 +197,8 @@ export const classifyUnknownFees = internalAction({
   },
   handler: async (ctx, args): Promise<{ classified: number; skipped: number }> => {
     // 1. Get unclassified fees
-    const unclassified = await ctx.runQuery(internal.functions.feeClassificationActions.getUnclassifiedFees as any, { businessId: args.businessId, importBatchId: args.importBatchId });
+    type UnclassifiedItem = { orderId: string; feeIndex: number; feeName: string; amount: number; platform: string; grossAmount: number; netAmount: number | undefined };
+    const unclassified: UnclassifiedItem[] = await ctx.runQuery(internal.functions.feeClassificationActions.getUnclassifiedFees as any, { businessId: args.businessId, importBatchId: args.importBatchId });
 
     if (unclassified.length === 0) {
       return { classified: 0, skipped: 0 };
@@ -212,22 +213,25 @@ export const classifyUnknownFees = internalAction({
 
     // 3. Get corrections for this business
     const corrections = await ctx.runQuery(
-      internal.functions.feeClassificationActions.getCorrections,
+      internal.functions.feeClassificationActions.getCorrections as any,
       { businessId: args.businessId, platform, limit: 50 }
     );
 
     // 4. Get active DSPy model for this platform
     const activeModel = await ctx.runQuery(
-      internal.functions.dspyModelVersions.getActiveModel,
+      internal.functions.dspyModelVersions.getActiveModel as any,
       { platform }
     );
 
     // 5. Deduplicate fee names
-    const uniqueFeeNames = [...new Set(unclassified.map((f: { feeName: string }) => f.feeName))] as string[];
-    const uniqueFees = uniqueFeeNames.map((name) => {
-      const item = unclassified.find((f: { feeName: string; amount: number }) => f.feeName === name)!;
-      return { feeName: name, amount: item.amount };
-    });
+    const seenNames = new Set<string>();
+    const uniqueFees: Array<{ feeName: string; amount: number }> = [];
+    for (const item of unclassified) {
+      if (!seenNames.has(item.feeName)) {
+        seenNames.add(item.feeName);
+        uniqueFees.push({ feeName: item.feeName, amount: item.amount });
+      }
+    }
 
     // 6. Call DSPy Lambda via MCP
     const businessCorrections = corrections.map((c: any) => ({
