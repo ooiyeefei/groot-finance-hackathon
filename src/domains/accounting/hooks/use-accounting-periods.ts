@@ -6,10 +6,15 @@ import type { Id } from '../../../../convex/_generated/dataModel'
 import { useActiveBusiness } from '@/contexts/business-context'
 
 export function useAccountingPeriods() {
-  const { businessId } = useActiveBusiness()
+  const { businessId, role } = useActiveBusiness()
 
   const periods = useQuery(
     api.functions.accountingPeriods.list,
+    businessId ? { businessId: businessId as Id<'businesses'> } : 'skip'
+  )
+
+  const lockStatus = useQuery(
+    api.functions.accountingPeriods.getLockStatus,
     businessId ? { businessId: businessId as Id<'businesses'> } : 'skip'
   )
 
@@ -18,10 +23,14 @@ export function useAccountingPeriods() {
   const lockEntries = useMutation(api.functions.accountingPeriods.lockEntries)
   const reopenPeriod = useMutation(api.functions.accountingPeriods.reopen)
 
+  const canManagePeriods = role === 'finance_admin' || role === 'owner'
+
   return {
     businessId,
     periods: periods ?? [],
+    lockStatus: lockStatus ?? {},
     isLoading: periods === undefined,
+    canManagePeriods,
     createPeriod,
     closePeriod,
     lockEntries,

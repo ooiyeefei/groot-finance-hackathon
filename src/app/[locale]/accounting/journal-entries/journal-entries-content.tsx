@@ -266,7 +266,12 @@ export default function JournalEntriesContent() {
                             )}
 
                             {!isEntryEditable(entry) && entry.status !== 'reversed' && (
-                              <span className="text-xs text-muted-foreground" title="Period is closed or locked">
+                              <span
+                                className="text-xs text-muted-foreground"
+                                title={entry.isPeriodLocked
+                                  ? 'Period is locked — entries cannot be edited, reversed, or voided'
+                                  : 'Period is closed — reopen the period to modify entries'}
+                              >
                                 <Lock className="w-3 h-3 inline" />
                               </span>
                             )}
@@ -291,6 +296,30 @@ export default function JournalEntriesContent() {
 
           {selectedEntry && (
             <div className="space-y-6">
+              {/* Period lock warning banner */}
+              {!isEntryEditable(selectedEntry) && selectedEntry.status !== 'reversed' && (
+                <div className={`rounded-lg p-3 flex items-start gap-2 ${
+                  selectedEntry.isPeriodLocked
+                    ? 'bg-red-500/10 border border-red-500/30'
+                    : 'bg-yellow-500/10 border border-yellow-500/30'
+                }`}>
+                  <Lock className={`w-4 h-4 mt-0.5 shrink-0 ${
+                    selectedEntry.isPeriodLocked
+                      ? 'text-red-600 dark:text-red-400'
+                      : 'text-yellow-600 dark:text-yellow-400'
+                  }`} />
+                  <p className={`text-sm ${
+                    selectedEntry.isPeriodLocked
+                      ? 'text-red-600 dark:text-red-400'
+                      : 'text-yellow-600 dark:text-yellow-400'
+                  }`}>
+                    {selectedEntry.isPeriodLocked
+                      ? 'This entry is locked — it cannot be edited, reversed, or voided.'
+                      : 'This entry belongs to a closed period — reopen the period to modify it.'}
+                  </p>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Date</p>
@@ -301,9 +330,12 @@ export default function JournalEntriesContent() {
 
                 <div>
                   <p className="text-sm text-muted-foreground">Status</p>
-                  <Badge className={getStatusBadge(selectedEntry.status)}>
-                    {selectedEntry.status}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge className={getStatusBadge(selectedEntry.status)}>
+                      {selectedEntry.status}
+                    </Badge>
+                    {getPeriodBadge(selectedEntry)}
+                  </div>
                 </div>
 
                 <div className="col-span-2">

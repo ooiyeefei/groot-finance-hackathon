@@ -11,6 +11,51 @@ import { mutation, query } from "../_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { Id } from "../_generated/dataModel";
+import { resolveUserByClerkId } from "../lib/resolvers";
+
+// Role hierarchy for permission checks: owner > finance_admin > manager > employee
+const ROLE_HIERARCHY: Record<string, number> = {
+  owner: 4,
+  finance_admin: 3,
+  manager: 2,
+  employee: 1,
+};
+
+// Verify the current user has finance_admin+ role for the business
+async function requireFinanceAdmin(
+  ctx: any,
+  businessId: Id<"businesses">
+): Promise<string> {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity?.subject) {
+    throw new ConvexError({ message: "Not authenticated", code: "UNAUTHENTICATED" });
+  }
+
+  const user = await resolveUserByClerkId(ctx.db, identity.subject);
+  if (!user) {
+    throw new ConvexError({ message: "User not found", code: "USER_NOT_FOUND" });
+  }
+
+  const membership = await ctx.db
+    .query("business_memberships")
+    .withIndex("by_userId_businessId", (q: any) =>
+      q.eq("userId", user._id).eq("businessId", businessId)
+    )
+    .first();
+
+  if (
+    !membership ||
+    membership.status !== "active" ||
+    (ROLE_HIERARCHY[membership.role] ?? 0) < ROLE_HIERARCHY.finance_admin
+  ) {
+    throw new ConvexError({
+      message: "Insufficient permissions — only Finance Admin or Owner can manage accounting periods",
+      code: "INSUFFICIENT_PERMISSIONS",
+    });
+  }
+
+  return identity.subject;
+}
 
 /**
  * Create a new accounting period
@@ -27,13 +72,7 @@ export const create = mutation({
     fiscalQuarter: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const userId = (await ctx.auth.getUserIdentity())?.subject;
-    if (!userId) {
-      throw new ConvexError({
-        message: "Not authenticated",
-        code: "UNAUTHENTICATED",
-      });
-    }
+    const userId = await requireFinanceAdmin(ctx, args.businessId);
 
     // Generate period code from start date (YYYY-MM)
     const periodCode = args.startDate.slice(0, 7);
@@ -91,14 +130,6 @@ export const close = mutation({
     closingNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = (await ctx.auth.getUserIdentity())?.subject;
-    if (!userId) {
-      throw new ConvexError({
-        message: "Not authenticated",
-        code: "UNAUTHENTICATED",
-      });
-    }
-
     const period = await ctx.db.get(args.periodId);
     if (!period) {
       throw new ConvexError({
@@ -106,6 +137,8 @@ export const close = mutation({
         code: "PERIOD_NOT_FOUND",
       });
     }
+
+    const userId = await requireFinanceAdmin(ctx, period.businessId);
 
     if (period.status === "closed") {
       throw new ConvexError({
@@ -160,14 +193,6 @@ export const lockEntries = mutation({
     periodId: v.id("accounting_periods"),
   },
   handler: async (ctx, args) => {
-    const userId = (await ctx.auth.getUserIdentity())?.subject;
-    if (!userId) {
-      throw new ConvexError({
-        message: "Not authenticated",
-        code: "UNAUTHENTICATED",
-      });
-    }
-
     const period = await ctx.db.get(args.periodId);
     if (!period) {
       throw new ConvexError({
@@ -175,6 +200,8 @@ export const lockEntries = mutation({
         code: "PERIOD_NOT_FOUND",
       });
     }
+
+    await requireFinanceAdmin(ctx, period.businessId);
 
     if (period.status !== "closed") {
       throw new ConvexError({
@@ -225,14 +252,6 @@ export const reopen = mutation({
     reason: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = (await ctx.auth.getUserIdentity())?.subject;
-    if (!userId) {
-      throw new ConvexError({
-        message: "Not authenticated",
-        code: "UNAUTHENTICATED",
-      });
-    }
-
     const period = await ctx.db.get(args.periodId);
     if (!period) {
       throw new ConvexError({
@@ -240,6 +259,8 @@ export const reopen = mutation({
         code: "PERIOD_NOT_FOUND",
       });
     }
+
+    await requireFinanceAdmin(ctx, period.businessId);
 
     if (period.status !== "closed") {
       throw new ConvexError({
@@ -324,6 +345,46 @@ export const getById = query({
   },
   handler: async (ctx, args) => {
     return await ctx.db.get(args.periodId);
+  },
+});
+
+/**
+ * Get lock status for all closed periods in a business
+ *
+ * Returns a map of periodCode → { totalEntries, lockedEntries, allLocked }
+ * Used by the UI to derive the "Locked" badge without client-side filtering.
+ */
+export const getLockStatus = query({
+  args: {
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    const closedPeriods = await ctx.db
+      .query("accounting_periods")
+      .withIndex("by_business_status", (q) =>
+        q.eq("businessId", args.businessId).eq("status", "closed")
+      )
+      .collect();
+
+    const result: Record<string, { totalEntries: number; lockedEntries: number; allLocked: boolean }> = {};
+
+    for (const period of closedPeriods) {
+      const entries = await ctx.db
+        .query("journal_entries")
+        .withIndex("by_business_period", (q) =>
+          q.eq("businessId", args.businessId).eq("fiscalPeriod", period.periodCode)
+        )
+        .collect();
+
+      const lockedEntries = entries.filter((e) => e.isPeriodLocked).length;
+      result[period.periodCode] = {
+        totalEntries: entries.length,
+        lockedEntries,
+        allLocked: entries.length > 0 && lockedEntries === entries.length,
+      };
+    }
+
+    return result;
   },
 });
 

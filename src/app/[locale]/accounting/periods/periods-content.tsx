@@ -15,18 +15,17 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { useAccountingPeriods } from '@/domains/accounting/hooks/use-accounting-periods'
-import { useJournalEntries } from '@/domains/accounting/hooks/use-journal-entries'
-import { Calendar, Lock, Unlock, Plus, AlertTriangle } from 'lucide-react'
+import { Calendar, Lock, Unlock, Plus, AlertTriangle, Eye } from 'lucide-react'
 import AccountingTabs from '../accounting-tabs'
 import { formatCurrency } from '@/lib/utils/format-number'
+import { formatBusinessDate } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { Id } from '../../../../../convex/_generated/dataModel'
 
-type PeriodAction = 'close' | 'lock' | 'reopen' | 'create' | null
+type PeriodAction = 'close' | 'lock' | 'reopen' | 'create' | 'detail' | null
 
 export default function PeriodsContent() {
-  const { businessId, periods, isLoading, createPeriod, closePeriod, lockEntries, reopenPeriod } = useAccountingPeriods()
-  const { entries } = useJournalEntries()
+  const { businessId, periods, lockStatus, isLoading, canManagePeriods, createPeriod, closePeriod, lockEntries, reopenPeriod } = useAccountingPeriods()
 
   const [activeAction, setActiveAction] = useState<PeriodAction>(null)
   const [selectedPeriodId, setSelectedPeriodId] = useState<Id<'accounting_periods'> | null>(null)
@@ -39,13 +38,11 @@ export default function PeriodsContent() {
 
   const selectedPeriod = periods.find((p: any) => p._id === selectedPeriodId)
 
-  // Derive "Locked" status: closed + all entries in period are locked
+  // Derive "Locked" status using server-side lockStatus query
   const getPeriodDisplayStatus = (period: any) => {
     if (period.status === 'open') return 'Open'
-    // Check if all entries in this period are locked
-    const periodEntries = (entries || []).filter((e: any) => e.fiscalPeriod === period.periodCode)
-    const allLocked = periodEntries.length > 0 && periodEntries.every((e: any) => e.isPeriodLocked)
-    if (allLocked) return 'Locked'
+    const status = lockStatus[period.periodCode]
+    if (status?.allLocked) return 'Locked'
     return 'Closed'
   }
 
@@ -62,18 +59,9 @@ export default function PeriodsContent() {
     }
   }
 
-  // Count draft entries in a period (for close warning)
-  const getDraftCount = (periodCode: string) => {
-    return (entries || []).filter(
-      (e: any) => e.fiscalPeriod === periodCode && e.status === 'draft'
-    ).length
-  }
-
-  // Count entries in a period (for lock dialog)
+  // Get entry count from lockStatus (server-side) for lock dialog
   const getEntryCount = (periodCode: string) => {
-    return (entries || []).filter(
-      (e: any) => e.fiscalPeriod === periodCode
-    ).length
+    return lockStatus[periodCode]?.totalEntries ?? 0
   }
 
   const openAction = (action: PeriodAction, periodId?: Id<'accounting_periods'>) => {
@@ -195,13 +183,15 @@ export default function PeriodsContent() {
         <CardHeader className="border-b border-border">
           <div className="flex items-center justify-between">
             <CardTitle>Accounting Periods</CardTitle>
-            <Button
-              className="bg-primary hover:bg-primary/90 text-primary-foreground"
-              onClick={() => openAction('create')}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Create Period
-            </Button>
+            {canManagePeriods && (
+              <Button
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                onClick={() => openAction('create')}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Create Period
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -211,15 +201,17 @@ export default function PeriodsContent() {
               <p className="text-lg font-medium text-foreground mb-2">No accounting periods yet</p>
               <p className="text-muted-foreground mb-6">
                 Accounting periods help you manage month-end close, prevent backdating, and prepare for audits.
-                Create your first period to get started.
+                {canManagePeriods ? ' Create your first period to get started.' : ' Contact your Finance Admin to create periods.'}
               </p>
-              <Button
-                className="bg-primary hover:bg-primary/90 text-primary-foreground"
-                onClick={() => openAction('create')}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Create First Period
-              </Button>
+              {canManagePeriods && (
+                <Button
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                  onClick={() => openAction('create')}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create First Period
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -240,7 +232,11 @@ export default function PeriodsContent() {
                     const displayStatus = getPeriodDisplayStatus(period)
                     const net = period.totalDebits - period.totalCredits
                     return (
-                      <tr key={period._id} className="border-b border-border hover:bg-muted/50">
+                      <tr
+                        key={period._id}
+                        className="border-b border-border hover:bg-muted/50 cursor-pointer"
+                        onClick={() => openAction('detail', period._id)}
+                      >
                         <td className="px-6 py-4 text-sm text-foreground font-medium">
                           {period.periodName}
                           <span className="ml-2 text-xs text-muted-foreground font-mono">
@@ -269,23 +265,33 @@ export default function PeriodsContent() {
                             </span>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-right">
+                        <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-2">
-                            {displayStatus === 'Open' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openAction('detail', period._id)}
+                              title="View period details"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            {canManagePeriods && displayStatus === 'Open' && (
                               <Button
                                 size="sm"
                                 className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                                 onClick={() => openAction('close', period._id)}
+                                title="Close this period — prevents new entries"
                               >
                                 Close
                               </Button>
                             )}
-                            {displayStatus === 'Closed' && (
+                            {canManagePeriods && displayStatus === 'Closed' && (
                               <>
                                 <Button
                                   size="sm"
                                   className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                                   onClick={() => openAction('lock', period._id)}
+                                  title="Lock all entries — prevents edits, reversals, and voids"
                                 >
                                   <Lock className="w-3 h-3 mr-1" />
                                   Lock
@@ -294,6 +300,7 @@ export default function PeriodsContent() {
                                   size="sm"
                                   className="bg-primary hover:bg-primary/90 text-primary-foreground"
                                   onClick={() => openAction('reopen', period._id)}
+                                  title="Reopen this period — allows new entries again"
                                 >
                                   <Unlock className="w-3 h-3 mr-1" />
                                   Reopen
@@ -301,7 +308,15 @@ export default function PeriodsContent() {
                               </>
                             )}
                             {displayStatus === 'Locked' && (
-                              <span className="text-xs text-muted-foreground">No actions available</span>
+                              <span className="text-xs text-muted-foreground" title="All entries are locked — no further actions available">
+                                <Lock className="w-3 h-3 inline mr-1" />
+                                Locked
+                              </span>
+                            )}
+                            {!canManagePeriods && displayStatus !== 'Locked' && (
+                              <span className="text-xs text-muted-foreground" title="Only Finance Admin or Owner can manage periods">
+                                View only
+                              </span>
                             )}
                           </div>
                         </td>
@@ -314,6 +329,104 @@ export default function PeriodsContent() {
           )}
         </CardContent>
       </Card>
+
+      {/* Period Detail Dialog */}
+      <Dialog open={activeAction === 'detail'} onOpenChange={() => closeDialog()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Period Details: {selectedPeriod?.periodName}</DialogTitle>
+          </DialogHeader>
+          {selectedPeriod && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Period Code</p>
+                  <p className="text-foreground font-mono">{selectedPeriod.periodCode}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Status</p>
+                  <Badge className={getStatusBadgeClass(getPeriodDisplayStatus(selectedPeriod))}>
+                    {getPeriodDisplayStatus(selectedPeriod)}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Start Date</p>
+                  <p className="text-foreground">{formatBusinessDate(selectedPeriod.startDate)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">End Date</p>
+                  <p className="text-foreground">{formatBusinessDate(selectedPeriod.endDate)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Fiscal Year</p>
+                  <p className="text-foreground">{selectedPeriod.fiscalYear}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Fiscal Quarter</p>
+                  <p className="text-foreground">Q{selectedPeriod.fiscalQuarter || '—'}</p>
+                </div>
+              </div>
+
+              <div className="border-t border-border pt-4">
+                <h4 className="text-sm font-medium text-foreground mb-3">Financial Summary</h4>
+                <div className="bg-muted rounded-lg p-4 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Journal Entries:</span>
+                    <span className="text-foreground font-medium">{selectedPeriod.journalEntryCount}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Total Debits:</span>
+                    <span className="text-foreground">{formatCurrency(selectedPeriod.totalDebits, 'MYR')}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Total Credits:</span>
+                    <span className="text-foreground">{formatCurrency(selectedPeriod.totalCredits, 'MYR')}</span>
+                  </div>
+                  <div className="flex justify-between text-sm border-t border-border pt-2">
+                    <span className="text-muted-foreground">Net:</span>
+                    <span className="text-foreground font-medium">
+                      {formatCurrency(Math.abs(selectedPeriod.totalDebits - selectedPeriod.totalCredits), 'MYR')}
+                      {(selectedPeriod.totalDebits - selectedPeriod.totalCredits) !== 0 && (
+                        <span className="ml-1 text-xs">
+                          {(selectedPeriod.totalDebits - selectedPeriod.totalCredits) > 0 ? 'DR' : 'CR'}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {selectedPeriod.closedBy && (
+                <div className="border-t border-border pt-4">
+                  <h4 className="text-sm font-medium text-foreground mb-3">Close Information</h4>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Closed By:</span>
+                      <span className="text-foreground">{selectedPeriod.closedBy}</span>
+                    </div>
+                    {selectedPeriod.closedAt && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Closed At:</span>
+                        <span className="text-foreground">{new Date(selectedPeriod.closedAt).toLocaleString()}</span>
+                      </div>
+                    )}
+                    {selectedPeriod.closingNotes && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Notes:</span>
+                        <span className="text-foreground">{selectedPeriod.closingNotes}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="text-xs text-muted-foreground border-t border-border pt-3">
+                Created by {selectedPeriod.createdBy} on {new Date(selectedPeriod.createdAt).toLocaleString()}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Close Period Dialog */}
       <Dialog open={activeAction === 'close'} onOpenChange={() => closeDialog()}>
@@ -337,16 +450,6 @@ export default function PeriodsContent() {
                   <span className="text-muted-foreground">Date Range:</span>
                   <span className="text-foreground">{selectedPeriod.startDate} to {selectedPeriod.endDate}</span>
                 </div>
-              </div>
-            )}
-
-            {selectedPeriod && getDraftCount(selectedPeriod.periodCode) > 0 && (
-              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 mt-0.5 shrink-0" />
-                <p className="text-sm text-yellow-600 dark:text-yellow-400">
-                  {getDraftCount(selectedPeriod.periodCode)} draft entries exist in this period.
-                  Draft entries will not be included in period totals.
-                </p>
               </div>
             )}
 
