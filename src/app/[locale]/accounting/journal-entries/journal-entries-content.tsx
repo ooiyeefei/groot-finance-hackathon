@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { useJournalEntries, useJournalEntry } from '@/domains/accounting/hooks/use-journal-entries'
 import { useAccountingPeriods } from '@/domains/accounting/hooks/use-accounting-periods'
 import { Plus, Eye, CheckCircle, XCircle, Lock } from 'lucide-react'
@@ -266,14 +267,20 @@ export default function JournalEntriesContent() {
                             )}
 
                             {!isEntryEditable(entry) && entry.status !== 'reversed' && (
-                              <span
-                                className="text-xs text-muted-foreground"
-                                title={entry.isPeriodLocked
-                                  ? 'Period is locked — entries cannot be edited, reversed, or voided'
-                                  : 'Period is closed — reopen the period to modify entries'}
-                              >
-                                <Lock className="w-3 h-3 inline" />
-                              </span>
+                              <TooltipProvider delayDuration={0}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="text-xs text-muted-foreground cursor-help">
+                                      <Lock className="w-3 h-3 inline" />
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {entry.isPeriodLocked
+                                      ? 'Period is locked — entries cannot be edited, reversed, or voided'
+                                      : 'Period is closed — reopen the period to modify entries'}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             )}
                           </div>
                         </td>

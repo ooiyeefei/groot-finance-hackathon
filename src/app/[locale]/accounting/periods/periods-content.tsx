@@ -14,6 +14,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { useAccountingPeriods } from '@/domains/accounting/hooks/use-accounting-periods'
 import { Calendar, Lock, Unlock, Plus, AlertTriangle, Eye, ChevronLeft, ChevronRight } from 'lucide-react'
 import AccountingTabs from '../accounting-tabs'
@@ -310,10 +311,19 @@ export default function PeriodsContent() {
                               </>
                             )}
                             {displayStatus === 'Locked' && (
-                              <span className="text-xs text-muted-foreground" title="All entries are locked — no further actions available">
-                                <Lock className="w-3 h-3 inline mr-1" />
-                                Locked
-                              </span>
+                              <TooltipProvider delayDuration={0}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="text-xs text-muted-foreground cursor-help">
+                                      <Lock className="w-3 h-3 inline mr-1" />
+                                      Locked
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    All entries are locked — no further actions available
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             )}
                             {!canManagePeriods && displayStatus !== 'Locked' && (
                               <span className="text-xs text-muted-foreground" title="Only Finance Admin or Owner can manage periods">
