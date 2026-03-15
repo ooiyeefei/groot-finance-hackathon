@@ -301,8 +301,19 @@ export const reopen = mutation({
   },
 });
 
+// Resolve a Clerk userId to display name
+async function resolveUserName(db: any, clerkUserId: string): Promise<string> {
+  const user = await db
+    .query("users")
+    .withIndex("by_clerkUserId", (q: any) => q.eq("clerkUserId", clerkUserId))
+    .first();
+  return user?.fullName || user?.email || clerkUserId;
+}
+
 /**
  * List accounting periods for a business
+ *
+ * Resolves createdBy/closedBy Clerk IDs to display names.
  */
 export const list = query({
   args: {
@@ -310,29 +321,39 @@ export const list = query({
     status: v.optional(v.union(v.literal("open"), v.literal("closed"))),
   },
   handler: async (ctx, args) => {
+    let periods;
     if (args.status) {
-      return await ctx.db
+      periods = await ctx.db
         .query("accounting_periods")
         .withIndex("by_business_status", (q) =>
           q.eq("businessId", args.businessId).eq("status", args.status!)
         )
         .order("desc")
         .collect();
+    } else {
+      const allPeriods = await ctx.db
+        .query("accounting_periods")
+        .withIndex("by_business", (q) => q.eq("businessId", args.businessId))
+        .collect();
+
+      periods = allPeriods.sort((a, b) => {
+        if (a.fiscalYear !== b.fiscalYear) {
+          return b.fiscalYear - a.fiscalYear;
+        }
+        return b.periodCode.localeCompare(a.periodCode);
+      });
     }
 
-    // Query all periods for the business
-    const allPeriods = await ctx.db
-      .query("accounting_periods")
-      .withIndex("by_business", (q) => q.eq("businessId", args.businessId))
-      .collect();
+    // Resolve user names for display
+    const enriched = await Promise.all(
+      periods.map(async (p) => ({
+        ...p,
+        createdByName: await resolveUserName(ctx.db, p.createdBy),
+        closedByName: p.closedBy ? await resolveUserName(ctx.db, p.closedBy) : undefined,
+      }))
+    );
 
-    return allPeriods.sort((a, b) => {
-      // Sort by fiscal year DESC, then period code DESC
-      if (a.fiscalYear !== b.fiscalYear) {
-        return b.fiscalYear - a.fiscalYear;
-      }
-      return b.periodCode.localeCompare(a.periodCode);
-    });
+    return enriched;
   },
 });
 
@@ -380,7 +401,7 @@ export const getLockStatus = query({
       result[period.periodCode] = {
         totalEntries: entries.length,
         lockedEntries,
-        allLocked: entries.length > 0 && lockedEntries === entries.length,
+        allLocked: lockedEntries === entries.length,
       };
     }
 

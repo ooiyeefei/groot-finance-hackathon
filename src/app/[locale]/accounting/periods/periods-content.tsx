@@ -404,7 +404,7 @@ export default function PeriodsContent() {
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Closed By:</span>
-                      <span className="text-foreground">{selectedPeriod.closedBy}</span>
+                      <span className="text-foreground">{selectedPeriod.closedByName || selectedPeriod.closedBy}</span>
                     </div>
                     {selectedPeriod.closedAt && (
                       <div className="flex justify-between text-sm">
@@ -423,7 +423,7 @@ export default function PeriodsContent() {
               )}
 
               <div className="text-xs text-muted-foreground border-t border-border pt-3">
-                Created by {selectedPeriod.createdBy} on {new Date(selectedPeriod.createdAt).toLocaleString()}
+                Created by {selectedPeriod.createdByName || selectedPeriod.createdBy} on {new Date(selectedPeriod.createdAt).toLocaleString()}
               </div>
             </div>
           )}
