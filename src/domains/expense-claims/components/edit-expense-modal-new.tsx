@@ -289,8 +289,8 @@ export default function EditExpenseModalNew({
   }, [einvoiceData?.einvoiceRequestStatus, refreshEinvoiceData])
 
   // Generate signed URL when claim is loaded
-  // Uses /api/v1/expense-claims/[id]/image-url which has S3 path discovery + fallback logic
-  // (the lightweight /api/v1/signed-url blindly signs the storagePath which may not match
+  // Uses /api/v1/expense-claims/[id]/image-url which has S3 path discovery + fallback
+  // (the lightweight /api/v1/signed-url blindly signs storagePath which may not match
   // the actual S3 location after Lambda processing — causing 403 errors)
   useEffect(() => {
     if (!expenseClaimId) return

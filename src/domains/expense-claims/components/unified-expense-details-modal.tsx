@@ -227,11 +227,12 @@ export default function UnifiedExpenseDetailsModal({
         setLoading(false)
 
         // Now generate signed URL immediately (no second effect needed)
-        const storagePath = enrichedData.storage_path
-        if (storagePath) {
+        // Use the full image-url endpoint which has S3 path discovery + fallback
+        // (the lightweight /api/v1/signed-url blindly signs storagePath which may
+        // not match the actual S3 location after Lambda processing — causing 403)
+        if (enrichedData.storage_path) {
           try {
-            const s3Key = `expense_claims/${storagePath}`
-            const urlResponse = await fetch(`/api/v1/signed-url?path=${encodeURIComponent(s3Key)}`)
+            const urlResponse = await fetch(`/api/v1/expense-claims/${claimId}/image-url`)
 
             if (cancelled) return
 
