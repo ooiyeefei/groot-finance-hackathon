@@ -7,7 +7,8 @@
 
 import { v } from "convex/values";
 import { internalAction, internalQuery } from "../_generated/server";
-import { internal } from "../_generated/api";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const _internal: any = require("../_generated/api").internal;
 import { callMCPTool } from "../lib/mcpClient";
 
 const MIN_CORRECTIONS_FOR_OPTIMIZATION = 100;
@@ -72,7 +73,7 @@ export const triggerOptimization = internalAction({
   },
   handler: async (ctx, args) => {
     // 1. Get all corrections for this platform
-    const corrections = await ctx.runQuery(internal.functions.dspyOptimization.getAllCorrectionsForPlatform as any, { platform: args.platform });
+    const corrections = await ctx.runQuery(_internal.functions.dspyOptimization.getAllCorrectionsForPlatform, { platform: args.platform });
 
     if (corrections.length < MIN_CORRECTIONS_FOR_OPTIMIZATION) {
       console.log(`[DSPy] Skipping ${args.platform}: only ${corrections.length} corrections (need ${MIN_CORRECTIONS_FOR_OPTIMIZATION})`);
@@ -81,7 +82,7 @@ export const triggerOptimization = internalAction({
 
     // 2. Get current active model
     const activeModel = await ctx.runQuery(
-      internal.functions.dspyModelVersions.getActiveModel,
+      _internal.functions.dspyModelVersions.getActiveModel,
       { platform: args.platform }
     );
 
@@ -118,7 +119,7 @@ export const triggerOptimization = internalAction({
       // 4. Record result in Convex
       if (result.success && result.newModelS3Key) {
         await ctx.runMutation(
-          internal.functions.dspyModelVersions.recordTrainingResult,
+          _internal.functions.dspyModelVersions.recordTrainingResult,
           {
             platform: args.platform,
             s3Key: result.newModelS3Key,
@@ -146,7 +147,7 @@ export const weeklyOptimization = internalAction({
   args: {},
   handler: async (ctx) => {
     const platforms = await ctx.runQuery(
-      internal.functions.dspyOptimization.getPlatformsReadyForOptimization as any,
+      _internal.functions.dspyOptimization.getPlatformsReadyForOptimization as any,
       {}
     );
 
@@ -155,7 +156,7 @@ export const weeklyOptimization = internalAction({
     for (const platform of platforms) {
       try {
         await ctx.runAction(
-          internal.functions.dspyOptimization.triggerOptimization as any,
+          _internal.functions.dspyOptimization.triggerOptimization as any,
           { platform }
         );
       } catch (error) {

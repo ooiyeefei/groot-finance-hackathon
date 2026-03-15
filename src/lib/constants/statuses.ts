@@ -770,3 +770,17 @@ export const CONFIDENCE_LEVELS = {
 
 export type ConfidenceLevel = typeof CONFIDENCE_LEVELS[keyof typeof CONFIDENCE_LEVELS];
 export const CONFIDENCE_LEVEL_VALUES = Object.values(CONFIDENCE_LEVELS);
+
+// FEE CLASSIFICATION CONFIDENCE (001-dspy-fee-breakdown)
+
+export const FEE_CONFIDENCE_THRESHOLDS = {
+  HIGH: 0.90,    // Green — auto-accepted
+  MEDIUM: 0.70,  // Yellow — review suggested
+  // Below 0.70 = Low (Red) — must review
+} as const;
+
+export const FEE_CONFIDENCE_COLORS = {
+  high: { bg: "bg-emerald-500/15", text: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
+  medium: { bg: "bg-amber-500/15", text: "text-amber-600 dark:text-amber-400", dot: "bg-amber-500" },
+  low: { bg: "bg-red-500/15", text: "text-red-600 dark:text-red-400", dot: "bg-red-500" },
+} as const;

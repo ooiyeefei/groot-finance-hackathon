@@ -124,3 +124,50 @@ export function useReconciliationMutations() {
     reopenPeriod,
   }
 }
+
+// ============================================
+// FEE CLASSIFICATION HOOKS
+// ============================================
+
+/**
+ * Hook for fee classification rules (admin management)
+ */
+export function useFeeClassificationRules(platform?: string) {
+  const { businessId } = useActiveBusiness()
+
+  const result = useQuery(
+    api.functions.feeClassificationRules.list,
+    businessId
+      ? {
+          businessId: businessId as Id<"businesses">,
+          platform,
+        }
+      : "skip"
+  )
+
+  return {
+    rules: result?.rules ?? [],
+    isLoading: result === undefined,
+  }
+}
+
+/**
+ * Hook for fee classification rule mutations
+ */
+export function useFeeClassificationMutations() {
+  const createRule = useMutation(api.functions.feeClassificationRules.create)
+  const updateRule = useMutation(api.functions.feeClassificationRules.update)
+  const removeRule = useMutation(api.functions.feeClassificationRules.remove)
+  const seedDefaults = useMutation(api.functions.feeClassificationRules.seedDefaults)
+  const recordCorrection = useMutation(api.functions.feeClassificationCorrections.recordCorrection)
+  const adjustFeeAmount = useMutation(api.functions.feeClassificationActions.adjustFeeAmount)
+
+  return {
+    createRule,
+    updateRule,
+    removeRule,
+    seedDefaults,
+    recordCorrection,
+    adjustFeeAmount,
+  }
+}

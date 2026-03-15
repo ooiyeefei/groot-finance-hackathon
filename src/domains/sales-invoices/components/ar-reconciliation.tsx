@@ -20,6 +20,7 @@ import {
   Info,
   HelpCircle,
   AlertCircle as AlertCircleIcon,
+  Settings2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -45,12 +46,15 @@ import {
   useSalesOrders,
   useReconciliationMutations,
   useExportData,
+  useFeeClassificationMutations,
 } from '../hooks/use-reconciliation'
+import FeeRulesManager from './fee-rules-manager'
 import { useSalesInvoices } from '../hooks/use-sales-invoices'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/toast'
 import type { Id } from '../../../../convex/_generated/dataModel'
+import { FEE_CONFIDENCE_THRESHOLDS, FEE_CONFIDENCE_COLORS } from '@/lib/constants/statuses'
 
 // Match status badge config
 const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; bgColor: string; textColor: string }> = {
@@ -113,6 +117,31 @@ function VarianceSeverityBadge({ severity }: { severity: string }) {
   return <Badge variant={c.variant} className="text-[10px] px-1.5 py-0">{c.label}</Badge>
 }
 
+// Fee confidence indicator for compact rows
+function FeeConfidenceDot({ classifiedFees }: { classifiedFees?: Array<{ confidence: number; isNew: boolean }> }) {
+  if (!classifiedFees || classifiedFees.length === 0) return null
+
+  const hasNew = classifiedFees.some(f => f.isNew)
+  const lowestConfidence = Math.min(...classifiedFees.map(f => f.confidence))
+
+  const level = lowestConfidence >= FEE_CONFIDENCE_THRESHOLDS.HIGH
+    ? 'high'
+    : lowestConfidence >= FEE_CONFIDENCE_THRESHOLDS.MEDIUM
+    ? 'medium'
+    : 'low'
+
+  const colors = FEE_CONFIDENCE_COLORS[level]
+
+  return (
+    <div className="flex items-center gap-1">
+      <div className={`h-2 w-2 rounded-full ${colors.dot}`} title={`Fee confidence: ${(lowestConfidence * 100).toFixed(0)}%`} />
+      {hasNew && (
+        <span className="text-[9px] font-bold bg-red-500 text-white px-1 rounded">NEW</span>
+      )}
+    </div>
+  )
+}
+
 export default function ARReconciliation() {
   const { businessId } = useActiveBusiness()
   const router = useRouter()
@@ -127,6 +156,10 @@ export default function ARReconciliation() {
   const [showPeriodPresets, setShowPeriodPresets] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const [isReconcilingLineItems, setIsReconcilingLineItems] = useState(false)
+  const [feeReviewFilter, setFeeReviewFilter] = useState(false)
+  const [feeRulesOpen, setFeeRulesOpen] = useState(false)
+
+  const { recordCorrection, adjustFeeAmount } = useFeeClassificationMutations()
 
   const { summary, isLoading: summaryLoading } = useReconciliationSummary({
     dateFrom: dateFrom || undefined,
@@ -160,7 +193,17 @@ export default function ARReconciliation() {
     reopenPeriod,
   } = useReconciliationMutations()
 
-  const selectedOrder = orders.find((o) => o._id === selectedOrderId)
+  // Apply fee review filter: show only orders with fees needing review (confidence < 90%)
+  const filteredOrders = useMemo(() => {
+    if (!feeReviewFilter) return orders
+    return orders.filter((order) => {
+      const classifiedFees = (order as any).classifiedFees as Array<{ confidence: number; isNew: boolean }> | undefined
+      if (!classifiedFees || classifiedFees.length === 0) return false
+      return classifiedFees.some(f => f.confidence < FEE_CONFIDENCE_THRESHOLDS.HIGH || f.isNew)
+    })
+  }, [orders, feeReviewFilter])
+
+  const selectedOrder = filteredOrders.find((o) => o._id === selectedOrderId) ?? orders.find((o) => o._id === selectedOrderId)
   const matchedInvoice = selectedOrder?.matchedInvoiceId
     ? invoices.find((inv) => inv._id === selectedOrder.matchedInvoiceId)
     : null
@@ -461,6 +504,14 @@ export default function ARReconciliation() {
           <Button
             variant="outline"
             size="sm"
+            onClick={() => setFeeRulesOpen(true)}
+          >
+            <Settings2 className="h-4 w-4 mr-1.5" />
+            Fee Rules
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={triggerExport}
             disabled={orders.length === 0}
           >
@@ -622,6 +673,16 @@ export default function ARReconciliation() {
               {status.charAt(0).toUpperCase() + status.slice(1)}
             </Button>
           ))}
+          <Button
+            variant={feeReviewFilter ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setFeeReviewFilter(!feeReviewFilter)}
+            className="text-xs ml-1"
+            title="Show only orders with fees needing review (confidence < 90%)"
+          >
+            <AlertTriangle className="h-3 w-3 mr-1" />
+            Needs Review
+          </Button>
         </div>
 
         {/* Period close/reopen */}
@@ -688,6 +749,10 @@ export default function ARReconciliation() {
                     <th className="pb-2 pr-4 text-muted-foreground font-medium">Customer</th>
                     <th className="pb-2 pr-4 text-muted-foreground font-medium text-right">Gross</th>
                     <th className="pb-2 pr-4 text-muted-foreground font-medium text-right">Fee</th>
+                    <th className="pb-2 pr-2 text-muted-foreground font-medium text-center w-8" title="Fee classification confidence">
+                      <span className="sr-only">Fee Confidence</span>
+                      <Info className="h-3 w-3 mx-auto" />
+                    </th>
                     <th className="pb-2 pr-4 text-muted-foreground font-medium text-right">Net</th>
                     <th className="pb-2 pr-4 text-muted-foreground font-medium">Platform</th>
                     <th className="pb-2 pr-4 text-muted-foreground font-medium">Method</th>
@@ -695,7 +760,7 @@ export default function ARReconciliation() {
                   </tr>
                 </thead>
                 <tbody>
-                  {orders.map((order) => {
+                  {filteredOrders.map((order) => {
                     const config = statusConfig[order.matchStatus] ?? statusConfig.unmatched
                     const isClosed = (order as any).periodStatus === 'closed'
                     const lineItemCount = (order as any).lineItems?.length ?? 0
@@ -730,6 +795,9 @@ export default function ARReconciliation() {
                         </td>
                         <td className="py-2.5 pr-4 text-right font-mono text-muted-foreground">
                           {order.platformFee != null ? formatCurrency(order.platformFee, order.currency) : '—'}
+                        </td>
+                        <td className="py-2.5 pr-2 text-center">
+                          <FeeConfidenceDot classifiedFees={(order as any).classifiedFees} />
                         </td>
                         <td className="py-2.5 pr-4 text-right font-mono text-foreground">
                           {order.netAmount != null ? formatCurrency(order.netAmount, order.currency) : '—'}
@@ -767,6 +835,12 @@ export default function ARReconciliation() {
         onComplete={handleImportComplete}
         onCancel={() => setCsvImportOpen(false)}
         businessId={businessId ?? undefined}
+      />
+
+      {/* Fee Classification Rules Manager */}
+      <FeeRulesManager
+        open={feeRulesOpen}
+        onOpenChange={setFeeRulesOpen}
       />
 
       {/* Order Detail Sheet — Side-by-Side Comparison */}
