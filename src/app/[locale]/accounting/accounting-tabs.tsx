@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { LayoutDashboard, FileText, BookOpen, Calendar, Plus } from 'lucide-react'
+import { LayoutDashboard, FileText, BookOpen, Calendar, Landmark, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 const TABS = [
@@ -9,10 +9,11 @@ const TABS = [
   { id: 'journal-entries', label: 'Journal Entries', href: '/en/accounting/journal-entries', icon: FileText },
   { id: 'chart-of-accounts', label: 'Chart of Accounts', href: '/en/accounting/chart-of-accounts', icon: BookOpen },
   { id: 'periods', label: 'Periods', href: '/en/accounting/periods', icon: Calendar },
+  { id: 'bank-reconciliation', label: 'Bank Recon', href: '/en/accounting/bank-reconciliation', icon: Landmark },
 ] as const
 
 interface AccountingTabsProps {
-  activeTab: 'dashboard' | 'journal-entries' | 'chart-of-accounts' | 'periods'
+  activeTab: 'dashboard' | 'journal-entries' | 'chart-of-accounts' | 'periods' | 'bank-reconciliation'
   hideNewEntryButton?: boolean
 }
 
