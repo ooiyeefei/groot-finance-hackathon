@@ -6,9 +6,10 @@ import { api } from '../../../../../convex/_generated/api'
 import { useActiveBusiness } from '@/contexts/business-context'
 import BankAccountsManager from './bank-accounts-manager'
 import ReconciliationDashboard from './reconciliation-dashboard'
+import ReconciliationSummary from './reconciliation-summary'
 import BankImportButton from './bank-import-button'
 import { Id } from '../../../../../convex/_generated/dataModel'
-import { Landmark, Plus, RefreshCw, AlertTriangle, CheckCircle2, X, Sparkles } from 'lucide-react'
+import { Landmark, Plus, RefreshCw, AlertTriangle, CheckCircle2, X, Sparkles, Brain } from 'lucide-react'
 import AccountingTabs from '../../../../app/[locale]/accounting/accounting-tabs'
 
 interface ImportNotification {
@@ -21,6 +22,7 @@ export default function BankReconTab() {
   const [selectedAccountId, setSelectedAccountId] = useState<Id<'bank_accounts'> | null>(null)
   const [showAccountManager, setShowAccountManager] = useState(false)
   const [isMatching, setIsMatching] = useState(false)
+  const [isClassifying, setIsClassifying] = useState(false)
   const [notification, setNotification] = useState<ImportNotification | null>(null)
 
   const convexBusinessId = businessId as unknown as Id<'businesses'> | undefined
@@ -31,6 +33,7 @@ export default function BankReconTab() {
   )
 
   const runMatching = useAction(api.functions.reconciliationMatches.runMatching)
+  const classifyBatch = useAction(api.functions.bankTransactions.classifyBatch)
 
   const handleImportComplete = useCallback(async (summary: { imported: number; duplicatesSkipped: number }) => {
     // Show import result notification
@@ -49,11 +52,10 @@ export default function BankReconTab() {
     // Auto-dismiss after 8 seconds
     setTimeout(() => setNotification(null), 8000)
 
-    // Run auto-matching
     if (!convexBusinessId || !selectedAccountId) return
-    setIsMatching(true)
 
-    // Show matching in progress
+    // Run auto-matching first
+    setIsMatching(true)
     setNotification({
       type: 'info',
       message: `Analyzing transactions for smart matches...`,
@@ -65,31 +67,55 @@ export default function BankReconTab() {
         bankAccountId: selectedAccountId,
       })
 
-      // Show matching results
       if (matchResult.matched > 0) {
         setNotification({
           type: 'success',
-          message: `Smart matching complete! Found ${matchResult.matched} suggested match${matchResult.matched !== 1 ? 'es' : ''} for your review.`,
+          message: `Found ${matchResult.matched} suggested match${matchResult.matched !== 1 ? 'es' : ''}. Now running AI classification...`,
+        })
+      }
+    } catch (err) {
+      console.error('Matching failed:', err)
+    } finally {
+      setIsMatching(false)
+    }
+
+    // Run AI classification on remaining unmatched
+    setIsClassifying(true)
+    setNotification({
+      type: 'info',
+      message: `Running AI classification on unmatched transactions...`,
+    })
+
+    try {
+      const classifyResult = await classifyBatch({
+        businessId: convexBusinessId,
+        bankAccountId: selectedAccountId,
+      })
+
+      if (classifyResult.classified > 0) {
+        setNotification({
+          type: 'success',
+          message: `AI classified ${classifyResult.classified} transaction${classifyResult.classified !== 1 ? 's' : ''}. Review suggested GL postings.`,
         })
       } else {
         setNotification({
           type: 'info',
-          message: `No automatic matches found. You can manually search and match transactions.`,
+          message: `No additional classifications found. You can manually categorize remaining transactions.`,
         })
       }
 
       setTimeout(() => setNotification(null), 8000)
     } catch (err) {
-      console.error('Matching failed:', err)
+      console.error('Classification failed:', err)
       setNotification({
         type: 'warning',
-        message: 'Auto-matching encountered an error. You can still manually match transactions.',
+        message: 'AI classification encountered an error. You can still manually classify transactions.',
       })
       setTimeout(() => setNotification(null), 6000)
     } finally {
-      setIsMatching(false)
+      setIsClassifying(false)
     }
-  }, [convexBusinessId, selectedAccountId, runMatching])
+  }, [convexBusinessId, selectedAccountId, runMatching, classifyBatch])
 
   const handleRunMatching = useCallback(async () => {
     if (!convexBusinessId || !selectedAccountId) return
@@ -130,6 +156,46 @@ export default function BankReconTab() {
       setIsMatching(false)
     }
   }, [convexBusinessId, selectedAccountId, runMatching])
+
+  const handleRunClassification = useCallback(async () => {
+    if (!convexBusinessId || !selectedAccountId) return
+    setIsClassifying(true)
+
+    setNotification({
+      type: 'info',
+      message: `Running AI classification on unmatched transactions...`,
+    })
+
+    try {
+      const result = await classifyBatch({
+        businessId: convexBusinessId,
+        bankAccountId: selectedAccountId,
+      })
+
+      if (result.classified > 0) {
+        setNotification({
+          type: 'success',
+          message: `AI classified ${result.classified} transaction${result.classified !== 1 ? 's' : ''}.${result.errors > 0 ? ` ${result.errors} could not be classified.` : ''}`,
+        })
+      } else {
+        setNotification({
+          type: 'info',
+          message: `No unmatched transactions to classify.`,
+        })
+      }
+
+      setTimeout(() => setNotification(null), 6000)
+    } catch (err) {
+      console.error('Classification failed:', err)
+      setNotification({
+        type: 'warning',
+        message: 'AI classification encountered an error. Please try again.',
+      })
+      setTimeout(() => setNotification(null), 6000)
+    } finally {
+      setIsClassifying(false)
+    }
+  }, [convexBusinessId, selectedAccountId, classifyBatch])
 
   if (!convexBusinessId) {
     return (
@@ -235,12 +301,21 @@ export default function BankReconTab() {
               />
               <button
                 onClick={handleRunMatching}
-                disabled={isMatching}
+                disabled={isMatching || isClassifying}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md border border-border bg-card hover:bg-muted text-foreground transition-colors disabled:opacity-50"
                 title="Re-run smart matching on unmatched transactions"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isMatching ? 'animate-spin' : ''}`} />
-                {isMatching ? 'Analyzing...' : 'Re-analyze'}
+                {isMatching ? 'Matching...' : 'Re-match'}
+              </button>
+              <button
+                onClick={handleRunClassification}
+                disabled={isClassifying || isMatching}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-primary hover:bg-primary/90 text-primary-foreground transition-colors disabled:opacity-50"
+                title="Run AI classification on unmatched transactions"
+              >
+                <Brain className={`w-3.5 h-3.5 ${isClassifying ? 'animate-pulse' : ''}`} />
+                {isClassifying ? 'Classifying...' : 'AI Classify'}
               </button>
             </>
           )}
@@ -249,10 +324,15 @@ export default function BankReconTab() {
 
       {/* Main content */}
       {selectedAccountId ? (
-        <ReconciliationDashboard
-          businessId={convexBusinessId}
-          bankAccountId={selectedAccountId}
-        />
+        <>
+          <ReconciliationDashboard
+            businessId={convexBusinessId}
+            bankAccountId={selectedAccountId}
+          />
+          <ReconciliationSummary
+            bankAccountId={selectedAccountId}
+          />
+        </>
       ) : (
         <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
           Select a bank account to view reconciliation
