@@ -12,7 +12,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
-import { getPresignedDownloadUrl, listFiles, URL_EXPIRY } from '@/lib/aws-s3'
+import { getPresignedDownloadUrl, listFiles, fileExists, URL_EXPIRY } from '@/lib/aws-s3'
 import {
   isCloudFrontConfigured,
   getInvoiceImageUrl,
@@ -125,26 +125,31 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       const convertedPath = invoice.convertedImagePath || actualStoragePath
       console.log(`[Invoice Image URL] Using ${invoice.convertedImagePath ? 'converted' : 'raw'} image path: ${convertedPath}`)
 
-      // If no converted path, try direct signed URL first (skip S3 HEAD check)
-      if (!invoice.convertedImagePath && convertedPath) {
+      // If no converted path, try direct file access (with existence check)
+      // Skip direct access for PDFs — img tags can't render PDFs, need converted images
+      const isPdf = /\.pdf$/i.test(convertedPath)
+      if (!invoice.convertedImagePath && convertedPath && !isPdf) {
         console.log(`[Invoice Image URL] No converted image found, trying direct access for: ${convertedPath}`)
 
-        try {
-          const signedUrl = await generateSignedUrl(convertedPath)
-          console.log(`[Invoice Image URL] Direct file access successful for: ${convertedPath}`)
-          return cachedJson({
-            success: true,
-            data: {
-              imageUrl: signedUrl,
-              filename: convertedPath.split('/').pop() || 'invoice',
-              storagePath: convertedPath,
-              currentPage: 1,
-              totalPages: 1,
-              availablePages: [{ pageNumber: 1, filename: convertedPath.split('/').pop() || 'invoice' }]
-            }
-          })
-        } catch (error) {
-          console.log(`[Invoice Image URL] Direct file access failed, falling back to directory listing:`, error)
+        const exists = await fileExists('invoices', convertedPath)
+        if (exists) {
+          try {
+            const signedUrl = await generateSignedUrl(convertedPath)
+            console.log(`[Invoice Image URL] Direct file access successful for: ${convertedPath}`)
+            return cachedJson({
+              success: true,
+              data: {
+                imageUrl: signedUrl,
+                filename: convertedPath.split('/').pop() || 'invoice',
+                storagePath: convertedPath,
+                currentPage: 1,
+                totalPages: 1,
+                availablePages: [{ pageNumber: 1, filename: convertedPath.split('/').pop() || 'invoice' }]
+              }
+            })
+          } catch (error) {
+            console.log(`[Invoice Image URL] Direct file access failed, falling back to directory listing:`, error)
+          }
         }
       }
 
