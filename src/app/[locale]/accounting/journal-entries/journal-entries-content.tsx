@@ -11,7 +11,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useJournalEntries, useJournalEntry } from '@/domains/accounting/hooks/use-journal-entries'
-import { Plus, Eye, CheckCircle, XCircle } from 'lucide-react'
+import { useAccountingPeriods } from '@/domains/accounting/hooks/use-accounting-periods'
+import { Plus, Eye, CheckCircle, XCircle, Lock } from 'lucide-react'
 import Link from 'next/link'
 import AccountingTabs from '../accounting-tabs'
 import { formatCurrency } from '@/lib/utils/format-number'
@@ -21,6 +22,7 @@ import type { Id } from '../../../../../convex/_generated/dataModel'
 
 export default function JournalEntriesContent() {
   const { entries: entriesRaw, isLoading, postEntry, reverseEntry } = useJournalEntries()
+  const { periods } = useAccountingPeriods()
   const entries = (entriesRaw || []) as any[]
 
   const [selectedEntryId, setSelectedEntryId] = useState<Id<'journal_entries'> | null>(null)
@@ -81,6 +83,43 @@ export default function JournalEntriesContent() {
       default:
         return ''
     }
+  }
+
+  const getPeriodBadge = (entry: any) => {
+    if (!entry.fiscalPeriod) return null
+    const period = (periods || []).find((p: any) => p.periodCode === entry.fiscalPeriod)
+    if (!period) return null
+
+    const isLocked = entry.isPeriodLocked
+    const isClosed = period.status === 'closed'
+
+    if (isLocked) {
+      return (
+        <Badge className="bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30 text-xs">
+          <Lock className="w-3 h-3 mr-1" />
+          {entry.fiscalPeriod} Locked
+        </Badge>
+      )
+    }
+    if (isClosed) {
+      return (
+        <Badge className="bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30 text-xs">
+          {entry.fiscalPeriod} Closed
+        </Badge>
+      )
+    }
+    return (
+      <Badge className="bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/30 text-xs">
+        {entry.fiscalPeriod} Open
+      </Badge>
+    )
+  }
+
+  const isEntryEditable = (entry: any) => {
+    if (entry.isPeriodLocked) return false
+    const period = (periods || []).find((p: any) => p.periodCode === entry.fiscalPeriod)
+    if (period && period.status === 'closed') return false
+    return true
   }
 
   const getSourceTypeBadge = (sourceType?: string) => {
@@ -150,6 +189,9 @@ export default function JournalEntriesContent() {
                     <th className="px-6 py-3 text-center text-sm font-medium text-foreground">
                       Status
                     </th>
+                    <th className="px-6 py-3 text-center text-sm font-medium text-foreground">
+                      Period
+                    </th>
                     <th className="px-6 py-3 text-right text-sm font-medium text-foreground">
                       Actions
                     </th>
@@ -188,6 +230,9 @@ export default function JournalEntriesContent() {
                             {entry.status}
                           </Badge>
                         </td>
+                        <td className="px-6 py-4 text-center">
+                          {getPeriodBadge(entry)}
+                        </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end space-x-2">
                             <Button
@@ -198,24 +243,32 @@ export default function JournalEntriesContent() {
                               <Eye className="w-4 h-4" />
                             </Button>
 
-                            {entry.status === 'draft' && (
+                            {entry.status === 'draft' && isEntryEditable(entry) && (
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handlePost(entry._id)}
+                                title="Post entry"
                               >
                                 <CheckCircle className="w-4 h-4 text-green-600" />
                               </Button>
                             )}
 
-                            {entry.status === 'posted' && (
+                            {entry.status === 'posted' && isEntryEditable(entry) && (
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleReverse(entry._id)}
+                                title="Reverse entry"
                               >
                                 <XCircle className="w-4 h-4 text-destructive" />
                               </Button>
+                            )}
+
+                            {!isEntryEditable(entry) && entry.status !== 'reversed' && (
+                              <span className="text-xs text-muted-foreground" title="Period is closed or locked">
+                                <Lock className="w-3 h-3 inline" />
+                              </span>
                             )}
                           </div>
                         </td>

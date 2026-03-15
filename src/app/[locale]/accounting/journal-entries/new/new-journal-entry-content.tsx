@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select'
 import { useChartOfAccounts } from '@/domains/accounting/hooks/use-chart-of-accounts'
 import { useJournalEntries } from '@/domains/accounting/hooks/use-journal-entries'
+import { useAccountingPeriods } from '@/domains/accounting/hooks/use-accounting-periods'
 import { Plus, Trash2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -32,6 +33,7 @@ export default function NewJournalEntryContent() {
   const router = useRouter()
   const { accounts, isLoading: accountsLoading } = useChartOfAccounts()
   const { businessId, createEntry, postEntry } = useJournalEntries()
+  const { periods } = useAccountingPeriods()
 
   const [formData, setFormData] = useState({
     transactionDate: new Date().toISOString().split('T')[0],
@@ -45,6 +47,18 @@ export default function NewJournalEntryContent() {
 
   const [isSaving, setIsSaving] = useState(false)
   const [saveAndPost, setSaveAndPost] = useState(false)
+
+  // Check if the selected date falls in a closed period
+  const getClosedPeriodWarning = () => {
+    if (!formData.transactionDate || !periods) return null
+    const periodCode = formData.transactionDate.slice(0, 7) // YYYY-MM
+    const period = periods.find((p: any) => p.periodCode === periodCode)
+    if (period && period.status === 'closed') {
+      return `Cannot create entry — the period for ${period.periodName} is closed`
+    }
+    return null
+  }
+  const closedPeriodWarning = getClosedPeriodWarning()
 
   const addLine = () => {
     setLines([
@@ -206,6 +220,12 @@ export default function NewJournalEntryContent() {
                     setFormData({ ...formData, transactionDate: e.target.value })
                   }
                 />
+                {closedPeriodWarning && (
+                  <div className="mt-2 bg-destructive/10 border border-destructive rounded-lg p-3 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+                    <p className="text-sm text-destructive">{closedPeriodWarning}</p>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -410,7 +430,7 @@ export default function NewJournalEntryContent() {
             <CardContent className="p-4 space-y-3">
               <Button
                 onClick={() => handleSubmit(false)}
-                disabled={isSaving || !balance.isBalanced}
+                disabled={isSaving || !balance.isBalanced || !!closedPeriodWarning}
                 className="w-full bg-secondary hover:bg-secondary/80 text-secondary-foreground"
               >
                 {isSaving && !saveAndPost ? 'Saving...' : 'Save as Draft'}
@@ -418,7 +438,7 @@ export default function NewJournalEntryContent() {
 
               <Button
                 onClick={() => handleSubmit(true)}
-                disabled={isSaving || !balance.isBalanced}
+                disabled={isSaving || !balance.isBalanced || !!closedPeriodWarning}
                 className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
               >
                 {isSaving && saveAndPost ? 'Posting...' : 'Save and Post'}

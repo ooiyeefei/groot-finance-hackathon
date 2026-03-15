@@ -397,6 +397,8 @@ const arBalance = arLines.reduce((sum, line) =>
 - Convex document database with real-time subscriptions. New tables: `chart_of_accounts`, `journal_entries`, `journal_entry_lines`, `accounting_periods`, `manual_exchange_rates`. Migration from existing `accounting_entries` table (001-accounting-double-entry)
 - TypeScript 5.9.3 + Convex 1.31.3, Next.js 15.5.7, React 19.1.2, Qwen3-8B (Modal) (001-improve-action-center)
 - Convex document database (actionCenterInsights table, accounting_entries, vendors, expense_claims, business_expense_categories) (001-improve-action-center)
+- TypeScript 5.9.3, Next.js 15.5.7, React 19.1.2 + Convex 1.31.3, Clerk 6.30.0, Radix UI (Dialog, Badge), lucide-react, sonner (toast) (001-acct-period-ui)
+- Convex document database (existing `accounting_periods` + `journal_entries` tables) (001-acct-period-ui)
 
 ## Recent Changes
 - 001-category-3-mcp: Added MCP Server with API key management
