@@ -446,6 +446,8 @@ const arBalance = arLines.reduce((sum, line) =>
 - Convex (document DB), S3 (DSPy model state JSON files) (001-dspy-fee-breakdown)
 - Python 3.11 (Lambda Docker), TypeScript 5.9.3 (Convex) + DSPy 2.6+, litellm, Playwright, Gemini Flash-Lite (`gemini-3.1-flash-lite-preview`), boto3 (001-dspy-cua-integration)
 - S3 (`finanseal-bucket/dspy-modules/`) for optimized module state, Convex for training data logs (001-dspy-cua-integration)
+- TypeScript 5.9.3 (Next.js + Convex), Python 3.11 (Lambda) + Convex 1.31.3, DSPy 3.1+, Gemini 3.1 Flash-Lite, AWS Lambda, boto3 (001-dspy-bank-recon)
+- Convex (corrections, model versions, bank transactions), S3 (optimized DSPy models) (001-dspy-bank-recon)
 
 ## Recent Changes
 - 001-category-3-mcp: Added MCP Server with API key management
