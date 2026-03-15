@@ -9,6 +9,7 @@ import ReconciliationDashboard from './reconciliation-dashboard'
 import BankImportButton from './bank-import-button'
 import { Id } from '../../../../../convex/_generated/dataModel'
 import { Landmark, Plus, RefreshCw, AlertTriangle, CheckCircle2, X, Sparkles } from 'lucide-react'
+import AccountingTabs from '../../../../app/[locale]/accounting/accounting-tabs'
 
 interface ImportNotification {
   type: 'success' | 'warning' | 'info'
@@ -132,8 +133,11 @@ export default function BankReconTab() {
 
   if (!convexBusinessId) {
     return (
-      <div className="flex items-center justify-center py-24 text-muted-foreground">
-        Select a business to view bank reconciliation
+      <div className="space-y-6">
+        <AccountingTabs activeTab="bank-reconciliation" hideNewEntryButton />
+        <div className="flex items-center justify-center py-24 text-muted-foreground">
+          Select a business to view bank reconciliation
+        </div>
       </div>
     )
   }
@@ -141,7 +145,9 @@ export default function BankReconTab() {
   // Empty state: no bank accounts yet
   if (bankAccounts && bankAccounts.length === 0 && !showAccountManager) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 gap-4">
+      <div className="space-y-6">
+        <AccountingTabs activeTab="bank-reconciliation" hideNewEntryButton />
+        <div className="flex flex-col items-center justify-center py-24 gap-4">
         <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
           <Landmark className="w-8 h-8 text-muted-foreground" />
         </div>
@@ -158,12 +164,14 @@ export default function BankReconTab() {
           <Plus className="w-4 h-4" />
           Add Bank Account
         </button>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
+      <AccountingTabs activeTab="bank-reconciliation" hideNewEntryButton />
       {/* Import notification banner */}
       {notification && (
         <div className={`flex items-center gap-3 rounded-lg border px-4 py-3 text-sm ${

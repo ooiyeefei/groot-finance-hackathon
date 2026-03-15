@@ -20,7 +20,7 @@ export default async function BankReconciliationPage() {
       <div className="flex h-screen bg-background">
         <Sidebar />
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
-          <HeaderWithUser title="Bank Reconciliation" subtitle="Import bank statements and reconcile against journal entries" />
+          <HeaderWithUser title="Accounting" subtitle="" />
           <main className="flex-1 overflow-auto p-4 sm:p-card-padding pb-24 sm:pb-4" style={{ contain: 'layout' }}>
             <div className="max-w-7xl mx-auto">
               <BankReconTab />
