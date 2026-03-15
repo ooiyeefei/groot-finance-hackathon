@@ -6,15 +6,17 @@ import { api } from '../../../../../convex/_generated/api'
 import { Id } from '../../../../../convex/_generated/dataModel'
 import TransactionRow from './transaction-row'
 import MatchCandidatesSheet from './match-candidates-sheet'
+import GLClassificationPanel from './gl-classification-panel'
+import BatchActionsBar from './batch-actions-bar'
 import { formatCurrency } from '@/lib/utils/format-number'
-import { CheckCircle2, Clock, HelpCircle, Tag, Filter, Download } from 'lucide-react'
+import { CheckCircle2, Clock, HelpCircle, Tag, Filter, Download, Brain, ShieldCheck } from 'lucide-react'
 
 interface ReconciliationDashboardProps {
   businessId: Id<'businesses'>
   bankAccountId: Id<'bank_accounts'>
 }
 
-type StatusFilter = 'all' | 'unmatched' | 'suggested' | 'reconciled' | 'categorized'
+type StatusFilter = 'all' | 'unmatched' | 'suggested' | 'reconciled' | 'categorized' | 'classified' | 'posted'
 
 export default function ReconciliationDashboard({
   businessId,
@@ -24,6 +26,7 @@ export default function ReconciliationDashboard({
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [matchingTxId, setMatchingTxId] = useState<Id<'bank_transactions'> | null>(null)
+  const [classifyingTxId, setClassifyingTxId] = useState<Id<'bank_transactions'> | null>(null)
 
   const summary = useQuery(api.functions.bankTransactions.getSummary, {
     businessId,
@@ -50,6 +53,12 @@ export default function ReconciliationDashboard({
       limit: 200,
     }
   ) ?? { transactions: [], totalCount: 0 }
+
+  // Fetch COA accounts for inline display in transaction rows
+  const coaAccounts = useQuery(api.functions.chartOfAccounts.list, {
+    businessId,
+    isActive: true,
+  })
 
   const updateStatus = useMutation(api.functions.bankTransactions.updateStatus)
 
@@ -86,9 +95,7 @@ export default function ReconciliationDashboard({
       rows.push(['', 'Total Transactions', '', String(reconSummary.totalTransactions), '', '', '', ''])
       rows.push(['', 'Total Credits', '', '', reconSummary.totalCredits.toFixed(2), '', '', ''])
       rows.push(['', 'Total Debits', '', reconSummary.totalDebits.toFixed(2), '', '', '', ''])
-      rows.push(['', 'Opening Balance', '', '', '', reconSummary.openingBalance.toFixed(2), '', ''])
       rows.push(['', 'Closing Balance', '', '', '', reconSummary.closingBalance.toFixed(2), '', ''])
-      rows.push(['', `Reconciled: ${reconSummary.reconciled}`, '', `Suggested: ${reconSummary.suggested}`, '', `Unmatched: ${reconSummary.unmatched}`, '', `Categorized: ${reconSummary.categorized}`])
     }
 
     const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')
@@ -119,6 +126,22 @@ export default function ReconciliationDashboard({
       filter: 'suggested' as StatusFilter,
     },
     {
+      label: 'Classified',
+      count: summary?.classified ?? 0,
+      icon: Brain,
+      color: 'text-purple-500',
+      bgColor: 'bg-purple-500/10',
+      filter: 'classified' as StatusFilter,
+    },
+    {
+      label: 'Posted',
+      count: summary?.posted ?? 0,
+      icon: ShieldCheck,
+      color: 'text-emerald-600',
+      bgColor: 'bg-emerald-600/10',
+      filter: 'posted' as StatusFilter,
+    },
+    {
       label: 'Unmatched',
       count: summary?.unmatched ?? 0,
       icon: HelpCircle,
@@ -139,7 +162,7 @@ export default function ReconciliationDashboard({
   return (
     <div className="space-y-4">
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {statusCards.map((card) => (
           <button
             key={card.filter}
@@ -201,6 +224,14 @@ export default function ReconciliationDashboard({
         </div>
       )}
 
+      {/* Batch actions bar */}
+      <BatchActionsBar
+        businessId={businessId}
+        bankAccountId={bankAccountId}
+        highConfidenceCount={summary?.highConfidenceClassified ?? 0}
+        classifiedCount={summary?.classified ?? 0}
+      />
+
       {/* Date filters + Export */}
       <div className="flex items-center gap-3 flex-wrap">
         <Filter className="w-4 h-4 text-muted-foreground" />
@@ -247,7 +278,7 @@ export default function ReconciliationDashboard({
       {/* Transaction list */}
       <div className="rounded-lg border border-border divide-y divide-border">
         {/* Header */}
-        <div className="grid grid-cols-[1fr_100px_100px_100px_140px] gap-2 px-4 py-2 text-xs font-medium text-muted-foreground bg-muted/50">
+        <div className="grid grid-cols-[1fr_100px_100px_100px_180px] gap-2 px-4 py-2 text-xs font-medium text-muted-foreground bg-muted/50">
           <div>Description</div>
           <div className="text-right">Debit</div>
           <div className="text-right">Credit</div>
@@ -267,7 +298,9 @@ export default function ReconciliationDashboard({
             <TransactionRow
               key={tx._id}
               transaction={tx}
+              coaAccounts={coaAccounts ?? null}
               onViewCandidates={() => setMatchingTxId(tx._id)}
+              onOpenClassification={() => setClassifyingTxId(tx._id)}
               onCategorize={handleCategorize}
               onUncategorize={handleUncategorize}
             />
@@ -281,6 +314,15 @@ export default function ReconciliationDashboard({
           bankTransactionId={matchingTxId}
           businessId={businessId}
           onClose={() => setMatchingTxId(null)}
+        />
+      )}
+
+      {/* GL Classification panel */}
+      {classifyingTxId && (
+        <GLClassificationPanel
+          transactionId={classifyingTxId}
+          businessId={businessId}
+          onClose={() => setClassifyingTxId(null)}
         />
       )}
     </div>
