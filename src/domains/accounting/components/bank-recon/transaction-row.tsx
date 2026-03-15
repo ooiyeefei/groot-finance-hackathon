@@ -50,7 +50,6 @@ export default function TransactionRow({
 }: TransactionRowProps) {
   const [showCategoryMenu, setShowCategoryMenu] = useState(false)
 
-  // @ts-expect-error Convex self-referencing type exceeds TS depth limit
   const match = useQuery(api.functions.reconciliationMatches.getByBankTransaction, { bankTransactionId: tx._id })
 
   const confirmMatch = useMutation(api.functions.reconciliationMatches.confirmMatch)
