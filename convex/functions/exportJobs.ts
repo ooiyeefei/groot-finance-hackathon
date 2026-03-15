@@ -1583,14 +1583,16 @@ async function enrichInvoiceRecords(
           || summary.vendor_name?.value || data.supplierName || data.supplier_name || "";
         let entityCode = "";
         if (!entityName) {
-          // Check if there's an accounting entry with vendor
-          const acctEntry = record.accountingEntryId
-            ? await ctx.db.get(record.accountingEntryId)
-            : null;
-          if (acctEntry?.vendorId) {
-            const vendor = await ctx.db.get(acctEntry.vendorId);
-            entityName = vendor?.companyName || "";
-            entityCode = vendor?.supplierCode || "";
+          // Check journal entry lines for vendor entity info
+          const jeId = (record as any).journalEntryId;
+          if (jeId) {
+            const jeLines = await ctx.db.query("journal_entry_lines")
+              .withIndex("by_journal_entry", (q: any) => q.eq("journalEntryId", jeId))
+              .collect();
+            const vendorLine = jeLines.find((l: any) => l.entityType === "vendor" && l.entityName);
+            if (vendorLine) {
+              entityName = (vendorLine as any).entityName || "";
+            }
           }
         }
 

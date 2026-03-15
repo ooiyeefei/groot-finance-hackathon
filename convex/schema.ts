@@ -443,7 +443,7 @@ export default defineSchema({
     deletedAt: v.optional(v.number()),
 
     // Linked Accounting Entry (created on approval)
-    accountingEntryId: v.optional(v.string()),  // Legacy field - table dropped
+    accountingEntryId: v.optional(v.string()),  // Stores journalEntryId (legacy field name)  // Stores journalEntryId (legacy field name, kept for data compat)
 
     // Double-entry accounting (new system)
     journalEntryId: v.optional(v.id("journal_entries")),
@@ -1020,7 +1020,7 @@ export default defineSchema({
 
     // Confirmation Status
     isConfirmed: v.boolean(),          // true if linked to an accounting entry
-    accountingEntryId: v.optional(v.string()),  // Legacy field - table dropped
+    accountingEntryId: v.optional(v.string()),  // Stores journalEntryId (legacy field name)  // Stores journalEntryId (legacy field name, kept for data compat)
 
     // Timestamps
     updatedAt: v.optional(v.number()),
@@ -1738,7 +1738,7 @@ export default defineSchema({
     isRecurringSource: v.optional(v.boolean()),
 
     // Accounting
-    accountingEntryId: v.optional(v.string()),
+    accountingEntryId: v.optional(v.string()),  // Stores journalEntryId (legacy field name)
 
     // Double-entry accounting (new system)
     journalEntryId: v.optional(v.id("journal_entries")),
@@ -2479,7 +2479,7 @@ export default defineSchema({
   reconciliation_matches: defineTable({
     businessId: v.id("businesses"),
     bankTransactionId: v.id("bank_transactions"),
-    accountingEntryId: v.optional(v.string()),  // Legacy field - table dropped
+    accountingEntryId: v.optional(v.string()),  // Stores journalEntryId (legacy field name)  // Stores journalEntryId (legacy field name, kept for data compat)
     matchType: matchTypeValidator,
     confidenceScore: v.number(),
     confidenceLevel: confidenceLevelValidator,
@@ -2565,7 +2565,7 @@ export default defineSchema({
   po_matches: defineTable({
     businessId: v.id("businesses"),
     purchaseOrderId: v.id("purchase_orders"),
-    accountingEntryId: v.optional(v.string()),  // Legacy field - table dropped
+    accountingEntryId: v.optional(v.string()),  // Stores journalEntryId (legacy field name)  // Stores journalEntryId (legacy field name, kept for data compat)
     invoiceId: v.optional(v.id("invoices")),
     grnIds: v.optional(v.array(v.id("goods_received_notes"))),
     matchType: poMatchTypeValidator,

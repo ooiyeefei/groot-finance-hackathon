@@ -5,6 +5,10 @@
  * Auto-matching engine + manual reconciliation workflows + split matching.
  * Matches bank transactions against journal_entries.
  * Access restricted to owner/finance_admin/manager roles.
+ *
+ * NOTE: The schema field `accountingEntryId` on reconciliation_matches
+ * is a legacy field name. It now stores journal_entries IDs.
+ * Field cannot be renamed without data migration (existing production documents).
  */
 
 import { v } from "convex/values";
