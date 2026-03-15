@@ -164,7 +164,7 @@ export const list = query({
         .map((inv) => inv.journalEntryId)
         .filter(Boolean);
       const journalEntries = await Promise.all(
-        journalEntryIds.map((id) => ctx.db.get(id!))
+        journalEntryIds.map((id) => ctx.db.get(id as any))
       );
       const jeMap = new Map(
         journalEntries.filter(Boolean).map((je) => [je!._id.toString(), je!])
@@ -220,7 +220,7 @@ export const list = query({
 
     // Use journalEntryId directly on invoices (no accounting_entries lookup needed)
     const jeIds2 = paginatedInvoices.map((inv) => inv.journalEntryId).filter(Boolean);
-    const jes2 = await Promise.all(jeIds2.map((id) => ctx.db.get(id!)));
+    const jes2 = await Promise.all(jeIds2.map((id) => ctx.db.get(id as any)));
     const jeMap2 = new Map(jes2.filter(Boolean).map((je) => [je!._id.toString(), je!]));
 
     const invoicesWithLinks = paginatedInvoices.map((invoice) => {
@@ -2098,10 +2098,10 @@ export const recordPayment = mutation({
     if (args.amount <= 0) throw new Error("Payment amount must be greater than 0");
 
     const journalEntry = invoice.journalEntryId
-      ? await ctx.db.get(invoice.journalEntryId)
+      ? await ctx.db.get(invoice.journalEntryId as any)
       : null;
-    const totalAmount = journalEntry?.totalDebit ?? 0;
-    const currentPaid = invoice.paidAmount ?? 0;
+    const totalAmount = (journalEntry as any)?.totalDebit ?? 0;
+    const currentPaid = (invoice as any).paidAmount ?? 0;
     const outstanding = totalAmount - currentPaid;
 
     if (outstanding <= 0) throw new Error("Invoice is already fully paid");
@@ -2183,7 +2183,7 @@ export const recordPayment = mutation({
     await ctx.db.patch(args.invoiceId, {
       paidAmount: newPaidAmount,
       paymentStatus: newPaymentStatus,
-      paymentHistory: [...existingHistory, paymentRecord],
+      paymentHistory: [...existingHistory, paymentRecord] as any,
       updatedAt: Date.now(),
     });
 

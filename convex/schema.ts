@@ -732,6 +732,39 @@ export default defineSchema({
       capsolverCostUsd: v.optional(v.number()),
       totalCostUsd: v.optional(v.number()),
     })),
+
+    // ── DSPy self-learning fields (001-dspy-cua-optimization) ──
+    reconDescription: v.optional(v.string()),
+    generatedHint: v.optional(v.string()),
+    hintEffectivenessOutcome: v.optional(v.union(
+      v.literal("helped"),
+      v.literal("not_helped"),
+      v.literal("pending"),
+    )),
+    confidenceGateScore: v.optional(v.number()),
+    confidenceGateDecision: v.optional(v.union(
+      v.literal("proceed"),
+      v.literal("skip"),
+    )),
+    failureCategory: v.optional(v.union(
+      v.literal("connectivity"),
+      v.literal("form_validation"),
+      v.literal("session"),
+      v.literal("captcha"),
+      v.literal("unknown"),
+    )),
+    perFieldResults: v.optional(v.array(v.object({
+      fieldName: v.string(),
+      filled: v.boolean(),
+      selector: v.optional(v.string()),
+      error: v.optional(v.string()),
+    }))),
+    buyerProfileMatchResult: v.optional(v.object({
+      profileSelected: v.optional(v.string()),
+      reasoning: v.optional(v.string()),
+      matchType: v.optional(v.string()),
+    })),
+    dspyModuleVersion: v.optional(v.string()),
   })
     .index("by_expenseClaimId", ["expenseClaimId"])
     .index("by_businessId_status", ["businessId", "status"])
@@ -866,20 +899,6 @@ export default defineSchema({
       target: v.optional(v.string()),
     }))),
     lhdnDocumentHash: v.optional(v.string()),
-
-    // AP Accounting (post-migration fields)
-    accountingStatus: v.optional(v.string()),            // "posted" | "unposted"
-    journalEntryId: v.optional(v.string()),              // Linked journal entry
-    paidAmount: v.optional(v.number()),                  // Amount paid so far
-    paymentStatus: v.optional(v.string()),               // "unpaid" | "partial" | "paid"
-    dueDate: v.optional(v.string()),                     // Payment due date
-    paymentHistory: v.optional(v.array(v.object({
-      amount: v.number(),
-      date: v.string(),
-      method: v.optional(v.string()),
-      reference: v.optional(v.string()),
-      journalEntryId: v.optional(v.string()),
-    }))),
 
     deletedAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),

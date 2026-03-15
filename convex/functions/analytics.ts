@@ -629,7 +629,7 @@ export const getCurrencyExposure = query({
 
     for (const inv of unpaidInvoices) {
       const extracted = (inv as any).extractedData || {};
-      const je = inv.journalEntryId ? await ctx.db.get(inv.journalEntryId) : null;
+      const je = inv.journalEntryId ? await ctx.db.get(inv.journalEntryId as any) : null;
       const amount = (je as any)?.totalDebit ?? (typeof extracted.total_amount === "number" ? extracted.total_amount : 0);
       const currency = extracted.currency?.value || extracted.currency || "MYR";
 
@@ -723,7 +723,7 @@ export const getCashFlowProjection = query({
       if ((inv as any).deletedAt || (inv as any).paymentStatus === "paid") continue;
       const dueDate = (inv as any).dueDate;
       if (!dueDate || dueDate < currentDateStr || dueDate > periodEndStr) continue;
-      const je = inv.journalEntryId ? await ctx.db.get(inv.journalEntryId) : null;
+      const je = inv.journalEntryId ? await ctx.db.get(inv.journalEntryId as any) : null;
       const amount = (je as any)?.totalDebit ?? 0;
       const outstanding = amount - ((inv as any).paidAmount ?? 0);
       projectedOutflows += outstanding;
