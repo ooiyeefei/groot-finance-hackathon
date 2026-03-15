@@ -445,12 +445,26 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                     errorMessage={document.error_message}
                   />
                   
-                  {/* Show posted to AP status */}
-                  {(document as any).accountingStatus === 'posted' && (
-                    <div className="badge-success-status inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors">
-                      ✓ Posted to AP
-                    </div>
-                  )}
+                  {/* AP Accounting Status Tag */}
+                  {(document as any).accountingStatus === 'posted' ? (
+                    (document as any).paymentStatus === 'paid' ? (
+                      <span className="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-0.5 text-xs font-medium">
+                        Paid
+                      </span>
+                    ) : (document as any).paymentStatus === 'partial' ? (
+                      <span className="inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-2 py-0.5 text-xs font-medium">
+                        Partial Payment
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-0.5 text-xs font-medium">
+                        Posted to AP
+                      </span>
+                    )
+                  ) : isCompletedDocument(document.status) && document.extracted_data ? (
+                    <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground px-2 py-0.5 text-xs font-medium">
+                      Not Posted
+                    </span>
+                  ) : null}
 
                   {/* Show confidence score for completed documents */}
                   {isCompletedDocument(document.status) && document.confidence_score && (
