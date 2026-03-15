@@ -1196,6 +1196,19 @@ export const reportEinvoiceFormFillResult = mutation({
       capsolverCostUsd: v.optional(v.number()),
       totalCostUsd: v.optional(v.number()),
     })),
+    // DSPy self-learning fields (001-dspy-cua-integration)
+    reconDescription: v.optional(v.string()),
+    generatedHint: v.optional(v.string()),
+    failureCategory: v.optional(v.union(
+      v.literal("connectivity"),
+      v.literal("form_validation"),
+      v.literal("session"),
+      v.literal("captcha"),
+      v.literal("unknown"),
+    )),
+    dspyModuleVersion: v.optional(v.string()),
+    confidenceGateScore: v.optional(v.number()),
+    confidenceGateDecision: v.optional(v.union(v.literal("proceed"), v.literal("skip"))),
   },
   handler: async (ctx, args) => {
     console.log(`[System] E-invoice form fill: claim=${args.expenseClaimId} status=${args.status}`);
@@ -1256,6 +1269,16 @@ export const reportEinvoiceFormFillResult = mutation({
       if (args.cuaActions !== undefined) logUpdate.cuaActions = args.cuaActions;
       if (args.verifyEvidence) logUpdate.verifyEvidence = args.verifyEvidence;
       if (args.cost) logUpdate.cost = args.cost;
+      // DSPy self-learning fields (001-dspy-cua-integration)
+      if (args.reconDescription) logUpdate.reconDescription = args.reconDescription;
+      if (args.generatedHint) {
+        logUpdate.generatedHint = args.generatedHint;
+        logUpdate.hintEffectivenessOutcome = "pending"; // Resolved on next attempt
+      }
+      if (args.failureCategory) logUpdate.failureCategory = args.failureCategory;
+      if (args.dspyModuleVersion) logUpdate.dspyModuleVersion = args.dspyModuleVersion;
+      if (args.confidenceGateScore !== undefined) logUpdate.confidenceGateScore = args.confidenceGateScore;
+      if (args.confidenceGateDecision) logUpdate.confidenceGateDecision = args.confidenceGateDecision;
       await ctx.db.patch(requestLog._id, logUpdate);
     }
 
@@ -1272,7 +1295,7 @@ export const reportEinvoiceFormFillResult = mutation({
     }
     await ctx.db.patch(claim._id, claimUpdate);
 
-    // Send notification (only on completion, not in_progress)
+    // Send notification to user (on completion, not in_progress)
     await ctx.scheduler.runAfter(0, internal.functions.notifications.create, {
       recipientUserId: claim.userId,
       businessId: claim.businessId,
@@ -1286,6 +1309,79 @@ export const reportEinvoiceFormFillResult = mutation({
       resourceId: args.expenseClaimId,
       sourceEvent: `einvoice_${args.status}_${args.expenseClaimId}`,
     });
+
+    // ── DSPy Alert: Email Groot dev team when a new/unknown merchant fails ──
+    // Internal ops alert — NOT a customer notification.
+    // Sends to dev+einvoiceMY@hellogroot.com via existing notifications API.
+    if (args.status === "failed" && args.merchantName) {
+      const priorLogs = await ctx.db
+        .query("einvoice_request_logs")
+        .withIndex("by_merchantName_status")
+        .collect();
+      const merchantLogs = priorLogs.filter((l) => l.merchantName === args.merchantName);
+      const hasAnySuccess = merchantLogs.some((l) => l.status === "success");
+      const failCount = merchantLogs.filter((l) => l.status === "failed").length;
+
+      // Alert on: first failure ever, or 3rd consecutive failure with no successes
+      const shouldAlert = !hasAnySuccess || (failCount >= 3 && !hasAnySuccess);
+      if (shouldAlert) {
+        const failureCat = args.failureCategory || "unknown";
+        const tier = args.tierReached || "unknown";
+        const gateScore = args.confidenceGateScore !== undefined
+          ? `${args.confidenceGateScore.toFixed(2)}` : "N/A";
+        const gateDecision = args.confidenceGateDecision || "N/A";
+
+        const subject = hasAnySuccess
+          ? `[E-Invoice DSPy] ${args.merchantName} — ${failCount} consecutive failures (${failureCat})`
+          : `[E-Invoice DSPy] NEW merchant "${args.merchantName}" — first failure (${failureCat})`;
+
+        const emailBody = [
+          hasAnySuccess
+            ? `Merchant "${args.merchantName}" has failed ${failCount} times consecutively.`
+            : `New merchant "${args.merchantName}" failed on first attempt. DSPy will generate cuaHints for next try.`,
+          "",
+          `Failure Category: ${failureCat}`,
+          `Tier Reached: ${tier}`,
+          `Gatekeeper: confidence=${gateScore}, decision=${gateDecision}`,
+          `Error: ${args.errorMessage?.substring(0, 300) || "N/A"}`,
+          `DSPy Module: ${args.dspyModuleVersion || "untracked"}`,
+          "",
+          `Business: ${claim.businessId}`,
+          `Claim: ${args.expenseClaimId}`,
+          "",
+          "---",
+          "Action needed:",
+          failureCat === "connectivity" ? "→ Switch merchant to Browserbase (site blocks Lambda IP)"
+            : failureCat === "captcha" ? "→ Review CapSolver config or mark as manual_only"
+            : failureCat === "form_validation" ? "→ DSPy troubleshooter will auto-learn — check cuaHints after next attempt"
+            : failureCat === "session" ? "→ Merchant may require login/OTP — check if account-based flow needed"
+            : "→ Review CloudWatch logs for this merchant",
+          "",
+          "This is an automated alert from the E-Invoice DSPy Intelligence Pipeline.",
+        ].join("\n");
+
+        // Send via existing notifications API (same pattern as einvoiceMonitoring.ts)
+        const apiUrl = process.env.APP_URL || "https://finance.hellogroot.com";
+        try {
+          await fetch(`${apiUrl}/api/v1/notifications/send-email`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": process.env.INTERNAL_API_KEY || "",
+            },
+            body: JSON.stringify({
+              to: "dev+einvoiceMY@hellogroot.com",
+              subject,
+              templateType: "plain_text",
+              templateData: { body: emailBody },
+            }),
+          });
+          console.log(`[DSPy Alert] Emailed dev+einvoiceMY@hellogroot.com: ${args.merchantName} (${failureCat})`);
+        } catch (emailErr) {
+          console.error(`[DSPy Alert] Failed to send email:`, emailErr);
+        }
+      }
+    }
 
     return { success: true };
   },
@@ -2206,6 +2302,246 @@ export const updateHintEffectiveness = internalMutation({
     );
 
     return { updated: true, outcome: args.currentAttemptSucceeded ? "helped" : "not_helped" };
+  },
+});
+
+/**
+ * Raw training data for DSPy optimization pipeline.
+ * Returns hint-effectiveness pairs (for MIPROv2) and recon-success pairs (for BootstrapFewShot).
+ * Called by the DSPy optimizer Lambda (EventBridge, every 3 days).
+ */
+export const getEinvoiceRawTrainingData = query({
+  args: {
+    minAttempts: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const allLogs = await ctx.db.query("einvoice_request_logs").collect();
+
+    // ── Hint-effectiveness pairs (for MIPROv2 troubleshooter optimization) ──
+    // Find logs with generatedHint + resolved outcome (helped/not_helped)
+    const hintPairs: Array<{
+      merchantName: string;
+      errorMessage: string;
+      screenshotDescription: string;
+      previousHints: string;
+      tierReached: string;
+      generatedHint: string;
+      nextAttemptSucceeded: boolean;
+      createdAt: number;
+    }> = [];
+
+    const resolvedHintLogs = allLogs.filter(
+      (l) => l.generatedHint && (l.hintEffectivenessOutcome === "helped" || l.hintEffectivenessOutcome === "not_helped")
+    );
+
+    for (const log of resolvedHintLogs) {
+      hintPairs.push({
+        merchantName: log.merchantName || "unknown",
+        errorMessage: log.errorMessage || "",
+        screenshotDescription: "", // Screenshot descriptions are not stored in logs (generated at runtime)
+        previousHints: "", // Previous hints context not stored separately
+        tierReached: log.tierReached || "tier2",
+        generatedHint: log.generatedHint!,
+        nextAttemptSucceeded: log.hintEffectivenessOutcome === "helped",
+        createdAt: log._creationTime,
+      });
+    }
+
+    // ── Recon-success pairs (for BootstrapFewShot recon optimization) ──
+    // Find successful logs with reconDescription
+    const reconPairs: Array<{
+      merchantName: string;
+      reconDescription: string;
+      buyerDetails: string;
+      succeeded: boolean;
+      cuaTurns: number;
+      createdAt: number;
+    }> = [];
+
+    const reconLogs = allLogs.filter(
+      (l) => l.reconDescription && (l.status === "success" || l.status === "failed")
+    );
+
+    for (const log of reconLogs) {
+      reconPairs.push({
+        merchantName: log.merchantName || "unknown",
+        reconDescription: log.reconDescription!,
+        buyerDetails: "{}", // Buyer details not stored in logs (privacy)
+        succeeded: log.status === "success",
+        cuaTurns: log.cuaActions || 50,
+        createdAt: log._creationTime,
+      });
+    }
+
+    console.log(`[DSPy] Training data: ${hintPairs.length} hint pairs, ${reconPairs.length} recon pairs`);
+
+    return { hintPairs, reconPairs };
+  },
+});
+
+/**
+ * DSPy Operations Dashboard — aggregated metrics for admin UI.
+ * Returns everything needed to build a "DSPy Intelligence" admin panel:
+ * - Per-merchant success rates with failure category breakdown
+ * - Gatekeeper accuracy (did Tier 0/0.5 routing lead to success?)
+ * - Tier usage distribution (cost optimization view)
+ * - Recent failures for new/unknown merchants (needs-attention list)
+ * - DSPy module version distribution (baseline vs optimized)
+ */
+export const getEinvoiceDspyDashboard = query({
+  args: {
+    businessId: v.optional(v.id("businesses")),
+    dayWindow: v.optional(v.number()), // Only include logs from last N days (default: 30)
+  },
+  handler: async (ctx, args) => {
+    let logs = await ctx.db.query("einvoice_request_logs").collect();
+
+    if (args.businessId) {
+      logs = logs.filter((l) => l.businessId === args.businessId);
+    }
+
+    // Time window filter (default 30 days)
+    const windowMs = (args.dayWindow ?? 30) * 86400 * 1000;
+    const cutoff = Date.now() - windowMs;
+    const recentLogs = logs.filter((l) => (l.startedAt || l._creationTime) > cutoff);
+    const completed = recentLogs.filter((l) => l.status === "success" || l.status === "failed");
+
+    // ── 1. Tier Usage Distribution ──
+    const tierUsage: Record<string, { count: number; successes: number; avgCostUsd: number }> = {};
+    for (const log of completed) {
+      const tier = log.tierReached || "unknown";
+      if (!tierUsage[tier]) tierUsage[tier] = { count: 0, successes: 0, avgCostUsd: 0 };
+      tierUsage[tier].count++;
+      if (log.status === "success") tierUsage[tier].successes++;
+    }
+    // Compute avg cost per tier
+    for (const tier of Object.keys(tierUsage)) {
+      const tierLogs = completed.filter((l) => (l.tierReached || "unknown") === tier);
+      const costs = tierLogs.map((l) => l.cost?.totalCostUsd).filter((c): c is number => c != null);
+      tierUsage[tier].avgCostUsd = costs.length > 0
+        ? Math.round((costs.reduce((a, b) => a + b, 0) / costs.length) * 10000) / 10000
+        : 0;
+    }
+
+    // ── 2. Failure Category Breakdown ──
+    const failedLogs = completed.filter((l) => l.status === "failed");
+    const failureCategories: Record<string, { count: number; merchants: string[] }> = {};
+    for (const log of failedLogs) {
+      const cat = log.failureCategory || "unknown";
+      if (!failureCategories[cat]) failureCategories[cat] = { count: 0, merchants: [] };
+      failureCategories[cat].count++;
+      const mn = log.merchantName || "unknown";
+      if (!failureCategories[cat].merchants.includes(mn)) {
+        failureCategories[cat].merchants.push(mn);
+      }
+    }
+
+    // ── 3. Gatekeeper Accuracy ──
+    const gatedLogs = completed.filter((l) => l.confidenceGateDecision);
+    const gatekeeperStats = {
+      totalGated: gatedLogs.length,
+      proceedSucceeded: gatedLogs.filter(
+        (l) => l.confidenceGateDecision === "proceed" && l.status === "success"
+      ).length,
+      proceedFailed: gatedLogs.filter(
+        (l) => l.confidenceGateDecision === "proceed" && l.status === "failed"
+      ).length,
+      skipCount: gatedLogs.filter((l) => l.confidenceGateDecision === "skip").length,
+      avgConfidence: gatedLogs.length > 0
+        ? Math.round(
+            (gatedLogs
+              .map((l) => l.confidenceGateScore || 0)
+              .reduce((a, b) => a + b, 0) / gatedLogs.length) * 100
+          ) / 100
+        : null,
+      overconfidentRate: gatedLogs.length > 0
+        ? Math.round(
+            (gatedLogs.filter(
+              (l) => l.confidenceGateDecision === "proceed" && l.status === "failed"
+            ).length / Math.max(1, gatedLogs.filter((l) => l.confidenceGateDecision === "proceed").length)) * 100
+          )
+        : null,
+    };
+
+    // ── 4. DSPy Module Version Distribution ──
+    const moduleVersions: Record<string, number> = {};
+    for (const log of completed) {
+      const ver = log.dspyModuleVersion || "untracked";
+      moduleVersions[ver] = (moduleVersions[ver] || 0) + 1;
+    }
+
+    // ── 5. Needs-Attention: New/Failing Merchants ──
+    // Merchants with 0% success (all attempts failed) or first-time failures
+    const byMerchant: Record<string, typeof completed> = {};
+    for (const log of completed) {
+      const mn = log.merchantName || "unknown";
+      if (!byMerchant[mn]) byMerchant[mn] = [];
+      byMerchant[mn].push(log);
+    }
+
+    const needsAttention: Array<{
+      merchantName: string;
+      attempts: number;
+      successRate: number;
+      topFailure: string;
+      lastFailedAt: number;
+      isNewMerchant: boolean;
+    }> = [];
+
+    for (const [merchant, merchantLogs] of Object.entries(byMerchant)) {
+      const successes = merchantLogs.filter((l) => l.status === "success").length;
+      const rate = Math.round((successes / merchantLogs.length) * 100);
+
+      // Flag if: 0% success rate, or <50% with 3+ attempts
+      if (rate === 0 || (rate < 50 && merchantLogs.length >= 3)) {
+        const failures = merchantLogs.filter((l) => l.status === "failed");
+        const cats: Record<string, number> = {};
+        for (const f of failures) {
+          const c = f.failureCategory || "unknown";
+          cats[c] = (cats[c] || 0) + 1;
+        }
+        const topFailure = Object.entries(cats).sort((a, b) => b[1] - a[1])[0]?.[0] || "unknown";
+
+        // Check if this is a "new" merchant (all logs within last 7 days)
+        const oldestLog = merchantLogs.reduce(
+          (min, l) => Math.min(min, l.startedAt || l._creationTime), Infinity
+        );
+        const isNew = (Date.now() - oldestLog) < 7 * 86400 * 1000;
+
+        needsAttention.push({
+          merchantName: merchant,
+          attempts: merchantLogs.length,
+          successRate: rate,
+          topFailure,
+          lastFailedAt: failures.reduce(
+            (max, l) => Math.max(max, l.completedAt || l._creationTime), 0
+          ),
+          isNewMerchant: isNew,
+        });
+      }
+    }
+
+    // Sort: new merchants first, then by success rate ascending
+    needsAttention.sort((a, b) => {
+      if (a.isNewMerchant !== b.isNewMerchant) return a.isNewMerchant ? -1 : 1;
+      return a.successRate - b.successRate;
+    });
+
+    return {
+      period: {
+        days: args.dayWindow ?? 30,
+        totalAttempts: recentLogs.length,
+        completedAttempts: completed.length,
+        overallSuccessRate: completed.length > 0
+          ? Math.round((completed.filter((l) => l.status === "success").length / completed.length) * 100)
+          : 0,
+      },
+      tierUsage,
+      failureCategories,
+      gatekeeperStats,
+      moduleVersions,
+      needsAttention,
+    };
   },
 });
 

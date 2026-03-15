@@ -213,17 +213,41 @@ Merchant sends e-invoice email
   → Lambda 3 (email processor): match → download PDF → forward to user
 ```
 
-### Self-Evolving Loop
+### Self-Evolving Loop (001-dspy-cua-integration)
 
 ```
-merchant_einvoice.formConfig:
-  fields: [...CSS selectors...]     ← Tier 1 (fast path)
-  cuaHints: "Click Company tab..."  ← Learned from Tier 3
-  successCount: N                   ← Tier 1 confidence
-  lastFailureReason: "..."          ← Tier 3 diagnosis
+TWO LEARNING LAYERS:
 
-Each failure → troubleshoot → new cuaHints → next run smarter
+Layer 1: Per-Merchant Memory (Convex — immediate)
+  merchant_einvoice.formConfig:
+    fields: [...CSS selectors...]     ← Tier 1 (fast path)
+    cuaHints: "Click Company tab..."  ← Learned from Tier 3
+    successCount: N                   ← Tier 1 confidence
+    lastFailureReason: "..."          ← Tier 3 diagnosis
+
+Layer 2: Cross-Merchant Intelligence (DSPy — every 3 days)
+  5 DSPy features integrated into handler.py:
+  1. MIPROv2 (Troubleshooter) — optimized prompts from failure/success patterns
+  2. Assert + Suggest (InstructionGuard) — required field validation with backtrack
+  3. BootstrapFewShot (ReconModule) — few-shot examples from successful fills
+  4. ChainOfThought — step-by-step reasoning for complex forms
+  5. Evaluate — per-merchant quality scorecards
+
+  Pipeline: EventBridge (3 days) → finanseal-dspy-optimizer Lambda
+    → collect training data from einvoice_request_logs
+    → MIPROv2 optimize troubleshooter
+    → BootstrapFewShot optimize recon
+    → Evaluate and compare vs baseline
+    → Upload to S3 (finanseal-bucket/dspy-modules/) if improved
+    → handler.py loads optimized modules on next invocation
+
+  Training data fields (einvoice_request_logs):
+    reconDescription, generatedHint, hintEffectivenessOutcome,
+    failureCategory, dspyModuleVersion, confidenceGateScore
+
+Each failure → troubleshoot (optimized) → new cuaHints → next run smarter
 Each success → save formConfig → next run uses Tier 1 (fast)
+New merchant with similar form → cross-merchant few-shot examples help
 ```
 
 ### Merchant-Specific Patterns

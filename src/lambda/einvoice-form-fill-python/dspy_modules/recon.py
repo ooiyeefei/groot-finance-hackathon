@@ -18,6 +18,14 @@ class ReconToInstructions(dspy.Signature):
 
     Generate instructions that tell the CUA agent exactly how
     to fill each field, in what order, and what to watch out for.
+
+    IMPORTANT: Consider the runtime_environment when generating instructions.
+    - "lambda": Running in AWS Lambda with limited memory (2GB) and no persistent
+      browser state. Avoid memory-heavy operations like opening multiple tabs,
+      loading large images, or extended scrolling. Prefer direct CSS selectors.
+    - "browserbase": Running in Browserbase with residential IP and full browser.
+      Can handle more complex interactions (multiple tabs, popups, longer sessions).
+      Has anti-detection features but may be slower.
     """
 
     recon_description: str = dspy.InputField(
@@ -30,11 +38,17 @@ class ReconToInstructions(dspy.Signature):
     previous_cua_hints: str = dspy.InputField(
         desc="Previously learned cuaHints for this merchant (empty if new merchant)"
     )
+    runtime_environment: str = dspy.InputField(
+        desc="Runtime environment: 'lambda' (AWS Lambda, 2GB RAM, no anti-detect) or "
+             "'browserbase' (residential IP, anti-detect, full browser). "
+             "Tailor instructions to the environment's capabilities and limitations."
+    )
 
     cua_instructions: str = dspy.OutputField(
         desc="Step-by-step CUA instructions for filling this specific form. "
              "Include field order, special handling (dropdowns, phone prefixes, tabs), "
-             "and submit button location."
+             "and submit button location. "
+             "Adapt strategy to the runtime_environment constraints."
     )
 
 
@@ -50,12 +64,14 @@ class ReconModule(dspy.Module):
         self.generate = dspy.ChainOfThought(ReconToInstructions)
 
     def forward(self, recon_description: str, merchant_name: str,
-                buyer_details: str, previous_cua_hints: str = ""):
+                buyer_details: str, previous_cua_hints: str = "",
+                runtime_environment: str = "lambda"):
         return self.generate(
             recon_description=recon_description,
             merchant_name=merchant_name,
             buyer_details=buyer_details,
             previous_cua_hints=previous_cua_hints,
+            runtime_environment=runtime_environment,
         )
 
 

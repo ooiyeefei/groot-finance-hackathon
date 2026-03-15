@@ -23,8 +23,11 @@ nest_asyncio.apply()
 
 from playwright.sync_api import sync_playwright, Page, Browser
 
-# DSPy imported lazily in troubleshoot() — avoids 10s cold start penalty on every invocation
+# DSPy imported lazily in troubleshoot()/run_tier2() — avoids 10s cold start penalty on every invocation
 dspy = None  # type: ignore
+
+# DSPy state dict — populated by troubleshooter/recon, logged to Convex
+_dspy_state: dict[str, Any] = {}
 
 # ── Per-domain rate limiting (prevents 429s from merchants) ──
 _domain_last_request: dict[str, float] = {}  # domain → last request timestamp
@@ -443,6 +446,21 @@ def _debug_fields() -> dict:
     cost_data = cost_tracker.to_dict()
     if cost_data.get("totalCostUsd", 0) > 0:
         fields["cost"] = cost_data
+    # DSPy self-learning fields (001-dspy-cua-integration)
+    if _dspy_state.get("reconDescription"):
+        fields["reconDescription"] = _dspy_state["reconDescription"][:2000]
+    if _dspy_state.get("generatedHint"):
+        fields["generatedHint"] = _dspy_state["generatedHint"][:500]
+    if _dspy_state.get("failureCategory"):
+        fields["failureCategory"] = _dspy_state["failureCategory"]
+    if _dspy_state.get("dspyModuleVersion"):
+        fields["dspyModuleVersion"] = _dspy_state["dspyModuleVersion"]
+    if _dspy_state.get("confidenceGateScore") is not None:
+        fields["confidenceGateScore"] = _dspy_state["confidenceGateScore"]
+    if _dspy_state.get("confidenceGateDecision"):
+        fields["confidenceGateDecision"] = _dspy_state["confidenceGateDecision"]
+    if _dspy_state.get("visualPageState"):
+        fields["visualPageState"] = _dspy_state["visualPageState"]
     return fields
 
 
@@ -1900,8 +1918,37 @@ def run_tier2(page: Page, buyer: dict, receipt: dict, receipt_image_b64: str | N
             full_b64,
         )
         print(f"[Recon] {recon[:200]}...")
+
+        # Log recon description for training data (US3/FR-009)
+        _dspy_state["reconDescription"] = recon[:2000]
+
     except Exception as e:
         print(f"[Recon] Failed: {e}")
+
+    # ── DSPy ReconModule: structured CUA strategy from cross-merchant intelligence (US3) ──
+    dspy_recon_strategy = ""
+    if recon:
+        try:
+            _dspy = _init_dspy()
+            from dspy_modules.module_loader import load_optimized_module
+            from dspy_modules.recon import create_recon_module
+            recon_state = load_optimized_module("recon")
+            recon_module = create_recon_module(recon_state)
+            merchant_name = _run_state.get("merchant", "")
+            # Pass runtime environment so AI adapts instructions to Lambda vs Browserbase constraints
+            runtime_env = "browserbase" if _run_state.get("browser_type") == "browserbase" else "lambda"
+            recon_result = recon_module.forward(
+                recon_description=recon,
+                merchant_name=merchant_name,
+                buyer_details=json.dumps(buyer),
+                previous_cua_hints=merchant_hints,
+                runtime_environment=runtime_env,
+            )
+            dspy_recon_strategy = getattr(recon_result, "cua_instructions", "") or ""
+            if dspy_recon_strategy:
+                print(f"[DSPy Recon] Strategy: {dspy_recon_strategy[:200]}...")
+        except Exception as recon_err:
+            print(f"[DSPy Recon] Module failed, using raw recon: {recon_err}")
 
     # Build CUA instruction
     instruction = f"""You are filling a merchant e-invoice buyer details form for a MALAYSIAN B2B (business-to-business) transaction.
@@ -1931,7 +1978,9 @@ RECEIPT DATA (use for receipt/bill/store fields):
 
 {f"FORM FIELDS (from page analysis):\\n{recon}" if recon else ""}
 
-{f"MERCHANT-SPECIFIC INSTRUCTIONS (learned from previous submissions):\\n{merchant_hints}" if merchant_hints else ""}
+{f"MERCHANT-SPECIFIC INSTRUCTIONS (learned from previous submissions — HIGHEST PRIORITY, always follow these first):\\n{merchant_hints}" if merchant_hints else ""}
+
+{f"STRUCTURED CUA STRATEGY (from cross-merchant intelligence — use as fallback guidance ONLY when merchant-specific instructions above do not cover a topic. In case of conflict, MERCHANT-SPECIFIC INSTRUCTIONS always take priority):\\n{dspy_recon_strategy}" if dspy_recon_strategy else ""}
 
 BUYER PROFILE SELECTION (CRITICAL — saves 5+ minutes):
 - If the form has a "Select Buyer" dropdown or "Buyer Profile" list/table, FIRST look for an EXISTING profile that matches.
@@ -1965,6 +2014,47 @@ TASK:
    - reCAPTCHA (Google — shows image puzzles like "select all buses"): Do NOT interact. It is handled automatically by the system. Skip completely.
    - Cloudflare "Verify you are human" checkbox: DO click it and wait 3-5 seconds. It usually auto-verifies after clicking. If it shows "Verification failed", click it again.
 18. For forms requiring OTP/TAC: Use the system email ({buyer["email"]}) for the email field. After filling all fields, click "Request OTP" or "Send OTP". The OTP will be handled automatically — just wait for the code to appear and then submit."""
+
+    # ── DSPy InstructionGuard: validate required fields with Assert/Suggest (US2) ──
+    try:
+        _dspy = _init_dspy()
+        from dspy_modules.instruction_guard import generate_guarded_instructions
+        # Extract CSS selectors from formConfig if available
+        form_selectors = ""
+        if 'fc' in dir() and fc and fc.get("fields"):
+            form_selectors = json.dumps(fc["fields"])
+        guard_result = generate_guarded_instructions(
+            form_description=recon or "Form with buyer details fields",
+            buyer_details=json.dumps(buyer),
+            form_selectors=form_selectors,
+            cua_hints=merchant_hints,
+        )
+        if not guard_result["fallback"]:
+            # Append guard-validated hints to instruction (don't replace — instruction has receipt data, keyboard rules)
+            instruction += f"\n\nFIELD COVERAGE VALIDATION (auto-verified by DSPy InstructionGuard):\n{guard_result['instructions']}"
+            print(f"[DSPy Guard] Validated: all required fields covered")
+        else:
+            print(f"[DSPy Guard] Fallback after retries — using original instruction")
+    except Exception as guard_err:
+        print(f"[DSPy Guard] Skipped: {guard_err}")
+
+    # ── Prompt bloat guard: monitor token count and prune if excessive ──
+    # Rough estimate: 1 token ≈ 4 chars for English text
+    estimated_tokens = len(instruction) // 4
+    MAX_INSTRUCTION_TOKENS = 4000
+    if estimated_tokens > MAX_INSTRUCTION_TOKENS:
+        print(f"[PromptBloat] ⚠ Instruction is ~{estimated_tokens} tokens (>{MAX_INSTRUCTION_TOKENS}). Pruning DSPy sections.")
+        # Prune in reverse priority: GuardValidation first, then ReconStrategy
+        # MERCHANT-SPECIFIC INSTRUCTIONS and core template are NEVER pruned
+        for section_marker in [
+            "\n\nFIELD COVERAGE VALIDATION (auto-verified by DSPy InstructionGuard):",
+            "\nSTRUCTURED CUA STRATEGY (from cross-merchant intelligence",
+        ]:
+            idx = instruction.find(section_marker)
+            if idx != -1 and len(instruction) // 4 > MAX_INSTRUCTION_TOKENS:
+                instruction = instruction[:idx]
+                print(f"[PromptBloat] Pruned section starting at char {idx}")
+        print(f"[PromptBloat] After pruning: ~{len(instruction) // 4} tokens")
 
     shot = base64.b64encode(page.screenshot(type="png")).decode()
     # Build CUA context: receipt image (reference) + form screenshot (current page)
@@ -2165,52 +2255,43 @@ Return ONLY the JSON array, no markdown."""
 
 # ── DSPy Signatures for structured troubleshooting ──────────
 
-def troubleshoot(screenshot_b64: str, error: str, merchant: str) -> dict:
-    """DSPy-structured troubleshooting: diagnoses failure → saves fix suggestions.
+def _init_dspy():
+    """Lazy-initialize DSPy with Gemini Flash-Lite. Call once per troubleshoot/recon invocation."""
+    os.environ["DSPY_CACHEDIR"] = "/tmp/dspy_cache"
+    import dspy as _dspy
+    lm = _dspy.LM("gemini/gemini-3.1-flash-lite-preview", api_key=GEMINI_KEY, max_tokens=2048, temperature=0.1)
+    _dspy.settings.configure(lm=lm, adapter=_dspy.JSONAdapter())
+    return _dspy
+
+
+def troubleshoot(screenshot_b64: str, error: str, merchant: str,
+                 previous_hints: str = "", tier_reached: str = "tier2") -> dict:
+    """DSPy-structured troubleshooting using OptimizedTroubleshooter module.
+    Loads MIPROv2-optimized weights from S3 when available, falls back to baseline.
     Returns diagnosis dict with keys: fixable, diagnosis, infra_action, cua_hints, fields."""
     print(f"[Troubleshoot] Diagnosing '{merchant}': {error[:80]}")
     result_info: dict = {"fixable": False, "infra_action": None, "diagnosis": "", "cua_hints": "", "fields": []}
     try:
-        # Lazy import DSPy (avoids 10s cold start on every invocation)
-        os.environ["DSPY_CACHEDIR"] = "/tmp/dspy_cache"
-        import dspy as _dspy
-        from pydantic import BaseModel as PydanticBaseModel, Field as PydanticField
+        _dspy = _init_dspy()
 
-        class UnfilledField(PydanticBaseModel):
-            label: str = PydanticField(description="Field label, e.g. 'Company Industry'")
-            css_selector: str = PydanticField(description="CSS selector, e.g. 'select[name=industry]'")
-            field_type: str = PydanticField(description="One of: text, select, radio, checkbox")
-            suggested_default: str = PydanticField(default="", description="Default value")
+        # Load optimized troubleshooter module (MIPROv2 + ChainOfThought)
+        try:
+            from dspy_modules.module_loader import load_optimized_module, get_module_version
+            from dspy_modules.troubleshooter import create_troubleshooter
+            optimized_state = load_optimized_module("troubleshooter")
+            ts_module = create_troubleshooter(optimized_state)
+            module_version = get_module_version("troubleshooter")
+            print(f"[DSPy] Troubleshooter loaded (version={module_version})")
+        except Exception as mod_err:
+            print(f"[DSPy] Fallback to baseline troubleshooter: {mod_err}")
+            from dspy_modules.troubleshooter import OptimizedTroubleshooter
+            ts_module = OptimizedTroubleshooter()
+            module_version = "baseline"
 
-        class FormDiagnosis(_dspy.Signature):
-            """Analyze a failed e-invoice form and diagnose the root cause.
-            You handle BOTH form-level issues (unfilled fields, validation errors) AND
-            infrastructure-level issues (network errors, IP blocking, bot detection).
-
-            Infrastructure issues you MUST recognize:
-            - ERR_SOCKET_NOT_CONNECTED, ERR_CONNECTION_REFUSED, ERR_CONNECTION_RESET → site blocks Lambda IP → infra_action: 'use_browserbase'
-            - ERR_TIMED_OUT, timeout → site unreachable from Lambda region → infra_action: 'use_browserbase'
-            - 403/401 status, WAF, bot detection → IP/fingerprint blocked → infra_action: 'use_browserbase'
-            - ERR_NAME_NOT_RESOLVED → domain doesn't exist → infra_action: 'invalid_url'
-            - Login page, password field required → not a buyer form → infra_action: 'wrong_url'
-            - CAPTCHA persistent after solving → infra_action: 'manual_only'
-
-            Set fixable=True for BOTH form fixes AND infra fixes. Only set fixable=False if truly unfixable (e.g. domain doesn't exist)."""
-            error_message: str = _dspy.InputField(desc="Error that caused the form fill to fail")
-            merchant_name: str = _dspy.InputField(desc="Merchant name")
-            screenshot_description: str = _dspy.InputField(desc="Description of the screenshot")
-            diagnosis: str = _dspy.OutputField(desc="What went wrong — be specific about root cause")
-            unfilled_fields: list[UnfilledField] = _dspy.OutputField(desc="Fields needing fixes (empty list for infra issues)")
-            fixable: bool = _dspy.OutputField(desc="True if fixable by form changes OR infrastructure changes (Browserbase, URL fix). False only if truly unfixable.")
-            infra_action: str = _dspy.OutputField(desc="Infrastructure fix action. One of: 'use_browserbase' (IP/geo/WAF block), 'invalid_url' (domain doesn't exist), 'wrong_url' (login page, not buyer form), 'manual_only' (persistent CAPTCHA), 'none' (form-level issue only)")
-            cua_hints: str = _dspy.OutputField(desc="Merchant-specific instructions for the CUA agent on next attempt. E.g. 'Click Company tab before filling fields', 'Phone field uses react-phone-input with +60 prefix — use 9-digit number without 0', 'Must click Validate button first to unlock fields'. For infra issues: 'use_browserbase: Site blocks Lambda IP, requires residential proxy'. Be specific and actionable.")
-
-        # Configure DSPy
-        lm = _dspy.LM("gemini/gemini-3.1-flash-lite-preview", api_key=GEMINI_KEY, max_tokens=2048, temperature=0.1)
-        _dspy.settings.configure(lm=lm, adapter=_dspy.JSONAdapter())
+        # Track module version for training data
+        _dspy_state["dspyModuleVersion"] = module_version
 
         # Gemini Flash describes the screenshot (DSPy doesn't handle images natively)
-        # If no real screenshot (e.g. network error before page loaded), skip vision call
         if screenshot_b64 and len(screenshot_b64) > 100:
             description = gemini_flash(
                 "Describe this screenshot. Focus on:\n"
@@ -2225,20 +2306,33 @@ def troubleshoot(screenshot_b64: str, error: str, merchant: str) -> dict:
             description = "No screenshot available — page never loaded (network error before rendering)"
         print(f"[Troubleshoot] Screenshot: {description[:150]}...")
 
-        # DSPy structured diagnosis
-        result = _dspy.Predict(FormDiagnosis)(
+        # DSPy structured diagnosis via OptimizedTroubleshooter (ChainOfThought + MIPROv2)
+        result = ts_module.forward(
             error_message=error[:500],
             merchant_name=merchant,
             screenshot_description=description[:2000],
+            previous_hints=previous_hints,
+            tier_reached=tier_reached,
         )
-        infra_action = getattr(result, "infra_action", "none") or "none"
-        print(f"[Troubleshoot] Diagnosis: {result.diagnosis}")
-        print(f"[Troubleshoot] Fixable: {result.fixable}, Fields: {len(result.unfilled_fields)}, Infra: {infra_action}")
 
-        result_info["fixable"] = result.fixable
+        # Log reasoning trace if ChainOfThought produced one
+        reasoning = getattr(result, "reasoning", "")
+        if reasoning:
+            print(f"[Troubleshoot] Reasoning: {reasoning[:300]}")
+
+        infra_action = getattr(result, "infra_action", "none") or "none"
+        # Map module output fields — the OptimizedTroubleshooter uses different field names
+        fixable = getattr(result, "is_fixable", getattr(result, "fixable", False))
+        cua_hints = getattr(result, "cua_hints", "") or ""
+        failure_category = getattr(result, "failure_category", None)
+
+        print(f"[Troubleshoot] Diagnosis: {result.diagnosis}")
+        print(f"[Troubleshoot] Fixable: {fixable}, Infra: {infra_action}")
+
+        result_info["fixable"] = fixable
         result_info["diagnosis"] = result.diagnosis
         result_info["infra_action"] = infra_action if infra_action != "none" else None
-        result_info["cua_hints"] = getattr(result, "cua_hints", "") or ""
+        result_info["cua_hints"] = cua_hints
 
         # Save infra-level hints (Browserbase, manual-only, wrong URL)
         if infra_action == "use_browserbase":
@@ -2263,33 +2357,35 @@ def troubleshoot(screenshot_b64: str, error: str, merchant: str) -> dict:
         elif infra_action == "wrong_url":
             print(f"[Troubleshoot] ⚠ URL appears to be a login/merchant portal, not a buyer form")
 
-        # Save form-level fixes
-        if result.fixable and result.unfilled_fields:
+        # Save form-level fixes (unfilled_fields may not exist on optimized module output)
+        unfilled_fields = getattr(result, "unfilled_fields", []) or []
+        if fixable and unfilled_fields:
             valid_types = {"text", "select", "radix_select", "radio", "checkbox"}
             fields = []
-            for uf in result.unfilled_fields:
-                ftype = uf.field_type if uf.field_type in valid_types else "text"
-                field: dict[str, Any] = {"label": uf.label, "selector": uf.css_selector,
+            for uf in unfilled_fields:
+                ftype = uf.field_type if hasattr(uf, "field_type") and uf.field_type in valid_types else "text"
+                field: dict[str, Any] = {"label": getattr(uf, "label", ""), "selector": getattr(uf, "css_selector", ""),
                                           "type": ftype, "required": True}
-                if uf.suggested_default:
-                    field["defaultValue"] = uf.suggested_default
+                default = getattr(uf, "suggested_default", "")
+                if default:
+                    field["defaultValue"] = default
                 fields.append(field)
             result_info["fields"] = fields
 
             config_update = {"fields": fields, "lastFailureReason": result.diagnosis[:200]}
-            if result.cua_hints:
-                config_update["cuaHints"] = result.cua_hints[:500]
-                print(f"[Troubleshoot] Learned CUA hints: {result.cua_hints[:150]}")
+            if cua_hints:
+                config_update["cuaHints"] = cua_hints[:500]
+                print(f"[Troubleshoot] Learned CUA hints: {cua_hints[:150]}")
             convex_mutation("functions/system:saveMerchantFormConfig", {
                 "merchantName": merchant,
                 "formConfig": config_update,
             })
             print(f"[Troubleshoot] Saved {len(fields)} fix suggestions")
 
-        # DSPy: Save generated hint and failure category to state (001-dspy-cua-optimization)
-        if result.cua_hints:
-            _dspy_state["generatedHint"] = result.cua_hints[:500]
-        _dspy_state["failureCategory"] = {
+        # DSPy: Save generated hint and failure category to state for training data
+        if cua_hints:
+            _dspy_state["generatedHint"] = cua_hints[:500]
+        _dspy_state["failureCategory"] = failure_category or {
             "use_browserbase": "connectivity",
             "invalid_url": "connectivity",
             "wrong_url": "session",
@@ -2480,9 +2576,10 @@ def handler(event: dict, context=None) -> dict:
         return download_einvoice(event)
 
     start = time.time()
-    global cost_tracker, _run_state
+    global cost_tracker, _run_state, _dspy_state
     cost_tracker = CostTracker()
     _run_state = {"tier": "prefill", "browser_type": "local", "cua_actions": 0}
+    _dspy_state = {}
     browser: Optional[Browser] = None
     claim_id = event["expenseClaimId"]
     url = event["merchantFormUrl"]
@@ -2781,8 +2878,86 @@ def handler(event: dict, context=None) -> dict:
         if receipt_image_local:
             receipt_uploaded = upload_receipt_image(page, receipt_image_local)
 
-        # ── Tier 1: Check for saved formConfig (merchant config already fetched above) ──
-        if merchant and fc and fc.get("fields") and (fc.get("successCount", 0) > 0):
+        # ── Cascading Gatekeeper: Tier 0 (HTML) → Tier 0.5 (Visual) ──────────
+        # Protects session integrity by verifying page state before Tier 1 selector fills.
+        # Tier 0:   Fast HTML check (~1-2s, ~$0.001) — runs every time
+        # Tier 0.5: Visual check (~5s, ~$0.02) — only when Tier 0 is uncertain or merchant is stale/volatile
+        tier1_eligible = merchant and fc and fc.get("fields") and (fc.get("successCount", 0) > 0)
+        if tier1_eligible:
+            try:
+                _dspy_init = _init_dspy()
+                from dspy_modules.confidence_gate import (
+                    evaluate_tier1_confidence,
+                    should_escalate_to_visual,
+                    evaluate_visual_confidence,
+                )
+
+                # ── Tier 0: Lightweight HTML structure check ──
+                page_html = page.content()[:2000]
+                gate_result = evaluate_tier1_confidence(
+                    saved_selectors=json.dumps(fc.get("fields", [])),
+                    page_html_snippet=page_html,
+                    merchant_name=merchant,
+                    success_count=fc.get("successCount", 0),
+                )
+                _dspy_state["confidenceGateScore"] = gate_result["confidence"]
+                _dspy_state["confidenceGateDecision"] = gate_result["decision"]
+
+                if gate_result["decision"] == "proceed":
+                    # High confidence — Tier 1 is safe
+                    pass
+                elif gate_result["decision"] == "skip":
+                    # Very low confidence — skip Tier 1 entirely
+                    tier1_eligible = False
+                    print(f"[Tier 0] Skipping Tier 1: confidence={gate_result['confidence']:.2f}")
+                elif gate_result["decision"] == "uncertain":
+                    # ── Tier 0.5: Visual pre-check (conditional) ──
+                    last_fill_ts = fc.get("lastOptimizedAt", 0) or 0
+                    tier1_failures = fc.get("tier1FailureCount", 0) or 0
+
+                    if should_escalate_to_visual(gate_result, last_fill_ts, tier1_failures):
+                        print(f"[Tier 0.5] Escalating to visual check (HTML confidence={gate_result['confidence']:.2f})")
+                        # Take screenshot and describe with Gemini Flash (reuse existing helper)
+                        vis_shot = base64.b64encode(page.screenshot(type="png")).decode()
+                        vis_desc = gemini_flash(
+                            "Describe this page. Is it a clean form ready for data entry? "
+                            "Focus on: 1) Any modal overlays or popups blocking the form, "
+                            "2) Form field visibility and layout, "
+                            "3) Error messages, login walls, or CAPTCHA challenges, "
+                            "4) Loading spinners or incomplete renders.",
+                            vis_shot,
+                        )
+                        import math
+                        last_success_days = 0
+                        if last_fill_ts > 0:
+                            last_success_days = int((time.time() * 1000 - last_fill_ts) / (1000 * 86400))
+
+                        visual_result = evaluate_visual_confidence(
+                            screenshot_description=vis_desc,
+                            merchant_name=merchant,
+                            saved_field_count=len(fc.get("fields", [])),
+                            last_success_age_days=last_success_days,
+                            known_cua_hints=fc.get("cuaHints", ""),
+                        )
+                        # Visual check overrides the uncertain HTML result
+                        _dspy_state["confidenceGateScore"] = visual_result["confidence"]
+                        _dspy_state["confidenceGateDecision"] = visual_result["decision"]
+                        _dspy_state["visualPageState"] = visual_result.get("page_state", "unknown")
+
+                        if visual_result["decision"] == "skip":
+                            tier1_eligible = False
+                            print(f"[Tier 0.5] Skipping Tier 1: visual={visual_result['confidence']:.2f}, "
+                                  f"state={visual_result.get('page_state')}")
+                        else:
+                            print(f"[Tier 0.5] Proceeding: visual={visual_result['confidence']:.2f}, page looks clean")
+                    else:
+                        # Uncertain but no escalation triggers — proceed with caution
+                        print(f"[Tier 0] Uncertain ({gate_result['confidence']:.2f}) but no escalation triggers — proceeding")
+
+            except Exception as gate_err:
+                print(f"[Confidence Gate] Error ({gate_err}), proceeding with Tier 1")
+
+        if tier1_eligible:
             _run_state["tier"] = "tier1"
             print(f"[Form Fill] ⚡ Tier 1: {len(fc['fields'])} fields, {fc['successCount']} successes")
             if run_tier1(page, fc, buyer):
@@ -2800,7 +2975,8 @@ def handler(event: dict, context=None) -> dict:
             print("[Form Fill] Tier 1 failed — falling back to Tier 2")
             try:
                 shot = base64.b64encode(page.screenshot(type="png")).decode()
-                troubleshoot(shot, "Tier 1 validation failed after submit", merchant)
+                troubleshoot(shot, "Tier 1 validation failed after submit", merchant,
+                             previous_hints=merchant_hints, tier_reached="tier1")
             except Exception:
                 pass
 
@@ -2974,7 +3150,8 @@ def handler(event: dict, context=None) -> dict:
         if not verified_success and merchant:
             try:
                 shot = base64.b64encode(page.screenshot(type="png")).decode()
-                troubleshoot(shot, f"Verification failed: {evidence[:300]}", merchant)
+                troubleshoot(shot, f"Verification failed: {evidence[:300]}", merchant,
+                             previous_hints=merchant_hints, tier_reached="tier2")
             except Exception:
                 pass
 
@@ -3020,7 +3197,9 @@ def handler(event: dict, context=None) -> dict:
                 if not shot:
                     # No browser/page available (e.g. network error) — use a blank placeholder
                     shot = base64.b64encode(b"blank").decode()
-                ts_result = troubleshoot(shot, error, merchant)
+                ts_result = troubleshoot(shot, error, merchant,
+                                        previous_hints=merchant_hints if 'merchant_hints' in dir() else "",
+                                        tier_reached=_run_state.get("tier", "tier2"))
             except Exception:
                 pass
 

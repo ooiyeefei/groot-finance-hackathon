@@ -42,7 +42,7 @@ class OptimizedTroubleshooter(dspy.Module):
 
     def __init__(self):
         super().__init__()
-        self.diagnose = dspy.Predict(FormDiagnosis)
+        self.diagnose = dspy.ChainOfThought(FormDiagnosis)
 
     def forward(self, error_message: str, merchant_name: str,
                 screenshot_description: str, previous_hints: str = "",

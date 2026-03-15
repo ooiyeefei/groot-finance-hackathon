@@ -444,6 +444,8 @@ const arBalance = arLines.reduce((sum, line) =>
 - Convex document database (existing `accounting_periods` + `journal_entries` tables) (001-acct-period-ui)
 - TypeScript 5.9.3 (Convex + Next.js) + Python 3.11 (DSPy Lambda) + DSPy 2.6+, Convex 1.31.3, Next.js 15.5.7, litellm (DSPy → Gemini) (001-dspy-fee-breakdown)
 - Convex (document DB), S3 (DSPy model state JSON files) (001-dspy-fee-breakdown)
+- Python 3.11 (Lambda Docker), TypeScript 5.9.3 (Convex) + DSPy 2.6+, litellm, Playwright, Gemini Flash-Lite (`gemini-3.1-flash-lite-preview`), boto3 (001-dspy-cua-integration)
+- S3 (`finanseal-bucket/dspy-modules/`) for optimized module state, Convex for training data logs (001-dspy-cua-integration)
 
 ## Recent Changes
 - 001-category-3-mcp: Added MCP Server with API key management

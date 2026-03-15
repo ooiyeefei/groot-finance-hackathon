@@ -224,6 +224,23 @@ crons.daily(
 // Lambda queries Convex for businesses with pending requests, polls LHDN directly.
 
 /**
+ * E-Invoice DSPy Weekly Intelligence Digest (001-dspy-cua-integration)
+ *
+ * Every Monday 9 AM MYT (1 AM UTC):
+ * - Queries getEinvoiceDspyDashboard for last 7 days
+ * - Emails dev+einvoiceMY@hellogroot.com with:
+ *   Success rates, tier usage, failure categories,
+ *   gatekeeper accuracy, merchants needing attention
+ *
+ * This is internal dev tooling — NOT customer-facing.
+ */
+crons.weekly(
+  "einvoice-dspy-weekly-digest",
+  { dayOfWeek: "monday", hourUTC: 1, minuteUTC: 0 },
+  internal.functions.einvoiceDspyDigest.sendWeeklyDigest
+);
+
+/**
  * E-Invoice Monitoring: Self-Improving Error Detection
  *
  * Runs every 2 hours to:
