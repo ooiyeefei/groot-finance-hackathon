@@ -15,7 +15,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { useAccountingPeriods } from '@/domains/accounting/hooks/use-accounting-periods'
-import { Calendar, Lock, Unlock, Plus, AlertTriangle, Eye } from 'lucide-react'
+import { Calendar, Lock, Unlock, Plus, AlertTriangle, Eye, ChevronLeft, ChevronRight } from 'lucide-react'
 import AccountingTabs from '../accounting-tabs'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { formatBusinessDate } from '@/lib/utils'
@@ -35,6 +35,7 @@ export default function PeriodsContent() {
 
   // Create period form state
   const [newPeriodDate, setNewPeriodDate] = useState('')
+  const [pickerYear, setPickerYear] = useState(new Date().getFullYear())
 
   const selectedPeriod = periods.find((p: any) => p._id === selectedPeriodId)
 
@@ -70,6 +71,7 @@ export default function PeriodsContent() {
     setClosingNotes('')
     setReopenReason('')
     setNewPeriodDate('')
+    setPickerYear(new Date().getFullYear())
   }
 
   const closeDialog = () => {
@@ -597,13 +599,57 @@ export default function PeriodsContent() {
               date range will be generated automatically.
             </p>
 
-            <div>
-              <Label>Month</Label>
-              <Input
-                type="month"
-                value={newPeriodDate}
-                onChange={(e) => setNewPeriodDate(e.target.value)}
-              />
+            {/* Year selector */}
+            <div className="flex items-center justify-between px-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setPickerYear(pickerYear - 1)}
+                className="h-8 w-8 p-0"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-sm font-semibold text-foreground">{pickerYear}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setPickerYear(pickerYear + 1)}
+                className="h-8 w-8 p-0"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Month grid */}
+            <div className="grid grid-cols-4 gap-2">
+              {Array.from({ length: 12 }, (_, i) => {
+                const monthNum = String(i + 1).padStart(2, '0')
+                const value = `${pickerYear}-${monthNum}`
+                const isSelected = newPeriodDate === value
+                const monthLabel = new Date(pickerYear, i).toLocaleDateString('en-US', { month: 'short' })
+                const existingPeriod = periods.find((p: any) => p.periodCode === value)
+                const isDisabled = !!existingPeriod
+
+                return (
+                  <Button
+                    key={value}
+                    variant="ghost"
+                    size="sm"
+                    disabled={isDisabled}
+                    onClick={() => setNewPeriodDate(value)}
+                    className={`h-10 text-sm font-medium rounded-lg transition-colors ${
+                      isSelected
+                        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                        : isDisabled
+                        ? 'text-muted-foreground/40 line-through cursor-not-allowed'
+                        : 'text-foreground hover:bg-muted'
+                    }`}
+                    title={isDisabled ? `${existingPeriod.periodName} already exists` : `Select ${monthLabel} ${pickerYear}`}
+                  >
+                    {monthLabel}
+                  </Button>
+                )
+              })}
             </div>
 
             {newPeriodDate && (
