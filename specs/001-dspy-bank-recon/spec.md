@@ -154,11 +154,14 @@ As a finance team member, I want the system to guarantee that every AI-generated
 - **FR-007**: The AI classifier MUST validate that every journal entry suggestion has total debits equal to total credits. If unbalanced, the system MUST retry with backtracking.
 - **FR-008**: The AI classifier MUST suggest both debit and credit account codes, not just a category label.
 
-**GL Posting**
-- **FR-009**: System MUST create a draft journal entry when a user confirms an AI classification for an unmatched bank transaction. The journal entry MUST have `sourceType: "bank_reconciliation"` and link back to the bank transaction.
+**GL Posting (Unmatched Transactions Only)**
+- **FR-009**: System MUST create a draft journal entry when a user confirms an AI classification for an unmatched bank transaction. The journal entry MUST have `sourceType: "bank_reconciliation"` and link back to the bank transaction. Matched transactions (confirmed against existing journal entries) MUST NOT trigger any GL posting — they are reconciliation verification only.
 - **FR-010**: Draft journal entries MUST follow double-entry bookkeeping: one debit line and one credit line (or more for split transactions), with debits equal to credits.
 - **FR-011**: The credit account for bank debits (money leaving) MUST default to the bank account's linked GL account. The debit account for bank credits (money arriving) MUST default to the bank account's linked GL account.
 - **FR-012**: Users MUST be able to edit the suggested GL accounts on a draft journal entry before posting.
+
+**UI Migration**
+- **FR-012a**: System MUST replace the existing 4-option categorize dropdown (Bank Charges, Interest, Non-Business, Other) with AI-suggested GL account classification and user override. The old categorize flow is fully superseded by the new AI classification + GL posting flow.
 
 **Correction Feedback Loop**
 - **FR-013**: System MUST store every user correction (rejected match, changed GL account, overridden classification) as a training record linked to the business.
@@ -218,6 +221,8 @@ As a finance team member, I want the system to guarantee that every AI-generated
 - Q: How many fixed categories for bank transactions? → A: No fixed categories. The full Chart of Accounts is the target space. The AI suggests specific GL account codes, not category labels. Seed training data uses common patterns (bank charges, interest, non-business) but the system learns any account mapping.
 - Q: How are corrections collected? → A: Implicitly from user actions — confirm (positive signal), reject (negative signal), edit GL account on draft JE (correction signal). No extra "rate this" button needed.
 - Q: What safeguards prevent overfitting? → A: Minimum 10 unique patterns, skip-if-recently-optimized (last optimized correction ID), accuracy gating (only deploy if improved), force flag for development.
+- Q: Should the existing 4-option categorize dropdown (Bank Charges, Interest, Non-Business, Other) coexist with AI GL classification? → A: No. Replace it entirely with AI-suggested GL accounts + user override. The 4 fixed categories were a placeholder for the missing GL posting — now redundant.
+- Q: Should matched transactions (bank tx confirmed against an existing journal entry) trigger any GL posting? → A: No GL action for matched transactions. Confirming a match is reconciliation verification only — the journal entry already exists from the source document (invoice, expense claim, payment). Creating duplicate JEs would corrupt the books.
 
 ## Assumptions
 
