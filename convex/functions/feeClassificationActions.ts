@@ -223,9 +223,9 @@ export const classifyUnknownFees = internalAction({
     );
 
     // 5. Deduplicate fee names
-    const uniqueFees = [...new Set(unclassified.map((f: { feeName: string }) => f.feeName))].map((name) => {
+    const uniqueFees: Array<{ feeName: string; amount: number }> = [...new Set(unclassified.map((f: { feeName: string }) => f.feeName))].map((name: string) => {
       const item = unclassified.find((f: { feeName: string; amount: number }) => f.feeName === name)!;
-      return { feeName: name, amount: item.amount };
+      return { feeName: name, amount: item.amount as number };
     });
 
     // 6. Call DSPy Lambda via MCP
