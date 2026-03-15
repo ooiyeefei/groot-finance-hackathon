@@ -19,6 +19,7 @@ from dspy.teleprompt import BootstrapFewShot
 
 from fee_module import (
     FeeClassifier,
+    BatchFeeClassifier,
     ClassifyFee,
     VALID_ACCOUNT_CODES,
     create_training_examples,
@@ -115,41 +116,62 @@ def _classify_fees(params: dict) -> dict:
     # Track known fee names from corrections for "NEW" detection
     known_fee_names = {c.get("feeName", "").lower() for c in corrections}
 
-    # Classify each fee
+    # Classify fees using BatchFeeClassifier (includes dspy.Assert for balance)
+    # BatchFeeClassifier wraps FeeClassifier with balance assertion backtracking
+    batch_classifier = BatchFeeClassifier()
+    batch_classifier.classifier = classifier  # Use the optimized/compiled classifier
+
     classifications = []
-    for fee in fees:
-        fee_name = fee.get("feeName", "")
-        try:
-            result = classifier(fee_name=fee_name, platform_name=platform)
-            account_code = str(result.account_code).strip()
-
-            # Validate account code
+    try:
+        batch_results = batch_classifier(
+            fees=fees,
+            platform_name=platform,
+            gross_amount=gross_amount,
+            net_amount=net_amount,
+        )
+        for r in batch_results:
+            account_code = r["accountCode"]
             if account_code not in VALID_ACCOUNT_CODES:
-                account_code = "5800"  # fallback to general
-
-            confidence = min(float(result.confidence), confidence_cap)
-            is_new = fee_name.lower() not in known_fee_names
-
+                account_code = "5800"
             classifications.append({
-                "feeName": fee_name,
+                "feeName": r["feeName"],
                 "accountCode": account_code,
                 "accountName": VALID_ACCOUNT_CODES.get(account_code, "Platform Fees (General)"),
-                "confidence": round(confidence, 2),
-                "isNew": is_new,
-                "reasoning": str(getattr(result, "reasoning", "")),
+                "confidence": round(min(r["confidence"], confidence_cap), 2),
+                "isNew": r["feeName"].lower() not in known_fee_names,
+                "reasoning": r.get("reasoning", ""),
             })
-        except Exception as e:
-            logger.error(f"Classification failed for '{fee_name}': {e}")
-            classifications.append({
-                "feeName": fee_name,
-                "accountCode": "5800",
-                "accountName": "Platform Fees (General)",
-                "confidence": 0.0,
-                "isNew": True,
-                "reasoning": f"Classification error: {str(e)[:100]}",
-            })
+    except Exception as e:
+        # If batch classification fails (e.g., Assert backtracking exhausted),
+        # fall back to per-fee classification without Assert
+        logger.warning(f"Batch classification failed: {e}. Falling back to per-fee.")
+        for fee in fees:
+            fee_name = fee.get("feeName", "")
+            try:
+                result = classifier(fee_name=fee_name, platform_name=platform)
+                account_code = str(result.account_code).strip()
+                if account_code not in VALID_ACCOUNT_CODES:
+                    account_code = "5800"
+                classifications.append({
+                    "feeName": fee_name,
+                    "accountCode": account_code,
+                    "accountName": VALID_ACCOUNT_CODES.get(account_code, "Platform Fees (General)"),
+                    "confidence": round(min(float(result.confidence), confidence_cap), 2),
+                    "isNew": fee_name.lower() not in known_fee_names,
+                    "reasoning": str(getattr(result, "reasoning", "")),
+                })
+            except Exception as e2:
+                logger.error(f"Per-fee classification failed for '{fee_name}': {e2}")
+                classifications.append({
+                    "feeName": fee_name,
+                    "accountCode": "5800",
+                    "accountName": "Platform Fees (General)",
+                    "confidence": 0.0,
+                    "isNew": True,
+                    "reasoning": f"Classification error: {str(e2)[:100]}",
+                })
 
-    # Balance check
+    # Post-hoc balance check (for response — Assert already validated during classification)
     balance_check = None
     if gross_amount is not None and net_amount is not None:
         fee_amounts = [fee.get("amount", 0) for fee in fees]

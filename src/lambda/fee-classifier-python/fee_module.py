@@ -58,8 +58,8 @@ class FeeClassifier(dspy.Module):
     ):
         result = self.classify(fee_name=fee_name, platform_name=platform_name)
 
-        # Validate account code is in allowed set
-        dspy.Suggest(
+        # Hard constraint: account code MUST be valid (triggers backtracking retry if not)
+        dspy.Assert(
             result.account_code in VALID_ACCOUNT_CODES,
             f"Account code '{result.account_code}' is not valid. Must be one of: {list(VALID_ACCOUNT_CODES.keys())}",
         )
@@ -73,6 +73,48 @@ class FeeClassifier(dspy.Module):
             result.confidence = 0.5
 
         return result
+
+
+class BatchFeeClassifier(dspy.Module):
+    """Classifies a batch of fees and asserts the total balances.
+
+    Uses dspy.Assert for balance validation — if gross != net + fees,
+    the LLM is asked to re-examine and retry (backtracking).
+    """
+
+    def __init__(self):
+        self.classifier = FeeClassifier()
+
+    def forward(self, fees: list[dict], platform_name: str,
+                gross_amount: float | None = None, net_amount: float | None = None):
+        results = []
+        for fee in fees:
+            result = self.classifier(
+                fee_name=fee["feeName"],
+                platform_name=platform_name,
+            )
+            results.append({
+                "feeName": fee["feeName"],
+                "amount": fee["amount"],
+                "accountCode": str(result.account_code).strip(),
+                "confidence": float(result.confidence),
+                "reasoning": str(getattr(result, "reasoning", "")),
+            })
+
+        # Balance assertion: gross should equal net + sum of fee amounts
+        if gross_amount is not None and net_amount is not None:
+            total_fees = sum(abs(f["amount"]) for f in fees)
+            expected_fees = gross_amount - net_amount
+            discrepancy = abs(expected_fees - total_fees)
+
+            dspy.Assert(
+                discrepancy < 0.01,
+                f"Fee breakdown doesn't balance: gross ({gross_amount}) - net ({net_amount}) = "
+                f"{expected_fees}, but fee total = {total_fees}. Discrepancy: {discrepancy}. "
+                "Re-examine the fee classifications to ensure all fees are correctly identified.",
+            )
+
+        return results
 
 
 def create_training_examples(corrections: list[dict]) -> list[dspy.Example]:
