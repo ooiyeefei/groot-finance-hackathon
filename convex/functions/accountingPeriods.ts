@@ -301,15 +301,6 @@ export const reopen = mutation({
   },
 });
 
-// Resolve a Clerk userId to display name
-async function resolveUserName(db: any, clerkUserId: string): Promise<string> {
-  const user = await db
-    .query("users")
-    .withIndex("by_clerkUserId", (q: any) => q.eq("clerkUserId", clerkUserId))
-    .first();
-  return user?.fullName || user?.email || clerkUserId;
-}
-
 /**
  * List accounting periods for a business
  *
@@ -346,11 +337,25 @@ export const list = query({
 
     // Resolve user names for display
     const enriched = await Promise.all(
-      periods.map(async (p) => ({
-        ...p,
-        createdByName: await resolveUserName(ctx.db, p.createdBy),
-        closedByName: p.closedBy ? await resolveUserName(ctx.db, p.closedBy) : undefined,
-      }))
+      periods.map(async (p) => {
+        const createdByUser = await ctx.db
+          .query("users")
+          .withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", p.createdBy))
+          .first();
+        let closedByName: string | undefined;
+        if (p.closedBy) {
+          const closedByUser = await ctx.db
+            .query("users")
+            .withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", p.closedBy!))
+            .first();
+          closedByName = closedByUser?.fullName || closedByUser?.email || p.closedBy;
+        }
+        return {
+          ...p,
+          createdByName: createdByUser?.fullName || createdByUser?.email || p.createdBy,
+          closedByName,
+        };
+      })
     );
 
     return enriched;
@@ -387,7 +392,7 @@ export const getLockStatus = query({
       )
       .collect();
 
-    const result: Record<string, { totalEntries: number; lockedEntries: number; allLocked: boolean }> = {};
+    const result: Record<string, any> = {};
 
     for (const period of closedPeriods) {
       const entries = await ctx.db
