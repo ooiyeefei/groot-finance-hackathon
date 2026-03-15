@@ -21,7 +21,9 @@ import type * as functions_attendanceRecords from "../functions/attendanceRecord
 import type * as functions_audit from "../functions/audit.js";
 import type * as functions_bankAccounts from "../functions/bankAccounts.js";
 import type * as functions_bankImportSessions from "../functions/bankImportSessions.js";
+import type * as functions_bankReconClassificationRules from "../functions/bankReconClassificationRules.js";
 import type * as functions_bankReconCorrections from "../functions/bankReconCorrections.js";
+import type * as functions_bankReconOptimization from "../functions/bankReconOptimization.js";
 import type * as functions_bankTransactions from "../functions/bankTransactions.js";
 import type * as functions_businesses from "../functions/businesses.js";
 import type * as functions_catalogItems from "../functions/catalogItems.js";
@@ -133,7 +135,9 @@ declare const fullApi: ApiFromModules<{
   "functions/audit": typeof functions_audit;
   "functions/bankAccounts": typeof functions_bankAccounts;
   "functions/bankImportSessions": typeof functions_bankImportSessions;
+  "functions/bankReconClassificationRules": typeof functions_bankReconClassificationRules;
   "functions/bankReconCorrections": typeof functions_bankReconCorrections;
+  "functions/bankReconOptimization": typeof functions_bankReconOptimization;
   "functions/bankTransactions": typeof functions_bankTransactions;
   "functions/businesses": typeof functions_businesses;
   "functions/catalogItems": typeof functions_catalogItems;

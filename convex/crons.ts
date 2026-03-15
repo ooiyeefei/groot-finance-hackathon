@@ -328,4 +328,18 @@ crons.weekly(
   { force: false }
 );
 
+/**
+ * DSPy Bank Recon — Weekly Optimization
+ *
+ * Runs every Sunday at 3:00 AM UTC (staggered 1h after fee optimization)
+ * to optimize bank transaction classification models using MIPROv2
+ * on accumulated user corrections (≥20 per business, ≥10 unique descriptions).
+ */
+crons.weekly(
+  "bank-recon-optimization",
+  { dayOfWeek: "sunday", hourUTC: 3, minuteUTC: 0 },
+  internal.functions.bankReconOptimization.weeklyOptimization,
+  { force: false }
+);
+
 export default crons;
