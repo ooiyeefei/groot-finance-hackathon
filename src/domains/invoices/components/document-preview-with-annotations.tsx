@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 
 interface BoundingBox {
@@ -54,17 +54,33 @@ export default function DocumentPreviewWithAnnotations({
   const [rotation, setRotation] = useState(0)
   const [hoveredBox, setHoveredBox] = useState<BoundingBox | null>(null)
   const [imageLoaded, setImageLoaded] = useState(false)
+  const [imageError, setImageError] = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
 
-  // Reset imageLoaded when imageUrl changes to ensure fresh load state
-  useEffect(() => {
-    setImageLoaded(false)
-  }, [imageUrl])
-
-  const handleImageLoad = () => {
+  const handleImageLoad = useCallback(() => {
     setImageLoaded(true)
-  }
+    setImageError(false)
+  }, [])
+
+  const handleImageError = useCallback(() => {
+    console.error('[DocumentPreview] Image failed to load:', imageUrl?.substring(0, 80))
+    if (retryCount < 2) {
+      // Auto-retry by appending a cache-buster to force re-fetch
+      setRetryCount(prev => prev + 1)
+      setImageLoaded(false)
+    } else {
+      setImageError(true)
+      setImageLoaded(false)
+    }
+  }, [imageUrl, retryCount])
+
+  const handleRetry = useCallback(() => {
+    setRetryCount(0)
+    setImageError(false)
+    setImageLoaded(false)
+  }, [])
 
   const handleZoomIn = () => setScale(prev => Math.min(prev + 0.25, 3))
   const handleZoomOut = () => setScale(prev => Math.max(prev - 0.25, 0.25))
@@ -234,26 +250,39 @@ export default function DocumentPreviewWithAnnotations({
             }}
           >
             {/* Loading skeleton while image loads */}
-            {!imageLoaded && (
+            {!imageLoaded && !imageError && (
               <div className="absolute inset-0 flex items-center justify-center bg-muted animate-pulse rounded-lg min-h-[300px] min-w-[200px]">
                 <div className="text-center text-muted-foreground">
                   <div className="w-8 h-8 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin mx-auto mb-2" />
-                  <p className="text-xs">Loading image...</p>
+                  <p className="text-xs">{retryCount > 0 ? `Retrying... (${retryCount}/2)` : 'Loading image...'}</p>
+                </div>
+              </div>
+            )}
+            {/* Error state with retry */}
+            {imageError && (
+              <div className="absolute inset-0 flex items-center justify-center bg-muted rounded-lg min-h-[300px] min-w-[200px]">
+                <div className="text-center text-muted-foreground">
+                  <p className="text-xs mb-2">Failed to load image</p>
+                  <button
+                    onClick={handleRetry}
+                    className="text-xs text-primary hover:text-primary/80 underline"
+                  >
+                    Click to retry
+                  </button>
                 </div>
               </div>
             )}
             {/* Document Image */}
-            {/* ⚡ OPTIMIZATION: fetchPriority=high for faster initial load, hide until fully loaded */}
             <img
               ref={imageRef}
-              src={imageUrl}
+              src={retryCount > 0 ? `${imageUrl}${imageUrl.includes('?') ? '&' : '?'}_r=${retryCount}` : imageUrl}
               alt={fileName}
               className={`max-w-full h-auto shadow-lg transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
               loading="eager"
-              decoding="async"
+              decoding="sync"
               fetchPriority="high"
               onLoad={handleImageLoad}
-              onError={() => setImageLoaded(false)}
+              onError={handleImageError}
             />
             
             {/* Bounding Box Overlays */}
