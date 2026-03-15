@@ -13,6 +13,7 @@ import {
 import { useJournalEntries, useJournalEntry } from '@/domains/accounting/hooks/use-journal-entries'
 import { Plus, Eye, CheckCircle, XCircle } from 'lucide-react'
 import Link from 'next/link'
+import AccountingTabs from '../accounting-tabs'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { formatBusinessDate } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -112,27 +113,26 @@ export default function JournalEntriesContent() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Journal Entries</h1>
-
-        <Link href="/en/accounting/journal-entries/new">
-          <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-            <Plus className="w-4 h-4 mr-2" />
-            New Entry
-          </Button>
-        </Link>
-      </div>
+      <AccountingTabs activeTab="journal-entries" />
 
       <Card>
         <CardHeader className="border-b border-border">
-          <CardTitle>All Journal Entries</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>All Journal Entries</CardTitle>
+            <Link href="/en/accounting/journal-entries/new">
+              <Button className="bg-primary hover:bg-primary/90">
+                <Plus className="w-4 h-4 mr-2" />
+                New Entry
+              </Button>
+            </Link>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           {entries.length === 0 ? (
             <div className="p-12 text-center">
               <p className="text-muted-foreground mb-4">No journal entries found</p>
               <Link href="/en/accounting/journal-entries/new">
-                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                <Button className="bg-primary hover:bg-primary/90">
                   <Plus className="w-4 h-4 mr-2" />
                   Create First Entry
                 </Button>

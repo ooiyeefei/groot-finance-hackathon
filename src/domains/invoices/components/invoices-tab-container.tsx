@@ -97,7 +97,7 @@ const TabLoading = () => (
 )
 
 const subTriggerClassName =
-  'flex items-center gap-2 px-4 py-2.5 rounded-md text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border whitespace-nowrap'
+  'flex items-center gap-2 px-4 py-2.5 rounded-md text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm whitespace-nowrap'
 
 const topTriggerClassName =
   'flex items-center gap-2 px-6 py-3 rounded-md text-muted-foreground font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm whitespace-nowrap'

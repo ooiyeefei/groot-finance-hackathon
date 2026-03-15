@@ -2,13 +2,13 @@
 
 import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useDashboardMetrics } from '@/domains/accounting/hooks/use-dashboard-metrics'
 import { useFinancialStatements } from '@/domains/accounting/hooks/use-financial-statements'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { BookOpen, FileText, Plus, TrendingUp, TrendingDown } from 'lucide-react'
 import Link from 'next/link'
+import AccountingTabs from './accounting-tabs'
 
 export default function AccountingDashboardContent() {
   const { metrics, isLoading: metricsLoading } = useDashboardMetrics()
@@ -33,17 +33,7 @@ export default function AccountingDashboardContent() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Accounting Dashboard</h1>
-        <div className="flex items-center space-x-3">
-          <Link href="/en/accounting/journal-entries/new">
-            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-              <Plus className="w-4 h-4 mr-2" />
-              New Entry
-            </Button>
-          </Link>
-        </div>
-      </div>
+      <AccountingTabs activeTab="dashboard" />
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
