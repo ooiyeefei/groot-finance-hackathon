@@ -64,6 +64,49 @@ src/lib/csv-parser/                 # Shared capability (no page, no route)
       └── csv-import-modal.tsx      # Reusable modal, returns structured data
 ```
 
+### Product & Engineering Principles (CRITICAL)
+
+**Groot is an Agentic AI startup, not a standard SaaS.** Every feature decision must be evaluated through this lens:
+
+**1. Self-Improving AI Over Static Rules**
+- Standard SaaS advice says "don't use expensive AI for things a simple `if/else` can solve." That advice works for a 2022 accounting app — not for Groot.
+- **The Scaling Wall**: Regex/rules work for 5 Malaysian banks. When we have 100+ merchants using 20+ banks and e-wallets across SE Asia, hardcoded patterns become an unmaintainable nightmare that breaks every time a bank changes their export format.
+- **Our moat is AI that learns**: Features should self-improve, self-evolve, and learn from user behavior over time. Every user correction should make the system smarter for all users — not just memorize a mapping.
+- **Don't overdo AI either**: Use AI only where it provides genuine leverage. Simple CRUD, auth, navigation — these don't need AI. But classification, matching, anomaly detection, document understanding — these are where DSPy shines.
+
+**2. Tiered Intelligence Architecture**
+All AI-powered features follow a two-tier pattern:
+
+| Tier | Engine | Cost | When |
+|------|--------|------|------|
+| **Tier 1** | Rule-based (regex, exact match, heuristics) | Free, instant | Runs first, handles 60-80% of cases |
+| **Tier 2** | DSPy / LLM (MIPROv2, BootstrapFewShot, Assert) | API cost, ~1-3s | Handles Tier 1 leftovers — the "long tail" |
+
+**Existing examples of this pattern:**
+- **Fee breakdown**: Tier 1 keyword rules → Tier 2 DSPy semantic classification
+- **E-invoice detection**: Tier 1 field validation → Tier 2 CUA learning + troubleshooting
+- **Bank reconciliation matching**: Tier 1 amount+reference+date → Tier 2 DSPy fuzzy matching + lumped sum bundling
+- **AR reconciliation**: Tier 1 invoice number match → Tier 2 AI column mapping
+
+**DSPy framework advantages:**
+- `BootstrapFewShot`: User corrections become training examples that **generalize** (not just memorize)
+- `MIPROv2`: Optimizes prompts for domain-specific understanding (Malaysian banking dialect, SE Asian vendor names)
+- `dspy.Assert`: Enforces business constraints (e.g., split match amounts must sum to bank transaction)
+
+**3. IFRS / Global Accounting Standards**
+- All accounting features MUST follow IFRS (International Financial Reporting Standards) as the baseline
+- Double-entry bookkeeping is mandatory — every transaction must have balanced debits and credits
+- Journal entries must support: posting, reversal, voiding, period locking
+- Chart of Accounts follows standard classification: Assets (1xxx), Liabilities (2xxx), Equity (3xxx), Revenue (4xxx), COGS (5xxx), Expenses (6xxx)
+- Bank reconciliation must produce a proper reconciliation statement (bank balance vs GL balance)
+- Support for multi-currency with home currency conversion per IFRS 21
+
+**4. Build the Moat, Not Just the Feature**
+When designing any new feature, ask:
+- "Does this get smarter with more users?" → If yes, invest in the learning loop
+- "Will this break at 100x scale?" → If yes, use DSPy over hardcoded rules
+- "Does this follow accounting standards?" → If no, fix it before shipping
+
 ## Mandatory Rules
 
 ### Git Author (CRITICAL)
