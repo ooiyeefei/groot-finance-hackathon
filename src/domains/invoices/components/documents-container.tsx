@@ -39,36 +39,26 @@ export default function DocumentsContainer() {
   }, [])
 
   return (
-    <div className="space-y-section-gap">
+    <div className="space-y-3">
       {/* Business Document Upload */}
       <div>
-        <Card className="bg-card border-border">
-          <CardContent className="pt-card-padding">
-
-            <Suspense fallback={<div className="border-2 border-dashed border-border rounded-lg p-card-padding text-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground mx-auto" /></div>}>
-              <FileUploadZone
-                onUploadSuccess={handleBusinessDocumentSuccess}
-                onUploadStart={() => {/* Upload started callback */}}
-                autoProcess={true}
-                allowMultiple={true}
-              />
-            </Suspense>
-          </CardContent>
-        </Card>
+        <Suspense fallback={<div className="border-2 border-dashed border-border rounded-lg p-4 text-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground mx-auto" /></div>}>
+          <FileUploadZone
+            onUploadSuccess={handleBusinessDocumentSuccess}
+            onUploadStart={() => {/* Upload started callback */}}
+            autoProcess={true}
+            allowMultiple={true}
+          />
+        </Suspense>
       </div>
 
       {/* Documents List */}
       <div>
-        <Card className="bg-card border-border">
-          <CardContent className="pt-card-padding">
-
             <DocumentsList
               key={refreshTrigger}
               onRefresh={handleDocumentsRefresh}
               ref={documentsListRef}
             />
-          </CardContent>
-        </Card>
       </div>
     </div>
   )

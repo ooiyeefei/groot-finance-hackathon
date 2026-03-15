@@ -337,17 +337,13 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-medium text-foreground">Your Documents</h3>
-      </div>
-
+    <div className="space-y-2">
       {/* Bulk Action Bar */}
       {postableCount > 0 && (
-        <div className="bg-card rounded-lg border border-border p-4">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="bg-card rounded-lg border border-border px-3 py-2">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3 flex-1 min-w-0">
-              <span className="text-sm text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 {selectedInvoices.size} of {postableCount} invoices selected
               </span>
               <Button
@@ -391,14 +387,14 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
         </div>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-1">
         {documents.map((document) => (
           <div
             key={document.id}
-            className="bg-muted/50 rounded-lg border border-border p-card-padding hover:bg-muted/70 transition-colors overflow-hidden"
+            className="bg-muted/50 rounded-lg border border-border px-3 py-2 hover:bg-muted/70 transition-colors overflow-hidden"
           >
             {/* Desktop: single row | Mobile: stacked sections */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2">
               {/* Checkbox + File info */}
               <div className="flex items-center space-x-3 flex-1 min-w-0">
                 {/* Checkbox for postable invoices */}
@@ -421,30 +417,28 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                   {/* Compact title: VENDOR | Amount | Invoice: NUMBER */}
                   {getCompactTitle(document) ? (
                     <>
-                      <h4 className="text-foreground font-medium truncate text-sm sm:text-base">
+                      <h4 className="text-foreground font-medium truncate text-sm">
                         {getCompactTitle(document)}
                       </h4>
-                      <p className="text-xs text-muted-foreground truncate mt-0.5">
-                        {document.file_name}
+                      <p className="text-xs text-muted-foreground truncate">
+                        {document.file_name} &middot; {formatFileSize(document.file_size)} &middot; {formatDate(document.created_at)}
                       </p>
                     </>
                   ) : (
                     <>
-                      <h4 className="text-foreground font-medium truncate text-sm sm:text-base">
+                      <h4 className="text-foreground font-medium truncate text-sm">
                         {document.file_name}
                       </h4>
-                      <div className="flex items-center flex-wrap gap-x-3 gap-y-0 text-xs sm:text-sm text-muted-foreground mt-0.5">
-                        <span>{formatFileSize(document.file_size)}</span>
-                        <span>•</span>
-                        <span>{formatDate(document.created_at)}</span>
-                      </div>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {formatFileSize(document.file_size)} &middot; {formatDate(document.created_at)}
+                      </p>
                     </>
                   )}
                 </div>
               </div>
 
               {/* Badges + Actions */}
-              <div className="flex flex-row items-center gap-2 sm:flex-col sm:items-end sm:space-y-2 min-w-0 max-w-full flex-wrap">
+              <div className="flex flex-row items-center gap-1.5 sm:flex-col sm:items-end sm:space-y-1 min-w-0 max-w-full flex-wrap">
                 <div className="doc-badges flex items-center flex-wrap gap-2">
                   <DocumentStatusBadge
                     status={document.status}
