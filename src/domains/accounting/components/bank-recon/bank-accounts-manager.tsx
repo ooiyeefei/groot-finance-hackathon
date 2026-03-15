@@ -10,7 +10,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { Plus, Pencil, Trash2, RotateCcw } from 'lucide-react'
+import { Plus, Pencil, Trash2, RotateCcw, AlertTriangle } from 'lucide-react'
 
 interface BankAccountsManagerProps {
   businessId: Id<'businesses'>
@@ -24,6 +24,13 @@ export default function BankAccountsManager({ businessId, onClose }: BankAccount
   const deactivateAccount = useMutation(api.functions.bankAccounts.deactivate)
   const reactivateAccount = useMutation(api.functions.bankAccounts.reactivate)
 
+  // Fetch asset-type COA entries for GL account linking
+  const coaAccounts = useQuery(api.functions.chartOfAccounts.list, {
+    businessId,
+    accountType: 'Asset',
+    isActive: true,
+  })
+
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<Id<'bank_accounts'> | null>(null)
   const [formData, setFormData] = useState({
@@ -31,10 +38,11 @@ export default function BankAccountsManager({ businessId, onClose }: BankAccount
     accountNumber: '',
     currency: 'MYR',
     nickname: '',
+    glAccountId: '' as string,
   })
 
   const resetForm = () => {
-    setFormData({ bankName: '', accountNumber: '', currency: 'MYR', nickname: '' })
+    setFormData({ bankName: '', accountNumber: '', currency: 'MYR', nickname: '', glAccountId: '' })
     setEditingId(null)
     setShowForm(false)
   }
@@ -43,6 +51,10 @@ export default function BankAccountsManager({ businessId, onClose }: BankAccount
     e.preventDefault()
     if (!formData.bankName || !formData.accountNumber) return
 
+    const glAccountId = formData.glAccountId
+      ? (formData.glAccountId as Id<'chart_of_accounts'>)
+      : undefined
+
     if (editingId) {
       await updateAccount({
         id: editingId,
@@ -50,6 +62,7 @@ export default function BankAccountsManager({ businessId, onClose }: BankAccount
         accountNumber: formData.accountNumber,
         currency: formData.currency,
         nickname: formData.nickname || undefined,
+        glAccountId,
       })
     } else {
       await createAccount({
@@ -58,6 +71,7 @@ export default function BankAccountsManager({ businessId, onClose }: BankAccount
         accountNumber: formData.accountNumber,
         currency: formData.currency,
         nickname: formData.nickname || undefined,
+        glAccountId,
       })
     }
     resetForm()
@@ -69,9 +83,17 @@ export default function BankAccountsManager({ businessId, onClose }: BankAccount
       accountNumber: account.accountNumber,
       currency: account.currency,
       nickname: account.nickname ?? '',
+      glAccountId: (account as any).glAccountId ?? '',
     })
     setEditingId(account._id)
     setShowForm(true)
+  }
+
+  // Helper to resolve GL account name for display
+  const getGLAccountName = (glAccountId?: Id<'chart_of_accounts'>) => {
+    if (!glAccountId || !coaAccounts) return null
+    const account = coaAccounts.find((a) => a._id === glAccountId)
+    return account ? `${account.accountCode} — ${account.accountName}` : null
   }
 
   return (
@@ -83,55 +105,70 @@ export default function BankAccountsManager({ businessId, onClose }: BankAccount
 
         <div className="mt-6 space-y-4">
           {/* Account list */}
-          {accounts?.map((account) => (
-            <div
-              key={account._id}
-              className={`rounded-lg border p-4 ${
-                account.status === 'inactive' ? 'opacity-50 border-dashed' : 'border-border'
-              }`}
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="font-medium text-foreground">{account.bankName}</div>
-                  <div className="text-sm text-muted-foreground">
-                    •••• {account.accountNumberLast4} · {account.currency}
+          {accounts?.map((account) => {
+            const glName = getGLAccountName((account as any).glAccountId)
+            const hasGLLink = !!(account as any).glAccountId
+
+            return (
+              <div
+                key={account._id}
+                className={`rounded-lg border p-4 ${
+                  account.status === 'inactive' ? 'opacity-50 border-dashed' : 'border-border'
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="font-medium text-foreground">{account.bankName}</div>
+                    <div className="text-sm text-muted-foreground">
+                      •••• {account.accountNumberLast4} · {account.currency}
+                    </div>
+                    {account.nickname && (
+                      <div className="text-xs text-muted-foreground mt-0.5">{account.nickname}</div>
+                    )}
+                    {glName ? (
+                      <div className="text-xs text-primary mt-1">GL: {glName}</div>
+                    ) : (
+                      account.status === 'active' && (
+                        <div className="flex items-center gap-1 text-xs text-amber-500 mt-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          No GL link
+                        </div>
+                      )
+                    )}
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {account.transactionCount} transactions
+                      {account.lastImportDate && ` · Last import: ${account.lastImportDate}`}
+                    </div>
                   </div>
-                  {account.nickname && (
-                    <div className="text-xs text-muted-foreground mt-0.5">{account.nickname}</div>
-                  )}
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {account.transactionCount} transactions
-                    {account.lastImportDate && ` · Last import: ${account.lastImportDate}`}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  {account.status === 'active' ? (
-                    <>
+                  <div className="flex items-center gap-1">
+                    {account.status === 'active' ? (
+                      <>
+                        <button
+                          onClick={() => handleEdit(account)}
+                          className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => deactivateAccount({ id: account._id })}
+                          className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    ) : (
                       <button
-                        onClick={() => handleEdit(account)}
+                        onClick={() => reactivateAccount({ id: account._id })}
                         className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                       >
-                        <Pencil className="w-3.5 h-3.5" />
+                        <RotateCcw className="w-3.5 h-3.5" />
                       </button>
-                      <button
-                        onClick={() => deactivateAccount({ id: account._id })}
-                        className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={() => reactivateAccount({ id: account._id })}
-                      className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
 
           {/* Add/Edit form */}
           {showForm ? (
@@ -188,6 +225,25 @@ export default function BankAccountsManager({ businessId, onClose }: BankAccount
                     className="mt-1 w-full h-9 rounded-md border border-border bg-card px-3 text-sm text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
+              </div>
+              {/* GL Account Selector */}
+              <div>
+                <label className="text-xs text-muted-foreground">GL Account (Cash at Bank)</label>
+                <select
+                  value={formData.glAccountId}
+                  onChange={(e) => setFormData({ ...formData, glAccountId: e.target.value })}
+                  className="mt-1 w-full h-9 rounded-md border border-border bg-card px-3 text-sm text-foreground"
+                >
+                  <option value="">— Select GL Account —</option>
+                  {coaAccounts?.map((coa) => (
+                    <option key={coa._id} value={coa._id}>
+                      {coa.accountCode} — {coa.accountName}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Link to the Cash at Bank account in your chart of accounts for automatic GL posting.
+                </p>
               </div>
               <div className="flex gap-2 pt-1">
                 <button

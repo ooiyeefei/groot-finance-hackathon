@@ -127,6 +127,7 @@ export const create = mutation({
     accountNumber: v.string(),
     currency: v.string(),
     nickname: v.optional(v.string()),
+    glAccountId: v.optional(v.id("chart_of_accounts")),
   },
   handler: async (ctx, args) => {
     const { userId } = await requireBankReconAccess(ctx, args.businessId);
@@ -141,6 +142,7 @@ export const create = mutation({
       accountNumberLast4: last4,
       currency: args.currency,
       nickname: args.nickname,
+      glAccountId: args.glAccountId,
       status: "active",
       transactionCount: 0,
       createdBy: userId,
@@ -155,6 +157,7 @@ export const update = mutation({
     accountNumber: v.optional(v.string()),
     currency: v.optional(v.string()),
     nickname: v.optional(v.string()),
+    glAccountId: v.optional(v.id("chart_of_accounts")),
   },
   handler: async (ctx, args) => {
     const account = await ctx.db.get(args.id);
@@ -168,6 +171,7 @@ export const update = mutation({
     if (updates.bankName !== undefined) patch.bankName = updates.bankName;
     if (updates.currency !== undefined) patch.currency = updates.currency;
     if (updates.nickname !== undefined) patch.nickname = updates.nickname;
+    if (updates.glAccountId !== undefined) patch.glAccountId = updates.glAccountId;
     if (updates.accountNumber !== undefined) {
       const last4 = updates.accountNumber.slice(-4);
       patch.accountNumber = `****${last4}`;
@@ -209,5 +213,28 @@ export const reactivate = mutation({
       status: "active",
       deletedAt: undefined,
     });
+  },
+});
+
+// ============================================
+// HELPERS
+// ============================================
+
+export const getGLAccount = query({
+  args: {
+    bankAccountId: v.id("bank_accounts"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    const account = await ctx.db.get(args.bankAccountId);
+    if (!account || !account.glAccountId) return null;
+
+    const hasAccess = await checkBankReconAccess(ctx, account.businessId);
+    if (!hasAccess) return null;
+
+    const glAccount = await ctx.db.get(account.glAccountId);
+    return glAccount;
   },
 });
