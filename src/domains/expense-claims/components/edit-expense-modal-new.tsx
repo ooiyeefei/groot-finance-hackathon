@@ -288,19 +288,19 @@ export default function EditExpenseModalNew({
     }
   }, [einvoiceData?.einvoiceRequestStatus, refreshEinvoiceData])
 
-  // Generate signed URL when receipt info is loaded
-  // Uses lightweight /api/v1/signed-url endpoint (skips redundant Convex query)
-  // Cancellation token prevents stale fetch responses from corrupting state
+  // Generate signed URL when claim is loaded
+  // Uses /api/v1/expense-claims/[id]/image-url which has S3 path discovery + fallback logic
+  // (the lightweight /api/v1/signed-url blindly signs the storagePath which may not match
+  // the actual S3 location after Lambda processing — causing 403 errors)
   useEffect(() => {
-    if (!receiptInfo.storagePath) return
+    if (!expenseClaimId) return
 
     let cancelled = false
 
     const generateSignedUrl = async () => {
       try {
         setImageLoading(true)
-        const s3Key = `expense_claims/${receiptInfo.storagePath}`
-        const response = await fetch(`/api/v1/signed-url?path=${encodeURIComponent(s3Key)}`)
+        const response = await fetch(`/api/v1/expense-claims/${expenseClaimId}/image-url`)
 
         if (cancelled) return
 
@@ -329,7 +329,7 @@ export default function EditExpenseModalNew({
     return () => {
       cancelled = true
     }
-  }, [receiptInfo.storagePath])
+  }, [expenseClaimId])
 
   // Handle reprocess with proper callback integration
   const handleReprocessWrapper = useCallback(async () => {

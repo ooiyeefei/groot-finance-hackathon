@@ -275,7 +275,7 @@ export default function DocumentPreviewWithAnnotations({
             {/* Document Image */}
             <img
               ref={imageRef}
-              src={retryCount > 0 ? `${imageUrl}${imageUrl.includes('?') ? '&' : '?'}_r=${retryCount}` : imageUrl}
+              src={imageUrl}
               alt={fileName}
               className={`max-w-full h-auto shadow-lg transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
               loading="eager"
