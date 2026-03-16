@@ -117,7 +117,7 @@
 - [ ] T024 [P] Test idempotency: Manually trigger same notification twice via Convex dashboard → verify second attempt logs "already_sent" skip reason and does not send duplicate email
 - [ ] T025 [P] Test graceful handling of edge cases: missing buyer email (skip with "no_email"), invalid email format (skip with "invalid_format"), SES failure (log with "failed" status + error message)
 - [X] T026 Update CLAUDE.md Recent Changes section with summary: "023-einv-buyer-notifications: Buyer email notifications for e-invoice validation, cancellation, rejection. Transactional emails via SES, idempotent via audit log, business settings toggles. Extended: sales_invoices (+buyerNotificationLog[]), businesses (+einvoiceNotifyBuyerOn*). New: buyer-notification-templates.ts, notify API route, Convex actions in lhdnJobs.ts."
-- [ ] T027 Run `npm run build` to verify Next.js build passes without TypeScript errors
+- [X] T027 Run `npm run build` to verify Next.js build passes without TypeScript errors
 - [ ] T028 Run `npx convex deploy --yes` to deploy schema and functions to production
 - [ ] T029 Verify production smoke test: Login to production with real account → create test invoice (mark as "Test" in notes) → submit to LHDN production → verify buyer receives validation email
 
