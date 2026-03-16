@@ -8,6 +8,8 @@ import useFinancialAnalytics from '@/domains/analytics/hooks/use-financial-analy
 import { useActiveBusiness } from '@/contexts/business-context';
 import { ProactiveActionCenter } from './action-center';
 import { AutomationRateHero } from './automation-rate-hero';
+import { AutomationRateTrendChart } from './automation-rate-trend-chart';
+import { useMilestoneSubscription } from '../hooks/use-milestone-subscription';
 
 // Lazy load heavy components to improve initial page load
 const CurrencyBreakdown = lazy(() => import('./financial-analytics/CurrencyBreakdown'));
@@ -69,6 +71,9 @@ export default function CompleteDashboard() {
     setDisplayCurrency(newCurrency);
     // TanStack Query will auto-refetch when displayCurrency changes
   };
+
+  // Milestone subscription — triggers toast notifications when thresholds are crossed
+  useMilestoneSubscription({ businessId: businessId as any, enabled: !!businessId });
 
   const { analytics, trends, loading, error, refresh, lastUpdated } = useFinancialAnalytics({
     period: selectedPeriod,
@@ -248,6 +253,11 @@ export default function CompleteDashboard() {
       {/* AI Automation Rate Hero Metric */}
       {businessId && (
         <AutomationRateHero businessId={businessId as any} defaultPeriod="week" />
+      )}
+
+      {/* AI Automation Rate Trend Chart */}
+      {businessId && (
+        <AutomationRateTrendChart businessId={businessId as any} weeks={8} />
       )}
 
       {/* KPI Metrics - 3+2 Grid Layout */}

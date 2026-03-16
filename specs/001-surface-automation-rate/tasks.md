@@ -71,8 +71,8 @@
 
 ### React Hooks for User Story 1
 
-- [ ] T018 [P] [US1] Create `src/domains/analytics/hooks/use-automation-rate.ts` file and export `useAutomationRate` hook using Convex `useQuery`
-- [ ] T019 [P] [US1] Add `useLifetimeStats` hook to `src/domains/analytics/hooks/use-automation-rate.ts` for business settings
+- [X] T018 [P] [US1] Create `src/domains/analytics/hooks/use-automation-rate.ts` file and export `useAutomationRate` hook using Convex `useQuery`
+- [X] T019 [P] [US1] Add `useLifetimeStats` hook to `src/domains/analytics/hooks/use-automation-rate.ts` for business settings
 
 ### Hero Metric Component (Dashboard)
 

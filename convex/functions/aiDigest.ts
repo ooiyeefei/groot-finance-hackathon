@@ -48,6 +48,11 @@ interface NormalizedActivity {
   trustedAliases: number;
   totalCorrections: number;
   newCorrectionsToday: number;
+  // 001-surface-automation-rate: Milestone achievements in last 24h
+  milestoneAchievements?: Array<{
+    threshold: number;  // 90, 95, 99
+    achievedAt: number; // Unix timestamp
+  }>;
 }
 
 /**
@@ -165,6 +170,17 @@ export const gatherAIActivity = internalQuery({
       trustedAliases,
       totalCorrections,
       newCorrectionsToday,
+      // 001-surface-automation-rate: Check for milestone achievements in last 24h
+      milestoneAchievements: await (async () => {
+        const biz: any = await ctx.db.get(args.businessId as any);
+        if (!biz?.automationMilestones) return [];
+        const achievements: Array<{ threshold: number; achievedAt: number }> = [];
+        const m = biz.automationMilestones as any;
+        if (m.milestone_90 && m.milestone_90 >= since) achievements.push({ threshold: 90, achievedAt: m.milestone_90 });
+        if (m.milestone_95 && m.milestone_95 >= since) achievements.push({ threshold: 95, achievedAt: m.milestone_95 });
+        if (m.milestone_99 && m.milestone_99 >= since) achievements.push({ threshold: 99, achievedAt: m.milestone_99 });
+        return achievements;
+      })(),
     };
   },
 });
@@ -292,6 +308,14 @@ function buildDigestHTML(
         </tbody>
       </table>
     </div>
+
+    <!-- Milestone Celebrations (001-surface-automation-rate) -->
+    ${activity.milestoneAchievements && activity.milestoneAchievements.length > 0 ? activity.milestoneAchievements.map((m) => `
+    <div style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); padding: 20px 32px; text-align: center;">
+      <p style="margin: 0; color: #fff; font-size: 24px; font-weight: 700;">AI Automation Rate Hit ${m.threshold}%!</p>
+      <p style="margin: 8px 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">${m.threshold === 99 ? 'Only 1 in 100 documents needs your review!' : m.threshold === 95 ? 'Only 1 in 20 documents needs your review!' : 'Only 1 in 10 documents needs your review!'}</p>
+    </div>
+    `).join('') : ''}
 
     <!-- Learning Progress -->
     ${activity.newCorrectionsToday > 0 ? `

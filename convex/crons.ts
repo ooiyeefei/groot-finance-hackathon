@@ -382,4 +382,18 @@ crons.weekly(
 //   (internal.functions as any).aiDigest.dailyDigest
 // );
 
+/**
+ * Daily Automation Milestone Check (001-surface-automation-rate)
+ *
+ * Runs daily at 10:00 UTC (6 PM SGT) to check all businesses
+ * for milestone achievements (90%, 95%, 99%).
+ * Updates businesses.automationMilestones if threshold newly crossed.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+crons.daily(
+  "check-automation-milestones",
+  { hourUTC: 10, minuteUTC: 0 },
+  (internal.functions as any).automationRate.checkAllBusinessMilestones
+);
+
 export default crons;

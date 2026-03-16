@@ -589,4 +589,99 @@ export const getMilestones = query({
   },
 });
 
-// T059: checkMilestones (internal mutation) - will be implemented in Phase 5
+/**
+ * Check and update milestone achievements for a business
+ * Called by cron job - uses internalMutation (not exposed to client)
+ */
+export const checkMilestones = internalMutation({
+  args: checkMilestonesArgs,
+  handler: async (ctx, args) => {
+    const { businessId } = args;
+
+    // Get business record
+    const business = await ctx.db.get(businessId);
+    if (!business) return { newlyAchieved: [] };
+
+    // Get current lifetime rate
+    const data = await aggregateAutomationRateData(ctx, businessId, 0, Date.now());
+    if (data.totalDecisions < 10) return { newlyAchieved: [] };
+
+    const rate = ((data.totalDecisions - data.decisionsReviewed) / data.totalDecisions) * 100;
+
+    const milestones = business.automationMilestones || {};
+    const newlyAchieved: Array<{ threshold: number; currentRate: number; timestamp: number }> = [];
+    const now = Date.now();
+
+    // Check each threshold
+    const thresholds = [
+      { key: "milestone_90" as const, value: 90 },
+      { key: "milestone_95" as const, value: 95 },
+      { key: "milestone_99" as const, value: 99 },
+    ];
+
+    let updated = false;
+    const updatedMilestones = { ...milestones };
+
+    for (const { key, value } of thresholds) {
+      if (rate >= value && !milestones[key]) {
+        updatedMilestones[key] = now;
+        newlyAchieved.push({ threshold: value, currentRate: rate, timestamp: now });
+        updated = true;
+      }
+    }
+
+    // Persist if any new milestones
+    if (updated) {
+      await ctx.db.patch(businessId, {
+        automationMilestones: updatedMilestones,
+      });
+    }
+
+    return { newlyAchieved };
+  },
+});
+
+/**
+ * Check milestones for ALL businesses (called by cron)
+ */
+export const checkAllBusinessMilestones = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    // Get all businesses
+    const businesses = await ctx.db.query("businesses").collect();
+
+    for (const business of businesses) {
+      try {
+        // Inline check (avoid internal function calls in Convex)
+        const data = await aggregateAutomationRateData(ctx, business._id, 0, Date.now());
+        if (data.totalDecisions < 10) continue;
+
+        const rate = ((data.totalDecisions - data.decisionsReviewed) / data.totalDecisions) * 100;
+        const milestones = business.automationMilestones || {};
+        const now = Date.now();
+        let updated = false;
+        const updatedMilestones = { ...milestones };
+
+        for (const { key, value } of [
+          { key: "milestone_90" as const, value: 90 },
+          { key: "milestone_95" as const, value: 95 },
+          { key: "milestone_99" as const, value: 99 },
+        ]) {
+          if (rate >= value && !milestones[key]) {
+            updatedMilestones[key] = now;
+            updated = true;
+          }
+        }
+
+        if (updated) {
+          await ctx.db.patch(business._id, {
+            automationMilestones: updatedMilestones,
+          });
+        }
+      } catch {
+        // Skip businesses that fail — don't block others
+        continue;
+      }
+    }
+  },
+});
