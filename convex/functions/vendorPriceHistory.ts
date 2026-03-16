@@ -712,3 +712,448 @@ export const getPriceObservationsBySource = internalQuery({
       .collect();
   },
 });
+
+// ============================================
+// SMART VENDOR INTELLIGENCE (#320)
+// ============================================
+
+/**
+ * T009: Create price history record from invoice line item.
+ * Called when AP invoice is processed — extracts line items and stores price history.
+ * Generates itemIdentifier from item code (primary) or description hash (fallback).
+ */
+export const createFromInvoiceLineItem = internalMutation({
+  args: {
+    businessId: v.id("businesses"),
+    vendorId: v.id("vendors"),
+    invoiceId: v.id("invoices"),
+    itemCode: v.optional(v.string()),
+    itemDescription: v.string(),
+    unitPrice: v.number(),
+    quantity: v.number(),
+    currency: v.string(),
+    invoiceDate: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Validation
+    if (args.unitPrice <= 0) {
+      throw new Error("Unit price must be positive");
+    }
+    if (args.quantity <= 0) {
+      throw new Error("Quantity must be positive");
+    }
+
+    // Generate item identifier: item code first, fallback to description hash
+    const itemCode = args.itemCode?.trim().toUpperCase();
+    const matchedFromItemCode = !!(itemCode && itemCode.length > 0);
+    const itemIdentifier = matchedFromItemCode
+      ? itemCode!
+      : args.itemDescription
+          .toLowerCase()
+          .trim()
+          .replace(/\s+/g, " ")
+          .replace(/[^a-z0-9\s-]/g, "")
+          .substring(0, 100);
+
+    // Check for existing records with same itemIdentifier for this vendor
+    const existingRecords = await ctx.db
+      .query("vendor_price_history")
+      .withIndex("by_business_itemId_archived", (q) =>
+        q
+          .eq("businessId", args.businessId)
+          .eq("itemIdentifier", itemIdentifier)
+          .eq("archivedFlag", false)
+      )
+      .collect();
+
+    // Filter to same vendor
+    const vendorRecords = existingRecords.filter(
+      (r) => r.vendorId === args.vendorId
+    );
+
+    // If no item code and we have no match, check fuzzy matching via description
+    let matchConfidenceScore: number | undefined;
+    let userConfirmedFlag = false;
+
+    if (!matchedFromItemCode && vendorRecords.length === 0) {
+      // Try fuzzy match against existing items for this vendor
+      const vendorItems = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_vendorId", (q) => q.eq("vendorId", args.vendorId))
+        .collect();
+
+      // Simple fuzzy match: normalized description similarity
+      const normalizedNew = args.itemDescription.toLowerCase().trim();
+      const uniqueDescriptions = [
+        ...new Set(vendorItems.map((i) => i.itemDescription)),
+      ];
+
+      let bestMatch: { description: string; score: number } | null = null;
+
+      for (const desc of uniqueDescriptions) {
+        const normalizedExisting = desc.toLowerCase().trim();
+        // Calculate similarity (Jaccard index on word tokens)
+        const wordsA = new Set(normalizedNew.split(/\s+/));
+        const wordsB = new Set(normalizedExisting.split(/\s+/));
+        const intersection = new Set(
+          [...wordsA].filter((w) => wordsB.has(w))
+        );
+        const union = new Set([...wordsA, ...wordsB]);
+        const score =
+          union.size > 0
+            ? Math.round((intersection.size / union.size) * 100)
+            : 0;
+
+        if (!bestMatch || score > bestMatch.score) {
+          bestMatch = { description: desc, score };
+        }
+      }
+
+      if (bestMatch && bestMatch.score >= 80) {
+        // Auto-link: confidence >= 80%
+        matchConfidenceScore = bestMatch.score;
+        userConfirmedFlag = false; // Auto-linked, no user confirmation needed
+      } else if (bestMatch && bestMatch.score >= 40) {
+        // Flag for user confirmation: confidence 40-79%
+        matchConfidenceScore = bestMatch.score;
+        userConfirmedFlag = false; // Needs user confirmation
+      }
+      // Below 40% — treat as new item, no match attempt
+    }
+
+    const now = Date.now();
+
+    // Insert price history record
+    const priceHistoryId = await ctx.db.insert("vendor_price_history", {
+      businessId: args.businessId,
+      vendorId: args.vendorId,
+      invoiceId: args.invoiceId,
+      itemIdentifier,
+      itemCode: args.itemCode,
+      itemDescription: args.itemDescription,
+      unitPrice: args.unitPrice,
+      quantity: args.quantity,
+      currency: args.currency,
+      invoiceDate: args.invoiceDate,
+      observationTimestamp: now,
+      matchConfidenceScore,
+      userConfirmedFlag,
+      matchedFromItemCode,
+      archivedFlag: false,
+      // Legacy fields for backward compat
+      sourceType: "invoice" as const,
+      sourceId: args.invoiceId as unknown as string,
+      observedAt: args.invoiceDate,
+      isConfirmed: false,
+      normalizedDescription: args.itemDescription.toLowerCase().trim(),
+    });
+
+    return {
+      priceHistoryId,
+      itemIdentifier,
+      matchedFromItemCode,
+      matchConfidenceScore,
+      needsUserConfirmation:
+        matchConfidenceScore !== undefined &&
+        matchConfidenceScore < 80 &&
+        matchConfidenceScore >= 40,
+      isNewItem: vendorRecords.length === 0 && !matchConfidenceScore,
+      previousRecordCount: vendorRecords.length,
+    };
+  },
+});
+
+/**
+ * T010: List price history with filters and pagination.
+ * Supports filtering by businessId, vendorId, itemIdentifier, archivedFlag.
+ */
+export const listPriceHistory = query({
+  args: {
+    businessId: v.id("businesses"),
+    vendorId: v.optional(v.id("vendors")),
+    itemIdentifier: v.optional(v.string()),
+    includeArchived: v.optional(v.boolean()),
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { items: [], nextCursor: null };
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) return { items: [], nextCursor: null };
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      return { items: [], nextCursor: null };
+    }
+
+    const includeArchived = args.includeArchived ?? false;
+    const limit = args.limit ?? 50;
+    const cursor = args.cursor ?? 0;
+
+    let records;
+
+    if (args.vendorId && !includeArchived) {
+      // Filter by vendor + non-archived
+      records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_business_vendor_archived", (q) =>
+          q
+            .eq("businessId", args.businessId)
+            .eq("vendorId", args.vendorId!)
+            .eq("archivedFlag", false)
+        )
+        .collect();
+    } else if (args.vendorId) {
+      // Filter by vendor, include archived
+      records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_business_vendor_archived", (q) =>
+          q
+            .eq("businessId", args.businessId)
+            .eq("vendorId", args.vendorId!)
+        )
+        .collect();
+    } else if (args.itemIdentifier && !includeArchived) {
+      // Filter by item identifier + non-archived
+      records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_business_itemId_archived", (q) =>
+          q
+            .eq("businessId", args.businessId)
+            .eq("itemIdentifier", args.itemIdentifier!)
+            .eq("archivedFlag", false)
+        )
+        .collect();
+    } else if (args.itemIdentifier) {
+      // Filter by item identifier, include archived
+      records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_business_itemId_archived", (q) =>
+          q
+            .eq("businessId", args.businessId)
+            .eq("itemIdentifier", args.itemIdentifier!)
+        )
+        .collect();
+    } else {
+      // All records for business
+      records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_businessId", (q) =>
+          q.eq("businessId", args.businessId)
+        )
+        .collect();
+
+      if (!includeArchived) {
+        records = records.filter((r) => !r.archivedFlag);
+      }
+    }
+
+    // Sort by invoiceDate descending (newest first)
+    records.sort((a, b) => {
+      const dateA = a.invoiceDate ?? a.observedAt;
+      const dateB = b.invoiceDate ?? b.observedAt;
+      return dateB.localeCompare(dateA);
+    });
+
+    // Enrich with vendor names
+    const vendorIds = [...new Set(records.map((r) => r.vendorId))];
+    const vendors = await Promise.all(vendorIds.map((id) => ctx.db.get(id)));
+    const vendorMap = new Map(
+      vendors.filter(Boolean).map((v) => [v!._id, v!])
+    );
+
+    const paginated = records.slice(cursor, cursor + limit);
+
+    return {
+      items: paginated.map((r) => ({
+        ...r,
+        vendor: {
+          name: vendorMap.get(r.vendorId)?.name ?? "Unknown Vendor",
+          category: (vendorMap.get(r.vendorId) as Record<string, unknown>)
+            ?.category as string | undefined,
+        },
+      })),
+      nextCursor:
+        cursor + limit < records.length ? cursor + limit : null,
+    };
+  },
+});
+
+/**
+ * T011: Get single item-vendor price timeline sorted by invoiceDate.
+ * Returns all price observations for a specific item from a specific vendor.
+ */
+export const getItemVendorTimeline = query({
+  args: {
+    businessId: v.id("businesses"),
+    vendorId: v.id("vendors"),
+    itemIdentifier: v.string(),
+    includeArchived: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) return [];
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") return [];
+
+    const includeArchived = args.includeArchived ?? false;
+
+    // Query by item identifier with archived filter
+    let records;
+    if (!includeArchived) {
+      records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_business_itemId_archived", (q) =>
+          q
+            .eq("businessId", args.businessId)
+            .eq("itemIdentifier", args.itemIdentifier)
+            .eq("archivedFlag", false)
+        )
+        .collect();
+    } else {
+      records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_business_itemId_archived", (q) =>
+          q
+            .eq("businessId", args.businessId)
+            .eq("itemIdentifier", args.itemIdentifier)
+        )
+        .collect();
+    }
+
+    // Filter to specific vendor
+    records = records.filter((r) => r.vendorId === args.vendorId);
+
+    // Sort by invoiceDate ascending (chronological for charts)
+    records.sort((a, b) => {
+      const dateA = a.invoiceDate ?? a.observedAt;
+      const dateB = b.invoiceDate ?? b.observedAt;
+      return dateA.localeCompare(dateB);
+    });
+
+    return records;
+  },
+});
+
+/**
+ * T014: Confirm or reject a fuzzy-matched price history record.
+ * User confirms <80% confidence matches to link to existing item history,
+ * or rejects to treat as a new distinct item.
+ */
+export const confirmFuzzyMatch = internalMutation({
+  args: {
+    priceHistoryId: v.id("vendor_price_history"),
+    confirmed: v.boolean(),
+    confirmedItemIdentifier: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const record = await ctx.db.get(args.priceHistoryId);
+    if (!record) {
+      throw new Error("Price history record not found");
+    }
+
+    if (args.confirmed && args.confirmedItemIdentifier) {
+      // User confirmed: link to existing item identifier
+      await ctx.db.patch(args.priceHistoryId, {
+        itemIdentifier: args.confirmedItemIdentifier,
+        userConfirmedFlag: true,
+        matchConfidenceScore: 100, // User-confirmed = 100% confidence
+      });
+    } else {
+      // User rejected: keep separate, mark as confirmed (new item)
+      await ctx.db.patch(args.priceHistoryId, {
+        userConfirmedFlag: true,
+        matchConfidenceScore: 0, // Explicitly rejected
+      });
+    }
+
+    return { success: true };
+  },
+});
+
+/**
+ * T036: Get price trend data for charts (Recharts format).
+ * Returns PriceTrendDataPoint[] for a specific item-vendor pair.
+ */
+export const getPriceTrendData = query({
+  args: {
+    businessId: v.id("businesses"),
+    vendorId: v.id("vendors"),
+    itemIdentifier: v.string(),
+    includeArchived: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) return [];
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") return [];
+
+    const includeArchived = args.includeArchived ?? false;
+
+    let records;
+    if (!includeArchived) {
+      records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_business_itemId_archived", (q) =>
+          q
+            .eq("businessId", args.businessId)
+            .eq("itemIdentifier", args.itemIdentifier)
+            .eq("archivedFlag", false)
+        )
+        .collect();
+    } else {
+      records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_business_itemId_archived", (q) =>
+          q
+            .eq("businessId", args.businessId)
+            .eq("itemIdentifier", args.itemIdentifier)
+        )
+        .collect();
+    }
+
+    records = records.filter((r) => r.vendorId === args.vendorId);
+
+    // Sort chronologically
+    records.sort((a, b) => {
+      const dateA = a.invoiceDate ?? a.observedAt;
+      const dateB = b.invoiceDate ?? b.observedAt;
+      return dateA.localeCompare(dateB);
+    });
+
+    return records.map((r) => ({
+      date: r.invoiceDate ?? r.observedAt,
+      unitPrice: r.unitPrice,
+      currency: r.currency,
+      invoiceId: r.invoiceId,
+    }));
+  },
+});

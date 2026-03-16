@@ -1048,10 +1048,12 @@ export default defineSchema({
     // Relationships
     businessId: v.id("businesses"),
     vendorId: v.id("vendors"),
+    invoiceId: v.optional(v.id("invoices")),  // #320: For invoice-sourced records only
 
     // Item Identification
     itemDescription: v.string(),
     itemCode: v.optional(v.string()),
+    itemIdentifier: v.optional(v.string()),  // #320: Unique ID within vendor (item code OR description hash)
 
     // Price Data
     unitPrice: v.number(),
@@ -1068,20 +1070,39 @@ export default defineSchema({
     sourceType: v.union(v.literal("invoice"), v.literal("expense_claim")),
     sourceId: v.string(),              // ID of the source document (invoice or expense_claim)
     observedAt: v.string(),            // Date from the document (ISO date string)
+    invoiceDate: v.optional(v.string()),  // #320: Same as observedAt, for clarity in queries
+
+    // Fuzzy Matching & Confirmation (#320)
+    matchConfidenceScore: v.optional(v.number()),  // 0-100, for fuzzy-matched items
+    userConfirmedFlag: v.optional(v.boolean()),     // True if user confirmed fuzzy match
+    matchedFromItemCode: v.optional(v.boolean()),   // True if matched via item code (primary key)
 
     // Confirmation Status
     isConfirmed: v.boolean(),          // true if linked to an accounting entry
-    accountingEntryId: v.optional(v.string()),  // Stores journalEntryId (legacy field name)  // Stores journalEntryId (legacy field name, kept for data compat)
+    accountingEntryId: v.optional(v.string()),  // Stores journalEntryId (legacy field name, kept for data compat)
+
+    // Archival (2-year retention #320)
+    archivedFlag: v.optional(v.boolean()),          // True if >2 years old
+    archivedTimestamp: v.optional(v.number()),      // When archived
+
+    // Cross-vendor grouping (#320)
+    itemGroupId: v.optional(v.id("cross_vendor_item_groups")),  // Link to cross-vendor group
 
     // Timestamps
     updatedAt: v.optional(v.number()),
+    observationTimestamp: v.optional(v.number()),  // #320: When record was created (ms since epoch)
   })
     .index("by_vendorId", ["vendorId"])
     .index("by_businessId_item", ["businessId", "itemDescription"])
     .index("by_vendor_item", ["vendorId", "itemDescription"])
     .index("by_source", ["sourceType", "sourceId"])
     .index("by_businessId", ["businessId"])
-    .index("by_vendor_normalized", ["vendorId", "normalizedDescription"]),
+    .index("by_vendor_normalized", ["vendorId", "normalizedDescription"])
+    // NEW indexes for #320 Smart Vendor Intelligence
+    .index("by_business_vendor_archived", ["businessId", "vendorId", "archivedFlag", "invoiceDate"])
+    .index("by_business_itemId_archived", ["businessId", "itemIdentifier", "archivedFlag", "invoiceDate"])
+    .index("by_item_group", ["itemGroupId"])
+    .index("by_invoice", ["invoiceId"]),
 
   stripe_events: defineTable({
     // Identity
@@ -3010,5 +3031,105 @@ export default defineSchema({
     deletedAt: v.optional(v.number()),
   })
     .index("by_businessId", ["businessId"]),
+
+  // ============================================
+  // SMART VENDOR INTELLIGENCE (#320)
+  // ============================================
+
+  vendor_price_anomalies: defineTable({
+    businessId: v.id("businesses"),
+    vendorId: v.id("vendors"),
+    itemIdentifier: v.optional(v.string()),
+    alertType: v.union(
+      v.literal("per-invoice"),
+      v.literal("trailing-average"),
+      v.literal("new-item"),
+      v.literal("frequency-change")
+    ),
+    oldValue: v.number(),
+    newValue: v.number(),
+    percentageChange: v.number(),
+    severityLevel: v.union(v.literal("standard"), v.literal("high-impact")),
+    potentialIndicators: v.optional(v.array(v.union(
+      v.literal("cash-flow-issues"),
+      v.literal("billing-errors"),
+      v.literal("contract-violations")
+    ))),
+    status: v.union(v.literal("active"), v.literal("dismissed")),
+    createdTimestamp: v.number(),
+    dismissedTimestamp: v.optional(v.number()),
+    userFeedback: v.optional(v.string()),
+    priceHistoryId: v.optional(v.id("vendor_price_history")),
+    invoiceId: v.optional(v.id("invoices")),
+  })
+    .index("by_business_vendor_status", ["businessId", "vendorId", "status", "createdTimestamp"])
+    .index("by_business_severity", ["businessId", "severityLevel", "status", "createdTimestamp"])
+    .index("by_created_date", ["businessId", "createdTimestamp"]),
+
+  vendor_scorecards: defineTable({
+    businessId: v.id("businesses"),
+    vendorId: v.id("vendors"),
+    totalSpendYTD: v.number(),
+    invoiceVolume: v.number(),
+    averagePaymentCycle: v.number(),
+    priceStabilityScore: v.number(),
+    aiExtractionAccuracy: v.number(),
+    anomalyFlagsCount: v.number(),
+    lastUpdatedTimestamp: v.number(),
+    fiscalYearStart: v.string(),
+  })
+    .index("by_business_vendor", ["businessId", "vendorId"])
+    .index("by_business_last_updated", ["businessId", "lastUpdatedTimestamp"]),
+
+  vendor_risk_profiles: defineTable({
+    businessId: v.id("businesses"),
+    vendorId: v.id("vendors"),
+    paymentRiskScore: v.number(),
+    concentrationRiskScore: v.number(),
+    complianceRiskScore: v.number(),
+    priceRiskScore: v.number(),
+    riskLevel: v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
+    lastCalculatedTimestamp: v.number(),
+  })
+    .index("by_business_vendor", ["businessId", "vendorId"])
+    .index("by_business_risk_level", ["businessId", "riskLevel", "lastCalculatedTimestamp"]),
+
+  cross_vendor_item_groups: defineTable({
+    businessId: v.id("businesses"),
+    groupId: v.id("cross_vendor_item_groups"),
+    groupName: v.string(),
+    itemReferences: v.array(v.object({
+      vendorId: v.id("vendors"),
+      itemIdentifier: v.string(),
+    })),
+    matchSource: v.union(
+      v.literal("ai-suggested"),
+      v.literal("user-confirmed"),
+      v.literal("user-created")
+    ),
+    createdTimestamp: v.number(),
+    lastUpdatedTimestamp: v.number(),
+  })
+    .index("by_business", ["businessId", "createdTimestamp"])
+    .index("by_match_source", ["businessId", "matchSource"]),
+
+  vendor_recommended_actions: defineTable({
+    businessId: v.id("businesses"),
+    vendorId: v.id("vendors"),
+    anomalyAlertId: v.id("vendor_price_anomalies"),
+    actionType: v.union(
+      v.literal("request-quotes"),
+      v.literal("negotiate"),
+      v.literal("review-contract")
+    ),
+    actionDescription: v.string(),
+    priorityLevel: v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
+    status: v.union(v.literal("pending"), v.literal("completed"), v.literal("dismissed")),
+    createdTimestamp: v.number(),
+    completedTimestamp: v.optional(v.number()),
+    dismissedTimestamp: v.optional(v.number()),
+  })
+    .index("by_business_vendor_status", ["businessId", "vendorId", "status", "createdTimestamp"])
+    .index("by_anomaly_alert", ["anomalyAlertId"]),
 
 });

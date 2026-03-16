@@ -18,6 +18,7 @@ import {
   FileCheck,
   CalendarDays,
   FileSpreadsheet,
+  ShieldAlert,
 } from 'lucide-react'
 
 export interface NavItem {
@@ -56,6 +57,7 @@ export function getNavigationGroups(userRole: UserRole): NavGroup[] {
           { icon: Home, label: 'dashboard', path: '/' },
           { icon: FileText, label: 'invoices', path: '/invoices' },
           { icon: CreditCard, label: 'transactions', path: '/accounting' },
+          { icon: ShieldAlert, label: 'vendorIntelligence', path: '/vendor-intelligence/alerts' },
         ]
       : [],
   }
