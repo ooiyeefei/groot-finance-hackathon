@@ -1,9 +1,13 @@
 /**
  * React hooks for automation rate data
  * Feature: 001-surface-automation-rate
+ *
+ * Uses useAction (not useQuery) to avoid reactive re-runs.
+ * See CLAUDE.md "Convex Bandwidth & Query Budget" for rationale.
  */
 
-import { useQuery } from "convex/react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useAction, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 
@@ -14,17 +18,16 @@ import type { Id } from "@/convex/_generated/dataModel";
 export interface UseAutomationRateOptions {
   businessId: Id<"businesses">;
   period: "today" | "week" | "month" | "custom";
-  startDate?: string;  // ISO date (required if period="custom")
-  endDate?: string;    // ISO date (required if period="custom")
+  startDate?: string;
+  endDate?: string;
 }
 
 export interface UseAutomationRateResult {
-  // Data
-  rate: number | undefined;              // Automation rate percentage
-  totalDecisions: number | undefined;    // Total AI decisions
-  decisionsReviewed: number | undefined; // Reviewed decisions
-  message: string | undefined;           // "No AI activity" or "Collecting data..."
-  hasMinimumData: boolean | undefined;   // >= 10 decisions
+  rate: number | undefined;
+  totalDecisions: number | undefined;
+  decisionsReviewed: number | undefined;
+  message: string | undefined;
+  hasMinimumData: boolean | undefined;
   sources:
     | {
         arRecon: { total: number; reviewed: number };
@@ -33,28 +36,37 @@ export interface UseAutomationRateResult {
         expenseOCR: { total: number; reviewed: number };
       }
     | undefined;
-
-  // Query state
   isLoading: boolean;
+  refresh: () => void;
 }
 
-/**
- * Fetch current automation rate for a business
- */
 export function useAutomationRate(
   options: UseAutomationRateOptions
 ): UseAutomationRateResult {
   const { businessId, period, startDate, endDate } = options;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [data, setData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const fetchAction = useAction(api.functions.automationRate.getAutomationRate);
+  const isMounted = useRef(true);
 
-  const data = useQuery(
-    api.functions.automationRate.getAutomationRate,
-    {
-      businessId,
-      period,
-      startDate,
-      endDate,
+  const fetchData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const result = await fetchAction({ businessId, period, startDate, endDate });
+      if (isMounted.current) setData(result);
+    } catch (error) {
+      console.error("Failed to fetch automation rate:", error);
+    } finally {
+      if (isMounted.current) setIsLoading(false);
     }
-  );
+  }, [fetchAction, businessId, period, startDate, endDate]);
+
+  useEffect(() => {
+    isMounted.current = true;
+    fetchData();
+    return () => { isMounted.current = false; };
+  }, [fetchData]);
 
   return {
     rate: data?.rate,
@@ -63,7 +75,8 @@ export function useAutomationRate(
     message: data?.message,
     hasMinimumData: data?.hasMinimumData,
     sources: data?.sources,
-    isLoading: data === undefined,
+    isLoading,
+    refresh: fetchData,
   };
 }
 
@@ -73,11 +86,10 @@ export function useAutomationRate(
 
 export interface UseAutomationRateTrendOptions {
   businessId: Id<"businesses">;
-  weeks?: number;           // Number of weeks (default: 8, max: 52)
+  weeks?: number;
 }
 
 export interface UseAutomationRateTrendResult {
-  // Data
   trendData:
     | Array<{
         weekStart: string;
@@ -95,27 +107,42 @@ export interface UseAutomationRateTrendResult {
         }>;
       }>
     | undefined;
-
-  // Query state
   isLoading: boolean;
+  refresh: () => void;
 }
 
-/**
- * Fetch weekly automation rate trend data
- */
 export function useAutomationRateTrend(
   options: UseAutomationRateTrendOptions
 ): UseAutomationRateTrendResult {
   const { businessId, weeks = 8 } = options;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [data, setData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const fetchAction = useAction(api.functions.automationRate.getAutomationRateTrend);
+  const isMounted = useRef(true);
 
-  const data = useQuery(api.functions.automationRate.getAutomationRateTrend, {
-    businessId,
-    weeks,
-  });
+  const fetchData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const result = await fetchAction({ businessId, weeks });
+      if (isMounted.current) setData(result);
+    } catch (error) {
+      console.error("Failed to fetch automation rate trend:", error);
+    } finally {
+      if (isMounted.current) setIsLoading(false);
+    }
+  }, [fetchAction, businessId, weeks]);
+
+  useEffect(() => {
+    isMounted.current = true;
+    fetchData();
+    return () => { isMounted.current = false; };
+  }, [fetchData]);
 
   return {
     trendData: data,
-    isLoading: data === undefined,
+    isLoading,
+    refresh: fetchData,
   };
 }
 
@@ -128,7 +155,6 @@ export interface UseLifetimeStatsOptions {
 }
 
 export interface UseLifetimeStatsResult {
-  // Data
   rate: number | undefined;
   totalDecisions: number | undefined;
   decisionsReviewed: number | undefined;
@@ -148,22 +174,37 @@ export interface UseLifetimeStatsResult {
         formatted: string;
       }
     | undefined;
-
-  // Query state
   isLoading: boolean;
+  refresh: () => void;
 }
 
-/**
- * Fetch lifetime automation statistics
- */
 export function useLifetimeStats(
   options: UseLifetimeStatsOptions
 ): UseLifetimeStatsResult {
   const { businessId } = options;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [data, setData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const fetchAction = useAction(api.functions.automationRate.getLifetimeStats);
+  const isMounted = useRef(true);
 
-  const data = useQuery(api.functions.automationRate.getLifetimeStats, {
-    businessId,
-  });
+  const fetchData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const result = await fetchAction({ businessId });
+      if (isMounted.current) setData(result);
+    } catch (error) {
+      console.error("Failed to fetch lifetime stats:", error);
+    } finally {
+      if (isMounted.current) setIsLoading(false);
+    }
+  }, [fetchAction, businessId]);
+
+  useEffect(() => {
+    isMounted.current = true;
+    fetchData();
+    return () => { isMounted.current = false; };
+  }, [fetchData]);
 
   return {
     rate: data?.rate,
@@ -173,12 +214,13 @@ export function useLifetimeStats(
     lastDecisionDate: data?.lastDecisionDate,
     sources: data?.sources,
     timesSaved: data?.timesSaved,
-    isLoading: data === undefined,
+    isLoading,
+    refresh: fetchData,
   };
 }
 
 // ============================================
-// HOOK: useMilestones
+// HOOK: useMilestones (kept as reactive query — single doc lookup)
 // ============================================
 
 export interface UseMilestonesOptions {
@@ -186,7 +228,6 @@ export interface UseMilestonesOptions {
 }
 
 export interface UseMilestonesResult {
-  // Data
   milestones:
     | {
         milestone_90: number | undefined;
@@ -194,13 +235,11 @@ export interface UseMilestonesResult {
         milestone_99: number | undefined;
       }
     | undefined;
-
-  // Query state
   isLoading: boolean;
 }
 
 /**
- * Fetch milestone achievement status
+ * Milestone status — uses reactive query (OK: single document lookup)
  */
 export function useMilestones(
   options: UseMilestonesOptions

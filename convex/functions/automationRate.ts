@@ -10,7 +10,8 @@
  */
 
 import { v } from "convex/values";
-import { query, internalMutation } from "../_generated/server";
+import { query, action, internalMutation } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { Id } from "../_generated/dataModel";
 
 // ============================================
@@ -153,7 +154,7 @@ function generateWeekRanges(weeks: number): Array<{
  * Aggregate automation rate data from all 4 AI sources
  * Returns total decisions and decisions reviewed (corrections)
  */
-async function aggregateAutomationRateData(
+export async function aggregateAutomationRateData(
   ctx: any,
   businessId: Id<"businesses">,
   startTime: number,
@@ -361,207 +362,64 @@ async function aggregateExpenseOCRData(
 // QUERIES
 // ============================================
 
+// ============================================
+// PUBLIC ACTIONS (non-reactive — called once on mount)
+// Internal queries live in automationRateInternal.ts to avoid circular refs.
+// ============================================
+
 /**
- * Get current automation rate for a business within a date range
- * Used by: Hero metric, Action Center summary, Settings stats
+ * Get current automation rate — public action (NOT reactive query).
  */
-export const getAutomationRate = query({
+export const getAutomationRate = action({
   args: getPeriodDateRangeArgs,
-  handler: async (ctx, args) => {
-    const { businessId, period, startDate, endDate } = args;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  handler: async (ctx, args): Promise<any> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
 
-    // Calculate date range
-    const range = calculatePeriodDateRange(period, startDate, endDate);
-
-    // Aggregate data from all 4 sources
-    const data = await aggregateAutomationRateData(
-      ctx,
-      businessId,
-      range.start,
-      range.end
-    );
-
-    // Calculate rate
-    const rate = data.totalDecisions === 0
-      ? 0
-      : ((data.totalDecisions - data.decisionsReviewed) / data.totalDecisions) * 100;
-
-    // Check minimum data threshold
-    const hasMinimumData = data.totalDecisions >= 10;
-
-    // Generate message if needed
-    let message: string | undefined;
-    if (data.totalDecisions === 0) {
-      message = "No AI activity in this period";
-    } else if (!hasMinimumData) {
-      message = "Collecting data... (need 10+ decisions for reliable rate)";
-    }
-
-    return {
-      rate,
-      totalDecisions: data.totalDecisions,
-      decisionsReviewed: data.decisionsReviewed,
-      period: {
-        start: new Date(range.start).toISOString().split("T")[0],
-        end: new Date(range.end).toISOString().split("T")[0],
-        label: range.label,
-      },
-      hasMinimumData,
-      message,
-      sources: data.sources,
-      timestamp: Date.now(),
-    };
+    const range = calculatePeriodDateRange(args.period, args.startDate, args.endDate);
+    return ctx.runQuery((internal.functions as any).automationRateInternal._computeAutomationRate, {
+      businessId: args.businessId as string,
+      periodStart: range.start,
+      periodEnd: range.end,
+      periodLabel: range.label,
+    });
   },
 });
 
 /**
- * Get weekly automation rate trend data for chart visualization
- * Used by: Trend chart component
+ * Get weekly trend data — public action (NOT reactive query).
  */
-export const getAutomationRateTrend = query({
+export const getAutomationRateTrend = action({
   args: getAutomationRateTrendArgs,
-  handler: async (ctx, args) => {
-    const { businessId, weeks = 8 } = args;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  handler: async (ctx, args): Promise<any> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
 
-    // Validate weeks parameter
-    if (weeks < 1 || weeks > 52) {
-      throw new Error("weeks must be between 1 and 52");
-    }
-
-    // Generate week ranges
+    const weeks = Math.min(Math.max(args.weeks ?? 8, 1), 52);
     const weekRanges = generateWeekRanges(weeks);
 
-    // Query DSPy optimization events for annotations (global, not per-business)
-    const optimizationEvents = await ctx.db
-      .query("dspy_model_versions")
-      .filter((q: any) => q.eq(q.field("status"), "active"))
-      .collect();
-
-    // Build trend data for each week
-    const trendData = await Promise.all(
-      weekRanges.map(async (weekRange) => {
-        // Aggregate data for this week
-        const data = await aggregateAutomationRateData(
-          ctx,
-          businessId,
-          weekRange.weekStart,
-          weekRange.weekEnd
-        );
-
-        // Calculate rate
-        const rate = data.totalDecisions === 0
-          ? null
-          : ((data.totalDecisions - data.decisionsReviewed) / data.totalDecisions) * 100;
-
-        // Find optimization events in this week
-        const eventsInWeek = optimizationEvents.filter((event) => {
-          const trainedAt = event.trainedAt || 0;
-          return trainedAt >= weekRange.weekStart && trainedAt <= weekRange.weekEnd;
-        });
-
-        return {
-          weekStart: new Date(weekRange.weekStart).toISOString().split("T")[0],
-          weekEnd: new Date(weekRange.weekEnd).toISOString().split("T")[0],
-          week: weekRange.label,
-          rate,
-          totalDecisions: data.totalDecisions,
-          decisionsReviewed: data.decisionsReviewed,
-          hasMinimumData: data.totalDecisions >= 10,
-          optimizationEvents: eventsInWeek.map((event) => ({
-            date: event.trainedAt || 0,
-            label: "Model optimized",
-            modelType: event.domain || "unknown",
-            optimizerType: event.optimizerType || "unknown",
-          })),
-        };
-      })
-    );
-
-    return trendData;
+    return ctx.runQuery((internal.functions as any).automationRateInternal._computeTrendData, {
+      businessId: args.businessId as string,
+      weekRangesJson: JSON.stringify(weekRanges),
+    });
   },
 });
 
 /**
- * Get cumulative lifetime automation statistics since business created
- * Used by: Business settings AI section
+ * Get lifetime stats — public action (NOT reactive query).
  */
-export const getLifetimeStats = query({
+export const getLifetimeStats = action({
   args: getLifetimeStatsArgs,
-  handler: async (ctx, args) => {
-    const { businessId } = args;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  handler: async (ctx, args): Promise<any> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
 
-    // Get business creation date
-    const business = await ctx.db.get(businessId);
-    if (!business) {
-      throw new Error("Business not found");
-    }
-
-    // Aggregate all-time data (from epoch to now)
-    const data = await aggregateAutomationRateData(
-      ctx,
-      businessId,
-      0, // Start from epoch
-      Date.now()
-    );
-
-    // Calculate lifetime rate
-    const rate = data.totalDecisions === 0
-      ? 0
-      : ((data.totalDecisions - data.decisionsReviewed) / data.totalDecisions) * 100;
-
-    // Find first and last decision dates
-    const [firstAROrder, firstBankTxn, firstExpense] = await Promise.all([
-      ctx.db
-        .query("sales_orders")
-        .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
-        .filter((q: any) => q.neq(q.field("aiMatchStatus"), undefined))
-        .order("asc")
-        .first(),
-      ctx.db
-        .query("bank_transactions")
-        .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
-        .filter((q: any) => q.neq(q.field("classificationTier"), undefined))
-        .order("asc")
-        .first(),
-      ctx.db
-        .query("expense_claims")
-        .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
-        .filter((q: any) => q.neq(q.field("confidenceScore"), undefined))
-        .order("asc")
-        .first(),
-    ]);
-
-    const firstDecisionTimes = [
-      firstAROrder?.createdAt,
-      firstBankTxn?._creationTime,
-      firstExpense?._creationTime,
-    ].filter((t) => t !== undefined) as number[];
-
-    const firstDecisionDate = firstDecisionTimes.length > 0
-      ? new Date(Math.min(...firstDecisionTimes)).toISOString().split("T")[0]
-      : null;
-
-    const lastDecisionDate = data.totalDecisions > 0
-      ? new Date().toISOString().split("T")[0]
-      : null;
-
-    // Calculate time saved estimate (assume 2 minutes per reviewed decision)
-    const totalSeconds = data.decisionsReviewed * 120; // 2 minutes = 120 seconds
-    const hours = Math.floor(totalSeconds / 3600);
-    const formatted = hours === 0 ? "< 1 hour" : `${hours} hour${hours > 1 ? "s" : ""}`;
-
-    return {
-      rate,
-      totalDecisions: data.totalDecisions,
-      decisionsReviewed: data.decisionsReviewed,
-      firstDecisionDate,
-      lastDecisionDate,
-      sources: data.sources,
-      timesSaved: {
-        totalSeconds,
-        formatted,
-      },
-    };
+    return ctx.runQuery((internal.functions as any).automationRateInternal._computeLifetimeStats, {
+      businessId: args.businessId as string,
+    });
   },
 });
 
