@@ -1044,37 +1044,89 @@ export default function BusinessProfileSettings({ section }: BusinessProfileSett
                     )}
                   </div>
 
+                  {/* LHDN API Credentials Setup Guide */}
+                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 space-y-3">
+                    <div className="flex items-start gap-2">
+                      <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                          Connect to LHDN MyInvois Portal
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Required to automatically receive e-invoices from suppliers and reject incorrect invoices within 72 hours.
+                        </p>
+                      </div>
+                    </div>
+
+                    <details className="group">
+                      <summary className="cursor-pointer text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center gap-1.5">
+                        <ChevronRight className="w-3.5 h-3.5 transition-transform group-open:rotate-90" />
+                        How to get your Client ID and Secret
+                      </summary>
+                      <div className="mt-3 pl-5 space-y-2 text-xs text-muted-foreground">
+                        <p className="font-medium text-foreground">Step-by-step guide:</p>
+                        <ol className="list-decimal list-inside space-y-1.5 ml-2">
+                          <li>Log in to <a href="https://myinvois.hasil.gov.my" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">MyInvois Portal</a></li>
+                          <li>Navigate to <strong>Systems</strong> &gt; <strong>Manage Application</strong></li>
+                          <li>Click <strong>"Register Application"</strong> or <strong>"Add New Application"</strong></li>
+                          <li>Fill in application details:
+                            <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                              <li><strong>Application Name:</strong> "Groot Finance" (or your preferred name)</li>
+                              <li><strong>Description:</strong> "Automated e-invoice management"</li>
+                              <li><strong>Redirect URL:</strong> <code className="bg-muted px-1 py-0.5 rounded">https://finance.hellogroot.com</code></li>
+                            </ul>
+                          </li>
+                          <li>Click <strong>"Submit"</strong> or <strong>"Register"</strong></li>
+                          <li>You'll receive:
+                            <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                              <li><strong>Client ID:</strong> A unique identifier (e.g., "ABC123...")</li>
+                              <li><strong>Client Secret:</strong> A secret key (copy immediately - shown only once)</li>
+                            </ul>
+                          </li>
+                          <li>Copy both values and paste them below</li>
+                        </ol>
+                        <div className="bg-amber-500/10 border border-amber-500/30 rounded p-2 mt-3">
+                          <p className="text-xs text-amber-700 dark:text-amber-300">
+                            <strong>⚠️ Important:</strong> Use <strong>Production</strong> credentials for live businesses. Sandbox credentials only work in LHDN's test environment.
+                          </p>
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+
                   {/* LHDN Client ID */}
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
+                    <label className="block text-sm font-medium text-foreground mb-2 flex items-center gap-2">
                       LHDN Client ID
+                      <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">Required</span>
                     </label>
                     <input
                       type="text"
                       value={lhdnClientId}
                       onChange={(e) => setLhdnClientId(e.target.value)}
-                      placeholder="LHDN MyInvois Client ID"
+                      placeholder="e.g., ABC123DEF456..."
                       className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
                     />
                     <p className="text-xs text-muted-foreground mt-1">
-                      From your MyInvois portal &gt; Manage Application.
+                      From MyInvois portal &gt; Systems &gt; Manage Application
                     </p>
                   </div>
 
                   {/* LHDN Client Secret */}
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
+                    <label className="block text-sm font-medium text-foreground mb-2 flex items-center gap-2">
                       LHDN Client Secret
+                      <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">Required</span>
                     </label>
                     <input
                       type="password"
                       value={lhdnClientSecret}
                       onChange={(e) => setLhdnClientSecret(e.target.value)}
-                      placeholder="LHDN MyInvois Client Secret"
+                      placeholder="Enter your secret key..."
                       className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
                     />
                     <p className="text-xs text-muted-foreground mt-1">
-                      Stored securely in AWS. Required for automatic e-invoice retrieval.
+                      🔒 Stored securely in AWS SSM Parameter Store (encrypted at rest). Required for automatic e-invoice polling and buyer rejection features.
                     </p>
                   </div>
 

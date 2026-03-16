@@ -102,7 +102,7 @@
 
 ### Implementation for User Story 3
 
-- [ ] T010 [P] [US3] Add 72-hour countdown logic to rejection dialog in `src/domains/expense-claims/components/einvoice-reject-dialog.tsx` (calculate expiry from `dateTimeValidated`, update every 30s with `useInterval`, conditional styling for urgency)
+- [x] T010 [P] [US3] Add 72-hour countdown logic to expense claims detail page in `src/domains/expense-claims/components/einvoice-section.tsx` (countdown badge in card header + next to reject button, updates every 60s, urgent styling < 6h)
 - [ ] T011 [P] [US3] Create reusable rejection button component in `src/domains/invoices/components/received-einvoice-reject-button.tsx` (conditional rendering based on status and window, visual states for enabled/urgent/disabled)
 - [ ] T012 [US3] Integrate rejection button into AP invoices domain (add to invoice detail page where received e-invoices are displayed, wire to rejection dialog)
 
@@ -119,7 +119,7 @@
 - [x] T015 Run `npm run build` and fix any TypeScript errors
 - [x] T016 Run `npx convex deploy --yes` to deploy mutations and schema to production
 - [ ] T017 Verify rejection flow in LHDN sandbox environment (test within 72-hour window, test after expiry, test with linked/unlinked documents) - **Requires manual testing**
-- [ ] T018 [P] Update documentation in `specs/023-einv-buyer-rejection-flow/quickstart.md` if any implementation differs from plan - **Note: AP invoice linking not yet implemented (schema missing matchedInvoiceId field); expense claims rejection fully functional**
+- [ ] T018 [P] Update documentation in `specs/023-einv-buyer-rejection-flow/quickstart.md` if any implementation differs from plan - **Note: Schema fields added (matchedApInvoiceId, einvoiceRejected fields); AP mutation implemented; UI integration (T011-T012) pending**
 
 ---
 

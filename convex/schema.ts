@@ -649,7 +649,10 @@ export default defineSchema({
     rejectedAt: v.optional(v.number()),
     rejectionReason: v.optional(v.string()),
     rejectedByUserId: v.optional(v.string()),
+
+    // 023-einv-buyer-rejection-flow: Matching links
     matchedExpenseClaimId: v.optional(v.id("expense_claims")),
+    matchedApInvoiceId: v.optional(v.id("invoices")),
     matchTier: v.optional(v.union(
       v.literal("tier1_email"),
       v.literal("tier1_5_reference"),
@@ -665,6 +668,7 @@ export default defineSchema({
     .index("by_businessId_status", ["businessId", "status"])
     .index("by_lhdnDocumentUuid", ["lhdnDocumentUuid"])
     .index("by_matchedExpenseClaimId", ["matchedExpenseClaimId"])
+    .index("by_matchedApInvoiceId", ["matchedApInvoiceId"])
     .index("by_businessId_processedAt", ["businessId", "processedAt"]),
 
   // ============================================
@@ -944,6 +948,11 @@ export default defineSchema({
       receivedAt: v.number(),
       messageId: v.string(),
     })),
+
+    // 023-einv-buyer-rejection-flow: Received e-invoice rejection tracking
+    einvoiceRejected: v.optional(v.boolean()),
+    einvoiceRejectionReason: v.optional(v.string()),
+    einvoiceRejectedAt: v.optional(v.number()),
 
     deletedAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),
