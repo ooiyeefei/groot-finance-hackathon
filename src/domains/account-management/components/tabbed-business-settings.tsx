@@ -2,7 +2,7 @@
 
 import { Suspense, lazy, memo, useCallback } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
-import { Building2, DollarSign, Users, Key, Loader2, Calendar, Sparkles, User, Plug, Clock, Shield, Gift, Mail, Zap } from 'lucide-react'
+import { Building2, DollarSign, Users, Key, Loader2, Calendar, Sparkles, User, Plug, Clock, Shield, Gift, FileText, Zap } from 'lucide-react'
 import { usePermissions } from '@/contexts/business-context'
 import { isNativePlatform } from '@/lib/capacitor/platform'
 import { useUser } from '@clerk/nextjs'
@@ -20,7 +20,7 @@ const UserProfileSection = lazy(() => import('@/domains/account-management/compo
 const TimesheetSettings = lazy(() => import('@/domains/timesheet-attendance/components/timesheet-settings'))
 const PrivacyDataSection = lazy(() => import('@/domains/account-management/components/privacy-data-section').then(m => ({ default: m.PrivacyDataSection })))
 const ReferralDashboard = lazy(() => import('@/domains/referral/components/referral-dashboard'))
-const EInvoiceNotificationSettings = lazy(() => import('@/domains/account-management/components/einvoice-notification-settings'))
+const EInvoiceSettingsWithTabs = lazy(() => import('@/domains/account-management/components/einvoice-settings-with-tabs'))
 const AIAutomationSettings = lazy(() => import('@/domains/account-management/components/ai-automation-settings').then(m => ({ default: m.AIAutomationSettings })))
 
 // Wrapper components for existing components that need userId
@@ -40,7 +40,7 @@ const TabbedBusinessSettings = memo(() => {
   const pathname = usePathname()
 
   // URL-based tab persistence: read from ?tab= query param
-  const validTabs = ['business-profile', 'category-management', 'leave-management', 'timesheet', 'team-management', 'api-keys', 'billing', 'integrations', 'einvoice-notifications', 'ai-automation', 'referral', 'privacy', 'profile'] as const
+  const validTabs = ['business-profile', 'category-management', 'leave-management', 'timesheet', 'team-management', 'api-keys', 'billing', 'integrations', 'einvoice', 'ai-automation', 'referral', 'privacy', 'profile'] as const
   type TabValue = typeof validTabs[number]
   const tabFromUrl = searchParams.get('tab') as TabValue | null
   // Default tab: 'business-profile' for finance_admin/owner, 'profile' for everyone else
@@ -141,11 +141,11 @@ const TabbedBusinessSettings = memo(() => {
           )}
           {isOwner && (
             <TabsTrigger
-              value="einvoice-notifications"
+              value="einvoice"
               className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
             >
-              <Mail className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">E-Invoice Notifications</span>
+              <FileText className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">e-Invoice</span>
               <span className="sm:hidden">E-Inv</span>
             </TabsTrigger>
           )}
@@ -310,17 +310,17 @@ const TabbedBusinessSettings = memo(() => {
           </TabsContent>
         )}
 
-        {/* E-Invoice Notifications Tab Content - Owner Only */}
+        {/* e-Invoice Tab Content - Owner Only */}
         {isOwner && (
-          <TabsContent value="einvoice-notifications" className="space-y-4">
+          <TabsContent value="einvoice" className="space-y-4">
             <div className="bg-card rounded-lg border border-border p-6">
               <Suspense fallback={
                 <div className="flex items-center justify-center p-8">
                   <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">Loading notification settings...</span>
+                  <span className="ml-2 text-muted-foreground">Loading e-invoice settings...</span>
                 </div>
               }>
-                <EInvoiceNotificationSettings />
+                <EInvoiceSettingsWithTabs />
               </Suspense>
             </div>
           </TabsContent>
