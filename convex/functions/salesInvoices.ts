@@ -1668,8 +1668,12 @@ export const updateLhdnStatusFromPoll = mutation({
       ? `Invoice ${invoice.invoiceNumber} has been ${statusLabel}. Reason: ${args.reason}`
       : `Invoice ${invoice.invoiceNumber} has been ${statusLabel}. Review the invoice and take appropriate action.`;
 
+    // Check if business has email notifications enabled
+    const business = await ctx.db.get(invoice.businessId);
+    const emailEnabled = business?.einvoiceBuyerNotifications !== false;
+
     for (const member of targetMembers) {
-      await ctx.db.insert("notifications", {
+      const notificationId = await ctx.db.insert("notifications", {
         recipientUserId: member.userId,
         businessId: invoice.businessId,
         type: "lhdn_submission",
@@ -1681,10 +1685,35 @@ export const updateLhdnStatusFromPoll = mutation({
         resourceId: invoice._id.toString(),
         createdAt: Date.now(),
       });
+
+      // Schedule email notification if enabled
+      if (emailEnabled) {
+        const user = await ctx.db.get(member.userId);
+        if (user?.email) {
+          await ctx.scheduler.runAfter(
+            0,
+            internal.functions.notifications.sendTransactionalEmail,
+            {
+              notificationId,
+              recipientEmail: user.email,
+              recipientName: user.email,
+              templateType: "notification_lhdn_status_change",
+              templateData: {
+                title,
+                body,
+                invoiceNumber: invoice.invoiceNumber,
+                newStatus: args.newStatus,
+                reason: args.reason,
+              },
+              userId: member.userId,
+            }
+          );
+        }
+      }
     }
 
     console.log(
-      `[updateLhdnStatusFromPoll] Invoice ${invoice.invoiceNumber} status updated to ${args.newStatus}`
+      `[updateLhdnStatusFromPoll] Invoice ${invoice.invoiceNumber} status updated to ${args.newStatus}${emailEnabled ? " (emails scheduled)" : ""}`
     );
   },
 });
