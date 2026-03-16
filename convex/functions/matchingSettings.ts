@@ -282,9 +282,16 @@ export const updateAutoApproval = mutation({
       return { updated: true };
     }
 
-    // Create new settings with defaults + auto-approval overrides
+    // Create new settings with PO matching defaults + auto-approval overrides
     await ctx.db.insert("matching_settings", {
       businessId: args.businessId,
+      // PO matching required defaults
+      quantityTolerancePercent: 10,
+      priceTolerancePercent: 5,
+      poNumberPrefix: "PO",
+      grnNumberPrefix: "GRN",
+      autoMatchEnabled: true,
+      // Auto-approval overrides
       enableAutoApprove: args.enableAutoApprove ?? AUTO_APPROVE_DEFAULTS.enableAutoApprove,
       autoApproveThreshold: args.autoApproveThreshold ?? AUTO_APPROVE_DEFAULTS.autoApproveThreshold,
       minLearningCycles: args.minLearningCycles ?? AUTO_APPROVE_DEFAULTS.minLearningCycles,

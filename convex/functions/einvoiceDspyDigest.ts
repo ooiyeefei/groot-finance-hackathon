@@ -11,7 +11,8 @@
  */
 
 import { internalAction } from "../_generated/server";
-import { api } from "../_generated/api";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const api: any = require("../_generated/api").api;
 
 const DEV_EMAIL = "dev+einvoiceMY@hellogroot.com";
 
