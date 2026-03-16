@@ -345,7 +345,7 @@ export const triggerAutoDelivery = internalAction({
     invoiceId: v.string(),
     businessId: v.id("businesses"),
   },
-  handler: async (_ctx, args) => {
+  handler: async (ctx, args) => {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : "http://localhost:3000";
@@ -372,11 +372,39 @@ export const triggerAutoDelivery = internalAction({
       const result = await response.json();
       if (!result.success) {
         console.error(`[triggerAutoDelivery] Delivery failed for ${args.invoiceId}:`, result.error);
+
+        // 001-einv-pdf-gen: Create failure notification
+        await ctx.runMutation(internal.functions.notifications.createForRole, {
+          businessId: args.businessId,
+          targetRoles: ["owner", "finance_admin", "manager"],
+          type: "lhdn_submission",
+          severity: "warning",
+          title: "E-Invoice Delivery Failed",
+          body: `Failed to deliver validated e-invoice to buyer: ${result.error || "Unknown error"}. You can manually retry from the invoice page.`,
+          resourceType: "sales_invoice",
+          resourceId: args.invoiceId,
+          resourceUrl: `/sales-invoices/${args.invoiceId}`,
+          sourceEvent: `lhdn_delivery_failed_${args.invoiceId}`,
+        });
       } else {
         console.log(`[triggerAutoDelivery] E-invoice ${args.invoiceId} delivered to ${result.data?.deliveredTo || "buyer"}`);
       }
     } catch (error) {
       console.error(`[triggerAutoDelivery] Error for ${args.invoiceId}:`, error);
+
+      // 001-einv-pdf-gen: Create failure notification for network/unexpected errors
+      await ctx.runMutation(internal.functions.notifications.createForRole, {
+        businessId: args.businessId,
+        targetRoles: ["owner", "finance_admin", "manager"],
+        type: "lhdn_submission",
+        severity: "warning",
+        title: "E-Invoice Delivery Failed",
+        body: `Failed to deliver validated e-invoice to buyer due to system error. You can manually retry from the invoice page.`,
+        resourceType: "sales_invoice",
+        resourceId: args.invoiceId,
+        resourceUrl: `/sales-invoices/${args.invoiceId}`,
+        sourceEvent: `lhdn_delivery_error_${args.invoiceId}`,
+      });
     }
   },
 });

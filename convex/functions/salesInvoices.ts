@@ -11,7 +11,7 @@
  */
 
 import { v } from "convex/values";
-import { query, mutation, internalMutation, internalQuery } from "../_generated/server";
+import { query, mutation, internalMutation, internalQuery, internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 import {
@@ -1744,22 +1744,104 @@ export const getInvoiceForDelivery = query({
 
 /**
  * Update delivery tracking after e-invoice PDF is emailed to buyer.
+ * Extended in 001-einv-pdf-gen to support PDF storage and delivery status.
  */
 export const updateLhdnDeliveryStatus = mutation({
   args: {
     invoiceId: v.id("sales_invoices"),
     businessId: v.id("businesses"),
-    deliveredTo: v.string(),
+    deliveredTo: v.optional(v.string()),
+    s3Path: v.optional(v.string()),  // S3 key with prefix
+    deliveryStatus: v.optional(v.string()),  // "pending" | "delivered" | "failed"
+    deliveryError: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const invoice = await ctx.db.get(args.invoiceId);
     if (!invoice || invoice.businessId !== args.businessId) return;
 
-    await ctx.db.patch(args.invoiceId, {
-      lhdnPdfDeliveredAt: Date.now(),
-      lhdnPdfDeliveredTo: args.deliveredTo,
+    const updates: Record<string, unknown> = {
       updatedAt: Date.now(),
-    });
+    };
+
+    // Legacy fields (when delivery succeeds)
+    if (args.deliveredTo) {
+      updates.lhdnPdfDeliveredAt = Date.now();
+      updates.lhdnPdfDeliveredTo = args.deliveredTo;
+    }
+
+    // 001-einv-pdf-gen: New fields for PDF storage and status tracking
+    if (args.s3Path !== undefined) {
+      updates.lhdnPdfS3Path = args.s3Path;
+    }
+    if (args.deliveryStatus !== undefined) {
+      updates.lhdnPdfDeliveryStatus = args.deliveryStatus;
+    }
+    if (args.deliveryError !== undefined) {
+      updates.lhdnPdfDeliveryError = args.deliveryError;
+    }
+
+    await ctx.db.patch(args.invoiceId, updates);
+  },
+});
+
+/**
+ * Store LHDN-validated PDF in S3 (internal action).
+ * 001-einv-pdf-gen: Enable efficient reuse without regeneration.
+ * Called from deliver route after PDF generation.
+ */
+export const storeLhdnPdfInternal = internalAction({
+  args: {
+    invoiceId: v.string(),
+    businessId: v.string(),
+    pdfBase64: v.string(),
+    filename: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Import S3 upload function
+    const { uploadFile } = await import("@/lib/aws-s3");
+
+    // Convert base64 to buffer
+    const pdfBuffer = Buffer.from(args.pdfBase64, "base64");
+
+    // Build S3 path: einvoices/{businessId}/{invoiceId}/validated/{filename}
+    const s3Path = `${args.businessId}/${args.invoiceId}/validated/${args.filename}`;
+
+    // Upload to S3
+    const result = await uploadFile(
+      "einvoices" as const,
+      s3Path,
+      pdfBuffer,
+      "application/pdf",
+      {
+        invoice_id: args.invoiceId,
+        business_id: args.businessId,
+        generated_at: new Date().toISOString(),
+      }
+    );
+
+    if (!result.success) {
+      throw new Error(`Failed to upload PDF to S3: ${result.error}`);
+    }
+
+    // Return full S3 key (with prefix)
+    return result.key;
+  },
+});
+
+/**
+ * Get stored LHDN PDF S3 path (to be signed via API route).
+ * 001-einv-pdf-gen: Returns S3 path; frontend calls API route for signed URL.
+ */
+export const getLhdnPdfPath = query({
+  args: {
+    invoiceId: v.id("sales_invoices"),
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice || invoice.businessId !== args.businessId) return null;
+
+    return invoice.lhdnPdfS3Path || null;
   },
 });
 

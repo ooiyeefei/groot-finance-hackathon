@@ -1819,6 +1819,11 @@ export default defineSchema({
     lhdnPdfDeliveredAt: v.optional(v.number()),
     lhdnPdfDeliveredTo: v.optional(v.string()),
 
+    // 001-einv-pdf-gen: PDF storage and delivery status tracking
+    lhdnPdfS3Path: v.optional(v.string()),  // S3 key: einvoices/{businessId}/{invoiceId}/validated/{filename}
+    lhdnPdfDeliveryStatus: v.optional(v.string()),  // "pending" | "delivered" | "failed"
+    lhdnPdfDeliveryError: v.optional(v.string()),
+
     // 016-e-invoice-schema-change: Peppol InvoiceNow tracking
     peppolDocumentId: v.optional(v.string()),
     peppolStatus: v.optional(peppolStatusValidator),

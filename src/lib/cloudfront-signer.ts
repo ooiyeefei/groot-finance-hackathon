@@ -214,6 +214,22 @@ export async function getInvoiceImageUrl(
 }
 
 /**
+ * Generate a CloudFront signed URL for LHDN-validated e-invoice PDFs
+ * 001-einv-pdf-gen: Serve validated e-invoice PDFs via CloudFront
+ *
+ * @param s3Path - The full S3 path stored on invoice record
+ * @param expiresInSeconds - URL expiry time in seconds
+ * @returns Signed CloudFront URL
+ */
+export async function getEinvoicePdfUrl(
+  s3Path: string,
+  expiresInSeconds: number = CLOUDFRONT_URL_EXPIRY.download
+): Promise<string> {
+  // s3Path already includes full prefix: einvoices/{businessId}/{invoiceId}/validated/{filename}
+  return getCloudFrontSignedUrl(s3Path, expiresInSeconds)
+}
+
+/**
  * Generate signed URLs for multiple images (batch operation)
  *
  * @param storagePaths - Array of storage paths

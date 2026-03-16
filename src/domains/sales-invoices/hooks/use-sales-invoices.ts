@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import { useQuery, useMutation } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
@@ -184,6 +185,40 @@ export function useInvoicePdfUrl(invoiceId: string | undefined) {
   )
 
   return pdfUrl ?? null
+}
+
+/**
+ * Hook for getting a stored LHDN-validated PDF URL.
+ * 001-einv-pdf-gen: Serve stored PDF to avoid regeneration.
+ * Calls API route to generate CloudFront signed URL from S3 path.
+ */
+export function useLhdnPdfUrl(invoiceId: string | undefined) {
+  const { businessId } = useActiveBusiness()
+  const [signedUrl, setSignedUrl] = React.useState<string | null>(null)
+  const [isLoading, setIsLoading] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!invoiceId || !businessId) {
+      setSignedUrl(null)
+      return
+    }
+
+    setIsLoading(true)
+    fetch(`/api/v1/sales-invoices/${invoiceId}/lhdn/pdf-url?businessId=${businessId}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setSignedUrl(data.data.url)
+        } else {
+          setSignedUrl(null)
+        }
+      })
+      .catch(() => setSignedUrl(null))
+      .finally(() => setIsLoading(false))
+  }, [invoiceId, businessId])
+
+  if (isLoading) return null
+  return signedUrl
 }
 
 /**
