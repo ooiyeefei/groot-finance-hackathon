@@ -52,6 +52,35 @@ interface BusinessToPoll {
   lhdnClientId: string;
 }
 
+/** LHDN submission status response */
+interface LhdnSubmissionStatusResponse {
+  submissionUid: string;
+  documentCount: number;
+  overallStatus: string;
+  documentSummary: Array<{
+    uuid: string;
+    submissionUid: string;
+    longId?: string;
+    internalId: string;
+    status: "Valid" | "Invalid" | "Cancelled" | "Submitted";
+    cancelDateTime?: string;
+    rejectRequestDateTime?: string;
+    documentStatusReason?: string;
+  }>;
+}
+
+/** Invoice returned by status polling query */
+interface IssuedInvoiceForPolling {
+  _id: string;
+  businessId: string;
+  lhdnSubmissionId?: string;
+  lhdnDocumentUuid?: string;
+  lhdnStatus?: string;
+  lhdnValidatedAt?: number;
+  invoiceNumber: string;
+  journalEntryId?: string;
+}
+
 interface LhdnDocument {
   uuid: string;
   submissionUID?: string;
@@ -183,6 +212,31 @@ async function fetchReceivedDocuments(accessToken: string, businessTin: string):
   return data.result || [];
 }
 
+/**
+ * Get the status of a submission and its documents from LHDN.
+ */
+async function getSubmissionStatus(
+  accessToken: string,
+  businessTin: string,
+  submissionUid: string
+): Promise<LhdnSubmissionStatusResponse> {
+  const response = await fetch(
+    `${LHDN_BASE_URL}/api/v1.0/documentsubmissions/${submissionUid}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        onbehalfof: businessTin,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`LHDN getSubmissionStatus failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
 async function fetchBuyerEmail(
   accessToken: string,
   businessTin: string,
@@ -257,6 +311,148 @@ async function pollBusiness(business: BusinessToPoll): Promise<{ documentsFound:
 }
 
 // ============================================================
+// Issued Invoice Status Polling (Buyer Rejection/Cancellation)
+// ============================================================
+
+/**
+ * Poll LHDN for status changes on issued invoices (valid → rejected/cancelled).
+ * Detects buyer rejections and cancellations within the 72-hour window.
+ */
+async function pollIssuedInvoiceStatuses(
+  businessAuthCache: Map<string, { accessToken: string; businessTin: string; lhdnClientId: string }>
+): Promise<{ statusChanges: number }> {
+  // Get invoices in the 72-hour polling window
+  const invoices = await convexQuery(
+    "functions/salesInvoices:getIssuedInvoicesForStatusPolling",
+    {}
+  ) as IssuedInvoiceForPolling[];
+
+  if (!invoices || invoices.length === 0) {
+    console.log("[LHDN Polling] No issued invoices in 72-hour window for status polling");
+    return { statusChanges: 0 };
+  }
+
+  console.log(`[LHDN Polling] Found ${invoices.length} issued invoices to poll for status changes`);
+
+  // Group by business
+  const byBusiness = new Map<string, IssuedInvoiceForPolling[]>();
+  for (const inv of invoices) {
+    const group = byBusiness.get(inv.businessId) ?? [];
+    group.push(inv);
+    byBusiness.set(inv.businessId, group);
+  }
+
+  let statusChanges = 0;
+
+  for (const [businessId, businessInvoices] of byBusiness) {
+    try {
+      // Get or create auth for this business
+      let auth = businessAuthCache.get(businessId);
+      if (!auth) {
+        // Need to look up business credentials
+        const businesses = await convexQuery(
+          "functions/system:getBusinessesForLhdnPolling",
+          {}
+        ) as BusinessToPoll[];
+
+        const biz = businesses?.find((b) => b.businessId === businessId);
+        if (!biz) {
+          console.log(`[LHDN Polling] Business ${businessId} not found for status polling, skipping`);
+          continue;
+        }
+
+        const clientSecret = await getLhdnClientSecret(businessId);
+        if (!clientSecret) {
+          console.log(`[LHDN Polling] No client secret for business ${businessId}, skipping status poll`);
+          continue;
+        }
+
+        const accessToken = await authenticateLhdn(biz.lhdnClientId, clientSecret);
+        auth = { accessToken, businessTin: biz.businessTin, lhdnClientId: biz.lhdnClientId };
+        businessAuthCache.set(businessId, auth);
+      }
+
+      // Group invoices by submissionId to minimize API calls
+      const bySubmission = new Map<string, IssuedInvoiceForPolling[]>();
+      for (const inv of businessInvoices) {
+        if (!inv.lhdnSubmissionId) continue;
+        const group = bySubmission.get(inv.lhdnSubmissionId) ?? [];
+        group.push(inv);
+        bySubmission.set(inv.lhdnSubmissionId, group);
+      }
+
+      for (const [submissionId, submissionInvoices] of bySubmission) {
+        try {
+          const submissionStatus = await getSubmissionStatus(
+            auth.accessToken,
+            auth.businessTin,
+            submissionId
+          );
+
+          // Check each document in the submission
+          for (const docSummary of submissionStatus.documentSummary) {
+            // Find matching invoice by documentUuid
+            const matchingInvoice = submissionInvoices.find(
+              (inv) => inv.lhdnDocumentUuid === docSummary.uuid
+            );
+            if (!matchingInvoice) continue;
+
+            // Detect rejection
+            if (docSummary.rejectRequestDateTime) {
+              console.log(
+                `[LHDN Polling] Detected rejection for invoice ${matchingInvoice.invoiceNumber} (UUID: ${docSummary.uuid})`
+              );
+              await convexMutation(
+                "functions/salesInvoices:updateLhdnStatusFromPoll",
+                {
+                  invoiceId: matchingInvoice._id,
+                  newStatus: "rejected",
+                  reason: docSummary.documentStatusReason || "Rejected by buyer",
+                  timestamp: new Date(docSummary.rejectRequestDateTime).getTime(),
+                }
+              );
+              statusChanges++;
+              continue;
+            }
+
+            // Detect cancellation (by buyer — invoice was previously "valid")
+            if (docSummary.status === "Cancelled" && matchingInvoice.lhdnStatus === "valid") {
+              console.log(
+                `[LHDN Polling] Detected buyer cancellation for invoice ${matchingInvoice.invoiceNumber} (UUID: ${docSummary.uuid})`
+              );
+              await convexMutation(
+                "functions/salesInvoices:updateLhdnStatusFromPoll",
+                {
+                  invoiceId: matchingInvoice._id,
+                  newStatus: "cancelled_by_buyer",
+                  reason: docSummary.documentStatusReason || "Cancelled by buyer",
+                  timestamp: docSummary.cancelDateTime
+                    ? new Date(docSummary.cancelDateTime).getTime()
+                    : Date.now(),
+                }
+              );
+              statusChanges++;
+            }
+          }
+        } catch (error) {
+          console.error(
+            `[LHDN Polling] Failed to poll submission ${submissionId} for business ${businessId}:`,
+            error
+          );
+        }
+      }
+    } catch (error) {
+      console.error(
+        `[LHDN Polling] Failed status polling for business ${businessId}:`,
+        error
+      );
+    }
+  }
+
+  return { statusChanges };
+}
+
+// ============================================================
 // Handler
 // ============================================================
 
@@ -282,7 +478,10 @@ export async function handler(event: PollEvent | EventBridgeEvent) {
 
     console.log(`[LHDN Polling] Found ${businesses.length} businesses with pending requests`);
 
+    // ── Pass 1: Poll for received documents ──
     let totalDocs = 0;
+    const businessAuthCache = new Map<string, { accessToken: string; businessTin: string; lhdnClientId: string }>();
+
     for (const biz of businesses) {
       try {
         const result = await pollBusiness(biz);
@@ -292,9 +491,18 @@ export async function handler(event: PollEvent | EventBridgeEvent) {
       }
     }
 
+    // ── Pass 2: Poll issued invoice statuses for buyer rejections/cancellations ──
+    let statusChanges = 0;
+    try {
+      const statusResult = await pollIssuedInvoiceStatuses(businessAuthCache);
+      statusChanges = statusResult.statusChanges;
+    } catch (error) {
+      console.error("[LHDN Polling] Failed issued invoice status polling:", error);
+    }
+
     const durationMs = Date.now() - startTime;
-    console.log(`[LHDN Polling] EventBridge complete: ${businesses.length} businesses, ${totalDocs} docs, ${durationMs}ms`);
-    return { success: true, businessesPolled: businesses.length, totalDocuments: totalDocs, durationMs };
+    console.log(`[LHDN Polling] EventBridge complete: ${businesses.length} businesses, ${totalDocs} docs, ${statusChanges} status changes, ${durationMs}ms`);
+    return { success: true, businessesPolled: businesses.length, totalDocuments: totalDocs, statusChanges, durationMs };
   }
 
   // ── Direct invocation: poll a specific business ──

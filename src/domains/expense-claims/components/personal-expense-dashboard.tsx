@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useCallback, lazy, Suspense, useMemo } from 'react'
 import { useSearchParams, useRouter, useParams } from 'next/navigation'
-import { FileText, Clock, CheckCircle, XCircle, Edit3, BarChart3, Eye, Trash2, Loader2, RotateCcw, Brain, AlertCircle, Send } from 'lucide-react'
+import { FileText, Clock, CheckCircle, XCircle, Edit3, BarChart3, Eye, Trash2, Loader2, RotateCcw, Brain, AlertCircle, Send, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -16,6 +16,12 @@ import ExpenseStatusBadge from './expense-status-badge'
 import DuplicateBadge from './duplicate-badge'
 import EinvoiceStatusBadge from './einvoice-status-badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { formatBusinessDate } from '@/lib/utils'
 
 // ✅ CONVEX REAL-TIME: Import hooks for automatic real-time updates
@@ -599,6 +605,22 @@ function ExpenseClaimCard({ claim, index, context, categories, setEditingClaimId
                   setShowDetailsModal(true)
                 }}
               />
+            )}
+            {/* E-Invoice Rejected Warning Badge */}
+            {claim.einvoiceRejectionWarning && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge className="bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 cursor-help">
+                      <AlertTriangle className="w-3 h-3 mr-1" />
+                      E-Invoice Rejected
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[260px] text-xs">
+                    The linked e-invoice was rejected. Finance admin review required before reimbursement.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
           </div>
 

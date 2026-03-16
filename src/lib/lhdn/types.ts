@@ -234,6 +234,43 @@ export interface LhdnCancelRequest {
 }
 
 // ============================================
+// REJECTION
+// ============================================
+
+export interface LhdnRejectRequest {
+  status: "rejected"
+  reason: string
+}
+
+// ============================================
+// DOCUMENT DETAIL (for status checking)
+// ============================================
+
+export interface LhdnDocumentDetail {
+  uuid: string
+  longId?: string
+  submissionUid?: string
+  internalId?: string
+  typeName?: string
+  typeVersionName?: string
+  issuerTin?: string
+  issuerName?: string
+  receiverId?: string
+  receiverName?: string
+  dateTimeIssued?: string
+  dateTimeReceived?: string
+  dateTimeValidated?: string
+  totalSales?: number
+  totalDiscount?: number
+  netAmount?: number
+  total?: number
+  status: string
+  cancelDateTime?: string
+  rejectRequestDateTime?: string
+  documentStatusReason?: string
+}
+
+// ============================================
 // TIN VALIDATION
 // ============================================
 
@@ -255,7 +292,7 @@ export interface LhdnValidationError {
 // STATUS TYPES
 // ============================================
 
-export type LhdnStatus = "pending" | "submitted" | "valid" | "invalid" | "cancelled"
+export type LhdnStatus = "pending" | "submitted" | "valid" | "invalid" | "cancelled" | "rejected" | "cancelled_by_buyer"
 
 export type LhdnJobStatus =
   | "queued"

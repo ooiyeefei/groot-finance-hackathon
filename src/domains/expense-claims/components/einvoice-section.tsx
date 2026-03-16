@@ -31,6 +31,7 @@ import EinvoiceStatusBadge from './einvoice-status-badge'
 import EinvoiceMatchReview from './einvoice-match-review'
 import { FeatureInterestButton } from '@/components/ui/feature-interest-button'
 import { formatBusinessDate } from '@/lib/utils'
+import EinvoiceRejectDialog from '@/domains/sales-invoices/components/einvoice-reject-dialog'
 
 function getUserFriendlyError(rawError: string | null): string {
   if (!rawError) return 'Something went wrong. Please try again or fill the form manually.'
@@ -89,6 +90,12 @@ interface EinvoiceSectionProps {
   businessHasAddress?: boolean
   businessHasPhone?: boolean
   businessHasEmail?: boolean
+  // Buyer rejection (022-einvoice-lhdn-buyer-flows)
+  businessId?: string
+  /** Timestamp (ms) when the received document was processed/created */
+  lhdnReceivedProcessedAt?: number | null
+  /** User role — reject button only for owner/finance_admin/manager */
+  userRole?: string | null
 }
 
 /**
@@ -118,12 +125,16 @@ export default function EinvoiceSection({
   businessHasAddress,
   businessHasPhone,
   businessHasEmail,
+  businessId,
+  lhdnReceivedProcessedAt,
+  userRole,
 }: EinvoiceSectionProps) {
   const [requestLoading, setRequestLoading] = useState(false)
   const [uploadLoading, setUploadLoading] = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [emailCopied, setEmailCopied] = useState(false)
+  const [showRejectDialog, setShowRejectDialog] = useState(false)
 
   const systemEmail = einvoiceEmailRef ? `einvoice+${einvoiceEmailRef}@einv.hellogroot.com` : null
 
@@ -224,6 +235,16 @@ export default function EinvoiceSection({
   const canUploadEinvoice = !einvoiceAttached
 
   const canRetry = einvoiceRequestStatus === 'failed' && merchantFormUrl
+
+  // Buyer can reject a received e-invoice within 72 hours
+  const REJECTION_WINDOW_MS = 72 * 60 * 60 * 1000
+  const docTimestamp = lhdnReceivedProcessedAt || lhdnReceivedAt || 0
+  const withinRejectionWindow = docTimestamp > 0 && (Date.now() - docTimestamp) < REJECTION_WINDOW_MS
+  const canReject = lhdnReceivedDocumentUuid &&
+    lhdnReceivedStatus === 'valid' &&
+    withinRejectionWindow &&
+    businessId &&
+    ['owner', 'finance_admin', 'manager'].includes(userRole || '')
 
   return (
     <Card className="bg-card border-border">
@@ -482,6 +503,15 @@ export default function EinvoiceSection({
             </div>
           )}
 
+          {lhdnReceivedStatus === 'rejected' && (
+            <div className="flex items-center gap-2 bg-red-500/10 rounded px-3 py-2 mt-2">
+              <Ban className="w-4 h-4 text-red-500" />
+              <span className="text-red-600 dark:text-red-400 text-sm">
+                This e-invoice has been rejected by your organization
+              </span>
+            </div>
+          )}
+
           {/* LHDN Verification QR Code Link */}
           {lhdnReceivedLongId && (
             <div className="flex justify-between items-center">
@@ -621,7 +651,31 @@ export default function EinvoiceSection({
               disabled={uploadLoading}
             />
           </label>
+
+          {/* Reject E-Invoice Button — only for valid LHDN docs within 72-hour window */}
+          {canReject && (
+            <Button
+              size="sm"
+              onClick={() => setShowRejectDialog(true)}
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            >
+              <Ban className="w-4 h-4 mr-1" />
+              Reject E-Invoice
+            </Button>
+          )}
         </div>
+
+        {/* Reject Dialog */}
+        {canReject && lhdnReceivedDocumentUuid && businessId && (
+          <EinvoiceRejectDialog
+            open={showRejectDialog}
+            onOpenChange={setShowRejectDialog}
+            documentUuid={lhdnReceivedDocumentUuid}
+            businessId={businessId}
+            documentTimestamp={docTimestamp}
+            onRejected={onRefresh}
+          />
+        )}
       </CardContent>
     </Card>
   )

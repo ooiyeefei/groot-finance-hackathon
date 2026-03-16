@@ -9,7 +9,7 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "../_generated/server";
+import { internalMutation, internalQuery, internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 
@@ -298,6 +298,19 @@ export const updateSourceRecord = internalMutation({
           resourceUrl,
           sourceEvent: `lhdn_valid_${args.jobId}`,
         });
+
+        // 022-einvoice-lhdn-buyer-flows: Trigger auto-delivery of validated PDF to buyer
+        if (job.sourceType === "sales_invoice") {
+          const business = await ctx.db.get(job.businessId);
+          // Auto-delivery is ON by default (einvoiceAutoDelivery === undefined treated as true)
+          if (business && business.einvoiceAutoDelivery !== false) {
+            // Schedule the auto-delivery action (runs async, non-blocking)
+            await ctx.scheduler.runAfter(5000, internal.functions.lhdnJobs.triggerAutoDelivery, {
+              invoiceId: job.sourceId,
+              businessId: job.businessId,
+            });
+          }
+        }
       } else {
         const errorSummary = args.validationErrors?.length
           ? `: ${args.validationErrors[0].message}`
@@ -315,6 +328,55 @@ export const updateSourceRecord = internalMutation({
           sourceEvent: `lhdn_invalid_${args.jobId}`,
         });
       }
+    }
+  },
+});
+
+// ============================================
+// AUTO-DELIVERY ACTION (022-einvoice-lhdn-buyer-flows)
+// ============================================
+
+/**
+ * Trigger auto-delivery of validated e-invoice PDF to buyer.
+ * Calls the Next.js API route to generate PDF server-side and email it.
+ */
+export const triggerAutoDelivery = internalAction({
+  args: {
+    invoiceId: v.string(),
+    businessId: v.id("businesses"),
+  },
+  handler: async (_ctx, args) => {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000";
+    const internalKey = process.env.MCP_INTERNAL_SERVICE_KEY;
+
+    if (!internalKey) {
+      console.error("[triggerAutoDelivery] MCP_INTERNAL_SERVICE_KEY not configured, skipping");
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/v1/sales-invoices/${args.invoiceId}/lhdn/deliver`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Internal-Key": internalKey,
+          },
+          body: JSON.stringify({ businessId: args.businessId }),
+        }
+      );
+
+      const result = await response.json();
+      if (!result.success) {
+        console.error(`[triggerAutoDelivery] Delivery failed for ${args.invoiceId}:`, result.error);
+      } else {
+        console.log(`[triggerAutoDelivery] E-invoice ${args.invoiceId} delivered to ${result.data?.deliveredTo || "buyer"}`);
+      }
+    } catch (error) {
+      console.error(`[triggerAutoDelivery] Error for ${args.invoiceId}:`, error);
     }
   },
 });

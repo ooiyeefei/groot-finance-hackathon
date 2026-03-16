@@ -18,8 +18,10 @@ import {
   Upload,
   X,
   CheckSquare,
+  AlertTriangle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { formatBusinessDate } from '@/lib/utils'
@@ -496,7 +498,15 @@ export default function SalesInvoiceList() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <LhdnStatusBadge status={invoice.lhdnStatus} />
+                      <div className="flex flex-col items-center gap-1">
+                        <LhdnStatusBadge status={invoice.lhdnStatus} />
+                        {(invoice as any).lhdnReviewRequired && (
+                          <Badge className="bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30 text-xs">
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            Review Required
+                          </Badge>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
@@ -641,6 +651,12 @@ export default function SalesInvoiceList() {
                     <InvoiceStatusBadge status={invoice.status} />
                     {invoice.lhdnStatus && (
                       <LhdnStatusBadge status={invoice.lhdnStatus} />
+                    )}
+                    {(invoice as any).lhdnReviewRequired && (
+                      <Badge className="bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30 text-xs">
+                        <AlertTriangle className="h-3 w-3 mr-1" />
+                        Review Required
+                      </Badge>
                     )}
                     {(invoice as any).peppolStatus && (
                       <PeppolStatusBadge status={(invoice as any).peppolStatus as PeppolStatus} />

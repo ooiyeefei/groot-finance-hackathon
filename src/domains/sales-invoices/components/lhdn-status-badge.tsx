@@ -28,6 +28,14 @@ const STATUS_CONFIG: Record<LhdnStatus, { label: string; className: string }> = 
     label: 'Cancelled',
     className: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30',
   },
+  rejected: {
+    label: 'Rejected',
+    className: 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30',
+  },
+  cancelled_by_buyer: {
+    label: 'Cancelled by Buyer',
+    className: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30',
+  },
 }
 
 export function LhdnStatusBadge({ status }: LhdnStatusBadgeProps) {

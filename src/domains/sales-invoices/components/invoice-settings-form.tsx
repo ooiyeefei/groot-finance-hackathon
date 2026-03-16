@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { ArrowLeft, Settings, Save, Loader2, Eye, CreditCard, Mail, Upload, X, ChevronDown, ChevronRight, QrCode } from 'lucide-react'
+import { ArrowLeft, Settings, Save, Loader2, Eye, CreditCard, Mail, Upload, X, ChevronDown, ChevronRight, QrCode, ShieldCheck } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -102,6 +102,8 @@ interface InvoiceSettingsState {
   paymentMethods: PaymentMethodState[]
   bccOutgoingEmails: boolean
   customerFieldsVisibility: CustomerFieldsVisibility
+  einvoiceAutoDelivery: boolean
+  einvoiceBuyerNotifications: boolean
 }
 
 function buildInitialPaymentMethods(
@@ -152,6 +154,8 @@ export default function InvoiceSettingsForm() {
     paymentMethods: buildInitialPaymentMethods(),
     bccOutgoingEmails: true,
     customerFieldsVisibility: { ...DEFAULT_CUSTOMER_FIELDS_VISIBILITY },
+    einvoiceAutoDelivery: true,
+    einvoiceBuyerNotifications: true,
   })
 
   // Sync state when Convex data loads
@@ -175,6 +179,8 @@ export default function InvoiceSettingsForm() {
           ...DEFAULT_CUSTOMER_FIELDS_VISIBILITY,
           ...savedVisibility,
         },
+        einvoiceAutoDelivery: (business as unknown as Record<string, unknown>)?.einvoiceAutoDelivery as boolean ?? true,
+        einvoiceBuyerNotifications: (business as unknown as Record<string, unknown>)?.einvoiceBuyerNotifications as boolean ?? true,
       })
     }
   }, [invoiceDefaults])
@@ -275,6 +281,8 @@ export default function InvoiceSettingsForm() {
         bccOutgoingEmails: settings.bccOutgoingEmails,
         paymentMethods: paymentMethodsToSave,
         customerFieldsVisibility: settings.customerFieldsVisibility,
+        einvoiceAutoDelivery: settings.einvoiceAutoDelivery,
+        einvoiceBuyerNotifications: settings.einvoiceBuyerNotifications,
       })
 
       setSaveSuccess(true)
@@ -527,6 +535,51 @@ export default function InvoiceSettingsForm() {
                     {contactEmail
                       ? `A BCC copy will be sent to ${contactEmail}`
                       : 'Set a contact email in your business profile to receive copies'}
+                  </p>
+                </div>
+              </label>
+            </CardContent>
+          </Card>
+
+          {/* LHDN e-Invoice Settings */}
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="text-foreground text-base flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4" />
+                LHDN e-Invoice
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-muted-foreground text-xs">
+                Configure how validated e-invoices are delivered to buyers.
+              </p>
+              <label className="flex items-start gap-3 p-3 rounded-md border border-border hover:bg-muted/50 cursor-pointer transition-colors">
+                <Checkbox
+                  checked={settings.einvoiceAutoDelivery}
+                  onCheckedChange={(checked) => updateSetting('einvoiceAutoDelivery', !!checked)}
+                  className="mt-0.5"
+                />
+                <div>
+                  <span className="text-sm font-medium text-foreground">
+                    Auto-deliver validated e-invoices to buyers
+                  </span>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Automatically send the LHDN-validated PDF to the buyer's email when an e-invoice is validated.
+                  </p>
+                </div>
+              </label>
+              <label className="flex items-start gap-3 p-3 rounded-md border border-border hover:bg-muted/50 cursor-pointer transition-colors">
+                <Checkbox
+                  checked={settings.einvoiceBuyerNotifications}
+                  onCheckedChange={(checked) => updateSetting('einvoiceBuyerNotifications', !!checked)}
+                  className="mt-0.5"
+                />
+                <div>
+                  <span className="text-sm font-medium text-foreground">
+                    Send buyer notification emails
+                  </span>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Notify buyers by email when e-invoices are validated, cancelled, or when rejection requests are confirmed.
                   </p>
                 </div>
               </label>

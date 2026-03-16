@@ -14,6 +14,7 @@ import type * as functions_actionCenterInsights from "../functions/actionCenterI
 import type * as functions_actionCenterJobs from "../functions/actionCenterJobs.js";
 import type * as functions_admin from "../functions/admin.js";
 import type * as functions_admin_resetDatabase from "../functions/admin/resetDatabase.js";
+import type * as functions_aiDigest from "../functions/aiDigest.js";
 import type * as functions_aiMessageUsage from "../functions/aiMessageUsage.js";
 import type * as functions_analytics from "../functions/analytics.js";
 import type * as functions_appVersions from "../functions/appVersions.js";
@@ -76,6 +77,8 @@ import type * as functions_messages from "../functions/messages.js";
 import type * as functions_notificationJobs from "../functions/notificationJobs.js";
 import type * as functions_notifications from "../functions/notifications.js";
 import type * as functions_ocrUsage from "../functions/ocrUsage.js";
+import type * as functions_orderMatchingCorrections from "../functions/orderMatchingCorrections.js";
+import type * as functions_orderMatchingOptimization from "../functions/orderMatchingOptimization.js";
 import type * as functions_overtimeRules from "../functions/overtimeRules.js";
 import type * as functions_payPeriodConfigs from "../functions/payPeriodConfigs.js";
 import type * as functions_payments from "../functions/payments.js";
@@ -131,6 +134,7 @@ declare const fullApi: ApiFromModules<{
   "functions/actionCenterJobs": typeof functions_actionCenterJobs;
   "functions/admin": typeof functions_admin;
   "functions/admin/resetDatabase": typeof functions_admin_resetDatabase;
+  "functions/aiDigest": typeof functions_aiDigest;
   "functions/aiMessageUsage": typeof functions_aiMessageUsage;
   "functions/analytics": typeof functions_analytics;
   "functions/appVersions": typeof functions_appVersions;
@@ -193,6 +197,8 @@ declare const fullApi: ApiFromModules<{
   "functions/notificationJobs": typeof functions_notificationJobs;
   "functions/notifications": typeof functions_notifications;
   "functions/ocrUsage": typeof functions_ocrUsage;
+  "functions/orderMatchingCorrections": typeof functions_orderMatchingCorrections;
+  "functions/orderMatchingOptimization": typeof functions_orderMatchingOptimization;
   "functions/overtimeRules": typeof functions_overtimeRules;
   "functions/payPeriodConfigs": typeof functions_payPeriodConfigs;
   "functions/payments": typeof functions_payments;

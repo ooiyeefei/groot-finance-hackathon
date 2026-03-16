@@ -248,6 +248,10 @@ export default defineSchema({
     // 001-lhdn-einvoice-submission: Auto self-bill setting
     autoSelfBillExemptVendors: v.optional(v.boolean()),
 
+    // 022-einvoice-lhdn-buyer-flows: Buyer notification settings
+    einvoiceAutoDelivery: v.optional(v.boolean()),
+    einvoiceBuyerNotifications: v.optional(v.boolean()),
+
     // 001-in-app-referral-code: Referral attribution
     referredByCode: v.optional(v.string()),
     referredByUserId: v.optional(v.string()),
@@ -527,6 +531,9 @@ export default defineSchema({
     einvoiceStoragePath: v.optional(v.string()),       // S3 path: {bizId}/{userId}/{claimId}/einvoice/{filename}
     einvoiceRawEmailPath: v.optional(v.string()),      // S3 path: {bizId}/{userId}/{claimId}/einvoice/raw-email.eml
 
+    // 022-einvoice-lhdn-buyer-flows: E-invoice rejection warning
+    einvoiceRejectionWarning: v.optional(v.boolean()),
+
     // Timestamps & Error
     einvoiceRequestedAt: v.optional(v.number()),
     einvoiceReceivedAt: v.optional(v.number()),
@@ -612,7 +619,12 @@ export default defineSchema({
     buyerEmail: v.optional(v.string()),                // From UBL — may contain + suffix
     total: v.optional(v.number()),
     dateTimeIssued: v.optional(v.string()),            // ISO date-time
-    status: v.union(v.literal("valid"), v.literal("cancelled")),
+    status: v.union(v.literal("valid"), v.literal("cancelled"), v.literal("rejected")),
+
+    // 022-einvoice-lhdn-buyer-flows: Buyer rejection fields
+    rejectedAt: v.optional(v.number()),
+    rejectionReason: v.optional(v.string()),
+    rejectedByUserId: v.optional(v.string()),
     matchedExpenseClaimId: v.optional(v.id("expense_claims")),
     matchTier: v.optional(v.union(
       v.literal("tier1_email"),
@@ -1799,6 +1811,13 @@ export default defineSchema({
       target: v.optional(v.string()),
     }))),
     lhdnDocumentHash: v.optional(v.string()),
+
+    // 022-einvoice-lhdn-buyer-flows: Buyer rejection/cancellation tracking
+    lhdnRejectedAt: v.optional(v.number()),
+    lhdnStatusReason: v.optional(v.string()),
+    lhdnReviewRequired: v.optional(v.boolean()),
+    lhdnPdfDeliveredAt: v.optional(v.number()),
+    lhdnPdfDeliveredTo: v.optional(v.string()),
 
     // 016-e-invoice-schema-change: Peppol InvoiceNow tracking
     peppolDocumentId: v.optional(v.string()),

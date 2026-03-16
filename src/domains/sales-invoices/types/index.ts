@@ -314,6 +314,9 @@ export interface SalesInvoice {
   lhdnValidatedAt?: number;
   lhdnValidationErrors?: LhdnValidationError[];
   lhdnDocumentHash?: string;
+  lhdnRejectedAt?: number;
+  lhdnStatusReason?: string;
+  lhdnReviewRequired?: boolean;
   einvoiceType?: EinvoiceType;
   // Peppol e-invoice fields (016-e-invoice-schema-change)
   peppolDocumentId?: string;

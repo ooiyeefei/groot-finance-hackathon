@@ -17,6 +17,8 @@ import {
   type LhdnSubmissionResponse,
   type LhdnSubmissionStatus,
   type LhdnCancelRequest,
+  type LhdnRejectRequest,
+  type LhdnDocumentDetail,
   LhdnApiError,
 } from "./types"
 import { LHDN_API_PATHS } from "./constants"
@@ -198,6 +200,44 @@ export async function cancelDocument(
       method: "PUT",
       body: JSON.stringify(body),
     }
+  )
+}
+
+/**
+ * Reject a received document within the 72-hour window.
+ * Same endpoint as cancel but with status: "rejected".
+ */
+export async function rejectDocument(
+  documentUuid: string,
+  reason: string,
+  accessToken: string
+): Promise<void> {
+  const body: LhdnRejectRequest = {
+    status: "rejected",
+    reason,
+  }
+
+  await lhdnFetch<void>(
+    `${LHDN_API_PATHS.CANCEL_DOCUMENT}${documentUuid}/state`,
+    accessToken,
+    {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }
+  )
+}
+
+/**
+ * Get document details by UUID to check for status changes
+ * (rejection, cancellation) after initial validation.
+ */
+export async function getDocumentDetails(
+  documentUuid: string,
+  accessToken: string
+): Promise<LhdnDocumentDetail> {
+  return lhdnFetch<LhdnDocumentDetail>(
+    `/api/v1.0/documents/${documentUuid}`,
+    accessToken
   )
 }
 

@@ -427,6 +427,8 @@ export const LHDN_STATUSES = {
   VALID: "valid",
   INVALID: "invalid",
   CANCELLED: "cancelled",
+  REJECTED: "rejected",
+  CANCELLED_BY_BUYER: "cancelled_by_buyer",
 } as const;
 
 export type LhdnStatus = typeof LHDN_STATUSES[keyof typeof LHDN_STATUSES];

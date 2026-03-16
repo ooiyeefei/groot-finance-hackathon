@@ -59,7 +59,9 @@ export const LHDN_RATE_LIMITS = {
   SUBMIT: 100,
   POLL: 300,
   CANCEL: 12,
+  REJECT: 12,
   VALIDATE_TIN: 60,
+  GET_DOCUMENT: 60,
 } as const
 
 // ============================================
@@ -110,6 +112,17 @@ export const LHDN_POLLING_CONFIG = {
 
 export const LHDN_CANCELLATION = {
   /** Maximum hours after validation to allow cancellation */
+  WINDOW_HOURS: 72,
+  /** Window in milliseconds */
+  WINDOW_MS: 72 * 60 * 60 * 1000,
+} as const
+
+// ============================================
+// REJECTION (same 72-hour window as cancellation)
+// ============================================
+
+export const LHDN_REJECTION = {
+  /** Maximum hours after validation to allow rejection */
   WINDOW_HOURS: 72,
   /** Window in milliseconds */
   WINDOW_MS: 72 * 60 * 60 * 1000,

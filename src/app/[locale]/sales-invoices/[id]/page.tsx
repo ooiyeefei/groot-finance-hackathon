@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { ArrowLeft, Pencil, Send, RotateCw, CreditCard, Ban, Download, Loader2, Trash2 } from 'lucide-react'
+import { ArrowLeft, Pencil, Send, RotateCw, CreditCard, Ban, Download, Loader2, Trash2, AlertTriangle, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -224,6 +224,13 @@ export default function SalesInvoiceDetailPage() {
     await generatePdf(invoice.invoiceNumber, pdfData)
   }
 
+  const handleDownloadLhdnPdf = async () => {
+    // Uses the same pdfData which already includes LHDN fields
+    await generatePdf(`${invoice.invoiceNumber}-LHDN`, pdfData)
+  }
+
+  const isLhdnValid = invoice.lhdnStatus === 'valid' && !!invoice.lhdnLongId
+
   // Build business info from profile for invoice templates
   const businessInfo = {
     companyName: resolvedBusinessName,
@@ -255,6 +262,9 @@ export default function SalesInvoiceDetailPage() {
       status: invoice.status,
       lhdnLongId: invoice.lhdnLongId,
       lhdnQrDataUrl,
+      lhdnDocumentUuid: invoice.lhdnDocumentUuid,
+      lhdnValidatedAt: invoice.lhdnValidatedAt,
+      lhdnStatus: invoice.lhdnStatus,
     },
     businessInfo,
     templateId: invoice.templateId,
@@ -297,6 +307,22 @@ export default function SalesInvoiceDetailPage() {
             )}
             PDF
           </Button>
+
+          {isLhdnValid && (
+            <Button
+              size="sm"
+              onClick={handleDownloadLhdnPdf}
+              disabled={isGenerating}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
+            >
+              {isGenerating ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <ShieldCheck className="h-4 w-4 mr-1" />
+              )}
+              Download E-Invoice (LHDN)
+            </Button>
+          )}
 
           {isDraft && (
             <>
@@ -372,6 +398,32 @@ export default function SalesInvoiceDetailPage() {
           )}
         </div>
       </div>
+
+      {/* LHDN Rejected / Cancelled by Buyer — Review Required */}
+      {(invoice as any).lhdnReviewRequired && (
+        <Card className="border-red-500/30 bg-red-500/5">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  LHDN e-Invoice {invoice.lhdnStatus === 'rejected' ? 'Rejected' : 'Cancelled'} by Buyer — Review Required
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {(invoice as any).lhdnStatusReason
+                    ? `Reason: ${(invoice as any).lhdnStatusReason}`
+                    : 'The buyer has taken action on this e-invoice. Review the journal entry and take corrective action.'}
+                </p>
+                {invoice.lhdnStatus === 'rejected' && (invoice as any).lhdnRejectedAt && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Rejected at: {formatBusinessDate(new Date((invoice as any).lhdnRejectedAt).toISOString().split('T')[0])}
+                  </p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Void Confirmation */}
       {showVoidConfirm && (

@@ -14,6 +14,7 @@ import {
   Loader2,
   ClipboardList,
   Link2,
+  ShieldCheck,
 } from 'lucide-react'
 import DocumentsContainer from './documents-container'
 
@@ -32,6 +33,9 @@ const CatalogItemManager = lazy(
 )
 const ARReconciliation = lazy(
   () => import('@/domains/sales-invoices/components/ar-reconciliation')
+)
+const EinvoiceDashboard = lazy(
+  () => import('@/domains/sales-invoices/components/einvoice-dashboard')
 )
 
 // AP sub-tab components (lazy-loaded)
@@ -56,10 +60,10 @@ const MatchingTab = lazy(
 
 // --- Types ---
 type TopLevelTab = 'ar' | 'ap'
-type ARSubTab = 'dashboard' | 'sales' | 'debtors' | 'catalog' | 'reconciliation'
+type ARSubTab = 'dashboard' | 'sales' | 'debtors' | 'catalog' | 'reconciliation' | 'einvoice-compliance'
 type APSubTab = 'dashboard' | 'incoming' | 'vendors' | 'prices' | 'purchase-orders' | 'goods-received' | 'matching'
 
-const AR_SUB_TABS: readonly ARSubTab[] = ['dashboard', 'sales', 'debtors', 'catalog', 'reconciliation']
+const AR_SUB_TABS: readonly ARSubTab[] = ['dashboard', 'sales', 'debtors', 'catalog', 'reconciliation', 'einvoice-compliance']
 const AP_SUB_TABS: readonly APSubTab[] = ['dashboard', 'incoming', 'vendors', 'prices', 'purchase-orders', 'goods-received', 'matching']
 
 
@@ -177,6 +181,10 @@ export default function InvoicesTabContainer() {
                 <ArrowRightLeft className="h-4 w-4" />
                 Reconciliation
               </TabsTrigger>
+              <TabsTrigger value="einvoice-compliance" className={subTriggerClassName}>
+                <ShieldCheck className="h-4 w-4" />
+                E-Invoice Compliance
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="dashboard" className="mt-4">
@@ -206,6 +214,12 @@ export default function InvoicesTabContainer() {
             <TabsContent value="reconciliation" className="mt-4">
               <Suspense fallback={<TabLoading />}>
                 <ARReconciliation />
+              </Suspense>
+            </TabsContent>
+
+            <TabsContent value="einvoice-compliance" className="mt-4">
+              <Suspense fallback={<TabLoading />}>
+                <EinvoiceDashboard />
               </Suspense>
             </TabsContent>
           </Tabs>

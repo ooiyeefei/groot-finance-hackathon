@@ -11,6 +11,7 @@ import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { authenticate, cancelDocument } from "@/lib/lhdn/client"
 import { LhdnApiError } from "@/lib/lhdn/types"
+import { sendBuyerNotification } from "@/lib/services/buyer-notification-service"
 
 async function getAuthenticatedConvexClient() {
   const url = process.env.NEXT_PUBLIC_CONVEX_URL
@@ -113,6 +114,41 @@ export async function PUT(
     // 3. Authenticate and cancel with LHDN
     const tokenResult = await authenticate(tenantTin)
     await cancelDocument(documentUuid, reason, tokenResult.accessToken)
+
+    // 4. Send buyer notification (fire-and-forget)
+    const buyerNotificationsEnabled = (business as Record<string, unknown>)?.einvoiceBuyerNotifications !== false
+    if (buyerNotificationsEnabled) {
+      try {
+        const invoice = await convex.query(api.functions.salesInvoices.getById, {
+          id: invoiceId as Id<"sales_invoices">,
+          businessId,
+        })
+        const inv = invoice as Record<string, unknown> | null
+        const buyerEmail = (inv?.customerSnapshot as Record<string, unknown>)?.email as string | undefined
+        const lhdnLongId = inv?.lhdnLongId as string | undefined
+
+        if (buyerEmail && lhdnLongId) {
+          const businessName = (business as Record<string, unknown>)?.businessName as string ??
+            (business as Record<string, unknown>)?.name as string ?? "Business"
+          sendBuyerNotification({
+            event: "cancelled",
+            buyerEmail,
+            buyerName: (inv?.customerSnapshot as Record<string, unknown>)?.contactPerson as string ??
+              (inv?.customerSnapshot as Record<string, unknown>)?.businessName as string,
+            invoiceNumber: inv?.invoiceNumber as string ?? "",
+            businessName,
+            amount: (inv?.totalAmount as number) ?? 0,
+            currency: (inv?.currency as string) ?? "MYR",
+            lhdnDocumentUuid: documentUuid,
+            lhdnLongId,
+            reason,
+          }).catch((err) => console.error("[LHDN Cancel] Buyer notification failed:", err))
+        }
+      } catch (notifError) {
+        // Notification failure should not block the cancellation response
+        console.error("[LHDN Cancel] Failed to send buyer notification:", notifError)
+      }
+    }
 
     return NextResponse.json({
       success: true,

@@ -1737,6 +1737,86 @@ Support: https://finance.hellogroot.com/en/support
 
     return text
   }
+
+  // ============================================
+  // GENERIC EMAIL (for buyer notifications, etc.)
+  // ============================================
+
+  /**
+   * Send a generic email with pre-built HTML/text bodies.
+   * Used by buyer-notification-service and other callers that compose their own content.
+   */
+  async sendGenericEmail(params: {
+    to: string
+    subject: string
+    htmlBody: string
+    textBody: string
+    attachments?: EmailAttachment[]
+    bcc?: string
+    replyTo?: string
+  }): Promise<{ success: boolean; error?: string; messageId?: string; provider?: 'ses' | 'resend' }> {
+    this.initialize()
+
+    const { to, subject, htmlBody, textBody, attachments, bcc, replyTo } = params
+
+    // Try SES first
+    try {
+      const rawMessage = this.buildRawEmail({
+        from: this.config!.fromEmail,
+        to,
+        subject,
+        htmlBody,
+        textBody,
+        attachments,
+        bcc,
+        replyTo,
+      })
+
+      const destinations = [to]
+      if (bcc) destinations.push(bcc)
+
+      const command = new SendRawEmailCommand({
+        RawMessage: {
+          Data: Buffer.from(rawMessage),
+        },
+        Destinations: destinations,
+        ConfigurationSetName: this.config!.configurationSet,
+      })
+
+      const response = await this.ses!.send(command)
+
+      if (response.MessageId) {
+        console.log(`[EmailService] Generic email sent via SES to ${to}, MessageId: ${response.MessageId}`)
+        return { success: true, messageId: response.MessageId, provider: 'ses' }
+      }
+    } catch (sesError) {
+      console.error('[EmailService] SES failed for generic email:', sesError)
+
+      if (this.resend) {
+        console.log('[EmailService] Falling back to Resend for generic email...')
+        const resendResult = await this.sendViaResend({
+          to,
+          subject,
+          htmlBody,
+          textBody,
+          attachments,
+          bcc,
+          replyTo,
+        })
+        if (resendResult.success) {
+          return { ...resendResult, provider: 'resend' }
+        }
+        return resendResult
+      }
+
+      return {
+        success: false,
+        error: sesError instanceof Error ? sesError.message : 'SES send failed',
+      }
+    }
+
+    return { success: false, error: 'No email provider available' }
+  }
 }
 
 // Export singleton instance

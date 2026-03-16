@@ -126,6 +126,8 @@ interface ClaimDetails {
   lhdnReceivedLongId?: string | null
   lhdnReceivedStatus?: string | null
   lhdnReceivedAt?: number | null
+  // 022-einvoice-lhdn-buyer-flows
+  einvoiceRejectionWarning?: boolean
   pendingMatchCandidates?: Array<{
     receivedDocId: string
     supplierName: string
@@ -536,6 +538,14 @@ export default function UnifiedExpenseDetailsModal({
                         {claimDetails.status_display?.label || claimDetails.status?.toWellFormed() || 'UNKNOWN'} {/* ✅ Unified status field */}
                       </Badge>
 
+                      {/* E-Invoice Rejected Warning Badge (022-einvoice-lhdn-buyer-flows) */}
+                      {claimDetails.einvoiceRejectionWarning && (
+                        <Badge className="bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 text-sm px-3 py-1">
+                          <AlertCircle className="w-3.5 h-3.5 mr-1" />
+                          E-Invoice Rejected
+                        </Badge>
+                      )}
+
                       {/* Key expense summary info - wraps on mobile */}
                       <div className="flex items-center gap-2">
                         <DollarSign className="w-4 md:w-5 h-4 md:h-5 text-success" />
@@ -906,6 +916,7 @@ export default function UnifiedExpenseDetailsModal({
                         lhdnReceivedLongId={claimDetails.lhdnReceivedLongId}
                         lhdnReceivedStatus={claimDetails.lhdnReceivedStatus}
                         lhdnReceivedAt={claimDetails.lhdnReceivedAt}
+                        lhdnReceivedProcessedAt={claimDetails.lhdnReceivedAt}
                         pendingMatchCandidates={claimDetails.pendingMatchCandidates}
                         currency={claimDetails.currency || claimDetails.transaction?.original_currency}
                         onRefresh={fetchClaimDetails}
@@ -914,6 +925,8 @@ export default function UnifiedExpenseDetailsModal({
                         businessHasAddress={!!businessProfile?.address_line1}
                         businessHasPhone={!!businessProfile?.contact_phone}
                         businessHasEmail={!!businessProfile?.contact_email}
+                        businessId={businessId}
+                        userRole={viewMode === 'manager' ? 'manager' : undefined}
                       />
 
                       {/* Document Processing Status */}

@@ -11,7 +11,7 @@
  */
 
 import { v } from "convex/values";
-import { query, mutation, internalMutation } from "../_generated/server";
+import { query, mutation, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 import {
@@ -1501,6 +1501,9 @@ export const updateInvoiceDefaults = mutation({
       sstRegistration: v.optional(v.boolean()),
       idType: v.optional(v.boolean()),
     })),
+    // 022-einvoice-lhdn-buyer-flows: LHDN buyer notification settings (on businesses table)
+    einvoiceAutoDelivery: v.optional(v.boolean()),
+    einvoiceBuyerNotifications: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     await requireFinanceAdmin(ctx, args.businessId);
@@ -1527,10 +1530,15 @@ export const updateInvoiceDefaults = mutation({
     if (args.paymentMethods !== undefined) patch.paymentMethods = args.paymentMethods;
     if (args.customerFieldsVisibility !== undefined) patch.customerFieldsVisibility = args.customerFieldsVisibility;
 
-    await ctx.db.patch(args.businessId, {
+    // Build business-level patch for LHDN buyer settings
+    const businessPatch: Record<string, unknown> = {
       invoiceSettings: patch as never,
       updatedAt: Date.now(),
-    });
+    };
+    if (args.einvoiceAutoDelivery !== undefined) businessPatch.einvoiceAutoDelivery = args.einvoiceAutoDelivery;
+    if (args.einvoiceBuyerNotifications !== undefined) businessPatch.einvoiceBuyerNotifications = args.einvoiceBuyerNotifications;
+
+    await ctx.db.patch(args.businessId, businessPatch as never);
   },
 });
 
@@ -1557,6 +1565,195 @@ export const deleteInvoiceTemplate = mutation({
       } as never,
       updatedAt: Date.now(),
     });
+  },
+});
+
+// ============================================
+// LHDN STATUS POLLING (Internal)
+// ============================================
+
+/**
+ * Get issued invoices that need LHDN status polling.
+ * Returns invoices with lhdnStatus === "valid" validated within the last 72 hours.
+ * Used by the LHDN polling Lambda to detect buyer rejections/cancellations.
+ *
+ * NOTE: This is a public query (not internalQuery) because the Lambda invokes it
+ * via the Convex HTTP API (/api/query), which only supports public functions.
+ * Same pattern as getBusinessesForLhdnPolling in system.ts.
+ */
+export const getIssuedInvoicesForStatusPolling = query({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const seventyTwoHoursAgo = now - 72 * 60 * 60 * 1000;
+
+    const invoices = await ctx.db
+      .query("sales_invoices")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("lhdnStatus"), "valid"),
+          q.neq(q.field("lhdnValidatedAt"), undefined),
+          q.gte(q.field("lhdnValidatedAt"), seventyTwoHoursAgo),
+          q.eq(q.field("deletedAt"), undefined)
+        )
+      )
+      .collect();
+
+    return invoices.map((inv) => ({
+      _id: inv._id,
+      businessId: inv.businessId,
+      lhdnSubmissionId: inv.lhdnSubmissionId,
+      lhdnDocumentUuid: inv.lhdnDocumentUuid,
+      lhdnStatus: inv.lhdnStatus,
+      lhdnValidatedAt: inv.lhdnValidatedAt,
+      invoiceNumber: inv.invoiceNumber,
+      journalEntryId: inv.journalEntryId,
+    }));
+  },
+});
+
+/**
+ * Update LHDN status from polling when a buyer rejection or cancellation is detected.
+ * Creates a notification for business admins/owners.
+ *
+ * NOTE: This is a public mutation (not internalMutation) because the Lambda invokes it
+ * via the Convex HTTP API (/api/mutation), which only supports public functions.
+ * Same pattern as processLhdnReceivedDocuments in system.ts.
+ */
+export const updateLhdnStatusFromPoll = mutation({
+  args: {
+    invoiceId: v.id("sales_invoices"),
+    newStatus: v.union(v.literal("rejected"), v.literal("cancelled_by_buyer")),
+    reason: v.optional(v.string()),
+    timestamp: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice) {
+      console.error(`[updateLhdnStatusFromPoll] Invoice not found: ${args.invoiceId}`);
+      return;
+    }
+
+    // Build patch
+    const patch: Record<string, unknown> = {
+      lhdnStatus: args.newStatus,
+      lhdnStatusReason: args.reason,
+      updatedAt: Date.now(),
+    };
+
+    if (args.newStatus === "rejected") {
+      patch.lhdnRejectedAt = args.timestamp;
+    }
+
+    // If invoice has a journal entry, flag for review
+    if (invoice.journalEntryId) {
+      patch.lhdnReviewRequired = true;
+    }
+
+    await ctx.db.patch(args.invoiceId, patch);
+
+    // Create notifications for business admins/owners
+    const members = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", invoice.businessId))
+      .collect();
+
+    const targetMembers = members.filter(
+      (m: any) => m.status === "active" && ["owner", "finance_admin", "manager"].includes(m.role)
+    );
+
+    const statusLabel = args.newStatus === "rejected" ? "rejected by buyer" : "cancelled by buyer";
+    const title = `LHDN e-Invoice ${statusLabel}: ${invoice.invoiceNumber}`;
+    const body = args.reason
+      ? `Invoice ${invoice.invoiceNumber} has been ${statusLabel}. Reason: ${args.reason}`
+      : `Invoice ${invoice.invoiceNumber} has been ${statusLabel}. Review the invoice and take appropriate action.`;
+
+    for (const member of targetMembers) {
+      await ctx.db.insert("notifications", {
+        recipientUserId: member.userId,
+        businessId: invoice.businessId,
+        type: "lhdn_submission",
+        severity: "warning",
+        status: "unread",
+        title,
+        body,
+        resourceType: "sales_invoice",
+        resourceId: invoice._id.toString(),
+        createdAt: Date.now(),
+      });
+    }
+
+    console.log(
+      `[updateLhdnStatusFromPoll] Invoice ${invoice.invoiceNumber} status updated to ${args.newStatus}`
+    );
+  },
+});
+
+// ============================================
+// LHDN AUTO-DELIVERY QUERIES (no user auth — protected by internal service key at API route level)
+// ============================================
+
+/**
+ * Get invoice data for auto-delivery. No user auth required.
+ * Only used by the internal delivery API route (X-Internal-Key protected).
+ */
+export const getInvoiceForDelivery = query({
+  args: {
+    invoiceId: v.id("sales_invoices"),
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice || invoice.businessId !== args.businessId || invoice.deletedAt) return null;
+    return invoice;
+  },
+});
+
+// ============================================
+// LHDN AUTO-DELIVERY TRACKING
+// ============================================
+
+/**
+ * Update delivery tracking after e-invoice PDF is emailed to buyer.
+ */
+export const updateLhdnDeliveryStatus = mutation({
+  args: {
+    invoiceId: v.id("sales_invoices"),
+    businessId: v.id("businesses"),
+    deliveredTo: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice || invoice.businessId !== args.businessId) return;
+
+    await ctx.db.patch(args.invoiceId, {
+      lhdnPdfDeliveredAt: Date.now(),
+      lhdnPdfDeliveredTo: args.deliveredTo,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+/**
+ * Get business info for invoice auto-delivery (minimal fields).
+ */
+export const getBusinessForInvoice = query({
+  args: { businessId: v.id("businesses") },
+  handler: async (ctx, args) => {
+    const business = await ctx.db.get(args.businessId);
+    if (!business) return null;
+    return {
+      name: business.name,
+      address: business.address,
+      contactPhone: business.contactPhone,
+      contactEmail: business.contactEmail,
+      businessRegistrationNumber: business.businessRegistrationNumber,
+      lhdnTin: business.lhdnTin,
+      sstRegistrationNumber: business.sstRegistrationNumber,
+      logoUrl: business.logoUrl,
+      einvoiceAutoDelivery: business.einvoiceAutoDelivery,
+      einvoiceBuyerNotifications: business.einvoiceBuyerNotifications,
+    };
   },
 });
 
@@ -2134,6 +2331,198 @@ export const cancelLhdnSubmission = mutation({
     });
 
     return { documentUuid: invoice.lhdnDocumentUuid };
+  },
+});
+
+// ============================================
+// E-INVOICE COMPLIANCE ANALYTICS
+// ============================================
+
+/**
+ * Get e-invoice compliance analytics for the dashboard.
+ * Aggregates LHDN submission stats, monthly breakdown, top errors, and recent activity.
+ */
+export const getEinvoiceAnalytics = query({
+  args: {
+    businessId: v.id("businesses"),
+    dateFrom: v.optional(v.number()),
+    dateTo: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    // Auth check
+    await requireFinanceAdmin(ctx, args.businessId);
+
+    // Fetch all sales invoices for this business
+    const allInvoices = await ctx.db
+      .query("sales_invoices")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    // Filter out soft-deleted
+    const activeInvoices = allInvoices.filter((inv) => !inv.deletedAt);
+
+    // Eligible invoices = those with status sent, paid, overdue, or partially_paid
+    const eligibleStatuses = ["sent", "paid", "overdue", "partially_paid"];
+    const totalEligible = activeInvoices.filter((inv) =>
+      eligibleStatuses.includes(inv.status)
+    ).length;
+
+    // Invoices that have been submitted to LHDN (have lhdnStatus set)
+    let lhdnInvoices = activeInvoices.filter((inv) => inv.lhdnStatus);
+
+    // Optional date range filter on lhdnSubmittedAt
+    if (args.dateFrom) {
+      lhdnInvoices = lhdnInvoices.filter(
+        (inv) => inv.lhdnSubmittedAt && inv.lhdnSubmittedAt >= args.dateFrom!
+      );
+    }
+    if (args.dateTo) {
+      lhdnInvoices = lhdnInvoices.filter(
+        (inv) => inv.lhdnSubmittedAt && inv.lhdnSubmittedAt <= args.dateTo!
+      );
+    }
+
+    // Aggregate status counts
+    let validated = 0;
+    let rejected = 0;
+    let cancelled = 0;
+    let invalid = 0;
+    let pending = 0;
+    let totalValidationTimeMs = 0;
+    let validationCount = 0;
+
+    // Monthly breakdown map: "2026-03" -> { submitted, validated, rejected }
+    const monthlyMap = new Map<string, { submitted: number; validated: number; rejected: number }>();
+
+    // Error aggregation
+    const errorMap = new Map<string, { code: string; message: string; count: number }>();
+
+    // Recent activity (collect all, sort later, take top 20)
+    const recentActivity: Array<{
+      invoiceNumber: string;
+      event: string;
+      timestamp: number;
+      details?: string;
+    }> = [];
+
+    for (const inv of lhdnInvoices) {
+      // Status aggregation
+      switch (inv.lhdnStatus) {
+        case "valid":
+          validated++;
+          break;
+        case "rejected":
+        case "cancelled_by_buyer":
+          rejected++;
+          break;
+        case "cancelled":
+          cancelled++;
+          break;
+        case "invalid":
+          invalid++;
+          break;
+        case "pending":
+        case "submitted":
+          pending++;
+          break;
+      }
+
+      // Average validation time
+      if (inv.lhdnStatus === "valid" && inv.lhdnValidatedAt && inv.lhdnSubmittedAt) {
+        totalValidationTimeMs += inv.lhdnValidatedAt - inv.lhdnSubmittedAt;
+        validationCount++;
+      }
+
+      // Monthly breakdown (keyed by submission month)
+      if (inv.lhdnSubmittedAt) {
+        const d = new Date(inv.lhdnSubmittedAt);
+        const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        const bucket = monthlyMap.get(monthKey) ?? { submitted: 0, validated: 0, rejected: 0 };
+        bucket.submitted++;
+        if (inv.lhdnStatus === "valid") bucket.validated++;
+        if (inv.lhdnStatus === "rejected" || inv.lhdnStatus === "cancelled_by_buyer") bucket.rejected++;
+        monthlyMap.set(monthKey, bucket);
+      }
+
+      // Top errors
+      if (inv.lhdnValidationErrors && inv.lhdnValidationErrors.length > 0) {
+        for (const err of inv.lhdnValidationErrors) {
+          const key = `${err.code}::${err.message}`;
+          const existing = errorMap.get(key);
+          if (existing) {
+            existing.count++;
+          } else {
+            errorMap.set(key, { code: err.code, message: err.message, count: 1 });
+          }
+        }
+      }
+
+      // Recent activity entries
+      if (inv.lhdnSubmittedAt) {
+        recentActivity.push({
+          invoiceNumber: inv.invoiceNumber,
+          event: "submitted",
+          timestamp: inv.lhdnSubmittedAt,
+        });
+      }
+      if (inv.lhdnValidatedAt && inv.lhdnStatus === "valid") {
+        recentActivity.push({
+          invoiceNumber: inv.invoiceNumber,
+          event: "validated",
+          timestamp: inv.lhdnValidatedAt,
+        });
+      }
+      if (inv.lhdnRejectedAt) {
+        recentActivity.push({
+          invoiceNumber: inv.invoiceNumber,
+          event: "rejected",
+          timestamp: inv.lhdnRejectedAt,
+          details: inv.lhdnStatusReason ?? undefined,
+        });
+      }
+      if (inv.lhdnStatus === "cancelled") {
+        recentActivity.push({
+          invoiceNumber: inv.invoiceNumber,
+          event: "cancelled",
+          timestamp: inv.updatedAt ?? inv._creationTime,
+          details: inv.lhdnStatusReason ?? undefined,
+        });
+      }
+    }
+
+    const totalSubmitted = lhdnInvoices.length;
+
+    // Sort monthly breakdown by month key
+    const monthlyBreakdown = Array.from(monthlyMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, data]) => ({ month, ...data }));
+
+    // Sort errors by count descending
+    const topErrors = Array.from(errorMap.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    // Sort recent activity by timestamp descending, take top 20
+    recentActivity.sort((a, b) => b.timestamp - a.timestamp);
+    const recentActivityTop = recentActivity.slice(0, 20);
+
+    // Compliance score: submitted / total eligible
+    const complianceScore = totalEligible > 0 ? totalSubmitted / totalEligible : 0;
+
+    return {
+      totalSubmitted,
+      validated,
+      rejected,
+      cancelled,
+      invalid,
+      pending,
+      avgValidationTimeMs: validationCount > 0 ? totalValidationTimeMs / validationCount : null,
+      complianceScore,
+      totalEligible,
+      monthlyBreakdown,
+      topErrors,
+      recentActivity: recentActivityTop,
+    };
   },
 });
 
