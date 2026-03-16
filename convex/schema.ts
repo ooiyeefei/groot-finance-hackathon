@@ -262,6 +262,13 @@ export default defineSchema({
 
     // Timestamps
     updatedAt: v.optional(v.number()),
+
+    // 001-surface-automation-rate: Milestone tracking
+    automationMilestones: v.optional(v.object({
+      milestone_90: v.optional(v.number()),  // Unix timestamp (ms) when 90% first achieved
+      milestone_95: v.optional(v.number()),  // Unix timestamp (ms) when 95% first achieved
+      milestone_99: v.optional(v.number()),  // Unix timestamp (ms) when 99% first achieved
+    })),
   })
     .index("by_legacyId", ["legacyId"])
     .index("by_stripeCustomerId", ["stripeCustomerId"])

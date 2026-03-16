@@ -7,6 +7,7 @@ import { SUPPORTED_CURRENCIES } from '@/domains/users/hooks/use-home-currency';
 import useFinancialAnalytics from '@/domains/analytics/hooks/use-financial-analytics';
 import { useActiveBusiness } from '@/contexts/business-context';
 import { ProactiveActionCenter } from './action-center';
+import { AutomationRateHero } from './automation-rate-hero';
 
 // Lazy load heavy components to improve initial page load
 const CurrencyBreakdown = lazy(() => import('./financial-analytics/CurrencyBreakdown'));
@@ -242,6 +243,11 @@ export default function CompleteDashboard() {
         <Suspense fallback={<ComponentLoader title="AI Performance" height="chart" />}>
           <AIPerformanceWidget businessId={businessId} />
         </Suspense>
+      )}
+
+      {/* AI Automation Rate Hero Metric */}
+      {businessId && (
+        <AutomationRateHero businessId={businessId as any} defaultPeriod="week" />
       )}
 
       {/* KPI Metrics - 3+2 Grid Layout */}
