@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useQuery } from 'convex/react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useAction } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 
@@ -37,22 +37,60 @@ interface AIPerformanceMetrics {
 }
 
 interface UseAIPerformanceReturn {
-  metrics: AIPerformanceMetrics | null | undefined;
+  metrics: AIPerformanceMetrics | null;
   period: Period;
   setPeriod: (period: Period) => void;
   loading: boolean;
   isEmpty: boolean;
+  refresh: () => void;
+  lastUpdated: Date | null;
 }
 
 export function useAIPerformance(businessId: string): UseAIPerformanceReturn {
-  const [period, setPeriod] = useState<Period>("this_month");
+  const [period, setPeriodState] = useState<Period>("this_month");
+  const [metrics, setMetrics] = useState<AIPerformanceMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const fetchAction = useAction(api.functions.aiPerformanceMetrics.getAIPerformanceMetrics);
+  const isMounted = useRef(true);
 
-  const metrics = useQuery(
-    api.functions.aiPerformanceMetrics.getAIPerformanceMetrics,
-    { businessId: businessId as Id<"businesses">, period }
-  );
+  const fetchMetrics = useCallback(async (p: Period) => {
+    setLoading(true);
+    try {
+      const result = await fetchAction({
+        businessId: businessId as Id<"businesses">,
+        period: p,
+      });
+      if (isMounted.current) {
+        setMetrics(result as AIPerformanceMetrics | null);
+        setLastUpdated(new Date());
+      }
+    } catch (error) {
+      console.error("Failed to fetch AI performance metrics:", error);
+      if (isMounted.current) {
+        setMetrics(null);
+      }
+    } finally {
+      if (isMounted.current) {
+        setLoading(false);
+      }
+    }
+  }, [fetchAction, businessId]);
 
-  const loading = metrics === undefined;
+  useEffect(() => {
+    isMounted.current = true;
+    fetchMetrics(period);
+    return () => { isMounted.current = false; };
+  }, [fetchMetrics, period]);
+
+  const setPeriod = useCallback((newPeriod: Period) => {
+    setPeriodState(newPeriod);
+  }, []);
+
+  const refresh = useCallback(() => {
+    fetchMetrics(period);
+  }, [fetchMetrics, period]);
+
   const isEmpty = metrics?.isEmpty ?? true;
 
   return {
@@ -61,5 +99,7 @@ export function useAIPerformance(businessId: string): UseAIPerformanceReturn {
     setPeriod,
     loading,
     isEmpty,
+    refresh,
+    lastUpdated,
   };
 }

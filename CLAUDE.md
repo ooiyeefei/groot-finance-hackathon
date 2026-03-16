@@ -144,6 +144,35 @@ Fix errors and repeat until successful.
   - Adding new Convex modules
 - **Common failure**: Forgetting to deploy to prod after Convex changes — causes "Could not find public function" errors in production
 
+### Convex Bandwidth & Query Budget (CRITICAL)
+
+**Free plan limits**: 2M function calls, **2 GB database bandwidth/month**, 1 GB storage. We are on the Free plan — every byte counts.
+
+**Rule 1: Never use reactive `query` for heavy aggregations.**
+- Convex `query` creates a reactive subscription. Every time ANY document in the queried tables changes, the query re-runs and re-reads ALL documents. Each re-read counts toward bandwidth.
+- **Use `action` + `internalQuery`** for dashboard widgets, analytics, reports, or anything that scans multiple tables. The action runs once on demand; the client stores results in React state.
+- Pattern: `internalQuery` does the DB reads → public `action` calls it via `ctx.runQuery` → client uses `useAction` + `useEffect` on mount.
+- **Use `query`** only for small, single-document lookups or real-time data that genuinely needs live updates (e.g., a single expense claim status).
+
+**Rule 2: Never `.collect()` entire tables without limits.**
+- Always ask: "How many documents could this return at scale?" If the answer is "thousands", use `.take(N)` or add tighter index range filters.
+- Prefer filtering at the index level (`.withIndex(..., q => q.eq(...).gte(...))`) over collecting everything and filtering in JS.
+
+**Rule 3: Audit crons for bandwidth impact.**
+- Every cron that reads data costs bandwidth. Hourly crons that scan multiple tables for all businesses are extremely expensive.
+- Before adding a cron: calculate `(docs_read × avg_doc_size × runs_per_month)`. If it exceeds ~50 MB/month, reconsider the frequency or scope.
+- **Currently disabled**: `ai-daily-digest` (was hourly, scanning multiple tables for all businesses). Re-enable only on Pro plan.
+
+**Rule 4: Kill stray `convex dev` processes.**
+- `npx convex dev` from worktrees auto-syncs to the shared deployment, consuming bandwidth and causing "Schema was overwritten" deploy conflicts.
+- Before deploying: `ps aux | grep convex | grep -v grep` — kill any stray `convex dev` processes from other worktrees.
+
+**Anti-patterns that burn bandwidth:**
+- `useQuery` with `.collect()` on large tables (reactive re-runs on every change)
+- Crons running hourly/every-5-min that scan entire tables
+- Multiple worktrees running `convex dev` against the same deployment
+- Dashboard widgets using reactive queries for aggregations (use `action` instead)
+
 ### Security — Least Privilege (CRITICAL)
 
 **Applies to ALL layers**: application code, infrastructure, database, service-to-service auth.

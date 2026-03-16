@@ -1,6 +1,6 @@
 'use client';
 
-import { Brain, TrendingUp, TrendingDown } from 'lucide-react';
+import { Brain, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { useAIPerformance } from '../../hooks/use-ai-performance';
 
@@ -15,9 +15,9 @@ const DONUT_COLORS = {
 };
 
 export default function AIPerformanceWidget({ businessId }: AIPerformanceWidgetProps) {
-  const { metrics, period, setPeriod, loading, isEmpty } = useAIPerformance(businessId);
+  const { metrics, period, setPeriod, loading, isEmpty, refresh, lastUpdated } = useAIPerformance(businessId);
 
-  if (loading) {
+  if (loading && !metrics) {
     return (
       <div className="bg-card text-card-foreground border rounded-lg p-card-padding min-h-[280px]">
         <div className="flex items-center justify-center h-full">
@@ -70,21 +70,36 @@ export default function AIPerformanceWidget({ businessId }: AIPerformanceWidgetP
 
   return (
     <div className="bg-card text-card-foreground border rounded-lg p-card-padding">
-      {/* Header with period selector */}
+      {/* Header with period selector + refresh */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Brain className="w-5 h-5 text-primary" />
           <h3 className="text-lg font-semibold">AI Performance</h3>
+          {lastUpdated && (
+            <span className="text-xs text-muted-foreground">
+              Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
         </div>
-        <select
-          value={period}
-          onChange={(e) => setPeriod(e.target.value as typeof period)}
-          className="px-2 py-1 bg-muted text-foreground border rounded text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-        >
-          <option value="this_month">This Month</option>
-          <option value="last_3_months">Last 3 Months</option>
-          <option value="all_time">All Time</option>
-        </select>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={refresh}
+            disabled={loading}
+            className="p-1 rounded hover:bg-muted transition-colors disabled:opacity-50"
+            title="Refresh metrics"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-muted-foreground ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <select
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as typeof period)}
+            className="px-2 py-1 bg-muted text-foreground border rounded text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value="this_month">This Month</option>
+            <option value="last_3_months">Last 3 Months</option>
+            <option value="all_time">All Time</option>
+          </select>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

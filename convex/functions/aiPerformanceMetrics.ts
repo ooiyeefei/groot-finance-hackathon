@@ -1,15 +1,20 @@
 /**
- * AI Performance Metrics — Real-time aggregation for the AI Performance Widget
+ * AI Performance Metrics — On-demand aggregation for the AI Performance Widget
  *
- * Extends the bridge pattern from aiDigest.ts with date-range filtering,
- * confidence averaging, and period-over-period trend comparison.
+ * Uses action (not query) to avoid reactive re-runs on every document change.
+ * Client calls once on mount via useAction, stores in React state, with optional refresh.
+ *
+ * Architecture:
+ * - internalQuery `_computeMetrics` does the heavy DB reads (ctx.db access)
+ * - Public action `getAIPerformanceMetrics` wraps it as a one-shot call (no reactivity)
  *
  * Data sources: sales_orders (AR + fees), bank_transactions, corrections tables.
  * No new tables — all metrics derived from existing data.
  */
 
 import { v } from "convex/values";
-import { query } from "../_generated/server";
+import { action, internalQuery } from "../_generated/server";
+import { internal } from "../_generated/api";
 
 // Reuse time saved estimates from aiDigest.ts
 const TIME_SAVED = {
@@ -57,7 +62,7 @@ function getPeriodBounds(period: Period): { current: PeriodBounds; previous: Per
 
 interface FeatureMetrics {
   total: number;
-  confidence: number; // average confidence (0-1)
+  confidence: number;
   corrections: number;
 }
 
@@ -86,42 +91,50 @@ interface PeriodMetrics {
 async function computeMetricsForPeriod(ctx: any, businessId: string, bounds: PeriodBounds): Promise<PeriodMetrics> {
   const { start, end } = bounds;
 
-  // ── AR Matching ──
-  const allOrders = await ctx.db
-    .query("sales_orders")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
-    .collect();
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const periodOrders = allOrders.filter((o: any) => {
-    const ts = o.updatedAt ?? o._creationTime ?? 0;
-    return ts >= start && ts <= end;
-  });
-
+  let periodOrders: any[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const arWithAi = periodOrders.filter((o: any) => o.aiMatchTier === 1 || o.aiMatchTier === 2);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const arAutoApproved = periodOrders.filter((o: any) => o.aiMatchStatus === "auto_approved").length;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const arApproved = periodOrders.filter((o: any) => o.aiMatchStatus === "approved").length;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const arPending = periodOrders.filter((o: any) => o.aiMatchStatus === "pending_review").length;
-
-  // AR confidence: average of top suggestion confidence
+  let arWithAi: any[] = [];
+  let arAutoApproved = 0;
+  let arApproved = 0;
+  let arPending = 0;
   let arConfidenceSum = 0;
   let arConfidenceCount = 0;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const o of arWithAi as any[]) {
-    const conf = o.aiMatchSuggestions?.[0]?.confidence ?? o.matchConfidence;
-    if (conf != null && conf > 0) {
-      arConfidenceSum += conf;
-      arConfidenceCount++;
+
+  try {
+    const allOrders = await ctx.db
+      .query("sales_orders")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .withIndex("by_businessId", (q: any) => q.eq("businessId", businessId))
+      .collect();
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    periodOrders = allOrders.filter((o: any) => {
+      const ts = o.updatedAt ?? o._creationTime ?? 0;
+      return ts >= start && ts <= end;
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    arWithAi = periodOrders.filter((o: any) => o.aiMatchTier === 1 || o.aiMatchTier === 2);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    arAutoApproved = periodOrders.filter((o: any) => o.aiMatchStatus === "auto_approved").length;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    arApproved = periodOrders.filter((o: any) => o.aiMatchStatus === "approved").length;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    arPending = periodOrders.filter((o: any) => o.aiMatchStatus === "pending_review").length;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const o of arWithAi as any[]) {
+      const conf = o.aiMatchSuggestions?.[0]?.confidence ?? o.matchConfidence;
+      if (conf != null && conf > 0) {
+        arConfidenceSum += conf;
+        arConfidenceCount++;
+      }
     }
+  } catch {
+    // sales_orders query failed
   }
 
-  // ── Bank Recon ──
-  let bankTotal = 0;
   let bankClassified = 0;
   let bankPending = 0;
   let bankConfidenceSum = 0;
@@ -139,7 +152,6 @@ async function computeMetricsForPeriod(ctx: any, businessId: string, bounds: Per
       return ts >= start && ts <= end;
     });
 
-    bankTotal = periodBank.length;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     bankClassified = periodBank.filter((t: any) => t.classificationTier && t.suggestedDebitAccountCode).length;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -153,10 +165,9 @@ async function computeMetricsForPeriod(ctx: any, businessId: string, bounds: Per
       }
     }
   } catch {
-    // Bank tables might not exist on all branches
+    // Bank tables might not exist
   }
 
-  // ── Fee Classification ──
   let feeTotal = 0;
   let feeClassified = 0;
   let feeMissing = 0;
@@ -181,7 +192,6 @@ async function computeMetricsForPeriod(ctx: any, businessId: string, bounds: Per
     }
   }
 
-  // ── Corrections ──
   let arCorrections = 0;
   try {
     const allArCorrections = await ctx.db
@@ -224,13 +234,11 @@ async function computeMetricsForPeriod(ctx: any, businessId: string, bounds: Per
     // Table might not exist
   }
 
-  // ── Aggregate ──
   const totalAiDecisions = arWithAi.length + bankClassified + feeClassified;
   const totalCorrections = arCorrections + bankCorrections + feeCorrections;
   const totalAccepted = totalAiDecisions - totalCorrections;
   const decisionsRequiringReview = arPending + bankPending + totalCorrections;
 
-  // Volume-weighted confidence
   const totalConfidenceWeight = arConfidenceCount + bankConfidenceCount + feeConfidenceCount;
   const overallConfidence = totalConfidenceWeight > 0
     ? ((arConfidenceSum + bankConfidenceSum + feeConfidenceSum) / totalConfidenceWeight) * 100
@@ -238,15 +246,10 @@ async function computeMetricsForPeriod(ctx: any, businessId: string, bounds: Per
 
   const editRate = totalAiDecisions > 0 ? (totalCorrections / totalAiDecisions) * 100 : 0;
   const noEditRate = totalAiDecisions > 0 ? 100 - editRate : 0;
-
-  // Automation rate: auto-approved / total eligible (AR only for now — Triple-Lock)
-  const totalEligible = arWithAi.length; // Only AR has auto-approval currently
+  const totalEligible = arWithAi.length;
   const automationRate = totalEligible > 0 ? (arAutoApproved / totalEligible) * 100 : 0;
-
-  // Missing fields rate (OCR/fee only)
   const missingFieldsRate = feeTotal > 0 ? (feeMissing / feeTotal) * 100 : 0;
 
-  // Hours saved calculation
   const arSuccessful = arApproved + arAutoApproved + arWithAi.filter(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (o: any) => o.aiMatchTier === 1
@@ -292,10 +295,28 @@ async function computeMetricsForPeriod(ctx: any, businessId: string, bounds: Per
 }
 
 /**
- * Get AI performance metrics for the dashboard widget.
- * Authenticated query — scoped to the user's active business.
+ * Internal query — does the heavy DB reads.
+ * Called by the public action below (not directly by clients).
  */
-export const getAIPerformanceMetrics = query({
+export const _computeMetrics = internalQuery({
+  args: {
+    businessId: v.string(),
+    periodStart: v.number(),
+    periodEnd: v.number(),
+  },
+  handler: async (ctx, args) => {
+    return computeMetricsForPeriod(ctx, args.businessId, {
+      start: args.periodStart,
+      end: args.periodEnd,
+    });
+  },
+});
+
+/**
+ * Get AI performance metrics — public action (NOT reactive query).
+ * Runs once on demand. Client calls via useAction on mount + optional refresh.
+ */
+export const getAIPerformanceMetrics = action({
   args: {
     businessId: v.id("businesses"),
     period: v.union(
@@ -308,41 +329,77 @@ export const getAIPerformanceMetrics = query({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
 
-    const { current, previous } = getPeriodBounds(args.period);
-
-    const currentMetrics = await computeMetricsForPeriod(ctx, args.businessId as string, current);
-
-    // Compute trend deltas if previous period exists
-    let trends: {
-      confidenceDelta: number | null;
-      editRateDelta: number | null;
-      automationRateDelta: number | null;
-      hoursSavedDelta: number | null;
-    } | null = null;
-
-    if (previous) {
-      const prevMetrics = await computeMetricsForPeriod(ctx, args.businessId as string, previous);
-      if (prevMetrics.totalAiDecisions > 0) {
-        trends = {
-          confidenceDelta: Math.round((currentMetrics.overallConfidence - prevMetrics.overallConfidence) * 10) / 10,
-          editRateDelta: Math.round((currentMetrics.editRate - prevMetrics.editRate) * 10) / 10,
-          automationRateDelta: Math.round((currentMetrics.automationRate - prevMetrics.automationRate) * 10) / 10,
-          hoursSavedDelta: Math.round((currentMetrics.estimatedHoursSaved - prevMetrics.estimatedHoursSaved) * 10) / 10,
-        };
-      }
-    }
-
     const periodLabels: Record<Period, string> = {
       this_month: "This Month",
       last_3_months: "Last 3 Months",
       all_time: "All Time",
     };
 
-    return {
-      ...currentMetrics,
-      trends,
-      periodLabel: periodLabels[args.period],
-      isEmpty: currentMetrics.totalAiDecisions === 0,
-    };
+    try {
+      const { current, previous } = getPeriodBounds(args.period);
+
+      const currentMetrics: PeriodMetrics = await ctx.runQuery(
+        internal.functions.aiPerformanceMetrics._computeMetrics,
+        {
+          businessId: args.businessId as string,
+          periodStart: current.start,
+          periodEnd: current.end,
+        }
+      );
+
+      let trends: {
+        confidenceDelta: number | null;
+        editRateDelta: number | null;
+        automationRateDelta: number | null;
+        hoursSavedDelta: number | null;
+      } | null = null;
+
+      if (previous) {
+        const prevMetrics: PeriodMetrics = await ctx.runQuery(
+          internal.functions.aiPerformanceMetrics._computeMetrics,
+          {
+            businessId: args.businessId as string,
+            periodStart: previous.start,
+            periodEnd: previous.end,
+          }
+        );
+        if (prevMetrics.totalAiDecisions > 0) {
+          trends = {
+            confidenceDelta: Math.round((currentMetrics.overallConfidence - prevMetrics.overallConfidence) * 10) / 10,
+            editRateDelta: Math.round((currentMetrics.editRate - prevMetrics.editRate) * 10) / 10,
+            automationRateDelta: Math.round((currentMetrics.automationRate - prevMetrics.automationRate) * 10) / 10,
+            hoursSavedDelta: Math.round((currentMetrics.estimatedHoursSaved - prevMetrics.estimatedHoursSaved) * 10) / 10,
+          };
+        }
+      }
+
+      return {
+        ...currentMetrics,
+        trends,
+        periodLabel: periodLabels[args.period],
+        isEmpty: currentMetrics.totalAiDecisions === 0,
+      };
+    } catch (error) {
+      console.error("aiPerformanceMetrics error:", error);
+      return {
+        overallConfidence: 0,
+        editRate: 0,
+        noEditRate: 0,
+        automationRate: 0,
+        missingFieldsRate: 0,
+        totalAiDecisions: 0,
+        decisionsRequiringReview: 0,
+        estimatedHoursSaved: 0,
+        distribution: { noEdit: 0, edited: 0, missing: 0 },
+        featureBreakdown: {
+          ar: { total: 0, confidence: 0, corrections: 0 },
+          bank: { total: 0, confidence: 0, corrections: 0 },
+          fee: { total: 0, confidence: 0, corrections: 0 },
+        },
+        trends: null,
+        periodLabel: periodLabels[args.period],
+        isEmpty: true,
+      };
+    }
   },
 });
