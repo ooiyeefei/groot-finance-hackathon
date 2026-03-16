@@ -13,6 +13,7 @@ const CurrencyBreakdown = lazy(() => import('./financial-analytics/CurrencyBreak
 const CategoryAnalysis = lazy(() => import('./financial-analytics/CategoryAnalysis'));
 const AgedReceivablesWidget = lazy(() => import('./AgedReceivablesWidget'));
 const AgedPayablesWidget = lazy(() => import('./AgedPayablesWidget'));
+const AIPerformanceWidget = lazy(() => import('./ai-performance/AIPerformanceWidget'));
 
 // Loading component for Suspense fallbacks
 // CLS FIX: Height must match actual component heights to prevent layout shift
@@ -234,6 +235,13 @@ export default function CompleteDashboard() {
       {/* Proactive AI Action Center */}
       {businessId && (
         <ProactiveActionCenter businessId={businessId} defaultExpanded={true} />
+      )}
+
+      {/* AI Performance Widget */}
+      {businessId && (
+        <Suspense fallback={<ComponentLoader title="AI Performance" height="chart" />}>
+          <AIPerformanceWidget businessId={businessId} />
+        </Suspense>
       )}
 
       {/* KPI Metrics - 3+2 Grid Layout */}

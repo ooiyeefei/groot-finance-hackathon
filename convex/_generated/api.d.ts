@@ -16,6 +16,7 @@ import type * as functions_admin from "../functions/admin.js";
 import type * as functions_admin_resetDatabase from "../functions/admin/resetDatabase.js";
 import type * as functions_aiDigest from "../functions/aiDigest.js";
 import type * as functions_aiMessageUsage from "../functions/aiMessageUsage.js";
+import type * as functions_aiPerformanceMetrics from "../functions/aiPerformanceMetrics.js";
 import type * as functions_analytics from "../functions/analytics.js";
 import type * as functions_appVersions from "../functions/appVersions.js";
 import type * as functions_attendanceRecords from "../functions/attendanceRecords.js";
@@ -136,6 +137,7 @@ declare const fullApi: ApiFromModules<{
   "functions/admin/resetDatabase": typeof functions_admin_resetDatabase;
   "functions/aiDigest": typeof functions_aiDigest;
   "functions/aiMessageUsage": typeof functions_aiMessageUsage;
+  "functions/aiPerformanceMetrics": typeof functions_aiPerformanceMetrics;
   "functions/analytics": typeof functions_analytics;
   "functions/appVersions": typeof functions_appVersions;
   "functions/attendanceRecords": typeof functions_attendanceRecords;
