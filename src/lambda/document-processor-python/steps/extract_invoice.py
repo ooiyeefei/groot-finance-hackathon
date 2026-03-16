@@ -568,7 +568,7 @@ def extract_invoice_step(
         ]
 
         # Log token usage for billing (include actual image count)
-        token_data = log_token_usage(get_lm(), "gemini-3-flash-preview", image_count=len(document_images))
+        token_data = log_token_usage(get_lm(), "gemini-3.1-flash-lite-preview", image_count=len(document_images))
 
         print(f"[{document_id}] Extracted: {extracted.vendor_name} - {extracted.total_amount} {extracted.currency}")
         print(f"[{document_id}] Quality: {extracted.extraction_quality}, Confidence: {extracted.confidence_score}")
@@ -660,7 +660,7 @@ def extract_invoice_step(
             "backend_used": "dspy_gemini",
             "processing_method": "dspy_predict",
             "document_type": "invoice",
-            "model_used": "gemini-3-flash-preview",
+            "model_used": "gemini-3.1-flash-lite-preview",
 
             # Core fields
             "vendor_name": extracted.vendor_name,
@@ -854,7 +854,7 @@ def extract_invoice_phase1_step(
         extracted = prediction.extracted_data
 
         # Log token usage
-        token_data = log_token_usage(get_lm(), "gemini-3-flash-preview", image_count=1)
+        token_data = log_token_usage(get_lm(), "gemini-3.1-flash-lite-preview", image_count=1)
 
         print(f"[{document_id}] Phase 1: Extracted: {extracted.vendor_name} - {extracted.total_amount} {extracted.currency}")
         print(f"[{document_id}] Phase 1: Quality: {extracted.extraction_quality}, Confidence: {extracted.confidence_score}")
@@ -923,7 +923,7 @@ def extract_invoice_phase1_step(
             "backend_used": "dspy_gemini",
             "processing_method": "dspy_phase1",
             "document_type": "invoice",
-            "model_used": "gemini-3-flash-preview",
+            "model_used": "gemini-3.1-flash-lite-preview",
 
             # Core fields (always present)
             "vendor_name": extracted.vendor_name,
@@ -1084,7 +1084,7 @@ def extract_invoice_phase2_step(
         extracted = prediction.extracted_data
 
         # Log token usage
-        token_data = log_token_usage(get_lm(), "gemini-3-flash-preview", image_count=len(document_images))
+        token_data = log_token_usage(get_lm(), "gemini-3.1-flash-lite-preview", image_count=len(document_images))
 
         # Convert line items - OMIT optional fields with None values
         # Critical: Convex v.optional() expects keys to be MISSING, not null

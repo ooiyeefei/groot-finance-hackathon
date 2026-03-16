@@ -9,7 +9,7 @@
  */
 
 import { v } from "convex/values";
-import { query, mutation } from "../_generated/server";
+import { query, mutation, internalAction, internalQuery, internalMutation } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { resolveUserByClerkId } from "../lib/resolvers";
 import {
@@ -349,6 +349,16 @@ function amountScore(orderAmount: number, invoiceAmount: number): number {
   return 1 - pctDiff * 4; // Linear decay, 0% = 1.0, 25% = 0.0
 }
 
+/** Normalize customer/vendor name for alias matching */
+function normalizeAlias(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/\b(sdn\.?\s*bhd\.?|plt|inc\.?|ltd\.?|corp\.?|co\.?)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** Build structured variance details between order and invoice */
 function buildMatchVariances(
   order: { grossAmount: number; customerName?: string; productName?: string; quantity?: number },
@@ -568,7 +578,40 @@ export const runMatching = mutation({
       }
     }
 
-    return { matched, variance, unmatched, conflicts };
+    // ── Phase 4: Mark Tier 1 matches and collect Tier 2 candidates ──
+    // Tag matched orders with aiMatchTier=1 so we can distinguish Tier 1 vs Tier 2 in metrics
+    const tier2CandidateIds: string[] = [];
+    for (const order of orders) {
+      const currentOrder = await ctx.db.get(order._id);
+      if (!currentOrder) continue;
+
+      if (currentOrder.matchStatus === "matched" || currentOrder.matchStatus === "variance") {
+        // Tier 1 match — tag it
+        if (currentOrder.aiMatchTier == null) {
+          await ctx.db.patch(order._id, { aiMatchTier: 1, updatedAt: now });
+        }
+      } else if (currentOrder.matchStatus === "unmatched") {
+        // Tier 1 miss — candidate for Tier 2 AI matching
+        await ctx.db.patch(order._id, { aiMatchTier: 0, updatedAt: now });
+        tier2CandidateIds.push(order._id.toString());
+      }
+    }
+
+    // ── Phase 5: Schedule Tier 2 AI matching for unmatched orders ──
+    if (tier2CandidateIds.length > 0) {
+      try {
+        await ctx.scheduler.runAfter(0, internal.functions.salesOrders.classifyUnmatchedOrdersWithAI, {
+          businessId: args.businessId.toString(),
+          unmatchedOrderIds: tier2CandidateIds,
+        });
+        console.log(`[AR Match] Scheduled Tier 2 AI matching for ${tier2CandidateIds.length} unmatched orders`);
+      } catch (error) {
+        // Non-fatal — Tier 1 results are still valid, Tier 2 is additive
+        console.error("[AR Match] Failed to schedule Tier 2 AI matching:", error);
+      }
+    }
+
+    return { matched, variance, unmatched, conflicts, tier2Scheduled: tier2CandidateIds.length };
   },
 });
 
@@ -619,11 +662,376 @@ export const updateMatchStatus = mutation({
         varianceAmount: isExact ? 0 : diff,
         varianceReason: isExact ? undefined : `Manual match — amount difference: ${diff.toFixed(2)}`,
         matchVariances: matchVariances.length > 0 ? matchVariances : undefined,
+        aiMatchStatus: order.aiMatchSuggestions ? "corrected" : undefined,
         updatedAt: now,
       });
+
+      // ── Learning Loop: Auto-capture correction for DSPy training ──
+      // If the order had AI suggestions, this manual match is a correction
+      if (order.aiMatchSuggestions && order.aiMatchSuggestions.length > 0) {
+        const topSuggestion = order.aiMatchSuggestions[0];
+        const isSameInvoice = topSuggestion.invoiceId === args.matchedInvoiceId.toString();
+
+        if (!isSameInvoice) {
+          // AI suggested wrong invoice → "wrong_match" correction
+          await ctx.db.insert("order_matching_corrections", {
+            businessId: order.businessId,
+            orderReference: order.orderReference,
+            orderCustomerName: order.customerName ?? "",
+            orderAmount: order.grossAmount,
+            orderDate: order.orderDate,
+            originalSuggestedInvoiceId: topSuggestion.invoiceId as any,
+            originalConfidence: topSuggestion.confidence,
+            originalReasoning: topSuggestion.reasoning,
+            correctedInvoiceId: args.matchedInvoiceId,
+            correctedInvoiceNumber: invoice.invoiceNumber ?? "",
+            correctedInvoiceCustomerName: invoice.customerSnapshot?.businessName ?? "",
+            correctedInvoiceAmount: invoice.totalAmount,
+            correctionType: "wrong_match",
+            createdBy: identity.subject,
+            createdAt: now,
+          });
+        }
+      } else if (order.aiMatchTier === 2 || order.aiMatchTier === 0) {
+        // AI found no match but user found one → "missed_match" correction
+        await ctx.db.insert("order_matching_corrections", {
+          businessId: order.businessId,
+          orderReference: order.orderReference,
+          orderCustomerName: order.customerName ?? "",
+          orderAmount: order.grossAmount,
+          orderDate: order.orderDate,
+          correctedInvoiceId: args.matchedInvoiceId,
+          correctedInvoiceNumber: invoice.invoiceNumber ?? "",
+          correctedInvoiceCustomerName: invoice.customerSnapshot?.businessName ?? "",
+          correctedInvoiceAmount: invoice.totalAmount,
+          correctionType: "missed_match",
+          createdBy: identity.subject,
+          createdAt: now,
+        });
+      }
     }
 
     return { success: true };
+  },
+});
+
+/**
+ * Approve AI-suggested matches (bulk).
+ * Takes the top suggestion for each order and confirms it.
+ */
+export const approveAiMatches = mutation({
+  args: {
+    salesOrderIds: v.array(v.id("sales_orders")),
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const now = Date.now();
+    let approved = 0;
+
+    for (const orderId of args.salesOrderIds) {
+      const order = await ctx.db.get(orderId);
+      if (!order || order.businessId !== args.businessId) continue;
+      if (!order.aiMatchSuggestions || order.aiMatchSuggestions.length === 0) continue;
+
+      const topSuggestion = order.aiMatchSuggestions[0];
+      const diff = Math.abs(order.grossAmount - topSuggestion.allocatedAmount);
+      const isExactAmount = diff < 0.01;
+
+      await ctx.db.patch(orderId, {
+        matchStatus: isExactAmount ? "matched" : "variance",
+        matchedInvoiceId: topSuggestion.invoiceId as any,
+        matchConfidence: topSuggestion.confidence,
+        matchMethod: "ai_suggested",
+        varianceAmount: isExactAmount ? 0 : order.grossAmount - topSuggestion.allocatedAmount,
+        varianceReason: isExactAmount ? undefined : `AI match — amount diff: ${(order.grossAmount - topSuggestion.allocatedAmount).toFixed(2)}`,
+        aiMatchStatus: "approved",
+        updatedAt: now,
+      });
+      approved++;
+    }
+
+    return { approved };
+  },
+});
+
+/**
+ * Reject an AI match suggestion.
+ */
+export const rejectAiMatch = mutation({
+  args: {
+    salesOrderId: v.id("sales_orders"),
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const order = await ctx.db.get(args.salesOrderId);
+    if (!order || order.businessId !== args.businessId) throw new Error("Order not found");
+
+    const now = Date.now();
+
+    // ── Learning Loop: Capture false_positive correction ──
+    // AI suggested a match but user rejected it entirely
+    if (order.aiMatchSuggestions && order.aiMatchSuggestions.length > 0) {
+      const topSuggestion = order.aiMatchSuggestions[0];
+      await ctx.db.insert("order_matching_corrections", {
+        businessId: order.businessId,
+        orderReference: order.orderReference,
+        orderCustomerName: order.customerName ?? "",
+        orderAmount: order.grossAmount,
+        orderDate: order.orderDate,
+        originalSuggestedInvoiceId: topSuggestion.invoiceId as any,
+        originalConfidence: topSuggestion.confidence,
+        originalReasoning: topSuggestion.reasoning,
+        // For false_positive, we still need a correctedInvoiceId — use the original
+        // suggestion as a "negative example" marker
+        correctedInvoiceId: topSuggestion.invoiceId as any,
+        correctedInvoiceNumber: topSuggestion.invoiceNumber,
+        correctedInvoiceCustomerName: "",
+        correctedInvoiceAmount: topSuggestion.allocatedAmount,
+        correctionType: "false_positive",
+        createdBy: identity.subject,
+        createdAt: now,
+      });
+    }
+
+    await ctx.db.patch(args.salesOrderId, {
+      aiMatchStatus: "rejected",
+      aiMatchSuggestions: undefined,
+      updatedAt: now,
+    });
+
+    return { success: true };
+  },
+});
+
+/**
+ * Tier 2 AI matching — classifies unmatched orders using DSPy via MCP Lambda.
+ * Called internally after Tier 1 matching completes.
+ */
+export const classifyUnmatchedOrdersWithAI = internalAction({
+  args: {
+    businessId: v.string(),
+    unmatchedOrderIds: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const _internal: any = require("../_generated/api").internal;
+    const { callMCPTool } = require("../lib/mcpClient");
+
+    if (args.unmatchedOrderIds.length === 0) return { processed: 0 };
+
+    // Get corrections for this business (for few-shot learning)
+    const corrections = await ctx.runQuery(
+      _internal.functions.orderMatchingCorrections.listByBusiness,
+      { businessId: args.businessId, limit: 50 }
+    );
+
+    // Get active model version
+    const activeModel = await ctx.runQuery(
+      _internal.functions.dspyModelVersions.getActiveModel,
+      { platform: `ar_match_${args.businessId}` }
+    );
+
+    // Get all candidate invoices
+    // Note: We can't query db directly in internalAction, so we use a helper query
+    // For now, we'll process orders via the MCP Lambda which handles matching
+    let processed = 0;
+
+    for (const orderIdStr of args.unmatchedOrderIds) {
+      try {
+        // Get order details via internal query
+        const orderData = await ctx.runQuery(
+          _internal.functions.salesOrders.getOrderForAIMatching,
+          { orderId: orderIdStr, businessId: args.businessId }
+        );
+
+        if (!orderData) continue;
+
+        interface MatchResult {
+          matches: Array<{
+            invoiceId: string;
+            invoiceNumber: string;
+            allocatedAmount: number;
+            matchType: string;
+          }>;
+          totalAllocated: number;
+          variance: number;
+          confidence: number;
+          reasoning: string;
+          constraintResults: Record<string, string>;
+          usedDspy: boolean;
+          modelVersion: string | null;
+          correctionCount: number;
+        }
+
+        const result = await callMCPTool({
+          toolName: "match_orders",
+          businessId: args.businessId,
+          args: {
+            order: orderData.order,
+            candidateInvoices: orderData.candidateInvoices,
+            corrections: corrections ?? [],
+            modelS3Key: activeModel?.s3Key ?? null,
+            maxSplitInvoices: 5,
+            amountTolerancePercent: 1.5,
+            amountToleranceAbsolute: 5.0,
+          },
+        }) as MatchResult | null;
+
+        if (result && result.matches && result.matches.length > 0) {
+          // Store AI suggestions on the order
+          await ctx.runMutation(
+            _internal.functions.salesOrders.updateAiMatchSuggestions,
+            {
+              orderId: orderIdStr,
+              suggestions: result.matches.map((m: any) => ({
+                invoiceId: m.invoiceId,
+                invoiceNumber: m.invoiceNumber,
+                allocatedAmount: m.allocatedAmount,
+                confidence: result.confidence,
+                reasoning: result.reasoning,
+                matchType: m.matchType ?? "single",
+              })),
+              modelVersion: result.modelVersion ?? activeModel?.s3Key ?? null,
+            }
+          );
+
+          // === Triple-Lock Auto-Approval Gate ===
+          if (result.matches.length === 1) {
+            // Only evaluate single matches for auto-approval (split matches always need review)
+            const tripleLock = await ctx.runQuery(
+              _internal.functions.salesOrders.evaluateTripleLock,
+              {
+                businessId: args.businessId,
+                confidence: result.confidence,
+                customerName: orderData.order.customerName,
+                matchType: result.matches[0].matchType ?? "single",
+              }
+            );
+
+            if (tripleLock.pass) {
+              // Auto-approve: update match status and post journal entry
+              await ctx.runMutation(
+                _internal.functions.salesOrders.autoApproveMatch,
+                {
+                  orderId: orderIdStr,
+                  businessId: args.businessId,
+                  invoiceId: result.matches[0].invoiceId,
+                  confidence: result.confidence,
+                  reasoning: result.reasoning,
+                  tripleLockResult: JSON.stringify(tripleLock),
+                }
+              );
+              console.log(`[AR Match AI] Auto-approved order ${orderIdStr} (confidence: ${result.confidence}, cycles: ${tripleLock.lock3.cycles})`);
+            }
+          }
+
+          processed++;
+        }
+      } catch (error) {
+        console.error(`[AR Match AI] Failed to process order ${orderIdStr}:`, error);
+      }
+    }
+
+    return { processed };
+  },
+});
+
+/**
+ * Internal query: Get order + candidate invoices for AI matching.
+ */
+export const getOrderForAIMatching = internalQuery({
+  args: {
+    orderId: v.string(),
+    businessId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Find the order
+    const allOrders = await ctx.db
+      .query("sales_orders")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId as any))
+      .collect();
+
+    const order = allOrders.find((o) => o._id.toString() === args.orderId);
+    if (!order) return null;
+
+    // Get candidate invoices (non-void, non-draft, not already matched by another order)
+    const invoices = await ctx.db
+      .query("sales_invoices")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId as any))
+      .collect();
+
+    const candidateInvoices = invoices
+      .filter((inv) => inv.status !== "void" && inv.status !== "draft")
+      .map((inv) => ({
+        invoiceId: inv._id.toString(),
+        invoiceNumber: inv.invoiceNumber ?? "",
+        customerName: inv.customerSnapshot?.businessName ?? "",
+        totalAmount: inv.totalAmount,
+        invoiceDate: inv.invoiceDate ?? "",
+        lineItems: (inv.lineItems ?? []).map((li: any) => ({
+          description: li.description ?? "",
+          quantity: li.quantity ?? 0,
+          unitPrice: li.unitPrice ?? 0,
+          amount: li.totalAmount ?? li.amount ?? 0,
+        })),
+      }));
+
+    return {
+      order: {
+        orderReference: order.orderReference,
+        customerName: order.customerName ?? "",
+        grossAmount: order.grossAmount,
+        netAmount: order.netAmount ?? order.grossAmount,
+        orderDate: order.orderDate,
+        currency: order.currency,
+        productName: order.productName ?? "",
+        lineItems: (order.lineItems ?? []).map((li) => ({
+          productName: li.productName ?? "",
+          quantity: li.quantity,
+          unitPrice: li.unitPrice,
+          total: li.totalAmount,
+        })),
+      },
+      candidateInvoices,
+    };
+  },
+});
+
+/**
+ * Internal mutation: Store AI match suggestions on an order.
+ */
+export const updateAiMatchSuggestions = internalMutation({
+  args: {
+    orderId: v.string(),
+    suggestions: v.array(v.object({
+      invoiceId: v.string(),
+      invoiceNumber: v.string(),
+      allocatedAmount: v.number(),
+      confidence: v.number(),
+      reasoning: v.string(),
+      matchType: v.string(),
+    })),
+    modelVersion: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, args) => {
+    // Find the order by string ID
+    const allOrders = await ctx.db.query("sales_orders").collect();
+    const order = allOrders.find((o) => o._id.toString() === args.orderId);
+    if (!order) return;
+
+    await ctx.db.patch(order._id, {
+      aiMatchSuggestions: args.suggestions,
+      aiMatchModelVersion: args.modelVersion ?? undefined,
+      aiMatchTier: 2,
+      aiMatchStatus: "pending_review",
+      updatedAt: Date.now(),
+    });
   },
 });
 
@@ -965,5 +1373,571 @@ export const getExportData = query({
     );
 
     return { orders: enriched };
+  },
+});
+
+// ============================================
+// AI MATCHING METRICS (T035)
+// ============================================
+
+/**
+ * Get AI matching performance metrics for a business.
+ * Compares Tier 1 (deterministic) vs Tier 2 (AI) success rates.
+ */
+export const getMatchingMetrics = query({
+  args: {
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        totalOrders: 0, tier1Matched: 0, tier2Matched: 0,
+        tier2Pending: 0, tier2Rejected: 0, tier2Corrected: 0,
+        totalCorrections: 0, autoMatchRate: 0, tier2Precision: 0,
+        estimatedHoursSaved: 0, uniqueLearnedAliases: 0,
+      };
+    }
+
+    const orders = await ctx.db
+      .query("sales_orders")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    const corrections = await ctx.db
+      .query("order_matching_corrections")
+      .withIndex("by_businessId_createdAt", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    const totalOrders = orders.length;
+    const tier1Matched = orders.filter((o) => o.aiMatchTier === 1).length;
+    const tier2Approved = orders.filter((o) => o.aiMatchStatus === "approved").length;
+    const tier2Pending = orders.filter((o) => o.aiMatchStatus === "pending_review").length;
+    const tier2Rejected = orders.filter((o) => o.aiMatchStatus === "rejected").length;
+    const tier2Corrected = orders.filter((o) => o.aiMatchStatus === "corrected").length;
+    const totalCorrections = corrections.length;
+
+    // Auto-match rate: (Tier 1 + Tier 2 approved) / total
+    const autoMatchRate = totalOrders > 0
+      ? ((tier1Matched + tier2Approved) / totalOrders) * 100
+      : 0;
+
+    // Tier 2 precision: approved / (approved + corrected + rejected)
+    const tier2Total = tier2Approved + tier2Corrected + tier2Rejected;
+    const tier2Precision = tier2Total > 0
+      ? (tier2Approved / tier2Total) * 100
+      : 0;
+
+    // Estimated hours saved: each auto-match saves ~2 min of manual work
+    const estimatedHoursSaved = ((tier1Matched + tier2Approved) * 2) / 60;
+
+    // Unique learned aliases: distinct customer name pairs in corrections
+    const uniqueLearnedAliases = new Set(
+      corrections.map((c) => `${c.orderCustomerName}→${c.correctedInvoiceCustomerName}`)
+    ).size;
+
+    return {
+      totalOrders,
+      tier1Matched,
+      tier2Matched: tier2Approved,
+      tier2Pending,
+      tier2Rejected,
+      tier2Corrected,
+      totalCorrections,
+      autoMatchRate: Math.round(autoMatchRate * 10) / 10,
+      tier2Precision: Math.round(tier2Precision * 10) / 10,
+      estimatedHoursSaved: Math.round(estimatedHoursSaved * 10) / 10,
+      uniqueLearnedAliases,
+    };
+  },
+});
+
+// ============================================
+// TRIPLE-LOCK AUTO-APPROVAL
+// ============================================
+
+/**
+ * Count learning cycles for a customer/vendor alias.
+ * Counts: user-approved AI matches + user corrections for the normalized alias.
+ */
+export const getLearningCyclesForAlias = internalQuery({
+  args: {
+    businessId: v.string(),
+    customerName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const normalized = normalizeAlias(args.customerName);
+    if (!normalized) return { cycles: 0, approvedMatches: 0, corrections: 0, normalizedAlias: normalized };
+
+    // Count approved AI matches for this alias
+    const allOrders = await ctx.db
+      .query("sales_orders")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId as any))
+      .collect();
+
+    const approvedMatches = allOrders.filter((o) =>
+      o.matchMethod === "ai_suggested" &&
+      o.aiMatchStatus === "approved" &&
+      o.customerName &&
+      normalizeAlias(o.customerName) === normalized
+    ).length;
+
+    // Count corrections where the corrected invoice customer matches this alias
+    const corrections = await ctx.db
+      .query("order_matching_corrections")
+      .withIndex("by_businessId_createdAt", (q) =>
+        q.eq("businessId", args.businessId as any)
+      )
+      .collect();
+
+    const relevantCorrections = corrections.filter((c) =>
+      c.correctionType !== "false_positive" &&
+      normalizeAlias(c.correctedInvoiceCustomerName) === normalized
+    ).length;
+
+    return {
+      cycles: approvedMatches + relevantCorrections,
+      approvedMatches,
+      corrections: relevantCorrections,
+      normalizedAlias: normalized,
+    };
+  },
+});
+
+/**
+ * Evaluate Triple-Lock gate for auto-approval.
+ */
+export const evaluateTripleLock = internalQuery({
+  args: {
+    businessId: v.string(),
+    confidence: v.number(),
+    customerName: v.string(),
+    matchType: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Split matches are never auto-approved
+    if (args.matchType === "split") {
+      return {
+        pass: false,
+        lock1: { pass: false, reason: "Split matches require human review" },
+        lock2: { pass: false, score: args.confidence, threshold: 0 },
+        lock3: { pass: false, cycles: 0, required: 0 },
+      };
+    }
+
+    // Lock 1: Check settings
+    const settings = await ctx.db
+      .query("matching_settings")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId as any))
+      .first();
+
+    const enableAutoApprove = settings?.enableAutoApprove ?? false;
+    const threshold = settings?.autoApproveThreshold ?? 0.98;
+    const minCycles = settings?.minLearningCycles ?? 5;
+
+    const lock1 = {
+      pass: enableAutoApprove && !settings?.autoApproveDisabledReason,
+      reason: !enableAutoApprove
+        ? "Auto-approve is disabled"
+        : settings?.autoApproveDisabledReason
+        ? `Auto-approve paused: ${settings.autoApproveDisabledReason}`
+        : "Auto-approve is enabled",
+    };
+
+    // Lock 2: Confidence threshold
+    const lock2 = {
+      pass: args.confidence >= threshold,
+      score: args.confidence,
+      threshold,
+    };
+
+    // Lock 3: Learning depth
+    const normalized = normalizeAlias(args.customerName);
+    let cycles = 0;
+
+    if (normalized) {
+      const allOrders = await ctx.db
+        .query("sales_orders")
+        .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId as any))
+        .collect();
+
+      const approvedMatches = allOrders.filter((o) =>
+        o.matchMethod === "ai_suggested" &&
+        o.aiMatchStatus === "approved" &&
+        o.customerName &&
+        normalizeAlias(o.customerName) === normalized
+      ).length;
+
+      const corrections = await ctx.db
+        .query("order_matching_corrections")
+        .withIndex("by_businessId_createdAt", (q) =>
+          q.eq("businessId", args.businessId as any)
+        )
+        .collect();
+
+      const relevantCorrections = corrections.filter((c) =>
+        c.correctionType !== "false_positive" &&
+        normalizeAlias(c.correctedInvoiceCustomerName) === normalized
+      ).length;
+
+      cycles = approvedMatches + relevantCorrections;
+    }
+
+    const lock3 = {
+      pass: cycles >= minCycles,
+      cycles,
+      required: minCycles,
+    };
+
+    return {
+      pass: lock1.pass && lock2.pass && lock3.pass,
+      lock1,
+      lock2,
+      lock3,
+    };
+  },
+});
+
+/**
+ * Reverse an auto-approved match.
+ * Creates reversal JE, marks as reversed, captures CRITICAL_FAILURE, checks safety valve.
+ */
+export const reverseAutoMatch = mutation({
+  args: {
+    salesOrderId: v.id("sales_orders"),
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const order = await ctx.db.get(args.salesOrderId);
+    if (!order || order.businessId !== args.businessId) throw new Error("Order not found");
+    if (order.matchMethod !== "auto_agent") throw new Error("Only auto-approved matches can be reversed");
+
+    const now = Date.now();
+
+    // 1. Create reversal journal entries if they exist
+    if (order.journalEntryIds && order.journalEntryIds.length > 0) {
+      for (const jeId of order.journalEntryIds) {
+        const je = await ctx.db.get(jeId);
+        if (je && je.status !== "voided") {
+          // Void the original JE
+          await ctx.db.patch(jeId, {
+            status: "voided",
+          });
+
+          // Create reversal JE
+          const lines = await ctx.db
+            .query("journal_entry_lines")
+            .withIndex("by_journal_entry", (q) => q.eq("journalEntryId", jeId))
+            .collect();
+
+          if (lines.length > 0) {
+            const transactionDate = new Date().toISOString().split("T")[0];
+            const fiscalYear = new Date().getFullYear();
+            const fiscalPeriod = `${fiscalYear}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+
+            // Generate entry number for reversal
+            const lastEntry = await ctx.db
+              .query("journal_entries")
+              .withIndex("by_business_entry_number", (q: any) =>
+                q.eq("businessId", args.businessId)
+              )
+              .order("desc")
+              .first();
+            const lastSequence = lastEntry
+              ? parseInt(lastEntry.entryNumber.split("-")[2]) || 0
+              : 0;
+            const entryNumber = `JE-${fiscalYear}-${String(lastSequence + 1).padStart(5, "0")}`;
+
+            const business = await ctx.db.get(args.businessId);
+            const homeCurrency = business?.homeCurrency ?? "MYR";
+
+            const reversalId = await ctx.db.insert("journal_entries", {
+              businessId: args.businessId,
+              entryNumber,
+              transactionDate,
+              postingDate: transactionDate,
+              description: `REVERSAL: Auto-match reversed for ${order.orderReference} — CRITICAL FAILURE`,
+              status: "posted",
+              sourceType: "auto_agent_reversal",
+              sourceId: args.salesOrderId.toString(),
+              fiscalYear,
+              fiscalPeriod,
+              homeCurrency,
+              totalDebit: lines.reduce((sum, l) => sum + l.creditAmount, 0),
+              totalCredit: lines.reduce((sum, l) => sum + l.debitAmount, 0),
+              lineCount: lines.length,
+              isPeriodLocked: false,
+              reversalOf: jeId,
+              createdBy: identity.subject,
+              createdAt: now,
+              postedBy: identity.subject,
+              postedAt: now,
+            });
+
+            // Mark original JE as reversed by this one
+            await ctx.db.patch(jeId, { reversedBy: reversalId });
+
+            // Create reversed lines (swap debits/credits)
+            for (const line of lines) {
+              await ctx.db.insert("journal_entry_lines", {
+                journalEntryId: reversalId,
+                businessId: args.businessId,
+                lineOrder: line.lineOrder,
+                accountId: line.accountId,
+                accountCode: line.accountCode,
+                accountName: line.accountName,
+                accountType: line.accountType,
+                debitAmount: line.creditAmount,
+                creditAmount: line.debitAmount,
+                homeCurrencyAmount: line.creditAmount,
+                lineDescription: `REVERSAL: ${line.lineDescription ?? ""}`,
+                entityType: line.entityType,
+                entityId: line.entityId,
+                entityName: line.entityName,
+                bankReconciled: false,
+                createdAt: now,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Mark order as reversed
+    await ctx.db.patch(args.salesOrderId, {
+      matchStatus: "unmatched",
+      matchedInvoiceId: undefined,
+      matchConfidence: undefined,
+      matchMethod: undefined,
+      varianceAmount: undefined,
+      varianceReason: undefined,
+      matchVariances: undefined,
+      aiMatchStatus: "reversed",
+      journalEntryIds: undefined,
+      reconciledAt: undefined,
+      updatedAt: now,
+    });
+
+    // 3. Create CRITICAL_FAILURE correction
+    const topSuggestion = order.aiMatchSuggestions?.[0];
+    await ctx.db.insert("order_matching_corrections", {
+      businessId: args.businessId,
+      orderReference: order.orderReference,
+      orderCustomerName: order.customerName ?? "",
+      orderAmount: order.grossAmount,
+      orderDate: order.orderDate,
+      originalSuggestedInvoiceId: topSuggestion?.invoiceId as any,
+      originalConfidence: topSuggestion?.confidence,
+      originalReasoning: topSuggestion?.reasoning,
+      correctedInvoiceId: topSuggestion?.invoiceId as any ?? order.matchedInvoiceId as any,
+      correctedInvoiceNumber: topSuggestion?.invoiceNumber ?? "",
+      correctedInvoiceCustomerName: "",
+      correctedInvoiceAmount: topSuggestion?.allocatedAmount ?? 0,
+      correctionType: "critical_failure",
+      weight: 5,
+      createdBy: identity.subject,
+      createdAt: now,
+    });
+
+    // 4. Safety valve: check critical failures in last 30 days
+    const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
+    const recentCorrections = await ctx.db
+      .query("order_matching_corrections")
+      .withIndex("by_businessId_createdAt", (q) =>
+        q.eq("businessId", args.businessId)
+      )
+      .collect();
+
+    const criticalFailureCount = recentCorrections.filter(
+      (c) => c.correctionType === "critical_failure" && c.createdAt > thirtyDaysAgo
+    ).length;
+
+    if (criticalFailureCount >= 3) {
+      // Auto-disable auto-approval
+      const settings = await ctx.db
+        .query("matching_settings")
+        .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+        .first();
+
+      if (settings) {
+        await ctx.db.patch(settings._id, {
+          enableAutoApprove: false,
+          autoApproveDisabledReason: "critical_failures_exceeded",
+          autoApproveDisabledAt: now,
+          updatedAt: now,
+        });
+      }
+
+      return {
+        reversed: true,
+        safetyValveTriggered: true,
+        criticalFailureCount,
+        message: "Auto-approval has been disabled due to 3+ critical failures in 30 days.",
+      };
+    }
+
+    return {
+      reversed: true,
+      safetyValveTriggered: false,
+      criticalFailureCount,
+    };
+  },
+});
+
+/**
+ * Auto-approve a match after Triple-Lock passes.
+ * Sets method to "auto_agent" and posts journal entry with "groot_ai_agent" preparer.
+ */
+export const autoApproveMatch = internalMutation({
+  args: {
+    orderId: v.string(),
+    businessId: v.string(),
+    invoiceId: v.string(),
+    confidence: v.number(),
+    reasoning: v.string(),
+    tripleLockResult: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Find the order
+    const allOrders = await ctx.db.query("sales_orders").collect();
+    const order = allOrders.find((o) => o._id.toString() === args.orderId);
+    if (!order) return;
+
+    const now = Date.now();
+
+    // Update order with auto-approval
+    await ctx.db.patch(order._id, {
+      matchStatus: "matched",
+      matchedInvoiceId: args.invoiceId as any,
+      matchConfidence: args.confidence,
+      matchMethod: "auto_agent",
+      varianceAmount: 0,
+      aiMatchStatus: "auto_approved",
+      updatedAt: now,
+    });
+
+    // Post journal entry with "groot_ai_agent" preparer
+    try {
+      const invoice = await ctx.db.get(args.invoiceId as any);
+      if (invoice && order.netAmount != null && order.netAmount > 0) {
+        // Get business for home currency
+        const business = await ctx.db
+          .query("businesses")
+          .filter((q: any) => q.eq(q.field("_id"), args.businessId))
+          .first();
+        const homeCurrency = (business as any)?.homeCurrency ?? "MYR";
+        const transactionDate = new Date().toISOString().split("T")[0];
+        const fiscalYear = new Date().getFullYear();
+        const fiscalPeriod = `${fiscalYear}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+
+        // Generate entry number
+        const lastEntry = await ctx.db
+          .query("journal_entries")
+          .withIndex("by_business_entry_number", (q: any) =>
+            q.eq("businessId", args.businessId as any)
+          )
+          .order("desc")
+          .first();
+        const lastSequence = lastEntry
+          ? parseInt(lastEntry.entryNumber.split("-")[2]) || 0
+          : 0;
+        const entryNumber = `JE-${fiscalYear}-${String(lastSequence + 1).padStart(5, "0")}`;
+
+        // Create Cash Received entry (Debit Cash, Credit AR)
+        const jeId = await ctx.db.insert("journal_entries", {
+          businessId: args.businessId as any,
+          entryNumber,
+          transactionDate,
+          postingDate: transactionDate,
+          description: `Auto-approved: ${order.orderReference} → ${(invoice as any).invoiceNumber ?? "invoice"} | Preparer: groot_ai_agent | ${args.reasoning.slice(0, 200)}`,
+          status: "posted",
+          sourceType: "auto_agent",
+          sourceId: order._id.toString(),
+          fiscalYear,
+          fiscalPeriod,
+          homeCurrency,
+          totalDebit: order.netAmount,
+          totalCredit: order.netAmount,
+          lineCount: 2,
+          isPeriodLocked: false,
+          createdBy: "groot_ai_agent",
+          createdAt: now,
+          postedBy: "groot_ai_agent",
+          postedAt: now,
+        });
+
+        // Look up account IDs
+        const cashAccount = await ctx.db
+          .query("chart_of_accounts")
+          .withIndex("by_business_code", (q: any) =>
+            q.eq("businessId", args.businessId as any).eq("accountCode", "1000")
+          )
+          .first();
+        const arAccount = await ctx.db
+          .query("chart_of_accounts")
+          .withIndex("by_business_code", (q: any) =>
+            q.eq("businessId", args.businessId as any).eq("accountCode", "1200")
+          )
+          .first();
+
+        // Debit Cash (1000)
+        await ctx.db.insert("journal_entry_lines", {
+          journalEntryId: jeId,
+          businessId: args.businessId as any,
+          lineOrder: 1,
+          accountId: cashAccount?._id ?? ("" as any),
+          accountCode: "1000",
+          accountName: cashAccount?.accountName ?? "Cash at Bank",
+          accountType: "asset",
+          debitAmount: order.netAmount,
+          creditAmount: 0,
+          homeCurrencyAmount: order.netAmount,
+          lineDescription: `Cash received: ${order.orderReference}`,
+          entityType: "customer",
+          entityName: order.customerName,
+          bankReconciled: false,
+          createdAt: now,
+        });
+
+        // Credit AR (1200)
+        await ctx.db.insert("journal_entry_lines", {
+          journalEntryId: jeId,
+          businessId: args.businessId as any,
+          lineOrder: 2,
+          accountId: arAccount?._id ?? ("" as any),
+          accountCode: "1200",
+          accountName: arAccount?.accountName ?? "Accounts Receivable",
+          accountType: "asset",
+          debitAmount: 0,
+          creditAmount: order.netAmount,
+          homeCurrencyAmount: order.netAmount,
+          lineDescription: `AR settled: ${(invoice as any).invoiceNumber ?? "invoice"} (auto-agent)`,
+          entityType: "customer",
+          entityName: order.customerName,
+          bankReconciled: false,
+          createdAt: now,
+        });
+
+        // Link JE to order
+        await ctx.db.patch(order._id, {
+          journalEntryIds: [jeId],
+          reconciledAt: now,
+        });
+      }
+    } catch (error) {
+      // If JE posting fails, revert to pending_review
+      console.error(`[AR Match AI] Auto-approval JE posting failed for ${args.orderId}:`, error);
+      await ctx.db.patch(order._id, {
+        matchMethod: undefined,
+        matchStatus: "unmatched",
+        matchedInvoiceId: undefined,
+        matchConfidence: undefined,
+        aiMatchStatus: "pending_review",
+        updatedAt: now,
+      });
+    }
   },
 });

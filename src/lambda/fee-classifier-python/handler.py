@@ -1,9 +1,13 @@
 """
 Fee Classifier Lambda Handler
 
-Exposes two JSON-RPC tools:
+Exposes JSON-RPC tools:
 - classify_fees: Classify fee names into accounting codes using DSPy
-- optimize_model: Run MIPROv2 optimization on accumulated corrections
+- optimize_model: Run MIPROv2 optimization on accumulated fee corrections
+- classify_bank_transaction: Classify bank transactions into GL accounts
+- optimize_bank_recon_model: Run MIPROv2 optimization for bank recon
+- match_orders: Match sales orders to candidate invoices (AR reconciliation)
+- optimize_ar_match_model: Run MIPROv2 optimization for AR order-invoice matching
 
 Invoked from Convex via MCP client pattern.
 """
@@ -37,6 +41,11 @@ from po_matching_module import (
     create_po_matching_training_examples,
     po_matching_metric,
 )
+from ar_match_module import (
+    OrderInvoiceMatcher,
+    create_training_examples as create_ar_match_training_examples,
+    matching_metric as ar_matching_metric,
+)
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -46,6 +55,7 @@ _classifier: FeeClassifier | None = None
 _bank_recon_classifier: BankTransactionClassifier | None = None
 _po_matcher: POMatchingModule | None = None
 _variance_diagnoser: VarianceDiagnoser | None = None
+_ar_matcher: OrderInvoiceMatcher | None = None
 _s3_client = None
 S3_BUCKET = "finanseal-bucket"
 DSPY_MODELS_PREFIX = "dspy-models"
@@ -342,6 +352,127 @@ def _optimize_bank_recon_model(params: dict) -> dict:
     return run_bank_recon_optimization(params)
 
 
+def _load_ar_matcher(s3_key: str | None = None) -> OrderInvoiceMatcher:
+    """Load AR order-invoice matcher, optionally restoring optimized state from S3."""
+    global _ar_matcher
+
+    matcher = OrderInvoiceMatcher()
+
+    if s3_key:
+        try:
+            s3 = _get_s3_client()
+            response = s3.get_object(Bucket=S3_BUCKET, Key=s3_key)
+            state_json = response["Body"].read().decode("utf-8")
+            tmp_path = f"/tmp/ar_match_model_{s3_key.replace('/', '_')}.json"
+            with open(tmp_path, "w") as f:
+                f.write(state_json)
+            matcher.load(tmp_path)
+            logger.info(f"Loaded AR match DSPy model from s3://{S3_BUCKET}/{s3_key}")
+        except Exception as e:
+            logger.warning(f"Failed to load AR match model from S3: {e}. Using base matcher.")
+
+    _ar_matcher = matcher
+    return matcher
+
+
+def _match_orders(params: dict) -> dict:
+    """Match sales orders to candidate invoices using DSPy."""
+    order = params.get("order", {})
+    candidate_invoices = params.get("candidateInvoices", [])
+    corrections = params.get("businessCorrections", [])
+    model_s3_key = params.get("modelS3Key")
+    amount_tolerance_percent = params.get("amountTolerancePercent", 1.5)
+    amount_tolerance_absolute = params.get("amountToleranceAbsolute", 5.0)
+    max_split_invoices = params.get("maxSplitInvoices", 5)
+
+    if not order or not candidate_invoices:
+        return {"matches": [], "usedDspy": False}
+
+    # Configure LM
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    configure_lm(api_key)
+
+    # Decide: DSPy (optimized) vs fallback
+    use_dspy = len(corrections) >= MIN_CORRECTIONS_FOR_DSPY
+    confidence_cap = 1.0
+
+    if use_dspy and model_s3_key:
+        matcher = _load_ar_matcher(model_s3_key)
+    elif use_dspy:
+        # Enough corrections but no pre-trained model — run BootstrapFewShot inline
+        matcher = OrderInvoiceMatcher()
+        try:
+            training_examples = create_ar_match_training_examples(corrections)
+            optimizer = BootstrapFewShot(
+                metric=ar_matching_metric,
+                max_bootstrapped_demos=4,
+                max_labeled_demos=min(8, len(training_examples)),
+            )
+            matcher = optimizer.compile(matcher, trainset=training_examples)
+            logger.info(f"Compiled AR match BootstrapFewShot with {len(training_examples)} examples")
+        except Exception as e:
+            logger.warning(f"AR match BootstrapFewShot failed: {e}. Using base matcher.")
+            matcher = OrderInvoiceMatcher()
+            confidence_cap = FALLBACK_CONFIDENCE_CAP
+    else:
+        matcher = OrderInvoiceMatcher()
+        confidence_cap = FALLBACK_CONFIDENCE_CAP
+
+    # Build candidate invoices JSON
+    candidate_invoices_json = json.dumps(candidate_invoices)
+
+    order_ref = order.get("orderReference", order.get("reference", ""))
+    customer_name = order.get("customerName", "")
+    order_amount = float(order.get("amount", order.get("orderAmount", 0)))
+    order_date = order.get("orderDate", order.get("date", ""))
+
+    try:
+        result = matcher(
+            order_reference=order_ref,
+            customer_name=customer_name,
+            order_amount=order_amount,
+            order_date=order_date,
+            candidate_invoices_json=candidate_invoices_json,
+            max_split_invoices=max_split_invoices,
+            amount_tolerance_percent=amount_tolerance_percent,
+            amount_tolerance_absolute=amount_tolerance_absolute,
+        )
+
+        # Parse matched invoices
+        try:
+            matched_invoices = json.loads(result.matched_invoices_json) if isinstance(result.matched_invoices_json, str) else result.matched_invoices_json
+        except (json.JSONDecodeError, TypeError):
+            matched_invoices = []
+
+        confidence = float(result.confidence) if result.confidence else 0.0
+        confidence = round(min(confidence, confidence_cap), 2)
+
+        return {
+            "matches": matched_invoices,
+            "totalAllocated": float(result.total_allocated) if result.total_allocated else 0.0,
+            "confidence": confidence,
+            "reasoning": str(getattr(result, "reasoning", "")),
+            "modelVersion": model_s3_key or ("fallback_gemini" if not use_dspy else "inline_bootstrap"),
+            "usedDspy": use_dspy,
+        }
+    except Exception as e:
+        logger.error(f"AR match failed for order '{order_ref}': {e}")
+        return {
+            "matches": [],
+            "totalAllocated": 0.0,
+            "confidence": 0.0,
+            "reasoning": f"Match error: {str(e)[:200]}",
+            "modelVersion": "error",
+            "usedDspy": use_dspy,
+        }
+
+
+def _optimize_ar_match_model(params: dict) -> dict:
+    """Run MIPROv2 optimization for AR order-invoice matching and save the result to S3."""
+    from ar_match_optimizer import run_ar_match_optimization
+    return run_ar_match_optimization(params)
+
+
 def lambda_handler(event: dict, context: Any) -> dict:
     """Lambda entry point — handles JSON-RPC requests."""
     try:
@@ -382,6 +513,10 @@ def lambda_handler(event: dict, context: Any) -> dict:
             result = _diagnose_variance(arguments)
         elif tool_name == "optimize_po_matching_model":
             result = _optimize_po_matching_model(arguments)
+        elif tool_name == "match_orders":
+            result = _match_orders(arguments)
+        elif tool_name == "optimize_ar_match_model":
+            result = _optimize_ar_match_model(arguments)
         else:
             return _error_response(request_id, -32601, f"Unknown tool: {tool_name}")
 

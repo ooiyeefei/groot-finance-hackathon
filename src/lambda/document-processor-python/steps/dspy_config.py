@@ -43,7 +43,7 @@ def _configure_dspy():
 
     # Create LM instance
     _lm_instance = dspy.LM(
-        "gemini/gemini-3-flash-preview",
+        "gemini/gemini-3.1-flash-lite-preview",
         api_key=gemini_api_key,
         temperature=0.1,
         max_tokens=16384,  # Max for full extraction; fast mode uses less

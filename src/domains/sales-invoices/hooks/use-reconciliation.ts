@@ -114,6 +114,12 @@ export function useReconciliationMutations() {
   const reconcileLineItems = useMutation(api.functions.salesOrders.reconcileLineItems)
   const closePeriod = useMutation(api.functions.salesOrders.closePeriod)
   const reopenPeriod = useMutation(api.functions.salesOrders.reopenPeriod)
+  const approveAiMatches = useMutation(api.functions.salesOrders.approveAiMatches)
+  const rejectAiMatch = useMutation(api.functions.salesOrders.rejectAiMatch)
+  // NOTE: Cast to fix build — new module, types regenerate with `npx convex dev`
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const createCorrection = useMutation((api.functions as any).orderMatchingCorrections.create)
+  const reverseAutoMatch = useMutation(api.functions.salesOrders.reverseAutoMatch)
 
   return {
     importBatch,
@@ -122,6 +128,64 @@ export function useReconciliationMutations() {
     reconcileLineItems,
     closePeriod,
     reopenPeriod,
+    approveAiMatches,
+    rejectAiMatch,
+    createCorrection,
+    reverseAutoMatch,
+  }
+}
+
+/**
+ * Hook for auto-approval settings
+ */
+export function useAutoApprovalSettings() {
+  const { businessId } = useActiveBusiness()
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = useQuery(
+    (api.functions as any).matchingSettings.getOrCreateAutoApproval,
+    businessId
+      ? { businessId: businessId as Id<"businesses"> }
+      : "skip"
+  )
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updateSettings = useMutation((api.functions as any).matchingSettings.updateAutoApproval)
+
+  return {
+    settings: result ?? {
+      enableAutoApprove: false,
+      autoApproveThreshold: 0.98,
+      minLearningCycles: 5,
+      autoApproveDisabledReason: undefined,
+      autoApproveDisabledAt: undefined,
+    },
+    updateSettings,
+    isLoading: result === undefined,
+  }
+}
+
+/**
+ * Hook for AI matching performance metrics
+ */
+export function useMatchingMetrics() {
+  const { businessId } = useActiveBusiness()
+
+  const result = useQuery(
+    api.functions.salesOrders.getMatchingMetrics,
+    businessId
+      ? { businessId: businessId as Id<"businesses"> }
+      : "skip"
+  )
+
+  return {
+    metrics: result ?? {
+      totalOrders: 0, tier1Matched: 0, tier2Matched: 0,
+      tier2Pending: 0, tier2Rejected: 0, tier2Corrected: 0,
+      totalCorrections: 0, autoMatchRate: 0, tier2Precision: 0,
+      estimatedHoursSaved: 0, uniqueLearnedAliases: 0,
+    },
+    isLoading: result === undefined,
   }
 }
 

@@ -47,8 +47,10 @@ import {
   useReconciliationMutations,
   useExportData,
   useFeeClassificationMutations,
+  useMatchingMetrics,
 } from '../hooks/use-reconciliation'
 import FeeRulesManager from './fee-rules-manager'
+import AutoApprovalSettings from './auto-approval-settings'
 import { useSalesInvoices } from '../hooks/use-sales-invoices'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { useRouter } from 'next/navigation'
@@ -71,6 +73,8 @@ const methodConfig: Record<string, { label: string; bgColor: string; textColor: 
   fuzzy: { label: 'fuzzy match', bgColor: 'bg-purple-500/10', textColor: 'text-purple-600 dark:text-purple-400' },
   manual: { label: 'manual', bgColor: 'bg-gray-500/10', textColor: 'text-gray-600 dark:text-gray-400' },
   line_item: { label: 'line items', bgColor: 'bg-indigo-500/10', textColor: 'text-indigo-600 dark:text-indigo-400' },
+  ai_suggested: { label: 'AI match', bgColor: 'bg-cyan-500/10', textColor: 'text-cyan-600 dark:text-cyan-400' },
+  auto_agent: { label: 'Verified by Groot', bgColor: 'bg-teal-500/10', textColor: 'text-teal-600 dark:text-teal-400' },
 }
 
 // Period presets
@@ -142,6 +146,25 @@ function FeeConfidenceDot({ classifiedFees }: { classifiedFees?: Array<{ confide
   )
 }
 
+// AI match confidence indicator for Tier 2 suggestions
+function AiMatchConfidenceDot({ confidence, status }: { confidence?: number; status?: string }) {
+  if (!status || status !== 'pending_review' || confidence == null) return null
+
+  const level = confidence >= 0.85 ? 'high' : confidence >= 0.60 ? 'medium' : 'low'
+  const colors = {
+    high: 'bg-emerald-500',
+    medium: 'bg-amber-500',
+    low: 'bg-red-500',
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <div className={`h-2 w-2 rounded-full ${colors[level]}`} title={`AI confidence: ${(confidence * 100).toFixed(0)}%`} />
+      <span className="text-[9px] font-bold bg-cyan-500 text-white px-1 rounded">AI</span>
+    </div>
+  )
+}
+
 export default function ARReconciliation() {
   const { businessId } = useActiveBusiness()
   const router = useRouter()
@@ -158,8 +181,12 @@ export default function ARReconciliation() {
   const [isReconcilingLineItems, setIsReconcilingLineItems] = useState(false)
   const [feeReviewFilter, setFeeReviewFilter] = useState(false)
   const [feeRulesOpen, setFeeRulesOpen] = useState(false)
+  const [autoApprovalSettingsOpen, setAutoApprovalSettingsOpen] = useState(false)
+  const [selectedAiMatchIds, setSelectedAiMatchIds] = useState<Set<string>>(new Set())
+  const [isApprovingAi, setIsApprovingAi] = useState(false)
 
   const { recordCorrection, adjustFeeAmount } = useFeeClassificationMutations()
+  const { metrics } = useMatchingMetrics()
 
   const { summary, isLoading: summaryLoading } = useReconciliationSummary({
     dateFrom: dateFrom || undefined,
@@ -191,17 +218,32 @@ export default function ARReconciliation() {
     reconcileLineItems,
     closePeriod,
     reopenPeriod,
+    approveAiMatches,
+    rejectAiMatch,
+    createCorrection,
+    reverseAutoMatch,
   } = useReconciliationMutations()
 
-  // Apply fee review filter: show only orders with fees needing review (confidence < 90%)
+  // Apply fee review filter and AI pending filter
   const filteredOrders = useMemo(() => {
-    if (!feeReviewFilter) return orders
-    return orders.filter((order) => {
-      const classifiedFees = (order as any).classifiedFees as Array<{ confidence: number; isNew: boolean }> | undefined
-      if (!classifiedFees || classifiedFees.length === 0) return false
-      return classifiedFees.some(f => f.confidence < FEE_CONFIDENCE_THRESHOLDS.HIGH || f.isNew)
-    })
-  }, [orders, feeReviewFilter])
+    let filtered = orders
+
+    // AI pending filter: show only orders with pending AI suggestions
+    if (statusFilter === 'ai_pending') {
+      return filtered.filter((o) => (o as any).aiMatchStatus === 'pending_review')
+    }
+
+    // Fee review filter: show only orders with fees needing review (confidence < 90%)
+    if (feeReviewFilter) {
+      filtered = filtered.filter((order) => {
+        const classifiedFees = (order as any).classifiedFees as Array<{ confidence: number; isNew: boolean }> | undefined
+        if (!classifiedFees || classifiedFees.length === 0) return false
+        return classifiedFees.some(f => f.confidence < FEE_CONFIDENCE_THRESHOLDS.HIGH || f.isNew)
+      })
+    }
+
+    return filtered
+  }, [orders, feeReviewFilter, statusFilter])
 
   const selectedOrder = filteredOrders.find((o) => o._id === selectedOrderId) ?? orders.find((o) => o._id === selectedOrderId)
   const matchedInvoice = selectedOrder?.matchedInvoiceId
@@ -426,6 +468,69 @@ export default function ARReconciliation() {
     [reconcileLineItems, addToast]
   )
 
+  // AI match batch approve
+  const handleApproveAiMatches = useCallback(
+    async () => {
+      if (!businessId || selectedAiMatchIds.size === 0) return
+      setIsApprovingAi(true)
+      try {
+        const result = await approveAiMatches({
+          salesOrderIds: Array.from(selectedAiMatchIds) as Id<"sales_orders">[],
+          businessId: businessId as Id<"businesses">,
+        })
+        setSelectedAiMatchIds(new Set())
+        addToast({
+          type: 'success',
+          title: `${result.approved} AI match${result.approved > 1 ? 'es' : ''} approved`,
+          description: 'Orders have been matched to their AI-suggested invoices.',
+          duration: 5000,
+        })
+      } catch (error) {
+        console.error('AI match approval failed:', error)
+        addToast({ type: 'error', title: 'Approval failed', description: error instanceof Error ? error.message : 'Failed to approve AI matches', duration: 7000 })
+      } finally {
+        setIsApprovingAi(false)
+      }
+    },
+    [businessId, selectedAiMatchIds, approveAiMatches, addToast]
+  )
+
+  // AI match batch reject
+  const handleRejectAiMatches = useCallback(
+    async () => {
+      if (!businessId) return
+      for (const orderId of selectedAiMatchIds) {
+        try {
+          await rejectAiMatch({
+            salesOrderId: orderId as Id<"sales_orders">,
+            businessId: businessId as Id<"businesses">,
+          })
+        } catch (error) {
+          console.error(`AI match rejection failed for ${orderId}:`, error)
+        }
+      }
+      setSelectedAiMatchIds(new Set())
+      addToast({ type: 'info', title: 'AI suggestions rejected', description: 'Orders returned to unmatched state.', duration: 5000 })
+    },
+    [businessId, selectedAiMatchIds, rejectAiMatch, addToast]
+  )
+
+  // Toggle AI match checkbox
+  const toggleAiMatchSelection = useCallback((orderId: string) => {
+    setSelectedAiMatchIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(orderId)) next.delete(orderId)
+      else next.add(orderId)
+      return next
+    })
+  }, [])
+
+  // Count orders with pending AI suggestions
+  const aiPendingCount = useMemo(() =>
+    filteredOrders.filter((o) => (o as any).aiMatchStatus === 'pending_review').length,
+    [filteredOrders]
+  )
+
   const handleClosePeriod = useCallback(
     async () => {
       if (!businessId || !dateFrom || !dateTo) return
@@ -508,6 +613,14 @@ export default function ARReconciliation() {
           >
             <Settings2 className="h-4 w-4 mr-1.5" />
             Fee Rules
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAutoApprovalSettingsOpen(true)}
+          >
+            <Settings2 className="h-4 w-4 mr-1.5" />
+            Auto-Approve
           </Button>
           <Button
             variant="outline"
@@ -608,6 +721,44 @@ export default function ARReconciliation() {
         </Card>
       </div>
 
+      {/* AI Matching Intelligence Cards */}
+      {(metrics.totalCorrections > 0 || metrics.tier2Matched > 0) && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card className="bg-cyan-500/5 border-cyan-500/20">
+            <CardContent className="pt-4 pb-3 px-4">
+              <span className="text-xs text-cyan-600 dark:text-cyan-400">Auto-Match Rate</span>
+              <p className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">
+                {metrics.autoMatchRate}%
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="bg-cyan-500/5 border-cyan-500/20">
+            <CardContent className="pt-4 pb-3 px-4">
+              <span className="text-xs text-cyan-600 dark:text-cyan-400">AI Precision</span>
+              <p className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">
+                {metrics.tier2Precision}%
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="bg-cyan-500/5 border-cyan-500/20">
+            <CardContent className="pt-4 pb-3 px-4">
+              <span className="text-xs text-cyan-600 dark:text-cyan-400">Learned Aliases</span>
+              <p className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">
+                {metrics.uniqueLearnedAliases}
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="bg-cyan-500/5 border-cyan-500/20">
+            <CardContent className="pt-4 pb-3 px-4">
+              <span className="text-xs text-cyan-600 dark:text-cyan-400">Est. Hours Saved</span>
+              <p className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">
+                {metrics.estimatedHoursSaved}h
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Filters + Period Controls */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
@@ -662,7 +813,7 @@ export default function ARReconciliation() {
 
         {/* Status filter pills */}
         <div className="flex gap-1">
-          {['all', 'matched', 'unmatched', 'variance', 'partial', 'conflict'].map((status) => (
+          {['all', 'matched', 'unmatched', 'variance', 'partial', 'conflict', 'ai_pending'].map((status) => (
             <Button
               key={status}
               variant={statusFilter === (status === 'all' ? undefined : status) ? 'default' : 'outline'}
@@ -670,7 +821,7 @@ export default function ARReconciliation() {
               onClick={() => setStatusFilter(status === 'all' ? undefined : status)}
               className="text-xs"
             >
-              {status.charAt(0).toUpperCase() + status.slice(1)}
+              {status === 'ai_pending' ? `AI Pending${aiPendingCount > 0 ? ` (${aiPendingCount})` : ''}` : status.charAt(0).toUpperCase() + status.slice(1)}
             </Button>
           ))}
           <Button
@@ -743,6 +894,11 @@ export default function ARReconciliation() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left">
+                    {aiPendingCount > 0 && (
+                      <th className="pb-2 pr-2 text-muted-foreground font-medium w-8">
+                        <span className="sr-only">Select</span>
+                      </th>
+                    )}
                     <th className="pb-2 pr-4 text-muted-foreground font-medium">Order Ref</th>
                     <th className="pb-2 pr-4 text-muted-foreground font-medium">Date</th>
                     <th className="pb-2 pr-4 text-muted-foreground font-medium">Product</th>
@@ -770,6 +926,18 @@ export default function ARReconciliation() {
                         className={`border-b border-border/50 hover:bg-muted/50 cursor-pointer transition-colors ${isClosed ? 'opacity-60' : ''}`}
                         onClick={() => setSelectedOrderId(order._id)}
                       >
+                        {aiPendingCount > 0 && (
+                          <td className="py-2.5 pr-2" onClick={(e) => e.stopPropagation()}>
+                            {(order as any).aiMatchStatus === 'pending_review' && (
+                              <input
+                                type="checkbox"
+                                checked={selectedAiMatchIds.has(order._id)}
+                                onChange={() => toggleAiMatchSelection(order._id)}
+                                className="h-3.5 w-3.5 rounded border-border"
+                              />
+                            )}
+                          </td>
+                        )}
                         <td className="py-2.5 pr-4 font-mono text-xs text-foreground">
                           <div className="flex items-center gap-1">
                             {order.orderReference}
@@ -808,9 +976,15 @@ export default function ARReconciliation() {
                           </span>
                         </td>
                         <td className="py-2.5 pr-4">
-                          <span className="text-xs text-muted-foreground capitalize">
-                            {order.matchMethod ?? '—'}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-muted-foreground capitalize">
+                              {order.matchMethod ?? '—'}
+                            </span>
+                            <AiMatchConfidenceDot
+                              confidence={(order as any).aiMatchSuggestions?.[0]?.confidence}
+                              status={(order as any).aiMatchStatus}
+                            />
+                          </div>
                         </td>
                         <td className="py-2.5">
                           <Badge className={`text-xs ${config.bgColor} ${config.textColor} border-0`}>
@@ -827,6 +1001,43 @@ export default function ARReconciliation() {
         </CardContent>
       </Card>
 
+      {/* AI Match Batch Action Bar */}
+      {selectedAiMatchIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-card border border-border rounded-lg shadow-lg px-6 py-3 flex items-center gap-4">
+          <span className="text-sm text-foreground font-medium">
+            {selectedAiMatchIds.size} AI match{selectedAiMatchIds.size > 1 ? 'es' : ''} selected
+          </span>
+          <Button
+            size="sm"
+            onClick={handleApproveAiMatches}
+            disabled={isApprovingAi}
+            className="bg-primary hover:bg-primary/90 text-primary-foreground"
+          >
+            {isApprovingAi ? (
+              <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+            ) : (
+              <CheckCircle className="h-3 w-3 mr-1" />
+            )}
+            Approve Selected ({selectedAiMatchIds.size})
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleRejectAiMatches}
+            className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+          >
+            <XCircle className="h-3 w-3 mr-1" />
+            Reject Selected
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => setSelectedAiMatchIds(new Set())}
+            className="bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+          >
+            Cancel
+          </Button>
+        </div>
+      )}
+
       {/* CSV Import Modal */}
       <CsvImportModal
         open={csvImportOpen}
@@ -841,6 +1052,12 @@ export default function ARReconciliation() {
       <FeeRulesManager
         open={feeRulesOpen}
         onOpenChange={setFeeRulesOpen}
+      />
+
+      {/* Auto-Approval Settings */}
+      <AutoApprovalSettings
+        open={autoApprovalSettingsOpen}
+        onOpenChange={setAutoApprovalSettingsOpen}
       />
 
       {/* Order Detail Sheet — Side-by-Side Comparison */}
@@ -1070,6 +1287,74 @@ export default function ARReconciliation() {
                 </div>
               )}
 
+              {/* AI Match Suggestion Detail */}
+              {(selectedOrder as any).aiMatchSuggestions && (selectedOrder as any).aiMatchSuggestions.length > 0 && (selectedOrder as any).aiMatchStatus === 'pending_review' && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium text-cyan-600 dark:text-cyan-400 uppercase tracking-wide flex items-center gap-1.5">
+                    <ArrowRightLeft className="h-3.5 w-3.5" />
+                    AI Match Suggestion
+                  </h3>
+                  <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-lg p-3 space-y-2 text-sm">
+                    {(selectedOrder as any).aiMatchSuggestions.map((suggestion: any, idx: number) => (
+                      <div key={idx} className="flex justify-between items-center">
+                        <div>
+                          <span className="font-mono text-foreground">{suggestion.invoiceNumber}</span>
+                          <span className="text-xs text-muted-foreground ml-2">({suggestion.matchType})</span>
+                        </div>
+                        <span className="font-mono text-foreground">
+                          {formatCurrency(suggestion.allocatedAmount, selectedOrder.currency)}
+                        </span>
+                      </div>
+                    ))}
+                    <div className="pt-2 border-t border-cyan-500/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs text-muted-foreground">Confidence:</span>
+                        <span className={`text-xs font-medium ${
+                          (selectedOrder as any).aiMatchSuggestions[0].confidence >= 0.85
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : (selectedOrder as any).aiMatchSuggestions[0].confidence >= 0.60
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : 'text-red-600 dark:text-red-400'
+                        }`}>
+                          {((selectedOrder as any).aiMatchSuggestions[0].confidence * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground italic">
+                        {(selectedOrder as any).aiMatchSuggestions[0].reasoning}
+                      </p>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          handleApproveAiMatches()
+                          setSelectedAiMatchIds(new Set([selectedOrder._id]))
+                        }}
+                        className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                      >
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={async () => {
+                          if (!businessId) return
+                          await rejectAiMatch({
+                            salesOrderId: selectedOrder._id as Id<"sales_orders">,
+                            businessId: businessId as Id<"businesses">,
+                          })
+                          addToast({ type: 'info', title: 'AI suggestion rejected', duration: 3000 })
+                        }}
+                        className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                      >
+                        <XCircle className="h-3 w-3 mr-1" />
+                        Reject
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Actions */}
               <div className="flex flex-wrap gap-2 pt-4 border-t border-border">
                 <Badge className={`text-xs ${statusConfig[selectedOrder.matchStatus]?.bgColor ?? 'bg-muted'} ${statusConfig[selectedOrder.matchStatus]?.textColor ?? 'text-foreground'} border-0`}>
@@ -1120,7 +1405,7 @@ export default function ARReconciliation() {
                   </TooltipProvider>
                 )}
 
-                {(selectedOrder.matchStatus === 'matched' || selectedOrder.matchStatus === 'variance') && (
+                {(selectedOrder.matchStatus === 'matched' || selectedOrder.matchStatus === 'variance') && selectedOrder.matchMethod !== 'auto_agent' && (
                   <Button
                     variant="destructive"
                     size="sm"
@@ -1128,6 +1413,44 @@ export default function ARReconciliation() {
                     className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                   >
                     Unmatch
+                  </Button>
+                )}
+
+                {selectedOrder.matchMethod === 'auto_agent' && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={async () => {
+                      if (!businessId) return
+                      if (!confirm('This will reverse the auto-approved journal entry and create a CRITICAL_FAILURE training example. Continue?')) return
+                      try {
+                        const result = await reverseAutoMatch({
+                          salesOrderId: selectedOrder._id as Id<"sales_orders">,
+                          businessId: businessId as Id<"businesses">,
+                        })
+                        setSelectedOrderId(null)
+                        if (result.safetyValveTriggered) {
+                          addToast({
+                            type: 'warning',
+                            title: 'Auto-approval paused',
+                            description: `${result.criticalFailureCount} critical failures in 30 days. Auto-approval has been disabled. Re-enable in Settings.`,
+                            duration: 10000,
+                          })
+                        } else {
+                          addToast({
+                            type: 'info',
+                            title: 'Auto-match reversed',
+                            description: 'Journal entry reversed. Critical failure logged for AI learning.',
+                            duration: 5000,
+                          })
+                        }
+                      } catch (error) {
+                        addToast({ type: 'error', title: 'Reversal failed', description: error instanceof Error ? error.message : 'Failed to reverse', duration: 7000 })
+                      }
+                    }}
+                    className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                  >
+                    Reverse Auto-Match
                   </Button>
                 )}
               </div>

@@ -29,7 +29,7 @@ async function createJournalEntryHelper(
     transactionDate: string;
     description: string;
     memo?: string;
-    sourceType?: "manual" | "sales_invoice" | "expense_claim" | "vendor_invoice" | "payment" | "ar_reconciliation" | "bank_reconciliation" | "migrated";
+    sourceType?: "manual" | "sales_invoice" | "expense_claim" | "vendor_invoice" | "payment" | "ar_reconciliation" | "bank_reconciliation" | "migrated" | "auto_agent" | "auto_agent_reversal";
     sourceId?: string;
     lines: Array<{
       accountCode: string;
@@ -538,7 +538,9 @@ export const createInternal = internalMutation({
       v.literal("payment"),
       v.literal("ar_reconciliation"),
       v.literal("bank_reconciliation"),
-      v.literal("manual")
+      v.literal("manual"),
+      v.literal("auto_agent"),
+      v.literal("auto_agent_reversal")
     ),
     sourceId: v.string(),
     lines: v.array(

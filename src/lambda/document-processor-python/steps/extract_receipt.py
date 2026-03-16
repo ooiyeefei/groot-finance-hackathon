@@ -597,7 +597,7 @@ def extract_receipt_step(
         ]
 
         # Log token usage for billing (include actual image count)
-        token_data = log_token_usage(get_lm(), "gemini-3-flash-preview", image_count=len(receipt_images))
+        token_data = log_token_usage(get_lm(), "gemini-3.1-flash-lite-preview", image_count=len(receipt_images))
 
         print(f"[{document_id}] Extracted: {extracted.vendor_name} - {extracted.total_amount} {extracted.currency}")
         print(f"[{document_id}] Quality: {extracted.extraction_quality}, Confidence: {extracted.confidence_score}")
@@ -674,7 +674,7 @@ def extract_receipt_step(
             "backend_used": "dspy_gemini",
             "processing_method": "dspy",
             "document_type": "receipt",
-            "model_used": "gemini-3-flash-preview",
+            "model_used": "gemini-3.1-flash-lite-preview",
 
             # Core fields
             "vendor_name": extracted.vendor_name,
@@ -874,7 +874,7 @@ def extract_receipt_phase1_step(
         extracted = prediction.extracted_data
 
         # Log token usage
-        token_data = log_token_usage(get_lm(), "gemini-3-flash-preview", image_count=1)
+        token_data = log_token_usage(get_lm(), "gemini-3.1-flash-lite-preview", image_count=1)
 
         print(f"[{document_id}] Phase 1 extracted: {extracted.vendor_name} - {extracted.total_amount} {extracted.currency}")
 
@@ -921,7 +921,7 @@ def extract_receipt_phase1_step(
             "backend_used": "dspy_gemini_phase1",
             "processing_method": "dspy_two_phase",
             "document_type": "receipt",
-            "model_used": "gemini-3-flash-preview",
+            "model_used": "gemini-3.1-flash-lite-preview",
 
             # Core fields
             "vendor_name": extracted.vendor_name,
@@ -1045,7 +1045,7 @@ def extract_receipt_phase2_step(
         extracted = prediction.extracted_data
 
         # Log token usage
-        token_data = log_token_usage(get_lm(), "gemini-3-flash-preview", image_count=1)
+        token_data = log_token_usage(get_lm(), "gemini-3.1-flash-lite-preview", image_count=1)
 
         # Convert line items to dict format with defensive None handling
         # Convex requires: description (string), line_total (number), quantity/unit_price (optional number)

@@ -268,8 +268,10 @@ formatBusinessDate('2025-10-31')  // "Oct 31, 2025" (no timezone shift)
 
 ### Gemini Model Selection (MANDATORY)
 - **CUA (Computer Use Agent)**: `gemini-2.5-computer-use-preview-10-2025` — only model available for browser automation
-- **All other Gemini calls** (recon, verify, troubleshoot, DSPy, browser-use Tier 2B): **Always use `gemini-3.1-flash-lite-preview`** — best price/performance for vision tasks ($0.25/$1.50 per M tokens)
-- **Never use `gemini-2.0-flash`** for new code — it's deprecated in our codebase in favor of 3.1 Flash-Lite
+- **All other Gemini calls** (recon, verify, troubleshoot, DSPy, browser-use Tier 2B, Doc AI, classification): **Always use `gemini-3.1-flash-lite-preview`** — best price/performance ($0.25/$1.50 per M tokens). This is the **single standard model** across ALL DSPy features (AR matching, bank recon, fee classification, document processing, e-invoice).
+- **Never use `gemini-2.0-flash`** or `gemini-3-flash-preview` — both are deprecated. `gemini-2.0-flash` shuts down June 1, 2026.
+- **Model review cadence**: When Google releases new Gemini models, evaluate whether a newer Flash-Lite variant offers better cost/performance. Always prefer the latest Flash-Lite for non-CUA tasks. Check [ai.google.dev/gemini-api/docs/models](https://ai.google.dev/gemini-api/docs/models) for the latest model IDs and deprecation timelines.
+- **Chat agent exception**: The chat assistant uses Qwen3-8B on Modal (not Gemini). All other AI features use Gemini.
 
 ### Documentation Update Rule (MANDATORY)
 After making changes to any system (e-invoice, expense claims, chat, etc.), **always update the relevant CLAUDE.md docs** to reflect the latest architecture, flow, and decisions. Docs must stay in sync with code. Key docs:
@@ -448,8 +450,15 @@ const arBalance = arLines.reduce((sum, line) =>
 - S3 (`finanseal-bucket/dspy-modules/`) for optimized module state, Convex for training data logs (001-dspy-cua-integration)
 - TypeScript 5.9.3 (Next.js + Convex), Python 3.11 (Lambda) + Convex 1.31.3, DSPy 3.1+, Gemini 3.1 Flash-Lite, AWS Lambda, boto3 (001-dspy-bank-recon)
 - Convex (corrections, model versions, bank transactions), S3 (optimized DSPy models) (001-dspy-bank-recon)
+- TypeScript 5.9.3 (Convex + Next.js 15.5.7), Python 3.11 (DSPy Lambda) + Convex 1.31.3, DSPy 2.6+, litellm, Gemini 3.1 Flash-Lite (`gemini-3.1-flash-lite-preview`), React 19.1.2, Radix UI (001-dspy-ar-smart-matcher)
+- Convex (document DB — new `order_matching_corrections` table, extended `sales_orders`), S3 (`finanseal-bucket/dspy-models/ar_match_{businessId}/`) (001-dspy-ar-smart-matcher)
+- TypeScript 5.9.3 (Convex + Next.js 15.5.7) + Convex 1.31.3, React 19.1.2, Radix UI (Sheet, Switch, Slider) (003-conditional-auto-approval)
+- Convex (new `matching_settings` table, extended `sales_orders` + `order_matching_corrections`) (003-conditional-auto-approval)
 
 ## Recent Changes
+- 002-unified-ai-transparency: Daily AI Intelligence Digest email. Hourly cron checks timezone → sends at 6 PM local (skip weekends). Aggregates AR/bank/fee AI activity via bridge pattern (gatherAIActivity normalizes from existing tables). Email shows: hero "Hours Saved Today" metric, autonomy rate, trusted suppliers count, auto-approved count, exceptions table with deep links, learning progress. Uses existing SES infrastructure. New file: `convex/functions/aiDigest.ts`. Cron: `ai-daily-digest` (hourly).
+- 003-conditional-auto-approval: Triple-Lock auto-approval for AR matching. Per-business settings (threshold 0.98, min 5 learning cycles, toggle). Triple-Lock gate: setting ON + confidence ≥ threshold + alias matched ≥ minCycles. Auto-posts journal entry with "groot_ai_agent" preparer (LHDN/IFRS audit). Reversal with CRITICAL_FAILURE (5x weight in MIPROv2). Safety valve: auto-disables after 3 failures in 30 days. New table: `matching_settings`. Extended: `sales_orders` (+auto_agent method), `order_matching_corrections` (+weight). UI: settings drawer, "Verified by Groot" badge, reversal button.
+- 001-dspy-ar-smart-matcher: DSPy Smart Matcher for AR order-to-invoice reconciliation — Tier 2 AI matching (ChainOfThought reasoning, BootstrapFewShot learning, MIPROv2 weekly optimization, Assert/Suggest integrity). Auto-triggers after Tier 1, 1-to-N split matches (cap 5), partial payments with residual. New table: `order_matching_corrections`. Extended: `sales_orders` (+aiMatchSuggestions, aiMatchTier, aiMatchStatus). Lambda: `/match_orders` + `/optimize_ar_match_model`. UI: confidence dots, bulk approve/reject, AI detail sheet, metrics dashboard. Learning loop: corrections auto-captured → BootstrapFewShot ≥20 → MIPROv2 ≥100 with accuracy gating.
 - 001-dspy-bank-recon: DSPy-powered bank reconciliation — Tier 1 keyword rules + Tier 2 DSPy AI classification, GL posting (draft JEs), correction feedback loop (BootstrapFewShot), weekly MIPROv2 optimization, batch operations, reconciliation summary. New tables: `bank_recon_corrections`, `bank_recon_classification_rules`. Extended: `bank_accounts` (+glAccountId), `bank_transactions` (+8 classification fields), `dspy_model_versions` (+domain). Lambda extended with `/classify_bank_transaction` and `/optimize_bank_recon_model`.
 - 001-category-3-mcp: Added MCP Server with API key management
 - 001-manager-approval: Added TypeScript 5.9.3, Next.js 15.5.7 + Convex 1.31.3, React 19.1.2, Clerk 6.30.0, Zod 3.23.8

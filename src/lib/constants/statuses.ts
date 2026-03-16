@@ -590,6 +590,8 @@ export const SALES_ORDER_MATCH_METHODS = {
   FUZZY: "fuzzy",
   LINE_ITEM: "line_item",
   MANUAL: "manual",
+  AI_SUGGESTED: "ai_suggested",
+  AUTO_AGENT: "auto_agent",
 } as const;
 
 export const SALES_ORDER_MATCH_METHOD_VALUES = Object.values(SALES_ORDER_MATCH_METHODS);

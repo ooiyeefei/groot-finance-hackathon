@@ -2461,6 +2461,19 @@ export default defineSchema({
     journalEntryIds: v.optional(v.array(v.id("journal_entries"))),
     reconciledAt: v.optional(v.number()),
 
+    // AI Matching (Tier 2 DSPy Smart Matcher)
+    aiMatchSuggestions: v.optional(v.array(v.object({
+      invoiceId: v.string(),
+      invoiceNumber: v.string(),
+      allocatedAmount: v.number(),
+      confidence: v.number(),
+      reasoning: v.string(),
+      matchType: v.string(),  // "single" | "split"
+    }))),
+    aiMatchModelVersion: v.optional(v.string()),
+    aiMatchTier: v.optional(v.number()),  // 0 = unprocessed, 1 = Tier 1, 2 = Tier 2
+    aiMatchStatus: v.optional(v.string()),  // "pending_review" | "approved" | "rejected" | "corrected"
+
     isRefund: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -2761,6 +2774,13 @@ export default defineSchema({
     aiEnabled: v.optional(v.boolean()),              // Master toggle for Tier 2 AI (default true)
     aiCallsThisMonth: v.optional(v.number()),        // Counter for monthly AI call usage
     aiCallsResetAt: v.optional(v.number()),          // Timestamp of last counter reset
+    // Auto-Approval Configuration (003-conditional-auto-approval)
+    enableAutoApprove: v.optional(v.boolean()),
+    autoApproveThreshold: v.optional(v.number()),      // 0.90-1.00, default 0.98
+    minLearningCycles: v.optional(v.number()),          // 1-50, default 5
+    autoApproveDisabledReason: v.optional(v.string()),  // "critical_failures_exceeded"
+    autoApproveDisabledAt: v.optional(v.number()),
+    updatedBy: v.optional(v.string()),
     updatedAt: v.optional(v.number()),
   })
     .index("by_businessId", ["businessId"]),
@@ -2855,7 +2875,9 @@ export default defineSchema({
       v.literal("payment"),
       v.literal("ar_reconciliation"),
       v.literal("bank_reconciliation"),
-      v.literal("migrated")
+      v.literal("migrated"),
+      v.literal("auto_agent"),
+      v.literal("auto_agent_reversal")
     )),
     sourceId: v.optional(v.string()),                 // ID of source document
     fiscalYear: v.number(),
@@ -2926,6 +2948,31 @@ export default defineSchema({
   })
     .index("by_businessId", ["businessId"])
     .index("by_businessId_createdAt", ["businessId", "createdAt"]),
+
+  // ============================================
+  // ORDER MATCHING CORRECTIONS (DSPy AR Matching)
+  // ============================================
+
+  order_matching_corrections: defineTable({
+    businessId: v.id("businesses"),
+    orderReference: v.string(),
+    orderCustomerName: v.string(),
+    orderAmount: v.number(),
+    orderDate: v.string(),
+    originalSuggestedInvoiceId: v.optional(v.id("sales_invoices")),
+    originalConfidence: v.optional(v.number()),
+    originalReasoning: v.optional(v.string()),
+    correctedInvoiceId: v.id("sales_invoices"),
+    correctedInvoiceNumber: v.string(),
+    correctedInvoiceCustomerName: v.string(),
+    correctedInvoiceAmount: v.number(),
+    correctionType: v.string(),  // "wrong_match" | "missed_match" | "false_positive" | "critical_failure"
+    weight: v.optional(v.number()),
+    createdBy: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_businessId_createdAt", ["businessId", "createdAt"])
+    .index("by_businessId_orderReference", ["businessId", "orderReference"]),
 
   // ============================================
   // BANK RECON CLASSIFICATION RULES (DSPy Bank Recon)

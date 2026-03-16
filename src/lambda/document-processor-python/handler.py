@@ -176,7 +176,7 @@ def _discover_merchant_url(vendor_name: str) -> Optional[str]:
 
     try:
         import urllib.request
-        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}"
+        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key={gemini_key}"
         payload = {
             "contents": [{"role": "user", "parts": [{"text":
                 f"Does the Malaysian merchant \"{vendor_name}\" have a public e-invoice request form "

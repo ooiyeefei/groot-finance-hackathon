@@ -152,7 +152,7 @@ class SimpleReceiptSignature(dspy.Signature):
 class ReceiptExtractor(dspy.Module):
     """DSPy extractor for receipt processing"""
 
-    def __init__(self, model_name: str = "gemini-3-flash-preview"):
+    def __init__(self, model_name: str = "gemini-3.1-flash-lite-preview"):
         super().__init__()
         self.model_name = model_name
         self.extractor = dspy.ChainOfThought(SimpleReceiptSignature)
@@ -186,7 +186,7 @@ class ReceiptExtractor(dspy.Module):
         # Log API usage for cost tracking and capture token data
         token_data = None
         if hasattr(dspy.settings, 'lm') and dspy.settings.lm:
-            token_data = log_gemini_usage(dspy.settings.lm, "gemini-3-flash-preview", image_count=1)
+            token_data = log_gemini_usage(dspy.settings.lm, "gemini-3.1-flash-lite-preview", image_count=1)
 
         # Return the full prediction object and token data
         return prediction, token_data
@@ -282,7 +282,7 @@ def process_receipt_extraction(params: Dict[str, Any]) -> Dict[str, Any]:
 
         print("🚀 Configuring DSPy with Gemini 3 Flash", file=sys.stderr)
         gemini_lm = dspy.LM(
-            model="gemini/gemini-3-flash-preview",
+            model="gemini/gemini-3.1-flash-lite-preview",
             api_key=api_key,
             temperature=0.1,
             max_tokens=4000
@@ -292,7 +292,7 @@ def process_receipt_extraction(params: Dict[str, Any]) -> Dict[str, Any]:
 
         # Run extraction
         print("🧠 Running DSPy receipt extraction...", file=sys.stderr)
-        extractor = ReceiptExtractor(model_name="gemini-3-flash-preview")
+        extractor = ReceiptExtractor(model_name="gemini-3.1-flash-lite-preview")
         prediction, token_data = extractor(image_data=image_data, business_categories=business_categories)
 
         # Extract the data from the prediction
@@ -301,7 +301,7 @@ def process_receipt_extraction(params: Dict[str, Any]) -> Dict[str, Any]:
         # Create a new instance with updated backend info (Pydantic model is immutable)
         extracted_data = extracted_data.model_copy(update={
             'backend_used': 'gemini_dspy',
-            'model_used': 'gemini-3-flash-preview'
+            'model_used': 'gemini-3.1-flash-lite-preview'
         })
 
         processing_time = int((datetime.now() - start_time).total_seconds() * 1000)

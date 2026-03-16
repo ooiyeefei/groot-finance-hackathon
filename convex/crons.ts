@@ -357,4 +357,30 @@ crons.weekly(
   { force: false }
 );
 
+/**
+ * AR Matching DSPy Optimization
+ * Runs weekly on Sunday at 5 AM UTC (after PO match optimization).
+ */
+// NOTE: Cast to fix build — new module, types regenerate with `npx convex dev`
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+crons.weekly(
+  "ar-match-dspy-optimization",
+  { dayOfWeek: "sunday", hourUTC: 5, minuteUTC: 0 },
+  (internal.functions as any).orderMatchingOptimization.weeklyOptimization
+);
+
+/**
+ * Daily AI Intelligence Digest
+ *
+ * Runs every hour. For each business, checks if it's 6 PM in their timezone.
+ * If yes, aggregates AI activity and sends a summary email to admins.
+ * Skips weekends — sends combined weekend digest on Monday.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+crons.hourly(
+  "ai-daily-digest",
+  { minuteUTC: 0 },
+  (internal.functions as any).aiDigest.dailyDigest
+);
+
 export default crons;
