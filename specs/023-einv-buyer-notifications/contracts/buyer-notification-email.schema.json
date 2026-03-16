@@ -1,0 +1,221 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Buyer Notification Email Service Contract",
+  "description": "API contract for sending transactional e-invoice lifecycle notifications to external buyers (customers)",
+  "definitions": {
+    "EventType": {
+      "type": "string",
+      "enum": ["validation", "cancellation", "rejection"],
+      "description": "E-invoice lifecycle event type"
+    },
+    "SendStatus": {
+      "type": "string",
+      "enum": ["sent", "skipped", "failed"],
+      "description": "Email send outcome"
+    },
+    "SkipReason": {
+      "type": "string",
+      "enum": [
+        "no_email",
+        "invalid_format",
+        "business_settings_disabled",
+        "already_sent"
+      ],
+      "description": "Reason for skipping email send"
+    }
+  },
+  "request": {
+    "type": "object",
+    "required": ["invoiceId", "businessId", "eventType"],
+    "properties": {
+      "invoiceId": {
+        "type": "string",
+        "description": "Sales invoice ID (Convex ID format: sales_invoices|...)",
+        "pattern": "^[a-zA-Z0-9_]+$"
+      },
+      "businessId": {
+        "type": "string",
+        "description": "Business ID (Convex ID format: businesses|...)",
+        "pattern": "^[a-zA-Z0-9_]+$"
+      },
+      "eventType": {
+        "$ref": "#/definitions/EventType"
+      },
+      "cancellationReason": {
+        "type": "string",
+        "description": "Required if eventType=cancellation. Reason provided by issuer when cancelling the invoice.",
+        "minLength": 1,
+        "maxLength": 500
+      }
+    },
+    "if": {
+      "properties": { "eventType": { "const": "cancellation" } }
+    },
+    "then": {
+      "required": ["cancellationReason"]
+    }
+  },
+  "responseSuccess": {
+    "type": "object",
+    "required": ["success", "data"],
+    "properties": {
+      "success": {
+        "type": "boolean",
+        "const": true
+      },
+      "data": {
+        "type": "object",
+        "required": ["sentTo", "loggedAt"],
+        "properties": {
+          "sentTo": {
+            "type": "string",
+            "format": "email",
+            "description": "Buyer email address (from customerSnapshot)"
+          },
+          "sesMessageId": {
+            "type": "string",
+            "description": "AWS SES Message ID for tracking delivery",
+            "pattern": "^[a-zA-Z0-9-]+$"
+          },
+          "loggedAt": {
+            "type": "number",
+            "description": "Unix timestamp when log entry was created",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  },
+  "responseSkipped": {
+    "type": "object",
+    "required": ["success", "skipped", "reason"],
+    "properties": {
+      "success": {
+        "type": "boolean",
+        "const": true
+      },
+      "skipped": {
+        "type": "boolean",
+        "const": true
+      },
+      "reason": {
+        "$ref": "#/definitions/SkipReason"
+      },
+      "details": {
+        "type": "string",
+        "description": "Optional human-readable explanation for the skip"
+      }
+    }
+  },
+  "responseError": {
+    "type": "object",
+    "required": ["success", "error"],
+    "properties": {
+      "success": {
+        "type": "boolean",
+        "const": false
+      },
+      "error": {
+        "type": "string",
+        "description": "Error message describing what went wrong"
+      },
+      "code": {
+        "type": "string",
+        "enum": [
+          "INVOICE_NOT_FOUND",
+          "BUSINESS_NOT_FOUND",
+          "INVALID_EMAIL",
+          "SES_THROTTLED",
+          "SES_ERROR",
+          "UNAUTHORIZED",
+          "VALIDATION_ERROR"
+        ],
+        "description": "Machine-readable error code"
+      },
+      "details": {
+        "type": "object",
+        "description": "Additional error context for debugging"
+      }
+    }
+  },
+  "emailTemplate": {
+    "validation": {
+      "subject": "E-Invoice {invoiceNumber} Validated by LHDN",
+      "body": "Hi {buyerName},\n\nYour e-invoice {invoiceNumber} from {businessName} has been validated by LHDN Malaysia.\n\nDocument UUID: {uuid}\nValidation Date: {validatedAt}\nAmount: {currency} {totalAmount}\n\nView on MyInvois: https://myinvois.hasil.gov.my/{longId}/share\n\nThis is an automated notification from {businessName} via Groot Finance."
+    },
+    "cancellation": {
+      "subject": "E-Invoice {invoiceNumber} Cancelled",
+      "body": "Hi {buyerName},\n\nE-Invoice {invoiceNumber} from {businessName} has been cancelled.\n\nDocument UUID: {uuid}\nCancellation Reason: {cancellationReason}\nAmount: {currency} {totalAmount}\n\nView on MyInvois: https://myinvois.hasil.gov.my/{longId}/share\n\nThis is an automated notification from {businessName} via Groot Finance."
+    },
+    "rejection": {
+      "subject": "E-Invoice {invoiceNumber} Rejection Confirmed",
+      "body": "Hi {buyerName},\n\nYour rejection of e-invoice {invoiceNumber} has been processed by LHDN.\n\nDocument UUID: {uuid}\nAmount: {currency} {totalAmount}\n\nView on MyInvois: https://myinvois.hasil.gov.my/{longId}/share\n\nThis is an automated notification from {businessName} via Groot Finance."
+    }
+  },
+  "notes": {
+    "authentication": "Internal service key (X-Internal-Key header) required. Not user-facing.",
+    "idempotency": "Service checks buyerNotificationLog before sending. If eventType already marked 'sent', returns responseSkipped with reason='already_sent'.",
+    "emailProvider": "AWS SES via existing email service (`src/lib/services/email-service.ts`). Resend fallback if SES fails.",
+    "language": "English only (v1). Localization deferred to future iteration.",
+    "pdpaCompliance": "Transactional exemption applies. No unsubscribe link required. Business-level toggle provides issuer-side control.",
+    "logging": "Every send attempt (sent/skipped/failed) appended to sales_invoices.buyerNotificationLog[]."
+  },
+  "examples": {
+    "requestValidation": {
+      "invoiceId": "k17abc123def456",
+      "businessId": "j27xyz789ghi012",
+      "eventType": "validation"
+    },
+    "requestCancellation": {
+      "invoiceId": "k17abc123def456",
+      "businessId": "j27xyz789ghi012",
+      "eventType": "cancellation",
+      "cancellationReason": "Incorrect invoice amount. Please disregard."
+    },
+    "requestRejection": {
+      "invoiceId": "k17abc123def456",
+      "businessId": "j27xyz789ghi012",
+      "eventType": "rejection"
+    },
+    "responseSuccessSent": {
+      "success": true,
+      "data": {
+        "sentTo": "buyer@example.com",
+        "sesMessageId": "0000014a3e4e-12ab34cd-56ef-78gh-90ij-1234567890ab-000000",
+        "loggedAt": 1710597600000
+      }
+    },
+    "responseSkippedNoEmail": {
+      "success": true,
+      "skipped": true,
+      "reason": "no_email",
+      "details": "Customer snapshot does not contain an email address"
+    },
+    "responseSkippedAlreadySent": {
+      "success": true,
+      "skipped": true,
+      "reason": "already_sent",
+      "details": "Notification for this event type has already been sent"
+    },
+    "responseSkippedDisabled": {
+      "success": true,
+      "skipped": true,
+      "reason": "business_settings_disabled",
+      "details": "Business has disabled buyer notifications for validation events"
+    },
+    "responseErrorThrottled": {
+      "success": false,
+      "error": "SES rate limit exceeded. Please retry later.",
+      "code": "SES_THROTTLED"
+    },
+    "responseErrorInvalidEmail": {
+      "success": false,
+      "error": "Buyer email address is malformed",
+      "code": "INVALID_EMAIL",
+      "details": {
+        "email": "not-an-email",
+        "validationError": "Invalid email format"
+      }
+    }
+  }
+}

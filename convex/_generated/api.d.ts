@@ -110,6 +110,7 @@ import type * as functions_webhooks from "../functions/webhooks.js";
 import type * as functions_workSchedules from "../functions/workSchedules.js";
 import type * as lib_bankReconClassifier from "../lib/bankReconClassifier.js";
 import type * as lib_bankReconGLPoster from "../lib/bankReconGLPoster.js";
+import type * as lib_buyerNotificationHelper from "../lib/buyerNotificationHelper.js";
 import type * as lib_feeClassifier from "../lib/feeClassifier.js";
 import type * as lib_journal_entry_helpers from "../lib/journal_entry_helpers.js";
 import type * as lib_llm from "../lib/llm.js";
@@ -231,6 +232,7 @@ declare const fullApi: ApiFromModules<{
   "functions/workSchedules": typeof functions_workSchedules;
   "lib/bankReconClassifier": typeof lib_bankReconClassifier;
   "lib/bankReconGLPoster": typeof lib_bankReconGLPoster;
+  "lib/buyerNotificationHelper": typeof lib_buyerNotificationHelper;
   "lib/feeClassifier": typeof lib_feeClassifier;
   "lib/journal_entry_helpers": typeof lib_journal_entry_helpers;
   "lib/llm": typeof lib_llm;
