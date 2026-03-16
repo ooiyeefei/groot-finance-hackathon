@@ -2735,6 +2735,14 @@ export default defineSchema({
     reviewNotes: v.optional(v.string()),
     reviewedAt: v.optional(v.number()),
 
+    // AI matching metadata (Tier 2 DSPy)
+    aiMatchTier: v.optional(v.number()),              // 1 = deterministic only, 2 = AI-enhanced
+    aiModelVersion: v.optional(v.string()),            // S3 key or "baseline"
+    aiReasoningTrace: v.optional(v.string()),          // Human-readable reasoning from ChainOfThought
+    aiVarianceDiagnosis: v.optional(v.string()),       // AI explanation of variance causes
+    aiMatchedAt: v.optional(v.number()),               // Timestamp of Tier 2 AI completion
+    aiConfidenceOverall: v.optional(v.number()),       // Average confidence across all AI pairings
+
     createdAt: v.number(),
     updatedAt: v.optional(v.number()),
   })
@@ -2750,9 +2758,29 @@ export default defineSchema({
     poNumberPrefix: v.string(),                    // Default: "PO"
     grnNumberPrefix: v.string(),                   // Default: "GRN"
     autoMatchEnabled: v.boolean(),                 // Default: true
+    aiEnabled: v.optional(v.boolean()),              // Master toggle for Tier 2 AI (default true)
+    aiCallsThisMonth: v.optional(v.number()),        // Counter for monthly AI call usage
+    aiCallsResetAt: v.optional(v.number()),          // Timestamp of last counter reset
     updatedAt: v.optional(v.number()),
   })
     .index("by_businessId", ["businessId"]),
+
+  // PO Match Corrections — training data for DSPy self-improving matching
+  po_match_corrections: defineTable({
+    businessId: v.id("businesses"),
+    matchId: v.optional(v.id("po_matches")),
+    vendorName: v.string(),
+    originalPoLineDescription: v.string(),
+    originalInvoiceLineDescription: v.string(),
+    originalConfidence: v.number(),
+    correctedPoLineDescription: v.string(),
+    correctedInvoiceLineDescription: v.string(),
+    correctionType: v.string(),                      // "rejection" | "override" | "approval"
+    createdBy: v.string(),                           // Clerk user ID
+    createdAt: v.number(),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_vendor", ["businessId", "vendorName"]),
 
   deletion_data_exports: defineTable({
     businessId: v.id("businesses"),

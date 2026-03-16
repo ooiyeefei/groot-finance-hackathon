@@ -11,6 +11,7 @@
 
 import { v } from "convex/values";
 import { query, mutation, internalMutation } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { Id, Doc } from "../_generated/dataModel";
 import { resolveUserByClerkId } from "../lib/resolvers";
 
@@ -641,6 +642,13 @@ export const getDashboardSummary = query({
       ? Math.round((autoApproved / totalMatches) * 100)
       : 0;
 
+    // AI Intelligence metrics
+    const aiEnhancedMatches = allMatches.filter((m: any) => m.aiMatchTier === 2);
+    const aiEnhancedCount = aiEnhancedMatches.length;
+    const avgAiConfidence = aiEnhancedCount > 0
+      ? aiEnhancedMatches.reduce((sum: number, m: any) => sum + (m.aiConfidenceOverall ?? 0), 0) / aiEnhancedCount
+      : 0;
+
     return {
       totalMatches,
       autoApproved,
@@ -649,6 +657,8 @@ export const getDashboardSummary = query({
       approved,
       onHold,
       autoMatchRate,
+      aiEnhancedCount,
+      avgAiConfidence: Math.round(avgAiConfidence * 100) / 100,
     };
   },
 });
@@ -906,6 +916,45 @@ export const review = mutation({
       reviewedAt: Date.now(),
       updatedAt: Date.now(),
     });
+
+    // ============================================
+    // Capture correction for DSPy training
+    // ============================================
+    if (match.aiMatchTier === 2 && match.lineItemPairings?.length > 0) {
+      // Get vendor name from PO
+      const po = await ctx.db.get(match.purchaseOrderId);
+      const vendorName = (po as any)?.vendorName ?? "Unknown";
+
+      const correctionType = args.action === "approve" ? "approval"
+        : args.action === "reject" ? "rejection"
+        : "override";
+
+      // Capture one correction per AI-generated pairing
+      for (const pairing of match.lineItemPairings) {
+        if (pairing.matchMethod === "ai_semantic") {
+          const poLine = po?.lineItems?.[pairing.poLineIndex];
+          const invoicePairing = pairing.invoiceLineIndex !== undefined ? pairing.invoiceLineIndex : -1;
+
+          await ctx.db.insert("po_match_corrections", {
+            businessId: match.businessId,
+            matchId: args.matchId,
+            vendorName,
+            originalPoLineDescription: poLine?.description ?? `PO Line ${pairing.poLineIndex}`,
+            originalInvoiceLineDescription: `Invoice Line ${invoicePairing}`,
+            originalConfidence: pairing.matchConfidence,
+            correctedPoLineDescription: correctionType === "approval"
+              ? (poLine?.description ?? `PO Line ${pairing.poLineIndex}`)
+              : "REJECTED",
+            correctedInvoiceLineDescription: correctionType === "approval"
+              ? `Invoice Line ${invoicePairing}`
+              : "REJECTED",
+            correctionType,
+            createdBy: identity.subject,
+            createdAt: Date.now(),
+          });
+        }
+      }
+    }
 
     // On approve: update PO status to "invoiced" only if ALL PO line items
     // are fully covered by approved/auto_approved matches
@@ -1462,8 +1511,55 @@ export const tryAutoMatchInternal = internalMutation({
       status: status as "auto_approved" | "pending_review",
       lineItemPairings: pairings,
       overallVarianceSummary,
+      aiMatchTier: 1, // Deterministic Tier 1
       createdAt: Date.now(),
     });
+
+    // ============================================
+    // Tier 2 AI escalation
+    // If any pairing has low confidence or match needs review,
+    // schedule async AI matching via DSPy Lambda
+    // ============================================
+    const hasLowConfidence = pairings.some((p) => p.matchConfidence < 0.6);
+    if (hasLowConfidence || status === "pending_review") {
+      try {
+        await ctx.scheduler.runAfter(0, internal.functions.poMatchingAI.matchWithAI, {
+          businessId,
+          matchId,
+          poLineItems: po.lineItems.map((li: any, idx: number) => ({
+            index: idx,
+            description: li.description ?? "",
+            item_code: li.itemCode ?? "",
+            quantity: li.quantity ?? 0,
+            unit_price: li.unitPrice ?? 0,
+            unit_of_measure: li.unitOfMeasure ?? "",
+          })),
+          invoiceLineItems: invoiceLineItems.map((li: any, idx: number) => ({
+            index: idx,
+            description: li.description ?? "",
+            item_code: li.itemCode ?? "",
+            quantity: li.quantity ?? 0,
+            unit_price: li.unitPrice ?? 0,
+            unit_of_measure: "",
+          })),
+          grnLineItems: allGrnLineItems.map((li: any) => ({
+            description: li.description ?? "",
+            quantity: li.receivedQuantity ?? 0,
+          })),
+          vendorName: po.vendorName ?? "",
+          tier1Pairings: pairings.map((p) => ({
+            poLineIndex: p.poLineIndex,
+            invoiceLineIndex: p.invoiceLineIndex,
+            grnLineIndex: p.grnLineIndex,
+            matchConfidence: p.matchConfidence,
+            matchMethod: p.matchMethod,
+          })),
+        });
+        console.log(`[tryAutoMatchInternal] Scheduled Tier 2 AI matching for match ${matchId}`);
+      } catch (e) {
+        console.warn("[tryAutoMatchInternal] Failed to schedule Tier 2 AI matching:", e);
+      }
+    }
 
     return {
       matched: true,

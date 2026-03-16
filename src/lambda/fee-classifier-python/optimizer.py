@@ -328,3 +328,156 @@ def _evaluate(classifier: FeeClassifier, testset: list) -> float:
             pass  # Count as incorrect
 
     return correct / len(testset)
+
+
+# ============================================
+# PO Matching Optimization (MIPROv2)
+# ============================================
+
+def optimize_po_matching(arguments: dict) -> dict:
+    """MIPROv2 optimization for PO-Invoice matching model."""
+    import time
+    from po_matching_module import (
+        POMatchingModule,
+        create_po_matching_training_examples,
+        po_matching_metric,
+    )
+    from fee_module import configure_lm
+
+    start_time = time.time()
+    configure_lm()
+
+    corrections = arguments.get("corrections", [])
+    current_s3_key = arguments.get("current_model_s3_key")
+    force = arguments.get("force", False)
+
+    if len(corrections) < 20 and not force:
+        return {
+            "success": False,
+            "errorMessage": f"Insufficient corrections ({len(corrections)}). Need ≥20.",
+        }
+
+    all_examples = create_po_matching_training_examples(corrections)
+    if len(all_examples) < 5:
+        return {
+            "success": False,
+            "errorMessage": f"Only {len(all_examples)} usable examples after filtering. Need ≥5.",
+        }
+
+    # 80/20 train/test split
+    split_idx = max(1, int(len(all_examples) * 0.8))
+    trainset = all_examples[:split_idx]
+    testset = all_examples[split_idx:]
+
+    # Evaluate baseline
+    baseline = POMatchingModule()
+    if current_s3_key:
+        try:
+            s3 = boto3.client("s3", region_name="us-west-2")
+            response = s3.get_object(Bucket="finanseal-bucket", Key=current_s3_key)
+            state_json = response["Body"].read().decode("utf-8")
+            tmp_path = "/tmp/po_matcher_baseline.json"
+            with open(tmp_path, "w") as f:
+                f.write(state_json)
+            baseline.load(tmp_path)
+        except Exception as e:
+            logger.warning(f"Failed to load baseline PO matcher: {e}")
+
+    before_accuracy = _evaluate_po_matching(baseline, testset)
+    logger.info(f"PO matching baseline accuracy: {before_accuracy:.2f} on {len(testset)} test examples")
+
+    try:
+        optimizer = MIPROv2(
+            metric=po_matching_metric,
+            auto="medium",
+        )
+        optimized = optimizer.compile(
+            POMatchingModule(),
+            trainset=trainset,
+            requires_permission_to_run=False,
+        )
+
+        after_accuracy = _evaluate_po_matching(optimized, testset)
+        logger.info(f"PO matching optimized accuracy: {after_accuracy:.2f}")
+
+        if after_accuracy <= before_accuracy and not force:
+            return {
+                "success": False,
+                "beforeAccuracy": round(before_accuracy, 4),
+                "afterAccuracy": round(after_accuracy, 4),
+                "trainingExamples": len(trainset),
+                "testSetSize": len(testset),
+                "errorMessage": "Optimization did not improve accuracy. Keeping current model.",
+                "durationMs": int((time.time() - start_time) * 1000),
+            }
+
+        # Save to S3
+        s3 = boto3.client("s3", region_name="us-west-2")
+        version = 1
+        if current_s3_key:
+            try:
+                current_version = int(current_s3_key.split("/v")[1].split(".")[0])
+                version = current_version + 1
+            except (IndexError, ValueError):
+                version = 1
+
+        new_s3_key = f"dspy-models/po_matching/v{version}.json"
+        tmp_save_path = f"/tmp/po_matcher_optimized_v{version}.json"
+        optimized.save(tmp_save_path, save_program=False)
+
+        with open(tmp_save_path, "r") as f:
+            model_state = f.read()
+
+        s3.put_object(
+            Bucket="finanseal-bucket",
+            Key=new_s3_key,
+            Body=model_state.encode("utf-8"),
+            ContentType="application/json",
+        )
+
+        logger.info(f"Saved optimized PO matcher to s3://finanseal-bucket/{new_s3_key}")
+
+        return {
+            "success": True,
+            "beforeAccuracy": round(before_accuracy, 4),
+            "afterAccuracy": round(after_accuracy, 4),
+            "trainingExamples": len(trainset),
+            "testSetSize": len(testset),
+            "newS3Key": new_s3_key,
+            "newVersion": version,
+            "durationMs": int((time.time() - start_time) * 1000),
+        }
+
+    except Exception as e:
+        logger.exception("PO matching optimization failed")
+        return {
+            "success": False,
+            "beforeAccuracy": round(before_accuracy, 4),
+            "trainingExamples": len(trainset),
+            "testSetSize": len(testset),
+            "errorMessage": str(e)[:500],
+            "durationMs": int((time.time() - start_time) * 1000),
+        }
+
+
+def _evaluate_po_matching(matcher, testset: list) -> float:
+    """Evaluate PO matcher accuracy on a test set."""
+    if not testset:
+        return 0.0
+
+    correct = 0
+    for example in testset:
+        try:
+            result = matcher(
+                po_lines=example.po_lines,
+                invoice_lines=example.invoice_lines,
+                grn_lines=example.grn_lines,
+                vendor_name=example.vendor_name,
+                tier1_pairings=example.tier1_pairings,
+            )
+            if po_matching_metric(example, result) > 0.5:
+                correct += 1
+        except Exception:
+            pass
+
+    return correct / len(testset)

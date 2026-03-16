@@ -651,6 +651,7 @@ export const MATCH_METHODS = {
   FUZZY_DESCRIPTION: "fuzzy_description",
   AMOUNT_FALLBACK: "amount_fallback",
   MANUAL: "manual",
+  AI_SEMANTIC: "ai_semantic",
 } as const;
 
 export type MatchMethod = typeof MATCH_METHODS[keyof typeof MATCH_METHODS];

@@ -234,11 +234,12 @@ crons.daily(
  *
  * This is internal dev tooling — NOT customer-facing.
  */
-crons.weekly(
-  "einvoice-dspy-weekly-digest",
-  { dayOfWeek: "monday", hourUTC: 1, minuteUTC: 0 },
-  internal.functions.einvoiceDspyDigest.sendWeeklyDigest
-);
+// TODO: Re-enable when einvoiceDspyDigest module is created
+// crons.weekly(
+//   "einvoice-dspy-weekly-digest",
+//   { dayOfWeek: "monday", hourUTC: 1, minuteUTC: 0 },
+//   internal.functions.einvoiceDspyDigest.sendWeeklyDigest
+// );
 
 /**
  * E-Invoice Monitoring: Self-Improving Error Detection
@@ -339,6 +340,20 @@ crons.weekly(
   "bank-recon-optimization",
   { dayOfWeek: "sunday", hourUTC: 3, minuteUTC: 0 },
   internal.functions.bankReconOptimization.weeklyOptimization,
+  { force: false }
+);
+
+/**
+ * DSPy PO Match — Weekly Optimization
+ *
+ * Runs every Sunday at 4:00 AM UTC (staggered 1h after bank recon optimization)
+ * to optimize PO-Invoice line matching models using MIPROv2
+ * on accumulated user corrections (≥20 per business, ≥10 unique descriptions).
+ */
+crons.weekly(
+  "po-match-optimization",
+  { dayOfWeek: "sunday", hourUTC: 4, minuteUTC: 0 },
+  internal.functions.poMatchOptimization.weeklyOptimization,
   { force: false }
 );
 

@@ -31,6 +31,12 @@ from bank_recon_module import (
     create_bank_recon_training_examples,
     bank_recon_classification_metric,
 )
+from po_matching_module import (
+    POMatchingModule,
+    VarianceDiagnoser,
+    create_po_matching_training_examples,
+    po_matching_metric,
+)
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -38,6 +44,8 @@ logger.setLevel(logging.INFO)
 # Module-level state (persists across warm invocations)
 _classifier: FeeClassifier | None = None
 _bank_recon_classifier: BankTransactionClassifier | None = None
+_po_matcher: POMatchingModule | None = None
+_variance_diagnoser: VarianceDiagnoser | None = None
 _s3_client = None
 S3_BUCKET = "finanseal-bucket"
 DSPY_MODELS_PREFIX = "dspy-models"
@@ -368,6 +376,12 @@ def lambda_handler(event: dict, context: Any) -> dict:
             result = _classify_bank_transactions(arguments)
         elif tool_name == "optimize_bank_recon_model":
             result = _optimize_bank_recon_model(arguments)
+        elif tool_name == "match_po_invoice":
+            result = _match_po_invoice(arguments)
+        elif tool_name == "diagnose_variance":
+            result = _diagnose_variance(arguments)
+        elif tool_name == "optimize_po_matching_model":
+            result = _optimize_po_matching_model(arguments)
         else:
             return _error_response(request_id, -32601, f"Unknown tool: {tool_name}")
 
@@ -400,3 +414,156 @@ def _error_response(request_id: int, code: int, message: str) -> dict:
             "error": {"code": code, "message": message},
         }),
     }
+
+
+# ============================================
+# PO-Invoice Matching Handlers
+# ============================================
+
+MIN_CORRECTIONS_FOR_PO_DSPY = 20
+DSPY_MODELS_PREFIX = "dspy-models"
+
+
+def _get_s3_client():
+    global _s3_client
+    if _s3_client is None:
+        _s3_client = boto3.client("s3", region_name="us-west-2")
+    return _s3_client
+
+
+def _load_po_matcher(s3_key: str | None = None) -> POMatchingModule:
+    """Load PO matcher, optionally from a pre-trained S3 model."""
+    matcher = POMatchingModule()
+    if s3_key:
+        try:
+            s3 = _get_s3_client()
+            response = s3.get_object(Bucket=S3_BUCKET, Key=s3_key)
+            state_json = response["Body"].read().decode("utf-8")
+            tmp_path = f"/tmp/po_matcher_{s3_key.replace('/', '_')}.json"
+            with open(tmp_path, "w") as f:
+                f.write(state_json)
+            matcher.load(tmp_path)
+            logger.info(f"Loaded PO matcher from s3://{S3_BUCKET}/{s3_key}")
+        except Exception as e:
+            logger.warning(f"Failed to load PO matcher from S3: {e}. Using base module.")
+    return matcher
+
+
+def _match_po_invoice(arguments: dict) -> dict:
+    """Tier 2 AI matching for PO-Invoice line items."""
+    global _po_matcher
+
+    configure_lm()
+
+    po_lines = arguments.get("po_line_items", [])
+    invoice_lines = arguments.get("invoice_line_items", [])
+    grn_lines = arguments.get("grn_line_items", [])
+    vendor_name = arguments.get("vendor_name", "Unknown")
+    tier1_pairings = arguments.get("tier1_pairings", [])
+    corrections = arguments.get("corrections", [])
+    model_s3_key = arguments.get("model_s3_key")
+
+    # Determine which DSPy approach to use
+    use_pretrained = model_s3_key is not None
+    use_dspy = len(corrections) >= MIN_CORRECTIONS_FOR_PO_DSPY
+    model_version = "baseline"
+
+    if use_pretrained:
+        _po_matcher = _load_po_matcher(model_s3_key)
+        model_version = model_s3_key
+        logger.info(f"Using pre-trained PO matcher: {model_s3_key}")
+    elif use_dspy:
+        # Enough corrections but no pre-trained model — run BootstrapFewShot inline
+        _po_matcher = POMatchingModule()
+        try:
+            training_examples = create_po_matching_training_examples(corrections)
+            optimizer = BootstrapFewShot(
+                metric=po_matching_metric,
+                max_bootstrapped_demos=4,
+                max_labeled_demos=min(8, len(training_examples)),
+            )
+            _po_matcher = optimizer.compile(_po_matcher, trainset=training_examples)
+            model_version = "bootstrap_fewshot_inline"
+            logger.info(f"Compiled PO matcher BootstrapFewShot with {len(training_examples)} examples")
+        except Exception as e:
+            logger.warning(f"PO matcher BootstrapFewShot failed: {e}. Using base module.")
+            _po_matcher = POMatchingModule()
+    else:
+        _po_matcher = POMatchingModule()
+
+    try:
+        result = _po_matcher(
+            po_lines=json.dumps(po_lines) if isinstance(po_lines, list) else po_lines,
+            invoice_lines=json.dumps(invoice_lines) if isinstance(invoice_lines, list) else invoice_lines,
+            grn_lines=json.dumps(grn_lines) if isinstance(grn_lines, list) else grn_lines,
+            vendor_name=vendor_name,
+            tier1_pairings=json.dumps(tier1_pairings) if isinstance(tier1_pairings, list) else tier1_pairings,
+        )
+
+        # Parse pairings
+        try:
+            pairings = json.loads(result.pairings) if isinstance(result.pairings, str) else result.pairings
+        except (json.JSONDecodeError, TypeError):
+            pairings = []
+
+        # Parse constraint violations
+        try:
+            violations = json.loads(result.constraint_violations) if isinstance(result.constraint_violations, str) else result.constraint_violations
+        except (json.JSONDecodeError, TypeError):
+            violations = []
+
+        # Cap confidence when using base model (no optimized model)
+        confidence_cap = 1.0 if use_pretrained else 0.80
+        for p in pairings:
+            if p.get("confidence", 0) > confidence_cap:
+                p["confidence"] = confidence_cap
+
+        overall_confidence = sum(p.get("confidence", 0) for p in pairings) / max(len(pairings), 1)
+
+        return {
+            "pairings": pairings,
+            "overall_reasoning": result.overall_reasoning,
+            "overall_confidence": round(overall_confidence, 4),
+            "model_version": model_version,
+            "used_dspy": use_pretrained or use_dspy,
+            "constraint_violations": violations,
+        }
+
+    except Exception as e:
+        logger.exception("PO matching failed")
+        return {"error": str(e), "fallback": True}
+
+
+def _diagnose_variance(arguments: dict) -> dict:
+    """AI-powered variance diagnosis for matched line items."""
+    global _variance_diagnoser
+
+    configure_lm()
+
+    if _variance_diagnoser is None:
+        _variance_diagnoser = VarianceDiagnoser()
+
+    try:
+        result = _variance_diagnoser(
+            po_line=json.dumps(arguments.get("po_line", {})),
+            invoice_line=json.dumps(arguments.get("invoice_line", {})),
+            grn_line=json.dumps(arguments.get("grn_line")) if arguments.get("grn_line") else "null",
+            vendor_name=arguments.get("vendor_name", "Unknown"),
+            variance_type=arguments.get("variance_type", "unknown"),
+            variance_amount=str(arguments.get("variance_amount", 0)),
+        )
+
+        return {
+            "diagnosis": result.diagnosis,
+            "suggested_action": result.suggested_action,
+            "confidence": float(result.confidence) if result.confidence else 0.5,
+        }
+    except Exception as e:
+        logger.exception("Variance diagnosis failed")
+        return {"diagnosis": f"AI diagnosis unavailable: {str(e)}", "suggested_action": "investigate", "confidence": 0.0}
+
+
+def _optimize_po_matching_model(arguments: dict) -> dict:
+    """MIPROv2 optimization for PO matching model."""
+    from optimizer import optimize_po_matching
+    return optimize_po_matching(arguments)
