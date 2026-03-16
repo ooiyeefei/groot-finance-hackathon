@@ -1784,54 +1784,6 @@ export const updateLhdnDeliveryStatus = mutation({
   },
 });
 
-/**
- * Store LHDN-validated PDF in S3 (internal action).
- * 001-einv-pdf-gen: Enable efficient reuse without regeneration.
- * Called from deliver route after PDF generation.
- */
-export const storeLhdnPdfInternal = internalAction({
-  args: {
-    invoiceId: v.string(),
-    businessId: v.string(),
-    pdfBase64: v.string(),
-    filename: v.string(),
-  },
-  handler: async (ctx, args) => {
-    // Import S3 upload function
-    const { uploadFile } = await import("@/lib/aws-s3");
-
-    // Convert base64 to buffer
-    const pdfBuffer = Buffer.from(args.pdfBase64, "base64");
-
-    // Build S3 path: einvoices/{businessId}/{invoiceId}/validated/{filename}
-    const s3Path = `${args.businessId}/${args.invoiceId}/validated/${args.filename}`;
-
-    // Upload to S3
-    const result = await uploadFile(
-      "einvoices" as const,
-      s3Path,
-      pdfBuffer,
-      "application/pdf",
-      {
-        invoice_id: args.invoiceId,
-        business_id: args.businessId,
-        generated_at: new Date().toISOString(),
-      }
-    );
-
-    if (!result.success) {
-      throw new Error(`Failed to upload PDF to S3: ${result.error}`);
-    }
-
-    // Return full S3 key (with prefix)
-    return result.key;
-  },
-});
-
-/**
- * Get stored LHDN PDF S3 path (to be signed via API route).
- * 001-einv-pdf-gen: Returns S3 path; frontend calls API route for signed URL.
- */
 export const getLhdnPdfPath = query({
   args: {
     invoiceId: v.id("sales_invoices"),
