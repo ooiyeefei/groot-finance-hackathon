@@ -2667,3 +2667,91 @@ function computeNextGenerationDate(currentDate: string, frequency: string): stri
 
   return date.toISOString().split("T")[0];
 }
+
+// ============================================
+// BUYER NOTIFICATION LOG (023-einv-buyer-notifications)
+// ============================================
+
+/**
+ * Append a notification log entry to a sales invoice
+ *
+ * Used to track all buyer notification attempts (sent, skipped, failed)
+ * for idempotency and audit purposes.
+ *
+ * This is an internalMutation - only callable from other Convex functions.
+ */
+export const appendNotificationLog = internalMutation({
+  args: {
+    invoiceId: v.id("sales_invoices"),
+    logEntry: v.object({
+      eventType: v.union(v.literal("validation"), v.literal("cancellation"), v.literal("rejection")),
+      recipientEmail: v.string(),
+      timestamp: v.number(),
+      sendStatus: v.union(v.literal("sent"), v.literal("skipped"), v.literal("failed")),
+      skipReason: v.optional(v.string()),
+      errorMessage: v.optional(v.string()),
+      sesMessageId: v.optional(v.string()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice) {
+      throw new Error(`Invoice ${args.invoiceId} not found`);
+    }
+
+    const existingLog = invoice.buyerNotificationLog || [];
+    const updatedLog = [...existingLog, args.logEntry];
+
+    await ctx.db.patch(args.invoiceId, {
+      buyerNotificationLog: updatedLog,
+    });
+
+    console.log(
+      `[appendNotificationLog] Logged ${args.logEntry.eventType} notification for invoice ${invoice.invoiceNumber}: ` +
+      `status=${args.logEntry.sendStatus}${args.logEntry.skipReason ? `, reason=${args.logEntry.skipReason}` : ""}`
+    );
+  },
+});
+
+/**
+ * Public version of appendNotificationLog for API route usage.
+ * Validates that the invoice belongs to the specified businessId.
+ */
+export const appendNotificationLogPublic = mutation({
+  args: {
+    invoiceId: v.id("sales_invoices"),
+    businessId: v.id("businesses"),
+    logEntry: v.object({
+      eventType: v.union(v.literal("validation"), v.literal("cancellation"), v.literal("rejection")),
+      recipientEmail: v.string(),
+      timestamp: v.number(),
+      sendStatus: v.union(v.literal("sent"), v.literal("skipped"), v.literal("failed")),
+      skipReason: v.optional(v.string()),
+      errorMessage: v.optional(v.string()),
+      sesMessageId: v.optional(v.string()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice) {
+      throw new Error(`Invoice ${args.invoiceId} not found`);
+    }
+
+    // Validate that invoice belongs to the specified business
+    if (invoice.businessId !== args.businessId) {
+      throw new Error("Invoice does not belong to the specified business");
+    }
+
+    const existingLog = invoice.buyerNotificationLog || [];
+    const updatedLog = [...existingLog, args.logEntry];
+
+    await ctx.db.patch(args.invoiceId, {
+      buyerNotificationLog: updatedLog,
+    });
+
+    console.log(
+      `[appendNotificationLogPublic] Logged ${args.logEntry.eventType} notification for invoice ${invoice.invoiceNumber}: ` +
+      `status=${args.logEntry.sendStatus}${args.logEntry.skipReason ? `, reason=${args.logEntry.skipReason}` : ""}`
+    );
+  },
+});

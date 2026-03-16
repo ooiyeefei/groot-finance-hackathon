@@ -2,7 +2,7 @@
 
 import { Suspense, lazy, memo, useCallback } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
-import { Building2, DollarSign, Users, Key, Loader2, Calendar, Sparkles, User, Plug, Clock, Shield, Gift } from 'lucide-react'
+import { Building2, DollarSign, Users, Key, Loader2, Calendar, Sparkles, User, Plug, Clock, Shield, Gift, Mail } from 'lucide-react'
 import { usePermissions } from '@/contexts/business-context'
 import { isNativePlatform } from '@/lib/capacitor/platform'
 import { useUser } from '@clerk/nextjs'
@@ -20,6 +20,7 @@ const UserProfileSection = lazy(() => import('@/domains/account-management/compo
 const TimesheetSettings = lazy(() => import('@/domains/timesheet-attendance/components/timesheet-settings'))
 const PrivacyDataSection = lazy(() => import('@/domains/account-management/components/privacy-data-section').then(m => ({ default: m.PrivacyDataSection })))
 const ReferralDashboard = lazy(() => import('@/domains/referral/components/referral-dashboard'))
+const EInvoiceNotificationSettings = lazy(() => import('@/domains/account-management/components/einvoice-notification-settings'))
 
 // Wrapper components for existing components that need userId
 const CategoryManagementTab = ({ userId }: { userId?: string }) => (
@@ -38,7 +39,7 @@ const TabbedBusinessSettings = memo(() => {
   const pathname = usePathname()
 
   // URL-based tab persistence: read from ?tab= query param
-  const validTabs = ['business-profile', 'category-management', 'leave-management', 'timesheet', 'team-management', 'api-keys', 'billing', 'integrations', 'referral', 'privacy', 'profile'] as const
+  const validTabs = ['business-profile', 'category-management', 'leave-management', 'timesheet', 'team-management', 'api-keys', 'billing', 'integrations', 'einvoice-notifications', 'referral', 'privacy', 'profile'] as const
   type TabValue = typeof validTabs[number]
   const tabFromUrl = searchParams.get('tab') as TabValue | null
   // Default tab: 'business-profile' for finance_admin/owner, 'profile' for everyone else
@@ -135,6 +136,16 @@ const TabbedBusinessSettings = memo(() => {
               <Plug className="w-4 h-4 mr-2" />
               <span className="hidden sm:inline">Integrations</span>
               <span className="sm:hidden">Intg</span>
+            </TabsTrigger>
+          )}
+          {isOwner && (
+            <TabsTrigger
+              value="einvoice-notifications"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+            >
+              <Mail className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">E-Invoice Notifications</span>
+              <span className="sm:hidden">E-Inv</span>
             </TabsTrigger>
           )}
           <TabsTrigger
@@ -283,6 +294,22 @@ const TabbedBusinessSettings = memo(() => {
                 </div>
               }>
                 <StripeIntegrationCard />
+              </Suspense>
+            </div>
+          </TabsContent>
+        )}
+
+        {/* E-Invoice Notifications Tab Content - Owner Only */}
+        {isOwner && (
+          <TabsContent value="einvoice-notifications" className="space-y-4">
+            <div className="bg-card rounded-lg border border-border p-6">
+              <Suspense fallback={
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  <span className="ml-2 text-muted-foreground">Loading notification settings...</span>
+                </div>
+              }>
+                <EInvoiceNotificationSettings />
               </Suspense>
             </div>
           </TabsContent>

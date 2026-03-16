@@ -310,6 +310,13 @@ export const updateSourceRecord = internalMutation({
               businessId: job.businessId,
             });
           }
+
+          // 023-einv-buyer-notifications: Send validation notification to buyer
+          // Runs with 1-second delay to avoid race conditions with auto-delivery
+          await ctx.scheduler.runAfter(1000, internal.functions.lhdnJobs.sendValidationNotification, {
+            invoiceId: job.sourceId,
+            businessId: job.businessId,
+          });
         }
       } else {
         const errorSummary = args.validationErrors?.length
@@ -328,6 +335,15 @@ export const updateSourceRecord = internalMutation({
           sourceEvent: `lhdn_invalid_${args.jobId}`,
         });
       }
+    }
+
+    // 023-einv-buyer-notifications: Send rejection confirmation to buyer
+    // Triggered when buyer rejects an e-invoice and LHDN confirms it
+    if (args.status === "rejected" && job.sourceType === "sales_invoice") {
+      await ctx.scheduler.runAfter(1000, internal.functions.lhdnJobs.sendRejectionConfirmation, {
+        invoiceId: job.sourceId,
+        businessId: job.businessId,
+      });
     }
   },
 });
@@ -405,6 +421,162 @@ export const triggerAutoDelivery = internalAction({
         resourceUrl: `/sales-invoices/${args.invoiceId}`,
         sourceEvent: `lhdn_delivery_error_${args.invoiceId}`,
       });
+    }
+  },
+});
+
+// ============================================
+// BUYER NOTIFICATION ACTIONS (023-einv-buyer-notifications)
+// ============================================
+
+/**
+ * Send validation notification to buyer.
+ * Triggered after LHDN validates the e-invoice.
+ */
+export const sendValidationNotification = internalAction({
+  args: {
+    invoiceId: v.string(),
+    businessId: v.id("businesses"),
+  },
+  handler: async (_ctx, args) => {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000";
+    const internalKey = process.env.MCP_INTERNAL_SERVICE_KEY;
+
+    if (!internalKey) {
+      console.error("[sendValidationNotification] MCP_INTERNAL_SERVICE_KEY not configured, skipping");
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/v1/sales-invoices/${args.invoiceId}/lhdn/notify`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Internal-Key": internalKey,
+          },
+          body: JSON.stringify({
+            businessId: args.businessId,
+            eventType: "validation",
+          }),
+        }
+      );
+
+      const result = await response.json();
+      if (!result.success && !result.skipped) {
+        console.error(`[sendValidationNotification] Failed for ${args.invoiceId}:`, result.error);
+      } else if (result.skipped) {
+        console.log(`[sendValidationNotification] Skipped for ${args.invoiceId}: ${result.reason}`);
+      } else {
+        console.log(`[sendValidationNotification] Sent for ${args.invoiceId} to ${result.data?.sentTo}`);
+      }
+    } catch (error) {
+      console.error(`[sendValidationNotification] Error for ${args.invoiceId}:`, error);
+    }
+  },
+});
+
+/**
+ * Send cancellation notification to buyer.
+ * Triggered when issuer cancels an e-invoice.
+ */
+export const sendCancellationNotification = internalAction({
+  args: {
+    invoiceId: v.string(),
+    businessId: v.id("businesses"),
+    cancellationReason: v.string(),
+  },
+  handler: async (_ctx, args) => {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000";
+    const internalKey = process.env.MCP_INTERNAL_SERVICE_KEY;
+
+    if (!internalKey) {
+      console.error("[sendCancellationNotification] MCP_INTERNAL_SERVICE_KEY not configured, skipping");
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/v1/sales-invoices/${args.invoiceId}/lhdn/notify`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Internal-Key": internalKey,
+          },
+          body: JSON.stringify({
+            businessId: args.businessId,
+            eventType: "cancellation",
+            cancellationReason: args.cancellationReason,
+          }),
+        }
+      );
+
+      const result = await response.json();
+      if (!result.success && !result.skipped) {
+        console.error(`[sendCancellationNotification] Failed for ${args.invoiceId}:`, result.error);
+      } else if (result.skipped) {
+        console.log(`[sendCancellationNotification] Skipped for ${args.invoiceId}: ${result.reason}`);
+      } else {
+        console.log(`[sendCancellationNotification] Sent for ${args.invoiceId} to ${result.data?.sentTo}`);
+      }
+    } catch (error) {
+      console.error(`[sendCancellationNotification] Error for ${args.invoiceId}:`, error);
+    }
+  },
+});
+
+/**
+ * Send rejection confirmation to buyer.
+ * Triggered when LHDN confirms buyer's rejection of an e-invoice.
+ */
+export const sendRejectionConfirmation = internalAction({
+  args: {
+    invoiceId: v.string(),
+    businessId: v.id("businesses"),
+  },
+  handler: async (_ctx, args) => {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000";
+    const internalKey = process.env.MCP_INTERNAL_SERVICE_KEY;
+
+    if (!internalKey) {
+      console.error("[sendRejectionConfirmation] MCP_INTERNAL_SERVICE_KEY not configured, skipping");
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/v1/sales-invoices/${args.invoiceId}/lhdn/notify`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Internal-Key": internalKey,
+          },
+          body: JSON.stringify({
+            businessId: args.businessId,
+            eventType: "rejection",
+          }),
+        }
+      );
+
+      const result = await response.json();
+      if (!result.success && !result.skipped) {
+        console.error(`[sendRejectionConfirmation] Failed for ${args.invoiceId}:`, result.error);
+      } else if (result.skipped) {
+        console.log(`[sendRejectionConfirmation] Skipped for ${args.invoiceId}: ${result.reason}`);
+      } else {
+        console.log(`[sendRejectionConfirmation] Sent for ${args.invoiceId} to ${result.data?.sentTo}`);
+      }
+    } catch (error) {
+      console.error(`[sendRejectionConfirmation] Error for ${args.invoiceId}:`, error);
     }
   },
 });
