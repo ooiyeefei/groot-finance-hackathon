@@ -410,6 +410,28 @@ export class DocumentProcessingStack extends cdk.Stack {
     });
 
     // ========================================================================
+    // SES Receiving: docs@*.hellogroot.com (001-doc-email-forward)
+    //
+    // Handles document forwarding emails (receipts & AP invoices).
+    // Format: docs@{business-prefix}.hellogroot.com
+    //
+    // Prerequisites (manual DNS):
+    // - MX record: docs.hellogroot.com → inbound-smtp.us-west-2.amazonaws.com (priority 10)
+    // ========================================================================
+    receiptRuleSet.addRule('DocumentForwardingReceiptRule', {
+      recipients: ['docs.hellogroot.com'], // Matches docs@*.hellogroot.com
+      actions: [
+        new sesActions.S3({
+          bucket,
+          objectKeyPrefix: 'ses-emails/document-forwarding/',
+        }),
+        new sesActions.Lambda({
+          function: emailProcessorFunction,
+        }),
+      ],
+    });
+
+    // ========================================================================
     // S3 Lifecycle: SES Email Retention (PDPA compliance)
     //
     // Delete raw SES emails after 90 days. These are incoming e-invoice emails

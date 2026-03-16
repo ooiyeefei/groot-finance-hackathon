@@ -35,6 +35,7 @@ import type * as functions_creditPacks from "../functions/creditPacks.js";
 import type * as functions_csvImportTemplates from "../functions/csvImportTemplates.js";
 import type * as functions_customers from "../functions/customers.js";
 import type * as functions_documentInbox from "../functions/documentInbox.js";
+import type * as functions_documentInboxCrons from "../functions/documentInboxCrons.js";
 import type * as functions_documentInboxInternal from "../functions/documentInboxInternal.js";
 import type * as functions_dspyModelVersions from "../functions/dspyModelVersions.js";
 import type * as functions_dspyOptimization from "../functions/dspyOptimization.js";
@@ -158,6 +159,7 @@ declare const fullApi: ApiFromModules<{
   "functions/csvImportTemplates": typeof functions_csvImportTemplates;
   "functions/customers": typeof functions_customers;
   "functions/documentInbox": typeof functions_documentInbox;
+  "functions/documentInboxCrons": typeof functions_documentInboxCrons;
   "functions/documentInboxInternal": typeof functions_documentInboxInternal;
   "functions/dspyModelVersions": typeof functions_dspyModelVersions;
   "functions/dspyOptimization": typeof functions_dspyOptimization;

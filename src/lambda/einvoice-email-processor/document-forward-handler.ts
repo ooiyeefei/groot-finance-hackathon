@@ -22,7 +22,10 @@ const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
 const ses = new SESClient({ region: process.env.AWS_REGION || "us-west-2" });
 const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL || "";
 const S3_BUCKET = process.env.S3_BUCKET_NAME || "finanseal-bucket";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 const SYSTEM_EMAIL = "noreply@notifications.hellogroot.com";
+
+const CONFIDENCE_THRESHOLD = 0.85; // Auto-route if confidence >= 85%
 
 interface DocumentAttachment {
   filename: string;
@@ -152,6 +155,176 @@ async function uploadToS3Staging(
   );
 
   return s3Key;
+}
+
+/**
+ * Classify document using Gemini Flash-Lite
+ */
+async function classifyDocument(
+  fileUrl: string,
+  filename: string
+): Promise<{
+  type: "receipt" | "invoice" | "unknown";
+  confidence: number;
+  reasoning: string;
+}> {
+  if (!GEMINI_API_KEY) {
+    console.log("[DocForward] No GEMINI_API_KEY - skipping classification");
+    return { type: "unknown", confidence: 0, reasoning: "No API key" };
+  }
+
+  try {
+    const prompt = `Classify this document image. Determine if it is:
+- "receipt": A receipt from a merchant/vendor (proof of purchase for expense claims)
+- "invoice": An AP supplier invoice (bill from vendor requesting payment)
+- "unknown": Cannot determine or unclear
+
+Consider:
+- Receipts: typically show itemized purchases, merchant name, transaction date, payment method
+- Invoices: show invoice number, payment terms, due date, "Invoice" header, billing/shipping addresses
+
+Respond in JSON only:
+{"type":"receipt|invoice|unknown","confidence":0.0-1.0,"reasoning":"brief explanation"}`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [
+                { text: prompt },
+                {
+                  inline_data: {
+                    mime_type: filename.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg",
+                    data: await fetchFileAsBase64(fileUrl),
+                  },
+                },
+              ],
+            },
+          ],
+          generationConfig: { temperature: 0.0, maxOutputTokens: 256 },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      console.log(`[DocForward] Gemini API error: ${response.status}`);
+      return { type: "unknown", confidence: 0, reasoning: `API error: ${response.status}` };
+    }
+
+    const result = await response.json();
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+    // Parse JSON from response
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        type: parsed.type === "receipt" || parsed.type === "invoice" ? parsed.type : "unknown",
+        confidence: parsed.confidence || 0,
+        reasoning: parsed.reasoning || "",
+      };
+    }
+
+    return { type: "unknown", confidence: 0, reasoning: "Failed to parse response" };
+  } catch (error) {
+    console.log(`[DocForward] Classification error: ${error}`);
+    return { type: "unknown", confidence: 0, reasoning: `Error: ${error}` };
+  }
+}
+
+/**
+ * Fetch file from Convex storage and convert to base64
+ */
+async function fetchFileAsBase64(url: string): Promise<string> {
+  const response = await fetch(url);
+  const buffer = await response.arrayBuffer();
+  return Buffer.from(buffer).toString("base64");
+}
+
+/**
+ * Route document to expense claims table
+ */
+async function routeToExpenseClaims(params: {
+  businessId: string;
+  userId: string;
+  fileStorageId: string;
+  originalFilename: string;
+  emailMetadata: any;
+}): Promise<string> {
+  const response = await fetch(`${CONVEX_URL}/api/mutation`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      path: "functions/expenseClaims:create",
+      args: {
+        businessId: params.businessId,
+        businessPurpose: `Document from email: ${params.emailMetadata.subject}`,
+        fileName: params.originalFilename,
+        fileType: params.originalFilename.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg",
+        fileSize: 0, // Will be updated after upload
+        status: "draft",
+        sourceType: "email_forward",
+        sourceEmailMetadata: params.emailMetadata,
+      },
+      format: "json",
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to create expense claim: ${response.status}`);
+  }
+
+  const result = await response.json();
+  if (result.status === "error") {
+    throw new Error(`Convex error: ${result.errorMessage}`);
+  }
+
+  return result.value;
+}
+
+/**
+ * Route document to invoices table
+ */
+async function routeToInvoices(params: {
+  businessId: string;
+  userId: string;
+  fileStorageId: string;
+  originalFilename: string;
+  emailMetadata: any;
+}): Promise<string> {
+  const response = await fetch(`${CONVEX_URL}/api/mutation`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      path: "functions/invoices:create",
+      args: {
+        businessId: params.businessId,
+        fileName: params.originalFilename,
+        fileType: params.originalFilename.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg",
+        fileSize: 0,
+        status: "pending",
+        sourceType: "email_forward",
+        sourceEmailMetadata: params.emailMetadata,
+      },
+      format: "json",
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to create invoice: ${response.status}`);
+  }
+
+  const result = await response.json();
+  if (result.status === "error") {
+    throw new Error(`Convex error: ${result.errorMessage}`);
+  }
+
+  return result.value;
 }
 
 /**
@@ -385,11 +558,106 @@ export async function handleDocumentForwarding(
           attachment.filename,
           new Date().toISOString().split("T")[0]  // Placeholder date
         );
-      } else {
-        console.log(`[DocForward] Inbox entry created: ${result.inboxEntryId} (hash=${result.fileHash}, size=${result.fileSizeBytes})`);
-        if (result.triggerClassification) {
-          console.log(`[DocForward] Classification will be triggered by Trigger.dev`);
+        continue;
+      }
+
+      console.log(`[DocForward] Inbox entry created: ${result.inboxEntryId} (hash=${result.fileHash}, size=${result.fileSizeBytes})`);
+
+      // Get file URL from Convex storage for classification
+      const fileUrlResponse = await fetch(`${CONVEX_URL}/api/query`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: "functions/documentInbox:getInboxDocument",
+          args: { inboxEntryId: result.inboxEntryId },
+          format: "json",
+        }),
+      });
+
+      if (!fileUrlResponse.ok) {
+        console.log(`[DocForward] Failed to get file URL: ${fileUrlResponse.status}`);
+        continue;
+      }
+
+      const fileUrlResult = await fileUrlResponse.json();
+      const fileUrl = fileUrlResult.value?.document?.fileUrl;
+
+      if (!fileUrl) {
+        console.log(`[DocForward] No file URL available for classification`);
+        continue;
+      }
+
+      // Classify document with Gemini
+      console.log(`[DocForward] Classifying document...`);
+      const classification = await classifyDocument(fileUrl, attachment.filename);
+      console.log(
+        `[DocForward] Classification: ${classification.type} (${classification.confidence}) - ${classification.reasoning}`
+      );
+
+      // Update inbox status with classification result
+      await fetch(`${CONVEX_URL}/api/mutation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: "functions/documentInbox:updateInboxStatus",
+          args: {
+            inboxEntryId: result.inboxEntryId,
+            status:
+              classification.confidence >= CONFIDENCE_THRESHOLD && classification.type !== "unknown"
+                ? "routed"
+                : "needs_review",
+            aiDetectedType: classification.type,
+            aiConfidence: classification.confidence,
+            aiReasoning: classification.reasoning,
+          },
+          format: "json",
+        }),
+      });
+
+      // If high confidence, route directly to destination table
+      if (classification.confidence >= CONFIDENCE_THRESHOLD && classification.type !== "unknown") {
+        try {
+          let destinationId: string;
+          if (classification.type === "receipt") {
+            destinationId = await routeToExpenseClaims({
+              businessId: businessConfig.businessId,
+              userId: businessConfig.userId,
+              fileStorageId: result.inboxEntryId, // Placeholder - will use actual storage ID
+              originalFilename: attachment.filename,
+              emailMetadata,
+            });
+            console.log(`[DocForward] Routed to expense_claims: ${destinationId}`);
+          } else {
+            destinationId = await routeToInvoices({
+              businessId: businessConfig.businessId,
+              userId: businessConfig.userId,
+              fileStorageId: result.inboxEntryId,
+              originalFilename: attachment.filename,
+              emailMetadata,
+            });
+            console.log(`[DocForward] Routed to invoices: ${destinationId}`);
+          }
+
+          // Delete inbox entry after successful routing
+          await fetch(`${CONVEX_URL}/api/mutation`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              path: "functions/documentInbox:deleteInboxEntry",
+              args: {
+                inboxEntryId: result.inboxEntryId,
+                deletedBy: businessConfig.userId,
+                reason: "Auto-routed after classification",
+              },
+              format: "json",
+            }),
+          });
+          console.log(`[DocForward] Inbox entry deleted after routing`);
+        } catch (routingError) {
+          console.log(`[DocForward] Routing failed, document left in inbox: ${routingError}`);
         }
+      } else {
+        console.log(`[DocForward] Low confidence or unknown type - document left in inbox for manual review`);
       }
     } catch (error) {
       console.log(`[DocForward] Failed to process ${attachment.filename}: ${error}`);
