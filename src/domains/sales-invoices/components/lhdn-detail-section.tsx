@@ -54,9 +54,14 @@ export function LhdnDetailSection({ invoice }: LhdnDetailSectionProps) {
     return (
       <Card className="bg-card border-border">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            LHDN e-Invoice
-          </CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              LHDN e-Invoice
+            </CardTitle>
+            <Badge className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 text-xs">
+              Early Access
+            </Badge>
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-center gap-2">
@@ -79,9 +84,14 @@ export function LhdnDetailSection({ invoice }: LhdnDetailSectionProps) {
     <Card className="bg-card border-border">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            LHDN e-Invoice
-          </CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              LHDN e-Invoice
+            </CardTitle>
+            <Badge className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 text-xs">
+              Early Access
+            </Badge>
+          </div>
           <LhdnStatusBadge status={invoice.lhdnStatus} />
         </div>
       </CardHeader>
