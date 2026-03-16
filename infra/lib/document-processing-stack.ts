@@ -363,6 +363,7 @@ export class DocumentProcessingStack extends cdk.Stack {
       },
       bundling: {
         externalModules: ['@aws-sdk/*'],
+        nodeModules: ['mailparser'],  // Native module — must be installed in bundle, not esbuild-bundled
         minify: true,
         sourceMap: true,
       },
