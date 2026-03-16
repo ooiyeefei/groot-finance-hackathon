@@ -84,7 +84,19 @@ export async function POST(
       )
     }
 
-    // 2. Validate document status is "valid"
+    // 2. Validate document status is "valid" (idempotency check)
+    if (doc.status === "rejected") {
+      // Idempotency: Already rejected, return success immediately
+      return NextResponse.json({
+        success: true,
+        data: {
+          lhdnStatus: "rejected",
+          documentUuid: uuid,
+          message: "Document already rejected",
+        },
+      })
+    }
+
     if (doc.status !== "valid") {
       return NextResponse.json(
         {
@@ -122,8 +134,81 @@ export async function POST(
     }
 
     // 5. Authenticate with LHDN and reject the document
-    const tokenResult = await authenticate(tenantTin)
-    await rejectDocument(uuid, reason, tokenResult.accessToken)
+    let tokenResult
+    try {
+      tokenResult = await authenticate(tenantTin)
+    } catch (authError) {
+      console.error("[LHDN Reject] Authentication failed:", authError)
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Failed to authenticate with LHDN. Please check your business TIN configuration.",
+          details: authError instanceof Error ? authError.message : "Authentication error",
+        },
+        { status: 502 }
+      )
+    }
+
+    try {
+      await rejectDocument(uuid, reason, tokenResult.accessToken)
+    } catch (rejectError) {
+      console.error("[LHDN Reject] Rejection request failed:", rejectError)
+
+      // Handle specific LHDN API errors
+      if (rejectError instanceof LhdnApiError) {
+        // Check for rate limit (LHDN has 12 RPM limit)
+        if (rejectError.message.includes("rate limit") || rejectError.message.includes("429")) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "LHDN rate limit exceeded. Please try again in a few moments.",
+              lhdnErrors: rejectError.errors,
+            },
+            { status: 429 }
+          )
+        }
+
+        // Check for already rejected on LHDN side
+        if (rejectError.message.includes("already rejected") || rejectError.message.includes("invalid state")) {
+          // Update local status to match LHDN
+          try {
+            await convex.mutation(
+              api.functions.einvoiceReceivedDocuments.rejectReceivedDocument,
+              {
+                documentId: doc._id as Id<"einvoice_received_documents">,
+                documentUuid: uuid,
+                reason: "Already rejected on LHDN",
+                rejectedByUserId: userId,
+              }
+            )
+          } catch (updateError) {
+            console.error("[LHDN Reject] Failed to sync status after concurrent rejection:", updateError)
+          }
+
+          return NextResponse.json({
+            success: true,
+            data: {
+              lhdnStatus: "rejected",
+              documentUuid: uuid,
+              message: "Document was already rejected (concurrent request or LHDN status sync)",
+            },
+          })
+        }
+
+        // Generic LHDN API error
+        return NextResponse.json(
+          {
+            success: false,
+            error: "LHDN API error: " + rejectError.message,
+            lhdnErrors: rejectError.errors,
+          },
+          { status: 502 }
+        )
+      }
+
+      // Network timeout or other errors
+      throw rejectError
+    }
 
     // 6. Update Convex (document status + expense claim unlink + notification)
     try {
@@ -131,6 +216,7 @@ export async function POST(
         api.functions.einvoiceReceivedDocuments.rejectReceivedDocument,
         {
           documentId: doc._id as Id<"einvoice_received_documents">,
+          documentUuid: uuid,
           reason,
           rejectedByUserId: userId,
         }
@@ -149,6 +235,29 @@ export async function POST(
     })
   } catch (error) {
     console.error("[LHDN Reject E-Invoice] Error:", error)
+
+    // Network/timeout errors
+    if (error instanceof Error) {
+      if (error.message.includes("timeout") || error.message.includes("ETIMEDOUT")) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Request timed out. The LHDN service may be temporarily unavailable. Please try again.",
+          },
+          { status: 504 }
+        )
+      }
+
+      if (error.message.includes("ECONNREFUSED") || error.message.includes("network")) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Could not connect to LHDN service. Please check your network connection and try again.",
+          },
+          { status: 503 }
+        )
+      }
+    }
 
     if (error instanceof LhdnApiError) {
       return NextResponse.json(
