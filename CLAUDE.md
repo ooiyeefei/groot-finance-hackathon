@@ -450,5 +450,6 @@ const arBalance = arLines.reduce((sum, line) =>
 - Convex (corrections, model versions, bank transactions), S3 (optimized DSPy models) (001-dspy-bank-recon)
 
 ## Recent Changes
+- 001-dspy-bank-recon: DSPy-powered bank reconciliation — Tier 1 keyword rules + Tier 2 DSPy AI classification, GL posting (draft JEs), correction feedback loop (BootstrapFewShot), weekly MIPROv2 optimization, batch operations, reconciliation summary. New tables: `bank_recon_corrections`, `bank_recon_classification_rules`. Extended: `bank_accounts` (+glAccountId), `bank_transactions` (+8 classification fields), `dspy_model_versions` (+domain). Lambda extended with `/classify_bank_transaction` and `/optimize_bank_recon_model`.
 - 001-category-3-mcp: Added MCP Server with API key management
 - 001-manager-approval: Added TypeScript 5.9.3, Next.js 15.5.7 + Convex 1.31.3, React 19.1.2, Clerk 6.30.0, Zod 3.23.8
