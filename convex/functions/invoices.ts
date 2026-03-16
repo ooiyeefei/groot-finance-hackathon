@@ -474,6 +474,18 @@ export const create = mutation({
     status: v.optional(
       v.union(v.literal("pending"), v.literal("uploading"))
     ),
+    // 001-doc-email-forward: Source tracking
+    sourceType: v.optional(
+      v.union(v.literal("manual_upload"), v.literal("email_forward"))
+    ),
+    sourceEmailMetadata: v.optional(
+      v.object({
+        from: v.string(),
+        subject: v.string(),
+        receivedAt: v.number(),
+        messageId: v.string(),
+      })
+    ),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -509,6 +521,9 @@ export const create = mutation({
       storagePath: args.storagePath ?? "", // Empty string if not provided
       status: args.status ?? "uploading", // Default to 'uploading' when creating
       documentDomain: "invoices", // Tag all records created through invoices.create as supplier invoices
+      // Source tracking (001-doc-email-forward)
+      sourceType: args.sourceType,
+      sourceEmailMetadata: args.sourceEmailMetadata,
       updatedAt: Date.now(),
     });
 

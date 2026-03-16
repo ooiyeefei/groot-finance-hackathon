@@ -161,6 +161,7 @@
     "eslint-config-next": "15.4.6",
     "eslint-plugin-unused-imports": "^4.2.0",
     "madge": "^8.0.0",
+    "mailparser": "^3.9.4",
     "postcss": "^8.5.6",
     "source-map-explorer": "^2.5.3",
     "tailwindcss": "^3.4.17",

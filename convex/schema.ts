@@ -260,6 +260,12 @@ export default defineSchema({
     referredByBusinessId: v.optional(v.id("businesses")),
     referralCapturedAt: v.optional(v.number()),
 
+    // 001-doc-email-forward: Email forwarding configuration
+    emailForwardingEnabled: v.optional(v.boolean()),
+    emailForwardingDomain: v.optional(v.string()),      // e.g., "docs.hellogroot.com"
+    emailForwardingPrefix: v.optional(v.string()),      // e.g., "acme-corp"
+    emailForwardingAllowlist: v.optional(v.array(v.string())), // Authorized sender emails
+
     // Timestamps
     updatedAt: v.optional(v.number()),
 
@@ -547,6 +553,15 @@ export default defineSchema({
     einvoiceRequestedAt: v.optional(v.number()),
     einvoiceReceivedAt: v.optional(v.number()),
     einvoiceAgentError: v.optional(v.string()),        // Error from AI agent failure
+
+    // 001-doc-email-forward: Source tracking
+    sourceType: v.optional(v.union(v.literal("manual_upload"), v.literal("email_forward"))),
+    sourceEmailMetadata: v.optional(v.object({
+      from: v.string(),
+      subject: v.string(),
+      receivedAt: v.number(),
+      messageId: v.string(),
+    })),
 
     // Timestamps
     updatedAt: v.optional(v.number()),
@@ -921,6 +936,15 @@ export default defineSchema({
     }))),
     lhdnDocumentHash: v.optional(v.string()),
 
+    // 001-doc-email-forward: Source tracking
+    sourceType: v.optional(v.union(v.literal("manual_upload"), v.literal("email_forward"))),
+    sourceEmailMetadata: v.optional(v.object({
+      from: v.string(),
+      subject: v.string(),
+      receivedAt: v.number(),
+      messageId: v.string(),
+    })),
+
     deletedAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),
   })
@@ -932,6 +956,106 @@ export default defineSchema({
     .index("by_businessId_lhdnStatus", ["businessId", "lhdnStatus"])
     // AP subledger: payment status queries
     .index("by_business_payment_status", ["businessId", "paymentStatus"]),
+
+  // ============================================
+  // DOCUMENT INBOX (001-doc-email-forward)
+  // ============================================
+
+  document_inbox_entries: defineTable({
+    // Relationships
+    businessId: v.id("businesses"),
+    userId: v.id("users"),  // Determined from email sender
+
+    // File Info
+    originalFilename: v.string(),
+    fileStorageId: v.id("_storage"),  // Convex file storage
+    fileHash: v.string(),  // MD5 hash for duplicate detection
+    fileSizeBytes: v.number(),
+    mimeType: v.string(),  // application/pdf | image/jpeg | image/png
+
+    // Source
+    sourceType: v.literal("email_forward"),
+    emailMetadata: v.object({
+      from: v.string(),
+      subject: v.string(),
+      body: v.string(),  // First 1000 characters
+      receivedAt: v.number(),
+      messageId: v.string(),  // SES message ID
+    }),
+
+    // Status
+    status: v.union(
+      v.literal("pending_classification"),
+      v.literal("classifying"),
+      v.literal("needs_review"),
+      v.literal("routed"),
+      v.literal("extraction_failed"),
+      v.literal("archived"),
+      v.literal("quarantined")
+    ),
+
+    // AI Classification Results (from Trigger.dev classify-document task)
+    aiDetectedType: v.optional(v.union(
+      v.literal("receipt"),
+      v.literal("invoice"),
+      v.literal("e_invoice"),
+      v.literal("unknown")
+    )),
+    aiConfidence: v.optional(v.number()),  // 0.0-1.0
+    aiReasoning: v.optional(v.string()),
+
+    // Manual Classification (user override)
+    manuallyClassifiedType: v.optional(v.union(
+      v.literal("receipt"),
+      v.literal("invoice"),
+      v.literal("e_invoice")
+    )),
+    classifiedBy: v.optional(v.id("users")),
+    classifiedAt: v.optional(v.number()),
+
+    // Routing
+    destinationDomain: v.optional(v.union(
+      v.literal("expense_claims"),
+      v.literal("invoices"),
+      v.literal("einvoice")
+    )),
+    destinationRecordId: v.optional(v.union(
+      v.id("expense_claims"),
+      v.id("invoices"),
+      v.id("einvoice_received_documents")
+    )),
+
+    // Error Handling
+    errorMessage: v.optional(v.string()),
+    errorDetails: v.optional(v.any()),
+    retryCount: v.optional(v.number()),
+
+    // Duplicate Detection
+    isDuplicate: v.optional(v.boolean()),
+    duplicateOriginalId: v.optional(v.union(
+      v.id("expense_claims"),
+      v.id("invoices")
+    )),
+
+    // Data Retention (PDPA 7-year compliance)
+    archiveEligibleAt: v.optional(v.number()),  // 30 days after entry
+    deleteEligibleAt: v.optional(v.number()),  // 7 years after entry
+
+    // Timestamps
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_userId", ["userId"])
+    .index("by_status", ["status"])
+    .index("by_business_status", ["businessId", "status"])
+    .index("by_business_user", ["businessId", "userId"])
+    .index("by_business_status_user", ["businessId", "status", "userId"])
+    .index("by_fileHash", ["fileHash"])
+    .index("by_business_fileHash", ["businessId", "fileHash"])
+    .index("by_destinationDomain", ["destinationDomain"])
+    .index("by_archiveEligibleAt", ["archiveEligibleAt"])
+    .index("by_deleteEligibleAt", ["deleteEligibleAt"])
+    .index("by_isDuplicate", ["isDuplicate"]),
 
   // ============================================
   // CHAT DOMAIN (Real-time enabled)
