@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import { Bot, Radar, FileText, ScanLine, Printer, Building2, Sparkles, Check, Clock } from 'lucide-react';
+import { Bot, Radar, FileText, ScanLine, Printer, Building2, Sparkles, Check, Clock, Zap, Brain } from 'lucide-react';
 import { localizeEInvoiceLabel } from '@/lib/utils/e-invoice-label';
 import { isNativePlatform } from '@/lib/capacitor/platform';
 
@@ -24,32 +24,38 @@ const FEATURES = [
   {
     icon: Bot,
     title: 'AI Financial Co-Pilot',
-    description: 'Ask anything in plain English, Thai, or Bahasa. Your AI consultant draws live dashboards, posts invoices, flags compliance risks, and forecasts cash flow — all from a single conversation.',
+    description: 'Talk to your finances like you\u2019d talk to a CFO. Ask in plain English, Thai, or Bahasa \u2014 get instant dashboards, post invoices, flag compliance risks, and forecast cash flow. No menus to dig through. Just ask and it\u2019s done.',
+    earlyAccess: false,
   },
   {
     icon: Radar,
     title: 'Proactive Insights Engine',
-    description: 'Our intelligence engine runs behind the scenes — detecting spend anomalies, tracking vendor price surges, and surfacing cash flow risks as actionable alerts before they become problems.',
+    description: 'Your finances, watched around the clock. Spending spikes, vendor price creep, and cash flow risks surface as alerts before they become problems \u2014 not buried in a report you\u2019ll read next month. Always on. Always ahead.',
+    earlyAccess: false,
   },
   {
-    icon: FileText,
-    title: 'Smart Invoicing & Payments',
-    description: 'Create, send, and track sales invoices with PDF generation. Manage vendor bills, debtor statements, and aging reports. Sync your Stripe product catalog or add custom items — one hub for all commercial documents.',
+    icon: Zap,
+    title: 'eInvoice Autopilot',
+    description: 'Stop filling buyer details on every merchant\u2019s e-invoice portal. Our AI agent handles it \u2014 automatically, on any merchant site, in seconds. It remembers every merchant and gets faster each time. One click, every e-invoice, done.',
+    earlyAccess: true,
   },
   {
     icon: ScanLine,
     title: 'AI Expense Intelligence',
-    description: 'Snap receipts and let AI extract every field, auto-categorize by vendor, and flag duplicates with statistical matching. Multi-level approval workflows route claims to the right manager automatically.',
+    description: 'Snap a receipt. Done. AI reads every line, sorts it to the right category, and catches duplicates before they cost you. Approvals route to the right manager automatically \u2014 no chasing, no spreadsheets, no month-end panic.',
+    earlyAccess: false,
   },
   {
-    icon: Printer,
-    title: 'Reports & Integration Hub',
-    description: 'Generate print-ready PDF financial reports and build custom CSV export templates mapped to any third-party accounting system. Schedule recurring exports or push to Google Sheets.',
+    icon: Brain,
+    title: 'AI That Learns Your Business',
+    description: 'Every finance app claims AI. Most just match keywords \u2014 same as five years ago. Groot is different. Our AI studies your team\u2019s corrections and gets measurably smarter every week. Payments matched to invoices. Bank transactions classified. Purchase orders verified against deliveries. Every match shows you exactly why it was made \u2014 so your auditors love it as much as your accountants do.',
+    earlyAccess: false,
   },
   {
     icon: Building2,
     title: 'Enterprise Command Center',
-    description: 'Multi-tenancy, role-based access, team management with leave tracking and shared calendar, and configurable approval workflows. Full audit trails and data isolation across every business unit.',
+    description: 'Run multiple business units with full data isolation, role-based access, and configurable approval chains. Complete audit trails, team management, and governance that scales \u2014 built for companies that need control without complexity.',
+    earlyAccess: false,
   },
 ];
 
@@ -124,7 +130,18 @@ const PRICING_TIERS = [
 export default function LandingContent({ country }: { country: string }) {
   const heroRef = useRef<HTMLDivElement>(null);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
+  const [waitlistEmail, setWaitlistEmail] = useState('');
+  const [waitlistCompany, setWaitlistCompany] = useState('');
+  const [waitlistSubmitted, setWaitlistSubmitted] = useState(false);
   const currency = getCurrencyInfo(country);
+
+  const handleWaitlistSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const subject = encodeURIComponent('eInvoice Autopilot — Early Access Interest');
+    const body = encodeURIComponent(`Hi Groot team,\n\nI'd like early access to eInvoice Autopilot.\n\nEmail: ${waitlistEmail}\nCompany: ${waitlistCompany}`);
+    window.location.href = `mailto:dev@hellogroot.com?subject=${subject}&body=${body}`;
+    setWaitlistSubmitted(true);
+  };
 
   useEffect(() => {
     const mainEl = document.querySelector('.snap-container');
@@ -434,13 +451,13 @@ export default function LandingContent({ country }: { country: string }) {
           </div>
 
           <h1 className="hero-fade hero-fade-2 text-4xl md:text-5xl font-semibold text-[#111111] mb-6 tracking-tight">
-            Your AI-powered <span className="text-[#4285F4]">finance team</span>
+            AI that gets <span className="text-[#4285F4]">smarter every week</span>
           </h1>
 
           <p className="hero-fade hero-fade-3 text-lg md:text-xl text-[#6B7280] font-medium mb-10 max-w-2xl mx-auto">
-            From invoicing and expense claims to proactive insights<br />
-            and team management — AI automates your financial
-            operations while you focus on growth.
+            The only finance platform with AI that actually learns<br />
+            your business. Not keyword matching. Real intelligence<br />
+            that improves every week you use it.
           </p>
 
           <div className="hero-fade hero-fade-4 flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
@@ -483,7 +500,7 @@ export default function LandingContent({ country }: { country: string }) {
             <h2 className="text-2xl md:text-3xl font-semibold text-[#111111] mb-2 tracking-tight">
               One platform, every <span className="text-[#4285F4]">advantage</span>
             </h2>
-            <p className="text-sm text-[#6B7280] font-medium">AI-powered tools that think, act, and scale with your business</p>
+            <p className="text-sm text-[#6B7280] font-medium">AI that doesn&apos;t just automate — it learns, adapts, and gets better the more you use it</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -492,8 +509,23 @@ export default function LandingContent({ country }: { country: string }) {
                 <div className="icon-box inline-block p-2.5 mb-3">
                   <feature.icon className="w-5 h-5 text-[#4285F4]" />
                 </div>
-                <h3 className="text-base font-medium text-[#111111] mb-1.5">{feature.title}</h3>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <h3 className="text-base font-medium text-[#111111]">{feature.title}</h3>
+                  {feature.earlyAccess && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-violet-100 text-violet-700 border border-violet-200">Early Access</span>
+                  )}
+                </div>
                 <p className="text-sm text-[#6B7280] leading-relaxed">{feature.description}</p>
+                {feature.earlyAccess && !waitlistSubmitted && (
+                  <form onSubmit={handleWaitlistSubmit} className="mt-3 pt-3 border-t border-[#E5E7EB] flex flex-col gap-2">
+                    <input type="email" placeholder="Work email" value={waitlistEmail} onChange={(e) => setWaitlistEmail(e.target.value)} required className="w-full px-3 py-2 text-sm rounded-lg border border-[#E5E7EB] focus:border-[#4285F4] focus:outline-none bg-white" />
+                    <input type="text" placeholder="Company name" value={waitlistCompany} onChange={(e) => setWaitlistCompany(e.target.value)} required className="w-full px-3 py-2 text-sm rounded-lg border border-[#E5E7EB] focus:border-[#4285F4] focus:outline-none bg-white" />
+                    <button type="submit" className="w-full px-3 py-2 text-sm font-medium text-white rounded-lg transition-colors" style={{ background: '#7C3AED' }}>Join Waitlist</button>
+                  </form>
+                )}
+                {feature.earlyAccess && waitlistSubmitted && (
+                  <p className="mt-3 pt-3 border-t border-[#E5E7EB] text-sm text-green-600 font-medium">You&apos;re on the list! We&apos;ll reach out soon.</p>
+                )}
               </div>
             ))}
           </div>
