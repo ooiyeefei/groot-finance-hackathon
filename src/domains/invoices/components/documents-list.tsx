@@ -216,11 +216,23 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
         businessId: businessId as Id<"businesses">,
       })
 
-      addToast({
-        type: 'success',
-        title: 'Posted to AP',
-        description: `Successfully posted ${result.succeeded} of ${result.total} invoices to AP`
-      })
+      if (result.succeeded > 0) {
+        addToast({
+          type: 'success',
+          title: 'Posted to AP',
+          description: result.failed > 0
+            ? `Posted ${result.succeeded} of ${result.total} invoices. ${result.failed} failed.`
+            : `Successfully posted ${result.succeeded} invoice${result.succeeded > 1 ? 's' : ''} to AP`
+        })
+      } else {
+        // All failed — show error with reason from first failure
+        const firstError = result.results?.find((r: { success: boolean; error?: string }) => !r.success)?.error || 'Unknown error'
+        addToast({
+          type: 'error',
+          title: 'Post to AP failed',
+          description: `No invoices could be posted. Reason: ${firstError}`
+        })
+      }
 
       // Clear selection and refresh
       setSelectedInvoices(new Set())
