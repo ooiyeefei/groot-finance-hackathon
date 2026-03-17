@@ -2,7 +2,7 @@
 
 import { Suspense, lazy, memo, useCallback, useState } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
-import { Building2, DollarSign, Users, Loader2, Sparkles, User, Gift } from 'lucide-react'
+import { Building2, DollarSign, Users, Loader2, Sparkles, User, Gift, Plug, Shield } from 'lucide-react'
 import { usePermissions } from '@/contexts/business-context'
 import { isNativePlatform } from '@/lib/capacitor/platform'
 import { useUser } from '@clerk/nextjs'
@@ -32,7 +32,7 @@ const TeamManagementTab = ({ userId }: { userId?: string }) => (
   userId ? <TeamsManagementClient userId={userId} /> : <div className="text-center py-8"><p className="text-muted-foreground">Please sign in to access this feature.</p></div>
 )
 
-// Sub-section navigation within a tab
+// Sub-section pill navigation within a tab
 function SubSection({ label, isActive, onClick }: { label: string; isActive: boolean; onClick: () => void }) {
   return (
     <button
@@ -58,8 +58,20 @@ function TabLoader({ title }: { title: string }) {
   )
 }
 
+/**
+ * Settings Page — Consolidated Tab Layout
+ *
+ * 7 top-level tabs:
+ * - Business: profile + address + e-invoice compliance (TIN, BRN, MSIC)
+ * - Finance: Categories | e-Invoice (connection + notifications) | AI & Automation
+ * - People: Team | Leave | Timesheet
+ * - Integrations: Stripe + API Keys
+ * - Billing: owner-only subscription management
+ * - Referral: all users
+ * - Personal: user profile | privacy & data
+ */
 const TabbedBusinessSettings = memo(() => {
-  const { isOwner, canChangeSettings, canManageSubscription } = usePermissions()
+  const { isOwner, canChangeSettings } = usePermissions()
   const { user } = useUser()
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -68,18 +80,19 @@ const TabbedBusinessSettings = memo(() => {
   const canViewBusinessSettings = canChangeSettings || isOwner
 
   // Sub-section state for grouped tabs
-  const [financeSection, setFinanceSection] = useState<'categories' | 'integrations' | 'ai'>('categories')
+  const [financeSection, setFinanceSection] = useState<'categories' | 'ai'>('categories')
   const [peopleSection, setPeopleSection] = useState<'team' | 'leave' | 'timesheet'>('team')
-  const [profileSection, setProfileSection] = useState<'profile' | 'privacy'>('profile')
+  const [integrationsSection, setIntegrationsSection] = useState<'stripe' | 'einvoice' | 'api-keys'>('stripe')
+  const [personalSection, setPersonalSection] = useState<'profile' | 'privacy'>('profile')
 
-  // Tab routing
-  const validTabs = ['business', 'finance', 'people', 'billing', 'referral', 'profile',
-    // Legacy tab values — redirect to new grouped tabs
+  // Tab routing — supports legacy URLs
+  const validTabs = ['business', 'finance', 'people', 'integrations', 'billing', 'referral', 'personal',
+    // Legacy tab values — auto-redirect to new grouped tabs
     'business-profile', 'category-management', 'leave-management', 'timesheet',
-    'team-management', 'api-keys', 'integrations', 'einvoice', 'ai-automation', 'privacy'] as const
+    'team-management', 'api-keys', 'einvoice', 'ai-automation', 'privacy', 'profile'] as const
   type TabValue = typeof validTabs[number]
   const tabFromUrl = searchParams.get('tab') as TabValue | null
-  const defaultTab = canViewBusinessSettings ? 'business' : 'profile'
+  const defaultTab = canViewBusinessSettings ? 'business' : 'personal'
 
   // Map legacy tab values to new grouped tabs
   function resolveTab(tab: TabValue | null): string {
@@ -87,13 +100,14 @@ const TabbedBusinessSettings = memo(() => {
     switch (tab) {
       case 'business-profile': return 'business'
       case 'category-management': setFinanceSection('categories'); return 'finance'
-      case 'integrations': setFinanceSection('integrations'); return 'finance'
+      case 'einvoice': setIntegrationsSection('einvoice'); return 'integrations'
       case 'ai-automation': setFinanceSection('ai'); return 'finance'
       case 'team-management': setPeopleSection('team'); return 'people'
       case 'leave-management': setPeopleSection('leave'); return 'people'
       case 'timesheet': setPeopleSection('timesheet'); return 'people'
-      case 'einvoice': return 'business'
-      case 'privacy': setProfileSection('privacy'); return 'profile'
+      case 'api-keys': setIntegrationsSection('api-keys'); return 'integrations'
+      case 'privacy': setPersonalSection('privacy'); return 'personal'
+      case 'profile': setPersonalSection('profile'); return 'personal'
       default: return tab
     }
   }
@@ -109,62 +123,51 @@ const TabbedBusinessSettings = memo(() => {
   return (
     <div className="w-full space-y-4">
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
-        {/* Simplified tab navigation — 6 tabs max */}
+        {/* 7-tab navigation */}
         <TabsList className="flex flex-wrap h-auto p-1 gap-1 bg-muted border border-border">
           {canViewBusinessSettings && (
-            <TabsTrigger
-              value="business"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
+            <TabsTrigger value="business" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Building2 className="w-4 h-4 mr-2" />
               Business
             </TabsTrigger>
           )}
           {canViewBusinessSettings && (
-            <TabsTrigger
-              value="finance"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
+            <TabsTrigger value="finance" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <DollarSign className="w-4 h-4 mr-2" />
               Finance
             </TabsTrigger>
           )}
           {canViewBusinessSettings && (
-            <TabsTrigger
-              value="people"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
+            <TabsTrigger value="people" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Users className="w-4 h-4 mr-2" />
               People
             </TabsTrigger>
           )}
+          {canViewBusinessSettings && (
+            <TabsTrigger value="integrations" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <Plug className="w-4 h-4 mr-2" />
+              Integrations
+            </TabsTrigger>
+          )}
           {isOwner && !isNativePlatform() && (
-            <TabsTrigger
-              value="billing"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
+            <TabsTrigger value="billing" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Sparkles className="w-4 h-4 mr-2" />
               Billing
             </TabsTrigger>
           )}
-          <TabsTrigger
-            value="referral"
-            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-          >
+          <TabsTrigger value="referral" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Gift className="w-4 h-4 mr-1.5" />
             Referral
           </TabsTrigger>
-          <TabsTrigger
-            value="profile"
-            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-          >
+          <TabsTrigger value="personal" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <User className="w-4 h-4 mr-1.5" />
-            Profile
+            Personal
           </TabsTrigger>
         </TabsList>
 
         {/* ============================================================ */}
-        {/* BUSINESS TAB — Profile + e-Invoice Settings (consolidated)   */}
+        {/* BUSINESS — Profile + Address + e-Invoice compliance fields   */}
+        {/* (TIN, BRN, MSIC, structured address — identity fields)      */}
         {/* ============================================================ */}
         {canViewBusinessSettings && (
           <TabsContent value="business" className="space-y-4">
@@ -173,40 +176,22 @@ const TabbedBusinessSettings = memo(() => {
                 <BusinessProfileSettings />
               </Suspense>
             </div>
-            {/* E-Invoice notification settings (the only fully-implemented part) */}
-            <div className="bg-card rounded-lg border border-border p-6">
-              <Suspense fallback={<TabLoader title="e-invoice settings" />}>
-                <EInvoiceSettingsWithTabs />
-              </Suspense>
-            </div>
           </TabsContent>
         )}
 
         {/* ============================================================ */}
-        {/* FINANCE TAB — Categories | Integrations | AI & Automation    */}
+        {/* FINANCE — Categories | AI & Automation                       */}
         {/* ============================================================ */}
         {canViewBusinessSettings && (
           <TabsContent value="finance" className="space-y-4">
-            {/* Sub-section navigation */}
             <div className="flex gap-1 p-1 bg-muted/50 rounded-lg w-fit">
               <SubSection label="Categories" isActive={financeSection === 'categories'} onClick={() => setFinanceSection('categories')} />
-              <SubSection label="Integrations" isActive={financeSection === 'integrations'} onClick={() => setFinanceSection('integrations')} />
               <SubSection label="AI & Automation" isActive={financeSection === 'ai'} onClick={() => setFinanceSection('ai')} />
             </div>
 
             <div className="bg-card rounded-lg border border-border p-6">
               <Suspense fallback={<TabLoader title={financeSection} />}>
                 {financeSection === 'categories' && <CategoryManagementTab userId={user?.id} />}
-                {financeSection === 'integrations' && (
-                  <div className="space-y-6">
-                    <StripeIntegrationCard />
-                    <div className="pt-4 border-t border-border">
-                      <Suspense fallback={<TabLoader title="API keys" />}>
-                        <ApiKeysManagementClient />
-                      </Suspense>
-                    </div>
-                  </div>
-                )}
                 {financeSection === 'ai' && <AIAutomationSettings />}
               </Suspense>
             </div>
@@ -214,11 +199,10 @@ const TabbedBusinessSettings = memo(() => {
         )}
 
         {/* ============================================================ */}
-        {/* PEOPLE TAB — Team | Leave | Timesheet                        */}
+        {/* PEOPLE — Team | Leave | Timesheet                            */}
         {/* ============================================================ */}
         {canViewBusinessSettings && (
           <TabsContent value="people" className="space-y-4">
-            {/* Sub-section navigation */}
             <div className="flex gap-1 p-1 bg-muted/50 rounded-lg w-fit">
               <SubSection label="Team" isActive={peopleSection === 'team'} onClick={() => setPeopleSection('team')} />
               <SubSection label="Leave" isActive={peopleSection === 'leave'} onClick={() => setPeopleSection('leave')} />
@@ -236,7 +220,28 @@ const TabbedBusinessSettings = memo(() => {
         )}
 
         {/* ============================================================ */}
-        {/* BILLING TAB — Owner only                                     */}
+        {/* INTEGRATIONS — Stripe | e-Invoice (LHDN) | API Keys          */}
+        {/* ============================================================ */}
+        {canViewBusinessSettings && (
+          <TabsContent value="integrations" className="space-y-4">
+            <div className="flex gap-1 p-1 bg-muted/50 rounded-lg w-fit">
+              <SubSection label="Stripe" isActive={integrationsSection === 'stripe'} onClick={() => setIntegrationsSection('stripe')} />
+              <SubSection label="e-Invoice" isActive={integrationsSection === 'einvoice'} onClick={() => setIntegrationsSection('einvoice')} />
+              <SubSection label="API Keys" isActive={integrationsSection === 'api-keys'} onClick={() => setIntegrationsSection('api-keys')} />
+            </div>
+
+            <div className="bg-card rounded-lg border border-border p-6">
+              <Suspense fallback={<TabLoader title={integrationsSection} />}>
+                {integrationsSection === 'stripe' && <StripeIntegrationCard />}
+                {integrationsSection === 'einvoice' && <EInvoiceSettingsWithTabs />}
+                {integrationsSection === 'api-keys' && <ApiKeysManagementClient />}
+              </Suspense>
+            </div>
+          </TabsContent>
+        )}
+
+        {/* ============================================================ */}
+        {/* BILLING — Owner only                                         */}
         {/* ============================================================ */}
         {isOwner && !isNativePlatform() && (
           <TabsContent value="billing" className="space-y-4">
@@ -247,7 +252,7 @@ const TabbedBusinessSettings = memo(() => {
         )}
 
         {/* ============================================================ */}
-        {/* REFERRAL TAB — All users                                     */}
+        {/* REFERRAL — All users                                         */}
         {/* ============================================================ */}
         <TabsContent value="referral" className="space-y-4">
           <div className="bg-card rounded-lg border border-border p-6">
@@ -258,19 +263,18 @@ const TabbedBusinessSettings = memo(() => {
         </TabsContent>
 
         {/* ============================================================ */}
-        {/* PROFILE TAB — User Profile | Privacy & Data                  */}
+        {/* PERSONAL — Profile | Privacy & Data                          */}
         {/* ============================================================ */}
-        <TabsContent value="profile" className="space-y-4">
-          {/* Sub-section navigation */}
+        <TabsContent value="personal" className="space-y-4">
           <div className="flex gap-1 p-1 bg-muted/50 rounded-lg w-fit">
-            <SubSection label="Profile" isActive={profileSection === 'profile'} onClick={() => setProfileSection('profile')} />
-            <SubSection label="Privacy & Data" isActive={profileSection === 'privacy'} onClick={() => setProfileSection('privacy')} />
+            <SubSection label="Profile" isActive={personalSection === 'profile'} onClick={() => setPersonalSection('profile')} />
+            <SubSection label="Privacy & Data" isActive={personalSection === 'privacy'} onClick={() => setPersonalSection('privacy')} />
           </div>
 
           <div className="bg-card rounded-lg border border-border p-6">
-            <Suspense fallback={<TabLoader title={profileSection} />}>
-              {profileSection === 'profile' && <UserProfileSection />}
-              {profileSection === 'privacy' && <PrivacyDataSection />}
+            <Suspense fallback={<TabLoader title={personalSection} />}>
+              {personalSection === 'profile' && <UserProfileSection />}
+              {personalSection === 'privacy' && <PrivacyDataSection />}
             </Suspense>
           </div>
         </TabsContent>
