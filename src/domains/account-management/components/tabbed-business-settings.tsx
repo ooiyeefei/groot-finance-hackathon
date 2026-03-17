@@ -1,14 +1,14 @@
 'use client'
 
-import { Suspense, lazy, memo, useCallback } from 'react'
+import { Suspense, lazy, memo, useCallback, useState } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
-import { Building2, DollarSign, Users, Key, Loader2, Calendar, Sparkles, User, Plug, Clock, Shield, Gift, FileText, Zap } from 'lucide-react'
+import { Building2, DollarSign, Users, Loader2, Sparkles, User, Gift } from 'lucide-react'
 import { usePermissions } from '@/contexts/business-context'
 import { isNativePlatform } from '@/lib/capacitor/platform'
 import { useUser } from '@clerk/nextjs'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
-// PERFORMANCE OPTIMIZATION: Dynamic imports for tab content (reuse existing components)
+// PERFORMANCE OPTIMIZATION: Dynamic imports for tab content
 const BusinessProfileSettings = lazy(() => import('@/domains/account-management/components/business-profile-settings'))
 const CategoriesManagementClient = lazy(() => import('@/domains/expense-claims/components/categories-management-client'))
 const TeamsManagementClient = lazy(() => import('@/domains/account-management/components/teams-management-client'))
@@ -32,6 +32,32 @@ const TeamManagementTab = ({ userId }: { userId?: string }) => (
   userId ? <TeamsManagementClient userId={userId} /> : <div className="text-center py-8"><p className="text-muted-foreground">Please sign in to access this feature.</p></div>
 )
 
+// Sub-section navigation within a tab
+function SubSection({ label, isActive, onClick }: { label: string; isActive: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+        isActive
+          ? 'bg-primary/10 text-primary font-medium'
+          : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+      }`}
+    >
+      {label}
+    </button>
+  )
+}
+
+// Loading fallback
+function TabLoader({ title }: { title: string }) {
+  return (
+    <div className="flex items-center justify-center p-8">
+      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <span className="ml-2 text-muted-foreground">Loading {title}...</span>
+    </div>
+  )
+}
+
 const TabbedBusinessSettings = memo(() => {
   const { isOwner, canChangeSettings, canManageSubscription } = usePermissions()
   const { user } = useUser()
@@ -39,18 +65,41 @@ const TabbedBusinessSettings = memo(() => {
   const router = useRouter()
   const pathname = usePathname()
 
-  // finance_admin and owner can see business settings tabs
   const canViewBusinessSettings = canChangeSettings || isOwner
 
-  // URL-based tab persistence: read from ?tab= query param
-  const validTabs = ['business-profile', 'category-management', 'leave-management', 'timesheet', 'team-management', 'api-keys', 'billing', 'integrations', 'einvoice', 'ai-automation', 'referral', 'privacy', 'profile'] as const
+  // Sub-section state for grouped tabs
+  const [financeSection, setFinanceSection] = useState<'categories' | 'integrations' | 'ai'>('categories')
+  const [peopleSection, setPeopleSection] = useState<'team' | 'leave' | 'timesheet'>('team')
+  const [profileSection, setProfileSection] = useState<'profile' | 'privacy'>('profile')
+
+  // Tab routing
+  const validTabs = ['business', 'finance', 'people', 'billing', 'referral', 'profile',
+    // Legacy tab values — redirect to new grouped tabs
+    'business-profile', 'category-management', 'leave-management', 'timesheet',
+    'team-management', 'api-keys', 'integrations', 'einvoice', 'ai-automation', 'privacy'] as const
   type TabValue = typeof validTabs[number]
   const tabFromUrl = searchParams.get('tab') as TabValue | null
-  // Default tab: 'business-profile' for finance_admin/owner, 'profile' for everyone else
-  const defaultTab = canViewBusinessSettings ? 'business-profile' : 'profile'
-  const activeTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : defaultTab
+  const defaultTab = canViewBusinessSettings ? 'business' : 'profile'
 
-  // Update URL when tab changes (without full page reload)
+  // Map legacy tab values to new grouped tabs
+  function resolveTab(tab: TabValue | null): string {
+    if (!tab) return defaultTab
+    switch (tab) {
+      case 'business-profile': return 'business'
+      case 'category-management': setFinanceSection('categories'); return 'finance'
+      case 'integrations': setFinanceSection('integrations'); return 'finance'
+      case 'ai-automation': setFinanceSection('ai'); return 'finance'
+      case 'team-management': setPeopleSection('team'); return 'people'
+      case 'leave-management': setPeopleSection('leave'); return 'people'
+      case 'timesheet': setPeopleSection('timesheet'); return 'people'
+      case 'einvoice': return 'business'
+      case 'privacy': setProfileSection('privacy'); return 'profile'
+      default: return tab
+    }
+  }
+
+  const activeTab = resolveTab(tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : null)
+
   const handleTabChange = useCallback((value: string) => {
     const params = new URLSearchParams(searchParams.toString())
     params.set('tab', value)
@@ -60,67 +109,33 @@ const TabbedBusinessSettings = memo(() => {
   return (
     <div className="w-full space-y-4">
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
-        {/* Tab Navigation - Semantic Design System */}
-        {/* Uses flex-wrap: tabs visible based on role permissions */}
-        {/* canViewBusinessSettings = owner OR finance_admin */}
+        {/* Simplified tab navigation — 6 tabs max */}
         <TabsList className="flex flex-wrap h-auto p-1 gap-1 bg-muted border border-border">
           {canViewBusinessSettings && (
             <TabsTrigger
-              value="business-profile"
+              value="business"
               className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
             >
               <Building2 className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Business</span>
-              <span className="sm:hidden">Biz</span>
+              Business
             </TabsTrigger>
           )}
           {canViewBusinessSettings && (
             <TabsTrigger
-              value="category-management"
+              value="finance"
               className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
             >
               <DollarSign className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Categories</span>
-              <span className="sm:hidden">Cat</span>
+              Finance
             </TabsTrigger>
           )}
           {canViewBusinessSettings && (
             <TabsTrigger
-              value="leave-management"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
-              <Calendar className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Leave</span>
-              <span className="sm:hidden">Leave</span>
-            </TabsTrigger>
-          )}
-          {canViewBusinessSettings && (
-            <TabsTrigger
-              value="timesheet"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
-              <Clock className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Timesheet</span>
-              <span className="sm:hidden">Time</span>
-            </TabsTrigger>
-          )}
-          {canViewBusinessSettings && (
-            <TabsTrigger
-              value="team-management"
+              value="people"
               className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
             >
               <Users className="w-4 h-4 mr-2" />
-              Team
-            </TabsTrigger>
-          )}
-          {canViewBusinessSettings && (
-            <TabsTrigger
-              value="api-keys"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
-              <Key className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">API Keys</span>
-              <span className="sm:hidden">API</span>
+              People
             </TabsTrigger>
           )}
           {isOwner && !isNativePlatform() && (
@@ -129,38 +144,7 @@ const TabbedBusinessSettings = memo(() => {
               className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
             >
               <Sparkles className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Billing</span>
-              <span className="sm:hidden">Bill</span>
-            </TabsTrigger>
-          )}
-          {canViewBusinessSettings && (
-            <TabsTrigger
-              value="integrations"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
-              <Plug className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Integrations</span>
-              <span className="sm:hidden">Intg</span>
-            </TabsTrigger>
-          )}
-          {canViewBusinessSettings && (
-            <TabsTrigger
-              value="einvoice"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
-              <FileText className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">e-Invoice</span>
-              <span className="sm:hidden">E-Inv</span>
-            </TabsTrigger>
-          )}
-          {canViewBusinessSettings && (
-            <TabsTrigger
-              value="ai-automation"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
-              <Zap className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">AI & Automation</span>
-              <span className="sm:hidden">AI</span>
+              Billing
             </TabsTrigger>
           )}
           <TabsTrigger
@@ -168,220 +152,125 @@ const TabbedBusinessSettings = memo(() => {
             className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
           >
             <Gift className="w-4 h-4 mr-1.5" />
-            <span className="hidden sm:inline">Referral</span>
-            <span className="sm:hidden">Refer</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="privacy"
-            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-          >
-            <Shield className="w-4 h-4 mr-1.5" />
-            <span className="hidden sm:inline">Privacy & Data</span>
-            <span className="sm:hidden">Privacy</span>
+            Referral
           </TabsTrigger>
           <TabsTrigger
             value="profile"
             className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
           >
-            <User className="w-4 h-4 mr-2" />
+            <User className="w-4 h-4 mr-1.5" />
             Profile
           </TabsTrigger>
         </TabsList>
 
-        {/* Business Profile Tab Content - Finance Admin/Owner */}
+        {/* ============================================================ */}
+        {/* BUSINESS TAB — Profile + e-Invoice Settings (consolidated)   */}
+        {/* ============================================================ */}
         {canViewBusinessSettings && (
-          <TabsContent value="business-profile" className="space-y-4">
+          <TabsContent value="business" className="space-y-4">
             <div className="bg-card rounded-lg border border-border p-6">
-              <Suspense fallback={
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">Loading business profile...</span>
-                </div>
-              }>
+              <Suspense fallback={<TabLoader title="business profile" />}>
                 <BusinessProfileSettings />
               </Suspense>
             </div>
-          </TabsContent>
-        )}
-
-        {/* Category Management Tab Content - Finance Admin/Owner */}
-        {canViewBusinessSettings && (
-          <TabsContent value="category-management" className="space-y-4">
+            {/* E-Invoice notification settings (the only fully-implemented part) */}
             <div className="bg-card rounded-lg border border-border p-6">
-              <Suspense fallback={
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">Loading categories...</span>
-                </div>
-              }>
-                <CategoryManagementTab userId={user?.id} />
-              </Suspense>
-            </div>
-          </TabsContent>
-        )}
-
-        {/* Leave Management Tab Content - Finance Admin/Owner */}
-        {canViewBusinessSettings && (
-          <TabsContent value="leave-management" className="space-y-4">
-            <div className="bg-card rounded-lg border border-border p-6">
-              <Suspense fallback={
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">Loading leave settings...</span>
-                </div>
-              }>
-                <LeaveManagementSettings />
-              </Suspense>
-            </div>
-          </TabsContent>
-        )}
-
-        {/* Timesheet Settings Tab Content - Finance Admin/Owner */}
-        {canViewBusinessSettings && (
-          <TabsContent value="timesheet" className="space-y-4">
-            <div className="bg-card rounded-lg border border-border p-6">
-              <Suspense fallback={
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">Loading timesheet settings...</span>
-                </div>
-              }>
-                <TimesheetSettings />
-              </Suspense>
-            </div>
-          </TabsContent>
-        )}
-
-        {/* Team Management Tab Content - Finance Admin/Owner */}
-        {canViewBusinessSettings && (
-          <TabsContent value="team-management" className="space-y-4">
-            <div className="bg-card rounded-lg border border-border p-6">
-              <Suspense fallback={
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">Loading team management...</span>
-                </div>
-              }>
-                <TeamManagementTab userId={user?.id} />
-              </Suspense>
-            </div>
-          </TabsContent>
-        )}
-
-        {/* API Keys Tab Content - Finance Admin/Owner */}
-        {canViewBusinessSettings && (
-          <TabsContent value="api-keys" className="space-y-4">
-            <div className="bg-card rounded-lg border border-border p-6">
-              <Suspense fallback={
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">Loading API keys...</span>
-                </div>
-              }>
-                <ApiKeysManagementClient />
-              </Suspense>
-            </div>
-          </TabsContent>
-        )}
-
-        {/* Billing Tab Content - Owner Only (hidden on native iOS per Apple IAP guidelines) */}
-        {isOwner && !isNativePlatform() && (
-          <TabsContent value="billing" className="space-y-4">
-            <Suspense fallback={
-              <div className="flex items-center justify-center p-8">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                <span className="ml-2 text-muted-foreground">Loading billing...</span>
-              </div>
-            }>
-              <BillingSettingsContent />
-            </Suspense>
-          </TabsContent>
-        )}
-
-        {/* Integrations Tab Content - Finance Admin/Owner */}
-        {canViewBusinessSettings && (
-          <TabsContent value="integrations" className="space-y-4">
-            <div className="bg-card rounded-lg border border-border p-6">
-              <Suspense fallback={
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">Loading integrations...</span>
-                </div>
-              }>
-                <StripeIntegrationCard />
-              </Suspense>
-            </div>
-          </TabsContent>
-        )}
-
-        {/* e-Invoice Tab Content - Finance Admin/Owner */}
-        {canViewBusinessSettings && (
-          <TabsContent value="einvoice" className="space-y-4">
-            <div className="bg-card rounded-lg border border-border p-6">
-              <Suspense fallback={
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">Loading e-invoice settings...</span>
-                </div>
-              }>
+              <Suspense fallback={<TabLoader title="e-invoice settings" />}>
                 <EInvoiceSettingsWithTabs />
               </Suspense>
             </div>
           </TabsContent>
         )}
 
-        {/* AI & Automation Tab Content - Finance Admin/Owner */}
+        {/* ============================================================ */}
+        {/* FINANCE TAB — Categories | Integrations | AI & Automation    */}
+        {/* ============================================================ */}
         {canViewBusinessSettings && (
-          <TabsContent value="ai-automation" className="space-y-4">
+          <TabsContent value="finance" className="space-y-4">
+            {/* Sub-section navigation */}
+            <div className="flex gap-1 p-1 bg-muted/50 rounded-lg w-fit">
+              <SubSection label="Categories" isActive={financeSection === 'categories'} onClick={() => setFinanceSection('categories')} />
+              <SubSection label="Integrations" isActive={financeSection === 'integrations'} onClick={() => setFinanceSection('integrations')} />
+              <SubSection label="AI & Automation" isActive={financeSection === 'ai'} onClick={() => setFinanceSection('ai')} />
+            </div>
+
             <div className="bg-card rounded-lg border border-border p-6">
-              <Suspense fallback={
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">Loading AI automation stats...</span>
-                </div>
-              }>
-                <AIAutomationSettings />
+              <Suspense fallback={<TabLoader title={financeSection} />}>
+                {financeSection === 'categories' && <CategoryManagementTab userId={user?.id} />}
+                {financeSection === 'integrations' && (
+                  <div className="space-y-6">
+                    <StripeIntegrationCard />
+                    <div className="pt-4 border-t border-border">
+                      <Suspense fallback={<TabLoader title="API keys" />}>
+                        <ApiKeysManagementClient />
+                      </Suspense>
+                    </div>
+                  </div>
+                )}
+                {financeSection === 'ai' && <AIAutomationSettings />}
               </Suspense>
             </div>
           </TabsContent>
         )}
 
-        {/* Referral Tab Content - Available to ALL users */}
+        {/* ============================================================ */}
+        {/* PEOPLE TAB — Team | Leave | Timesheet                        */}
+        {/* ============================================================ */}
+        {canViewBusinessSettings && (
+          <TabsContent value="people" className="space-y-4">
+            {/* Sub-section navigation */}
+            <div className="flex gap-1 p-1 bg-muted/50 rounded-lg w-fit">
+              <SubSection label="Team" isActive={peopleSection === 'team'} onClick={() => setPeopleSection('team')} />
+              <SubSection label="Leave" isActive={peopleSection === 'leave'} onClick={() => setPeopleSection('leave')} />
+              <SubSection label="Timesheet" isActive={peopleSection === 'timesheet'} onClick={() => setPeopleSection('timesheet')} />
+            </div>
+
+            <div className="bg-card rounded-lg border border-border p-6">
+              <Suspense fallback={<TabLoader title={peopleSection} />}>
+                {peopleSection === 'team' && <TeamManagementTab userId={user?.id} />}
+                {peopleSection === 'leave' && <LeaveManagementSettings />}
+                {peopleSection === 'timesheet' && <TimesheetSettings />}
+              </Suspense>
+            </div>
+          </TabsContent>
+        )}
+
+        {/* ============================================================ */}
+        {/* BILLING TAB — Owner only                                     */}
+        {/* ============================================================ */}
+        {isOwner && !isNativePlatform() && (
+          <TabsContent value="billing" className="space-y-4">
+            <Suspense fallback={<TabLoader title="billing" />}>
+              <BillingSettingsContent />
+            </Suspense>
+          </TabsContent>
+        )}
+
+        {/* ============================================================ */}
+        {/* REFERRAL TAB — All users                                     */}
+        {/* ============================================================ */}
         <TabsContent value="referral" className="space-y-4">
-          <div className="max-w-2xl mx-auto">
-            <Suspense fallback={
-              <div className="flex items-center justify-center p-8">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                <span className="ml-2 text-muted-foreground">Loading referral program...</span>
-              </div>
-            }>
+          <div className="bg-card rounded-lg border border-border p-6">
+            <Suspense fallback={<TabLoader title="referral" />}>
               <ReferralDashboard />
             </Suspense>
           </div>
         </TabsContent>
 
-        {/* Privacy & Data Tab Content - Available to ALL users */}
-        <TabsContent value="privacy" className="space-y-4">
-          <Suspense fallback={
-            <div className="flex items-center justify-center p-8">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              <span className="ml-2 text-muted-foreground">Loading privacy settings...</span>
-            </div>
-          }>
-            <PrivacyDataSection />
-          </Suspense>
-        </TabsContent>
-
-        {/* Profile Tab Content - Available to ALL users */}
+        {/* ============================================================ */}
+        {/* PROFILE TAB — User Profile | Privacy & Data                  */}
+        {/* ============================================================ */}
         <TabsContent value="profile" className="space-y-4">
+          {/* Sub-section navigation */}
+          <div className="flex gap-1 p-1 bg-muted/50 rounded-lg w-fit">
+            <SubSection label="Profile" isActive={profileSection === 'profile'} onClick={() => setProfileSection('profile')} />
+            <SubSection label="Privacy & Data" isActive={profileSection === 'privacy'} onClick={() => setProfileSection('privacy')} />
+          </div>
+
           <div className="bg-card rounded-lg border border-border p-6">
-            <Suspense fallback={
-              <div className="flex items-center justify-center p-8">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                <span className="ml-2 text-muted-foreground">Loading profile...</span>
-              </div>
-            }>
-              <UserProfileSection />
+            <Suspense fallback={<TabLoader title={profileSection} />}>
+              {profileSection === 'profile' && <UserProfileSection />}
+              {profileSection === 'privacy' && <PrivacyDataSection />}
             </Suspense>
           </div>
         </TabsContent>

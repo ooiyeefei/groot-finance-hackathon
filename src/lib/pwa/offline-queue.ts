@@ -189,9 +189,26 @@ export async function clearCompletedActions(): Promise<number> {
  * Clear all actions (for testing/reset)
  */
 export async function clearAllActions(): Promise<void> {
-  const db = await getDB();
-  await db.clear('offlineActions');
-  console.log('[OfflineQueue] Cleared all actions');
+  // Use a timeout to prevent IndexedDB blocking from hanging the caller
+  // (e.g., business switch). The service worker may hold an open connection,
+  // causing getDB() to deadlock on the upgrade event.
+  const timeoutMs = 2000;
+  try {
+    const result = await Promise.race([
+      (async () => {
+        const db = await getDB();
+        await db.clear('offlineActions');
+        console.log('[OfflineQueue] Cleared all actions');
+      })(),
+      new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), timeoutMs)
+      ),
+    ]);
+    return result;
+  } catch (error) {
+    // Don't block the caller — clearing the queue is best-effort
+    console.warn('[OfflineQueue] clearAllActions timed out or failed, skipping:', error);
+  }
 }
 
 /**
