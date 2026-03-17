@@ -40,6 +40,48 @@ const preloadDocumentAnalysisModal = () => import('./document-analysis-modal')
 const preloadConfirmationDialog = () => import('@/components/ui/confirmation-dialog')
 
 
+// Map raw Post-to-AP errors to user-friendly messages with resolution guidance
+function formatPostToAPError(raw: string): { title: string; description: string } {
+  // Period closed — extract period code from ConvexError JSON or plain text
+  if (raw.includes('PERIOD_CLOSED') || raw.includes('closed accounting period')) {
+    const periodMatch = raw.match(/period(?:Code)?["\s:]+(\d{4}-\d{2})/i)
+    const period = periodMatch?.[1] || 'current period'
+    return {
+      title: 'Accounting period closed',
+      description: `The accounting period ${period} is closed. Go to Settings > Accounting to reopen it, then try again.`
+    }
+  }
+  if (raw.includes('Chart of accounts not configured')) {
+    return {
+      title: 'Chart of accounts missing',
+      description: 'Your business needs Expense (5100) and AP (2100) accounts. Go to Accounting > Chart of Accounts to set them up.'
+    }
+  }
+  if (raw.includes('Invoice not ready for posting')) {
+    return {
+      title: 'Invoice not ready',
+      description: 'The invoice is still processing or missing extracted data. Wait for OCR to complete, then try again.'
+    }
+  }
+  if (raw.includes('Invalid amount')) {
+    return {
+      title: 'Invalid invoice amount',
+      description: 'The invoice total amount is missing or zero. Check the extracted data and correct the amount.'
+    }
+  }
+  if (raw.includes('Already posted')) {
+    return {
+      title: 'Already posted',
+      description: 'This invoice has already been posted to AP. Check the Accounting > Journal Entries page.'
+    }
+  }
+  // Fallback — show cleaned message
+  return {
+    title: 'Post to AP failed',
+    description: raw.length > 150 ? raw.substring(0, 150) + '...' : raw
+  }
+}
+
 interface DocumentsListProps {
   onRefresh?: () => void
 }
@@ -225,13 +267,10 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
             : `Successfully posted ${result.succeeded} invoice${result.succeeded > 1 ? 's' : ''} to AP`
         })
       } else {
-        // All failed — show error with reason from first failure
+        // All failed — show user-friendly error with resolution guidance
         const firstError = result.results?.find((r: { success: boolean; error?: string }) => !r.success)?.error || 'Unknown error'
-        addToast({
-          type: 'error',
-          title: 'Post to AP failed',
-          description: `No invoices could be posted. Reason: ${firstError}`
-        })
+        const { title, description } = formatPostToAPError(firstError)
+        addToast({ type: 'error', title, description })
       }
 
       // Clear selection and refresh
@@ -239,11 +278,9 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
       await refreshDocuments()
     } catch (error) {
       console.error('Post to AP failed:', error)
-      addToast({
-        type: 'error',
-        title: 'Post failed',
-        description: error instanceof Error ? error.message : 'Unable to post invoices to AP'
-      })
+      const rawMsg = error instanceof Error ? error.message : 'Unable to post invoices to AP'
+      const { title, description } = formatPostToAPError(rawMsg)
+      addToast({ type: 'error', title, description })
     } finally {
       setIsPostingToAP(false)
     }

@@ -10,6 +10,47 @@ import { v } from "convex/values";
 import { internalQuery, internalMutation, query, mutation } from "../_generated/server";
 import { Id } from "../_generated/dataModel";
 
+/**
+ * Admin: Reopen accounting periods by period code.
+ * Also unlocks any locked journal entries in those periods.
+ */
+export const adminReopenPeriods = internalMutation({
+  args: { periodCodes: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const results: string[] = [];
+    for (const code of args.periodCodes) {
+      const periods = await ctx.db
+        .query("accounting_periods")
+        .filter((q) => q.eq(q.field("periodCode"), code))
+        .collect();
+      for (const period of periods) {
+        // Unlock any locked journal entries in this period
+        const entries = await ctx.db
+          .query("journal_entries")
+          .withIndex("by_business_period", (q) =>
+            q.eq("businessId", period.businessId).eq("fiscalPeriod", code)
+          )
+          .collect();
+        let unlocked = 0;
+        for (const entry of entries) {
+          if (entry.isPeriodLocked) {
+            await ctx.db.patch(entry._id, { isPeriodLocked: false });
+            unlocked++;
+          }
+        }
+        await ctx.db.patch(period._id, {
+          status: "open",
+          closedBy: undefined,
+          closedAt: undefined,
+          closingNotes: `Admin reopened (${unlocked} entries unlocked)`,
+        });
+        results.push(`${code}: reopened, ${unlocked} entries unlocked`);
+      }
+    }
+    return results;
+  },
+});
+
 // ============================================
 // DEBUG QUERIES
 // ============================================
