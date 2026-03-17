@@ -432,13 +432,9 @@ export const getMilestones = query({
   handler: async (ctx, args) => {
     const { businessId } = args;
 
-    // Get business record
     const business = await ctx.db.get(businessId);
-    if (!business) {
-      throw new Error("Business not found");
-    }
+    if (!business) return null;
 
-    // Return milestone timestamps (undefined if not achieved)
     return {
       milestone_90: business.automationMilestones?.milestone_90,
       milestone_95: business.automationMilestones?.milestone_95,

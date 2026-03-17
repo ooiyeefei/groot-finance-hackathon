@@ -113,7 +113,7 @@ export const _computeLifetimeStats = internalQuery({
   handler: async (ctx, args) => {
     const businessId = args.businessId as Id<"businesses">;
     const business = await ctx.db.get(businessId);
-    if (!business) throw new Error("Business not found");
+    if (!business) return null;
 
     const data = await aggregateAutomationRateData(ctx, businessId, 0, Date.now());
 
