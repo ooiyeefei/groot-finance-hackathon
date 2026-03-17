@@ -247,12 +247,14 @@ export function useMilestones(
 ): UseMilestonesResult {
   const { businessId } = options;
 
-  const data = useQuery(api.functions.automationRate.getMilestones, {
-    businessId,
-  });
+  // Skip query when businessId is not yet available (prevents ArgumentValidationError)
+  const data = useQuery(
+    api.functions.automationRate.getMilestones,
+    businessId ? { businessId } : "skip"
+  );
 
   return {
-    milestones: data,
+    milestones: data ?? undefined,
     isLoading: data === undefined,
   };
 }
