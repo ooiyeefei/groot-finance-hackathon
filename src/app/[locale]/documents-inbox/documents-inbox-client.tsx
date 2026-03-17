@@ -175,19 +175,10 @@ export default function DocumentsInboxClient() {
 
   return (
     <div className="space-y-6">
-      {/* Header with Info Button */}
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold">Documents Inbox</h1>
-            <HowItWorksDrawer forwardingEmail={forwardingEmail} />
-          </div>
-          <p className="text-muted-foreground mt-2">
-            Review and classify documents that need manual attention
-          </p>
-        </div>
+      {/* Action Bar — info button + forwarding email (title is in HeaderWithUser) */}
+      <div className="flex items-center justify-between">
+        <HowItWorksDrawer forwardingEmail={forwardingEmail} />
 
-        {/* Forwarding Email Display */}
         {forwardingEmail && (
           <div className="flex items-center gap-2 bg-card border rounded-lg px-4 py-2">
             <Mail className="h-4 w-4 text-muted-foreground shrink-0" />

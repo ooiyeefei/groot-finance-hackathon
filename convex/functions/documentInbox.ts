@@ -241,15 +241,14 @@ export const getInboxDocuments = query({
   handler: async (ctx, args) => {
     const { businessId, status = "needs_review", userId, limit = 50, offset = 0 } = args;
 
-    // Build query
-    let query = ctx.db
+    // Query inbox entries by business + status
+    const allDocs = await ctx.db
       .query("document_inbox_entries")
       .withIndex("by_business_status", (q) =>
         q.eq("businessId", businessId).eq("status", status)
-      );
+      )
+      .collect();
 
-    // Apply user filter if provided
-    const allDocs = await query.collect();
     let filteredDocs = allDocs;
     if (userId) {
       filteredDocs = allDocs.filter((doc) => doc.userId === userId);
