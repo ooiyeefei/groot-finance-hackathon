@@ -432,14 +432,19 @@ export const getMilestones = query({
   handler: async (ctx, args) => {
     const { businessId } = args;
 
-    const business = await ctx.db.get(businessId);
-    if (!business) return null;
+    try {
+      const business = await ctx.db.get(businessId);
+      if (!business) return null;
 
-    return {
-      milestone_90: business.automationMilestones?.milestone_90,
-      milestone_95: business.automationMilestones?.milestone_95,
-      milestone_99: business.automationMilestones?.milestone_99,
-    };
+      const milestones = business.automationMilestones;
+      return {
+        milestone_90: milestones?.milestone_90 ?? null,
+        milestone_95: milestones?.milestone_95 ?? null,
+        milestone_99: milestones?.milestone_99 ?? null,
+      };
+    } catch {
+      return null;
+    }
   },
 });
 
