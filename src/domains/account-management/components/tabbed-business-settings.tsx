@@ -203,9 +203,7 @@ const TabbedBusinessSettings = memo(() => {
           <TabsContent value="business" className="mt-0">
             <div className="bg-card rounded-lg border border-border p-6">
               <Suspense fallback={<TabLoader title="business settings" />}>
-                {businessSection === 'profile' && <BusinessProfileSettings section="profile" />}
-                {businessSection === 'einvoice' && <BusinessProfileSettings section="einvoice" />}
-                {businessSection === 'currency' && <BusinessProfileSettings section="currency" />}
+                <BusinessProfileSettings section={businessSection} />
               </Suspense>
             </div>
           </TabsContent>
