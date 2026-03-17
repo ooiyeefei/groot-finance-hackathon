@@ -58,7 +58,7 @@ export default function EInvoiceComplianceSettings() {
 
     try {
       // Get CSRF token
-      const csrfResponse = await fetch('/api/v1/system/csrf-token')
+      const csrfResponse = await fetch('/api/v1/utils/security/csrf-token')
       const csrfData = await csrfResponse.json()
       if (!csrfData.success) throw new Error('Failed to get CSRF token')
 
