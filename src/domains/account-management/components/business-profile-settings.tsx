@@ -14,7 +14,16 @@ import { MALAYSIAN_STATE_CODES } from '@/lib/data/state-codes'
 import { COUNTRY_CODES } from '@/lib/data/country-codes'
 import { MSIC_CODES } from '@/lib/data/msic-codes'
 
-export default function BusinessProfileSettings() {
+interface BusinessProfileSettingsProps {
+  section?: 'profile' | 'einvoice' | 'currency'
+}
+
+export default function BusinessProfileSettings({ section }: BusinessProfileSettingsProps) {
+  // When section prop is provided, only render that section
+  const showAll = !section
+  const showProfile = showAll || section === 'profile'
+  const showEInvoice = showAll || section === 'einvoice'
+  const showCurrency = showAll || section === 'currency'
   const { profile, isLoading, updateProfile } = useBusinessProfile()
   const searchParams = useSearchParams()
   const [isUpdating, setIsUpdating] = useState(false)
@@ -534,6 +543,126 @@ export default function BusinessProfileSettings() {
     )
   }
 
+  // When section="currency", render only currency preferences
+  if (showCurrency && !showProfile && !showEInvoice) {
+    return (
+      <div>
+        <div className="flex items-center space-x-3 mb-4">
+          <DollarSign className="w-5 h-5 text-primary" />
+          <h3 className="text-lg font-medium text-foreground">Currency Preferences</h3>
+          {lastCurrencySaved && (
+            <span className="text-xs text-primary">
+              Saved {lastCurrencySaved.toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-2">Home Currency</label>
+          <p className="text-xs text-muted-foreground mb-3">
+            This currency will be used for dashboard summaries and conversions throughout the app.
+          </p>
+          <select
+            value={profile?.home_currency || 'MYR'}
+            onChange={(e) => handleCurrencyChange(e.target.value as SupportedCurrency)}
+            disabled={isLoading || isCurrencySaving}
+            className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+          >
+            {SUPPORTED_CURRENCIES.map(currency => (
+              <option key={currency.code} value={currency.code}>{currency.name}</option>
+            ))}
+          </select>
+          {isCurrencySaving && (
+            <p className="text-xs text-primary mt-2 flex items-center gap-2">
+              <span className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin"></span>
+              Saving preferences...
+            </p>
+          )}
+          <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 mt-4">
+            <div className="flex items-start gap-3">
+              <div className="w-5 h-5 text-primary mt-0.5">
+                <svg fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div>
+                <h4 className="text-sm font-medium text-foreground mb-1">Currency Conversion</h4>
+                <p className="text-sm text-muted-foreground">
+                  Transactions in other currencies will be converted to {profile?.home_currency || 'MYR'} for dashboard summaries.
+                  Original amounts and currencies are always preserved.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // When section="einvoice", render only e-invoice compliance fields
+  // (expanded by default, no collapsible wrapper)
+  if (showEInvoice && !showProfile && !showCurrency) {
+    return (
+      <div>
+        <div className="flex items-center space-x-3 mb-6">
+          <FileText className="w-6 h-6 text-primary" />
+          <h2 className="text-xl font-semibold text-foreground">e-Invoice Compliance</h2>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">LHDN TIN (Tax Identification Number)</label>
+            <input type="text" value={lhdnTin} onChange={(e) => setLhdnTin(e.target.value)} placeholder="C21638015020"
+              className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">Business Registration Number (BRN)</label>
+              <input type="text" value={businessRegistrationNumber} onChange={(e) => setBusinessRegistrationNumber(e.target.value)} placeholder="e.g. 202001234567"
+                className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">SST Registration Number</label>
+              <input type="text" value={sstRegistrationNumber} onChange={(e) => setSstRegistrationNumber(e.target.value)} placeholder="e.g. B10-1234-56789012"
+                className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">MSIC Code (Business Activity)</label>
+            <input type="text" value={msicCode} onChange={(e) => setMsicCode(e.target.value)} placeholder="e.g. 62021"
+              className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+            {msicCode && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {MSIC_CODES.find(m => m.code === msicCode)?.description || 'Custom code'}
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">Peppol Participant ID</label>
+            <input type="text" value={peppolParticipantId} onChange={(e) => setPeppolParticipantId(e.target.value)} placeholder="0195:T08GA1234A"
+              className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+          </div>
+          <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
+            <input type="checkbox" id="autoSelfBill" checked={autoSelfBillExemptVendors} onChange={(e) => setAutoSelfBillExemptVendors(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-ring" />
+            <div>
+              <label htmlFor="autoSelfBill" className="text-sm font-medium text-foreground cursor-pointer">
+                Auto-generate self-billed e-invoices for exempt vendors
+              </label>
+              <p className="text-xs text-muted-foreground mt-1">
+                When enabled, self-billed e-invoices will be automatically generated for approved expenses and AP invoices from LHDN-exempt vendors.
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <button onClick={updateBusinessDetails} disabled={isUpdating}
+              className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-primary-foreground rounded-md font-medium transition-colors">
+              {isUpdating ? <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></div> : 'Save Details'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="bg-card rounded-lg border border-border p-6">
       <div className="flex items-center space-x-3 mb-6">
@@ -731,11 +860,11 @@ export default function BusinessProfileSettings() {
               </div>
             </div>
 
-            {/* E-Invoice Email Forwarding — user's personal email for receiving e-invoice copies */}
+            {/* Email Forwarding — user's personal email for receiving e-invoice copies */}
             <div className="bg-muted/30 border border-border rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Mail className="w-4 h-4 text-primary" />
-                <span className="text-sm font-medium text-foreground">E-Invoice Email Forwarding</span>
+                <span className="text-sm font-medium text-foreground">Email Forwarding</span>
                 {sesVerifyStatus === 'verified' && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/30">
                     <CheckCircle2 className="w-3 h-3" />
