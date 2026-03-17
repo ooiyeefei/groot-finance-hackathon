@@ -711,6 +711,34 @@ export const recordPriceObservationsBatch = internalMutation({
       }
     }
 
+    // T011: DSPy Tier 2 auto-suggest — if Tier 1 Jaccard score was 40-79%,
+    // trigger Lambda DSPy matching for that specific item
+    for (const item of args.lineItems) {
+      // Find the priceHistory record we just inserted that had a fuzzy match score in the uncertain range
+      const recentRecords = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_vendorId", (q) => q.eq("vendorId", args.vendorId))
+        .take(5);
+      const justInserted = recentRecords.find(
+        (r) =>
+          r.matchConfidenceScore !== undefined &&
+          r.matchConfidenceScore !== null &&
+          r.matchConfidenceScore >= 40 &&
+          r.matchConfidenceScore < 80 &&
+          r.itemDescription === item.itemDescription.trim()
+      );
+      if (justInserted && args.businessId) {
+        // Schedule DSPy Tier 2 matching for this uncertain item
+        // Note: suggestMatches is a public action — schedule via _autoSuggestTrigger internalAction
+        await ctx.scheduler.runAfter(
+          0,
+          internal.functions.vendorItemMatching._autoSuggestTrigger,
+          { businessId: args.businessId }
+        );
+        break; // Only trigger once per batch, not per item
+      }
+    }
+
     // T074: Billing frequency change detection (FR-006)
     // Check if vendor's invoice frequency deviated ≥50% from historical average
     if (priceHistoryIds.length > 0) {

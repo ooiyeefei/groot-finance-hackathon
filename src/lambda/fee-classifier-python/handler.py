@@ -517,6 +517,10 @@ def lambda_handler(event: dict, context: Any) -> dict:
             result = _match_orders(arguments)
         elif tool_name == "optimize_ar_match_model":
             result = _optimize_ar_match_model(arguments)
+        elif tool_name == "match_vendor_items":
+            result = _match_vendor_items(arguments)
+        elif tool_name == "optimize_vendor_item_model":
+            result = _optimize_vendor_item_model(arguments)
         else:
             return _error_response(request_id, -32601, f"Unknown tool: {tool_name}")
 
@@ -702,3 +706,136 @@ def _optimize_po_matching_model(arguments: dict) -> dict:
     """MIPROv2 optimization for PO matching model."""
     from optimizer import optimize_po_matching
     return optimize_po_matching(arguments)
+
+
+# ============================================
+# VENDOR ITEM MATCHING (#320 DSPy Tier 2)
+# ============================================
+
+VENDOR_ITEM_MIN_CORRECTIONS = 20
+VENDOR_ITEM_FALLBACK_CONFIDENCE_CAP = 0.80
+
+
+def _match_vendor_items(arguments: dict) -> dict:
+    """Match items across vendors using DSPy ChainOfThought reasoning.
+
+    Loads pre-trained model from S3 if available, otherwise uses inline
+    BootstrapFewShot with corrections, or base model with 80% confidence cap.
+    """
+    from vendor_item_matcher import (
+        VendorItemMatcher,
+        create_training_examples,
+        matching_metric,
+    )
+
+    items = arguments.get("items", [])
+    corrections = arguments.get("businessCorrections", [])
+    model_s3_key = arguments.get("modelS3Key")
+    max_suggestions = arguments.get("maxSuggestions", 20)
+    rejected_pair_keys = set(arguments.get("rejectedPairKeys", []))
+
+    if len(items) < 2:
+        return {"suggestions": [], "modelVersion": "none", "usedDspy": False, "confidenceCapped": True}
+
+    # Determine matching strategy (tiered)
+    use_dspy = len(corrections) >= VENDOR_ITEM_MIN_CORRECTIONS or model_s3_key
+    confidence_cap = 1.0
+
+    # Load or compile matcher
+    matcher = VendorItemMatcher()
+
+    if model_s3_key:
+        # Pre-trained model from S3
+        try:
+            import boto3
+            s3 = boto3.client("s3", region_name="us-west-2")
+            bucket = os.environ.get("S3_BUCKET_NAME", "finanseal-bucket")
+            response = s3.get_object(Bucket=bucket, Key=model_s3_key)
+            state_json = response["Body"].read().decode("utf-8")
+            tmp_path = f"/tmp/vendor_match_{model_s3_key.replace('/', '_')}.json"
+            with open(tmp_path, "w") as f:
+                f.write(state_json)
+            matcher.load(tmp_path)
+            logger.info(f"[VendorItemMatcher] Loaded optimized model from S3: {model_s3_key}")
+        except Exception as e:
+            logger.warning(f"[VendorItemMatcher] Failed to load S3 model: {e}. Using base.")
+            confidence_cap = VENDOR_ITEM_FALLBACK_CONFIDENCE_CAP
+    elif use_dspy and corrections:
+        # Inline BootstrapFewShot
+        try:
+            from dspy.teleprompt import BootstrapFewShot
+            examples = create_training_examples(corrections)
+            optimizer = BootstrapFewShot(
+                metric=matching_metric,
+                max_bootstrapped_demos=4,
+                max_labeled_demos=min(8, len(examples)),
+            )
+            matcher = optimizer.compile(matcher, trainset=examples)
+            logger.info(f"[VendorItemMatcher] Inline BootstrapFewShot with {len(examples)} examples")
+        except Exception as e:
+            logger.warning(f"[VendorItemMatcher] BootstrapFewShot failed: {e}. Using base.")
+            confidence_cap = VENDOR_ITEM_FALLBACK_CONFIDENCE_CAP
+    else:
+        confidence_cap = VENDOR_ITEM_FALLBACK_CONFIDENCE_CAP
+
+    # Generate pairwise comparisons (different vendors only)
+    suggestions = []
+    seen_pairs = set()
+
+    for i, item_a in enumerate(items):
+        for j, item_b in enumerate(items):
+            if i >= j:
+                continue  # Avoid duplicates
+            if item_a["vendorId"] == item_b["vendorId"]:
+                continue  # Same vendor — skip
+
+            # Generate normalized pair key for dedup
+            norm_a = item_a["itemDescription"].lower().strip().replace("  ", " ")
+            norm_b = item_b["itemDescription"].lower().strip().replace("  ", " ")
+            pair_key = "||".join(sorted([norm_a, norm_b]))
+
+            if pair_key in rejected_pair_keys:
+                continue  # Previously rejected
+            if pair_key in seen_pairs:
+                continue  # Already evaluated
+            seen_pairs.add(pair_key)
+
+            try:
+                result = matcher(
+                    item_a_description=item_a["itemDescription"],
+                    item_b_description=item_b["itemDescription"],
+                    item_a_vendor=item_a.get("vendorName", "Vendor A"),
+                    item_b_vendor=item_b.get("vendorName", "Vendor B"),
+                )
+
+                if result.is_match:
+                    conf = min(float(result.confidence), confidence_cap)
+                    suggestions.append({
+                        "itemDescriptionA": item_a["itemDescription"],
+                        "itemDescriptionB": item_b["itemDescription"],
+                        "vendorIdA": item_a["vendorId"],
+                        "vendorIdB": item_b["vendorId"],
+                        "confidence": round(conf, 2),
+                        "reasoning": result.reasoning,
+                        "suggestedGroupName": result.suggested_group_name,
+                    })
+            except Exception as e:
+                logger.warning(f"[VendorItemMatcher] Match failed for pair: {e}")
+                continue
+
+    # Sort by confidence descending, limit results
+    suggestions.sort(key=lambda x: x["confidence"], reverse=True)
+    suggestions = suggestions[:max_suggestions]
+
+    return {
+        "suggestions": suggestions,
+        "modelVersion": model_s3_key or "base",
+        "usedDspy": use_dspy,
+        "confidenceCapped": confidence_cap < 1.0,
+    }
+
+
+def _optimize_vendor_item_model(arguments: dict) -> dict:
+    """Run MIPROv2 optimization for vendor item matching model."""
+    from vendor_item_optimizer import run_optimization
+    return run_optimization(arguments)

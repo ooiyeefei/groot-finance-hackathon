@@ -7,7 +7,7 @@
  */
 
 import { v } from "convex/values";
-import { query, mutation } from "../_generated/server";
+import { query, mutation, internalMutation } from "../_generated/server";
 import { resolveUserByClerkId } from "../lib/resolvers";
 
 /**
@@ -324,5 +324,57 @@ export const getGroupById = query({
     priceData.sort((a, b) => a.currentUnitPrice - b.currentUnitPrice);
 
     return { ...group, priceData };
+  },
+});
+
+/**
+ * T011: Internal mutation for auto-creating ai-suggested groups from DSPy Tier 2.
+ * Called by vendorItemMatching._autoSuggestTrigger when confidence ≥80%.
+ */
+export const _createFromAutoSuggest = internalMutation({
+  args: {
+    businessId: v.id("businesses"),
+    groupName: v.string(),
+    vendorIdA: v.id("vendors"),
+    vendorIdB: v.id("vendors"),
+    itemIdentifierA: v.string(),
+    itemIdentifierB: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    // Check if group already exists for this pair
+    const existing = await ctx.db
+      .query("cross_vendor_item_groups")
+      .withIndex("by_business", (q) =>
+        q.eq("businessId", args.businessId)
+      )
+      .take(50);
+
+    for (const group of existing) {
+      const hasA = group.itemReferences.some(
+        (r) => r.vendorId === args.vendorIdA && r.itemIdentifier === args.itemIdentifierA
+      );
+      const hasB = group.itemReferences.some(
+        (r) => r.vendorId === args.vendorIdB && r.itemIdentifier === args.itemIdentifierB
+      );
+      if (hasA && hasB) return group._id; // Already exists
+    }
+
+    const groupId = await ctx.db.insert("cross_vendor_item_groups", {
+      businessId: args.businessId,
+      groupId: "" as any,
+      groupName: args.groupName,
+      itemReferences: [
+        { vendorId: args.vendorIdA, itemIdentifier: args.itemIdentifierA },
+        { vendorId: args.vendorIdB, itemIdentifier: args.itemIdentifierB },
+      ],
+      matchSource: "ai-suggested",
+      createdTimestamp: now,
+      lastUpdatedTimestamp: now,
+    });
+
+    await ctx.db.patch(groupId, { groupId });
+    return groupId;
   },
 });

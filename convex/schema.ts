@@ -3165,4 +3165,25 @@ export default defineSchema({
     .index("by_business_vendor_status", ["businessId", "vendorId", "status", "createdTimestamp"])
     .index("by_anomaly_alert", ["anomalyAlertId"]),
 
+  // ============================================
+  // DSPY VENDOR ITEM MATCHING CORRECTIONS (#320)
+  // ============================================
+
+  vendor_item_matching_corrections: defineTable({
+    businessId: v.id("businesses"),
+    itemDescriptionA: v.string(),
+    itemDescriptionB: v.string(),
+    vendorIdA: v.id("vendors"),
+    vendorIdB: v.id("vendors"),
+    normalizedPairKey: v.string(),
+    isMatch: v.boolean(),
+    originalConfidence: v.optional(v.number()),
+    originalReasoning: v.optional(v.string()),
+    modelVersionUsed: v.optional(v.string()),
+    correctedBy: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_businessId_createdAt", ["businessId", "createdAt"])
+    .index("by_businessId_pairKey", ["businessId", "normalizedPairKey"]),
+
 });
