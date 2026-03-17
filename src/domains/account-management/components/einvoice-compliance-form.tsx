@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo } from 'react'
-import { FileText, Mail, Bell } from 'lucide-react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { FileText, Mail, Bell, CheckCircle2, AlertCircle, Loader2, Shield, XCircle } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
 import { useBusinessProfile } from '@/contexts/business-context'
 import { useRegisterUnsavedChanges } from '@/components/providers/unsaved-changes-provider'
@@ -22,6 +22,24 @@ export default function EInvoiceComplianceForm() {
   const [lhdnClientSecret, setLhdnClientSecret] = useState('')
   const [peppolParticipantId, setPeppolParticipantId] = useState('')
   const [autoSelfBillExemptVendors, setAutoSelfBillExemptVendors] = useState(false)
+
+  // Connection status
+  const [secretExists, setSecretExists] = useState<boolean | null>(null)
+  const [checkingSecret, setCheckingSecret] = useState(false)
+  const [validationError, setValidationError] = useState<string | null>(null)
+
+  // Check if secret exists in SSM
+  const checkSecretStatus = useCallback(async () => {
+    setCheckingSecret(true)
+    try {
+      const res = await fetch('/api/v1/account-management/businesses/lhdn-secret')
+      const data = await res.json()
+      if (data.success) setSecretExists(data.data.exists)
+    } catch { /* ignore */ }
+    finally { setCheckingSecret(false) }
+  }, [])
+
+  useEffect(() => { if (profile) checkSecretStatus() }, [profile, checkSecretStatus])
 
   // Notification settings
   const [autoDelivery, setAutoDelivery] = useState(true)
@@ -123,6 +141,32 @@ export default function EInvoiceComplianceForm() {
 
     try {
       setIsUpdating(true)
+      setValidationError(null)
+
+      // Validate LHDN credentials against OAuth before saving
+      if (lhdnClientId.trim() && lhdnClientSecret.trim() && lhdnClientSecret !== initialValues.lhdnClientSecret) {
+        const validateRes = await fetch('/api/v1/account-management/businesses/lhdn-validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            client_id: lhdnClientId.trim(),
+            client_secret: lhdnClientSecret.trim(),
+            tin: lhdnTin.trim() || undefined,
+          }),
+        })
+        const validateData = await validateRes.json()
+        if (!validateData.success) throw new Error(validateData.error || 'Validation failed')
+        if (!validateData.data.valid) {
+          setValidationError(validateData.data.error || 'Invalid credentials')
+          setIsUpdating(false)
+          addToast({
+            type: 'error',
+            title: 'Invalid LHDN credentials',
+            description: validateData.data.error || 'Client ID or Secret is incorrect.',
+          })
+          return
+        }
+      }
 
       const csrfResponse = await fetch('/api/v1/utils/security/csrf-token')
       if (!csrfResponse.ok) throw new Error('Failed to get CSRF token')
@@ -152,16 +196,21 @@ export default function EInvoiceComplianceForm() {
       const result = await response.json()
 
       if (result.success) {
-        // Save LHDN client secret to AWS SSM Parameter Store (separate from Convex)
+        // Save LHDN client secret securely (separate from Convex)
         if (lhdnClientSecret.trim() && lhdnClientSecret !== initialValues.lhdnClientSecret) {
           try {
-            await fetch('/api/v1/account-management/businesses/lhdn-secret', {
+            const ssmRes = await fetch('/api/v1/account-management/businesses/lhdn-secret', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ client_secret: lhdnClientSecret.trim() }),
             })
+            const ssmData = await ssmRes.json()
+            if (ssmData.success) {
+              setSecretExists(true)
+              setLhdnClientSecret('') // Clear field, show masked
+            }
           } catch (ssmError) {
-            console.error('[e-Invoice Settings] Failed to save LHDN secret to SSM:', ssmError)
+            console.error('[e-Invoice Settings] Failed to save LHDN secret:', ssmError)
             addToast({
               type: 'error',
               title: 'Client Secret save failed',
@@ -328,6 +377,34 @@ export default function EInvoiceComplianceForm() {
           )}
         </div>
 
+        {/* Connection Status */}
+        <div className={`flex items-center gap-3 rounded-lg border p-3 ${
+          lhdnClientId.trim() && secretExists
+            ? 'bg-green-500/10 border-green-500/30'
+            : 'bg-muted/50 border-border'
+        }`}>
+          {checkingSecret ? (
+            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+          ) : lhdnClientId.trim() && secretExists ? (
+            <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400" />
+          ) : (
+            <AlertCircle className="w-4 h-4 text-muted-foreground" />
+          )}
+          <div className="flex-1">
+            <p className={`text-sm font-medium ${lhdnClientId.trim() && secretExists ? 'text-green-700 dark:text-green-300' : 'text-foreground'}`}>
+              {lhdnClientId.trim() && secretExists ? 'Connected to LHDN MyInvois' : 'Not connected'}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {lhdnClientId.trim() && secretExists
+                ? 'E-invoices are being polled automatically.'
+                : 'Enter Client ID and Secret below to connect.'}
+            </p>
+          </div>
+          {lhdnClientId.trim() && secretExists && (
+            <span className="inline-flex items-center rounded-full bg-green-500/20 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-300">Active</span>
+          )}
+        </div>
+
         {/* LHDN Client ID */}
         <div>
           <label className="block text-sm font-medium text-foreground mb-2">
@@ -337,29 +414,49 @@ export default function EInvoiceComplianceForm() {
             type="text"
             value={lhdnClientId}
             onChange={(e) => setLhdnClientId(e.target.value)}
-            placeholder="LHDN MyInvois Client ID"
+            placeholder="e.g., 3cec36d3-bf94-4e82-a4ca-b2614e56c77e"
             className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
           />
           <p className="text-xs text-muted-foreground mt-1">
-            From your MyInvois portal &gt; Manage Application.
+            From MyInvois portal → Taxpayer Profile → ERP tab.
           </p>
         </div>
 
         {/* LHDN Client Secret */}
         <div>
           <label className="block text-sm font-medium text-foreground mb-2">
-            LHDN Client Secret
+            LHDN Client Secret (Secret 1 or 2)
           </label>
-          <input
-            type="password"
-            value={lhdnClientSecret}
-            onChange={(e) => setLhdnClientSecret(e.target.value)}
-            placeholder="LHDN MyInvois Client Secret"
-            className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
-          />
+          {secretExists && !lhdnClientSecret ? (
+            <div className="w-full bg-input border border-input rounded-md px-3 py-2 flex items-center gap-2">
+              <Shield className="w-4 h-4 text-green-600 dark:text-green-400" />
+              <span className="text-muted-foreground font-mono text-sm">••••••••••••••••••••••••</span>
+              <button
+                type="button"
+                onClick={() => setLhdnClientSecret(' ')}
+                className="ml-auto text-xs text-primary hover:text-primary/80"
+              >
+                Update secret
+              </button>
+            </div>
+          ) : (
+            <input
+              type="password"
+              value={lhdnClientSecret}
+              onChange={(e) => setLhdnClientSecret(e.target.value)}
+              placeholder="Enter either Client Secret 1 or 2..."
+              className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+            />
+          )}
           <p className="text-xs text-muted-foreground mt-1">
-            Stored securely in AWS. Required for automatic e-invoice retrieval.
+            Stored securely (encrypted at rest). Required for automatic e-invoice retrieval.
           </p>
+          {validationError && (
+            <div className="flex items-center gap-2 mt-2 text-xs text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/30 rounded p-2">
+              <XCircle className="w-3.5 h-3.5 flex-shrink-0" />
+              <span><strong>Invalid credentials:</strong> {validationError}</span>
+            </div>
+          )}
         </div>
 
         {/* Peppol Participant ID */}
