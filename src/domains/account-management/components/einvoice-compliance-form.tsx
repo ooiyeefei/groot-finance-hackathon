@@ -28,8 +28,13 @@ export default function EInvoiceComplianceForm() {
   const [checkingSecret, setCheckingSecret] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
 
-  // Check if secret exists in SSM — always validate, never assume
-  const checkSecretStatus = useCallback(async () => {
+  // Check if secret exists in SSM — always validate, cache for 60s to avoid redundant calls
+  const lastCheckedRef = useRef<number>(0)
+  const checkSecretStatus = useCallback(async (force = false) => {
+    // Skip if checked within last 60 seconds (unless forced)
+    const now = Date.now()
+    if (!force && now - lastCheckedRef.current < 60_000 && secretExists !== null) return
+
     setCheckingSecret(true)
     try {
       const res = await fetch('/api/v1/account-management/businesses/lhdn-secret')
@@ -39,11 +44,12 @@ export default function EInvoiceComplianceForm() {
       } else {
         setSecretExists(false)
       }
+      lastCheckedRef.current = now
     } catch {
       setSecretExists(false)
     }
     finally { setCheckingSecret(false) }
-  }, [])
+  }, [secretExists])
 
   useEffect(() => { if (profile) checkSecretStatus() }, [profile, checkSecretStatus])
 
@@ -214,6 +220,7 @@ export default function EInvoiceComplianceForm() {
             if (ssmData.success) {
               setSecretExists(true)
               setLhdnClientSecret('') // Clear field, show masked
+              lastCheckedRef.current = Date.now() // Reset cache
             }
           } catch (ssmError) {
             console.error('[e-Invoice Settings] Failed to save LHDN secret:', ssmError)
