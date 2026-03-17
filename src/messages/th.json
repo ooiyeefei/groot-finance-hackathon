@@ -52,7 +52,8 @@
     "teamCalendar": "ปฏิทินทีม",
     "leaveManagement": "ลางาน & ไทม์ชีท",
     "personalSettings": "ตั้งค่าส่วนตัว",
-    "reporting": "รายงานและส่งออก"
+    "reporting": "รายงานและส่งออก",
+    "documentsInbox": "กล่องเอกสาร"
   },
   "dashboard": {
     "title": "แดชบอร์ด",

@@ -245,15 +245,15 @@ export default function EnhancedBusinessDisplay({
       <div className={cn('transition-all duration-300 ease-in-out')}>
         {isExpanded ? (
           // Brainwave-style: Clean expanded workspace header
-          <div className="p-3 relative">
+          <div className="p-3 relative overflow-hidden">
             <button
               onClick={onToggleSidebar}
-              className="absolute top-1/2 -translate-y-1/2 right-3 p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              className="absolute top-1/2 -translate-y-1/2 right-3 p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors z-10"
               aria-label="Collapse sidebar"
             >
               <PanelLeftClose className="w-5 h-5" />
             </button>
-            <Link href={`/${locale}`} className="flex items-center space-x-3 min-w-0 group rounded-lg hover:bg-accent p-3 transition-colors mr-12">
+            <Link href={`/${locale}`} className="flex items-center space-x-3 min-w-0 group rounded-lg hover:bg-accent p-3 transition-colors mr-10">
               <div className="relative">
                 <WorkspaceLogo
                   businessProfile={businessProfile}
@@ -430,15 +430,15 @@ export default function EnhancedBusinessDisplay({
     <div className={cn('transition-all duration-300 ease-in-out')}>
       {isExpanded ? (
         // Brainwave-style: Clean expanded workspace header with logo overlay dropdown
-        <div className="p-3 relative">
+        <div className="p-3 relative overflow-hidden">
           <button
             onClick={onToggleSidebar}
-            className="absolute top-1/2 -translate-y-1/2 right-3 p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            className="absolute top-1/2 -translate-y-1/2 right-3 p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors z-10"
             aria-label="Collapse sidebar"
           >
             <PanelLeftClose className="w-5 h-5" />
           </button>
-          <Link href={`/${locale}`} className="flex items-center space-x-3 min-w-0 group rounded-lg hover:bg-accent p-3 transition-colors mr-2">
+          <Link href={`/${locale}`} className="flex items-center space-x-3 min-w-0 group rounded-lg hover:bg-accent p-3 transition-colors mr-10">
             <div className="relative">
               <WorkspaceLogo
                 businessProfile={businessProfile}

@@ -24,6 +24,7 @@ import { SESClient, SendRawEmailCommand } from "@aws-sdk/client-ses";
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { simpleParser, ParsedMail } from "mailparser";
 import { Readable } from "stream";
+import { handleDocumentForwarding, parseBusinessPrefix } from "./document-forward-handler";
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -288,6 +289,39 @@ export async function handler(event: SESEvent) {
     const rawEmailKey = `ses-emails/einvoice/${messageId}`;
 
     console.log(`[Email] Processing: ${messageId} from ${fromAddress} subject="${subject}"`);
+
+    // ===================================================================
+    // FEATURE: Document Forwarding (001-doc-email-forward)
+    // Check if this is a document forwarding email (inbox@{prefix}.hellogroot.com)
+    // If yes, route to document forwarding handler and skip e-invoice processing
+    // ===================================================================
+    let isDocumentForwarding = false;
+    for (const addr of toAddresses) {
+      if (parseBusinessPrefix(addr)) {
+        isDocumentForwarding = true;
+        console.log(`[Email] Detected document forwarding email: ${addr}`);
+
+        // Download raw email from S3
+        const rawEmailBytes = await downloadFromS3(rawEmailBucket, rawEmailKey);
+
+        // Route to document forwarding handler
+        await handleDocumentForwarding(
+          rawEmailBytes,
+          addr,
+          fromAddress,
+          subject,
+          messageId
+        );
+
+        break;
+      }
+    }
+
+    // Skip rest of handler if this was a document forwarding email
+    if (isDocumentForwarding) {
+      console.log(`[Email] Document forwarding complete: ${messageId}`);
+      continue;
+    }
 
     // 1. Find einvoice+ address (direct ref matching)
     let emailRef: string | null = null;

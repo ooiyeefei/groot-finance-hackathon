@@ -137,6 +137,8 @@ export const getMyBusinessesWithMemberships = query({
           homeCurrency: business.homeCurrency,
           logoUrl: business.logoStoragePath,
           logoFallbackColor: business.logoFallbackColor,
+          subscriptionStatus: business.subscriptionStatus ?? null,
+          planName: business.planName ?? null,
           membership: {
             id: membership._id,
             userId: membership.userId,
@@ -213,20 +215,22 @@ export const getBusinessContext = query({
     const ownerMembership = bizMemberships.find((m) => m.role === "owner");
     const isOwner = ownerMembership?.userId === user._id;
 
-    // Compute permissions based on role and ownership (simplified: owner > manager > employee)
-    const role = membership.role as "manager" | "employee" | "owner";
+    // Compute permissions based on role and ownership
+    // Hierarchy: owner > finance_admin > manager > employee
+    const role = membership.role as "manager" | "employee" | "owner" | "finance_admin";
+    const isFinanceAdmin = role === "finance_admin";
     const permissions = {
       // Owner-only permissions (business-level)
       canDeleteBusiness: isOwner,
       canManageSubscription: isOwner,
       canTransferOwnership: isOwner,
-      // Operational permissions based on role (owner and manager)
-      canInviteMembers: role === "owner" || role === "manager",
-      canRemoveMembers: role === "owner" || role === "manager",
-      canChangeSettings: role === "owner",
-      canApproveExpenses: role === "owner" || role === "manager",
-      canManageCategories: role === "owner" || role === "manager",
-      canViewAllData: role === "owner" || role === "manager",
+      // Operational permissions (owner, finance_admin, and manager)
+      canInviteMembers: isOwner || isFinanceAdmin || role === "manager",
+      canRemoveMembers: isOwner || isFinanceAdmin || role === "manager",
+      canChangeSettings: isOwner || isFinanceAdmin,
+      canApproveExpenses: isOwner || isFinanceAdmin || role === "manager",
+      canManageCategories: isOwner || isFinanceAdmin || role === "manager",
+      canViewAllData: isOwner || isFinanceAdmin || role === "manager",
     };
 
     return {
@@ -661,6 +665,9 @@ export const updateBusinessByStringId = mutation({
     postal_code: v.optional(v.string()),
     // LHDN self-bill auto-trigger setting
     auto_self_bill_exempt_vendors: v.optional(v.boolean()),
+    // 001-doc-email-forward: Email forwarding settings
+    email_forwarding_enabled: v.optional(v.boolean()),
+    email_forwarding_allowlist: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -727,6 +734,14 @@ export const updateBusinessByStringId = mutation({
     if (args.postal_code !== undefined) updates.postalCode = args.postal_code;
     // LHDN self-bill auto-trigger
     if (args.auto_self_bill_exempt_vendors !== undefined) updates.autoSelfBillExemptVendors = args.auto_self_bill_exempt_vendors;
+    // 001-doc-email-forward: Email forwarding settings
+    if (args.email_forwarding_enabled !== undefined) updates.emailForwardingEnabled = args.email_forwarding_enabled;
+    if (args.email_forwarding_allowlist !== undefined) updates.emailForwardingAllowlist = args.email_forwarding_allowlist;
+    // Auto-set prefix from slug when enabling (zero-config for users)
+    if (args.email_forwarding_enabled === true && !business.emailForwardingPrefix && business.slug) {
+      updates.emailForwardingPrefix = business.slug;
+      updates.emailForwardingDomain = 'inbox.hellogroot.com';
+    }
 
     await ctx.db.patch(business._id, updates);
 

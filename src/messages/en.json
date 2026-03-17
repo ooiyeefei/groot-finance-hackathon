@@ -52,7 +52,8 @@
     "teamCalendar": "Team Calendar",
     "leaveManagement": "Leave & Timesheet",
     "personalSettings": "Personal Settings",
-    "reporting": "Reporting & Exports"
+    "reporting": "Reporting & Exports",
+    "documentsInbox": "Documents Inbox"
   },
   "dashboard": {
     "title": "Dashboard",

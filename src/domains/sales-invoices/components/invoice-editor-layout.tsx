@@ -183,7 +183,7 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
   }), [previewInvoice, businessInfo, form.templateId])
 
   const handleClose = useCallback(() => {
-    router.push(`/${locale}/invoices#sales-invoices`)
+    router.push(`/${locale}/invoices?tab=ar&sub=sales`)
   }, [router, locale])
 
   const handleSendInvoice = useCallback(async () => {
@@ -311,7 +311,7 @@ export function InvoiceEditorLayout({ mode, invoiceId, initialData }: InvoiceEdi
         })
       }
 
-      router.push(`/${locale}/invoices#sales-invoices`)
+      router.push(`/${locale}/invoices?tab=ar&sub=sales`)
     } catch (error) {
       console.error('Failed to send invoice:', error)
       addToast({

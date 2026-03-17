@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Button } from '@/components/ui/button'
 import { Loader2 } from 'lucide-react'
 
@@ -26,40 +28,50 @@ export default function ConfirmationDialog({
   confirmVariant = 'primary',
   isLoading = false
 }: ConfirmationDialogProps) {
-  if (!isOpen) return null
+  const [mounted, setMounted] = useState(false)
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Enhanced Backdrop for Better Visibility */}
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Lock body scroll when open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden'
+      return () => { document.body.style.overflow = '' }
+    }
+  }, [isOpen])
+
+  if (!isOpen || !mounted) return null
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      {/* Backdrop — covers entire viewport including sidebar */}
       <div
-        className="fixed inset-0 transition-opacity"
+        className="fixed inset-0"
         style={{
           backgroundColor: 'rgba(0, 0, 0, 0.4)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)'
+          backdropFilter: 'blur(4px)',
+          WebkitBackdropFilter: 'blur(4px)'
         }}
         onClick={onClose}
       />
 
       {/* Dialog */}
       <div className="relative transform overflow-hidden rounded-xl bg-card shadow-2xl text-left transition-all w-full max-w-md">
-          {/* Content with proper spacing */}
           <div className="p-6 space-y-5">
-            {/* Title Section */}
             <div className="text-center">
               <h3 className="text-lg font-semibold leading-6 text-foreground">
                 {title}
               </h3>
             </div>
 
-            {/* Message Section */}
             <div className="text-center">
               <p className="text-sm leading-relaxed text-muted-foreground">
                 {message}
               </p>
             </div>
-            
-            {/* Actions Section - Centered Layout */}
+
             <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
               <Button
                 variant="secondary"
@@ -87,6 +99,7 @@ export default function ConfirmationDialog({
             </div>
           </div>
         </div>
-    </div>
+    </div>,
+    document.body
   )
 }

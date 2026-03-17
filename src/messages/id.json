@@ -52,7 +52,8 @@
     "teamCalendar": "Kalender Tim",
     "leaveManagement": "Cuti & Absensi",
     "personalSettings": "Pengaturan Pribadi",
-    "reporting": "Laporan & Ekspor"
+    "reporting": "Laporan & Ekspor",
+    "documentsInbox": "Kotak Masuk Dokumen"
   },
   "dashboard": {
     "title": "Dashboard",

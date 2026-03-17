@@ -977,6 +977,48 @@ export const updateEmailStatus = internalMutation({
 });
 
 // ============================================
+// HELPER FUNCTION: Create Rejection Notification
+// ============================================
+
+/**
+ * Helper function to create a notification when an e-invoice is rejected.
+ * Used by the rejection mutation to notify stakeholders (AP invoice creator or expense claim submitter).
+ *
+ * @param ctx - Convex mutation context
+ * @param userId - Recipient user ID (invoice creator or claim submitter)
+ * @param businessId - Business ID
+ * @param supplierName - Name of the supplier whose e-invoice was rejected
+ * @param reason - Rejection reason provided by the user
+ * @param resourceUrl - Deep link to the affected invoice or claim
+ * @returns The created notification ID
+ */
+export async function createRejectionNotification(
+  ctx: any,
+  userId: string,
+  businessId: Id<"businesses">,
+  supplierName: string,
+  reason: string,
+  resourceUrl: string
+): Promise<Id<"notifications">> {
+  const notificationId = await ctx.db.insert("notifications", {
+    recipientUserId: userId,
+    businessId,
+    type: "lhdn_submission" as const,
+    severity: "warning" as const,
+    title: "E-Invoice Rejected",
+    message: `E-invoice from ${supplierName} was rejected: ${reason}`,
+    resourceUrl,
+    status: "unread" as const,
+    read: false,
+    dismissed: false,
+    createdAt: Date.now(),
+    emailSent: false, // Email notifications handled by separate preferences system
+  });
+
+  return notificationId;
+}
+
+// ============================================
 // INTERNAL ACTION: Send Push Notification via APNs
 // ============================================
 

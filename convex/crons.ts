@@ -396,4 +396,36 @@ crons.daily(
   (internal.functions as any).automationRate.checkAllBusinessMilestones
 );
 
+// ============================================
+// Document Inbox Data Retention (001-doc-email-forward)
+// ============================================
+
+/**
+ * Auto-archive documents after 30 days of no user action
+ * Runs daily at 5:30 AM UTC (1:30 PM MYT)
+ *
+ * Archives documents in "needs_review" status that have been
+ * sitting in the inbox for 30+ days without classification.
+ */
+crons.daily(
+  "archive-inbox-documents",
+  { hourUTC: 5, minuteUTC: 30 },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (internal.functions as any).documentInboxCrons.archiveOldDocuments
+);
+
+/**
+ * Delete documents after 7-year retention period (PDPA compliance)
+ * Runs monthly on the 1st at 6:00 AM UTC (2 PM MYT)
+ *
+ * Permanently deletes archived documents older than 7 years
+ * (Malaysian tax retention requirement).
+ */
+crons.monthly(
+  "delete-expired-inbox-documents",
+  { day: 1, hourUTC: 6, minuteUTC: 0 },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (internal.functions as any).documentInboxCrons.deleteExpiredDocuments
+);
+
 export default crons;

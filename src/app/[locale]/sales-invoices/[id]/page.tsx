@@ -86,7 +86,7 @@ export default function SalesInvoiceDetailPage() {
         <main className="flex-1 overflow-auto p-card-padding pb-24 sm:pb-4">
           <div className="text-center py-24">
             <p className="text-muted-foreground">Invoice not found.</p>
-            <Button variant="outline" className="mt-4" onClick={() => router.push(`/${locale}/invoices#sales-invoices`)}>Back to Invoices</Button>
+            <Button variant="outline" className="mt-4" onClick={() => router.push(`/${locale}/invoices?tab=ar&sub=sales`)}>Back to Invoices</Button>
           </div>
         </main>
       </>
@@ -217,7 +217,7 @@ export default function SalesInvoiceDetailPage() {
     setIsDeleting(true)
     try {
       await removeInvoice({ id: invoice._id, businessId: invoice.businessId })
-      router.push(`/${locale}/invoices#sales-invoices`)
+      router.push(`/${locale}/invoices?tab=ar&sub=sales`)
     } finally {
       setIsDeleting(false)
     }
@@ -292,7 +292,7 @@ export default function SalesInvoiceDetailPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => router.push(`/${locale}/invoices#sales-invoices`)}>
+          <Button variant="ghost" size="sm" onClick={() => router.push(`/${locale}/invoices?tab=ar&sub=sales`)}>
             <ArrowLeft className="h-4 w-4 mr-1" />
             Back
           </Button>

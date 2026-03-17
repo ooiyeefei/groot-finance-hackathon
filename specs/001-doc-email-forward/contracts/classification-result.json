@@ -1,0 +1,265 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Document Classification Result",
+  "description": "Schema for Trigger.dev classify-document task output (Gemini Vision API classification result)",
+  "type": "object",
+  "required": ["type", "confidence", "reasoning", "timestamp"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["receipt", "invoice", "e_invoice", "unknown"],
+      "description": "Classified document type"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "AI confidence score (0.0-1.0). Threshold: ≥0.85 for auto-routing, <0.85 for manual review"
+    },
+    "reasoning": {
+      "type": "string",
+      "description": "AI's explanation of classification decision (for debugging and user transparency)",
+      "maxLength": 500,
+      "examples": [
+        "Document contains invoice header, line items, vendor details, and total amount",
+        "Document appears to be a receipt with vendor name, date, and itemized list",
+        "Blurry text and missing key fields - unable to confidently classify"
+      ]
+    },
+    "detectedElements": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "invoice_header",
+          "invoice_number",
+          "vendor_name",
+          "vendor_address",
+          "vendor_tax_id",
+          "line_items",
+          "total_amount",
+          "tax_amount",
+          "payment_terms",
+          "due_date",
+          "receipt_header",
+          "transaction_date",
+          "items_list",
+          "qr_code",
+          "uuid",
+          "lhdn_logo"
+        ]
+      },
+      "description": "List of document elements detected by Gemini Vision (used to determine type)"
+    },
+    "extractedData": {
+      "type": "object",
+      "description": "Basic extracted data from document (if classification succeeded). Full extraction happens in separate task.",
+      "properties": {
+        "vendorName": {
+          "type": "string",
+          "description": "Vendor or merchant name"
+        },
+        "totalAmount": {
+          "type": "number",
+          "description": "Total amount in document currency"
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$",
+          "description": "ISO 4217 currency code",
+          "examples": ["MYR", "USD", "SGD"]
+        },
+        "date": {
+          "type": "string",
+          "format": "date",
+          "description": "Transaction or invoice date (YYYY-MM-DD)"
+        },
+        "invoiceNumber": {
+          "type": "string",
+          "description": "Invoice number (if type=invoice)"
+        },
+        "taxAmount": {
+          "type": "number",
+          "description": "Tax amount (if applicable)"
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "blurry_image",
+          "partial_text",
+          "low_resolution",
+          "handwritten",
+          "rotated",
+          "multiple_pages",
+          "watermark_present",
+          "faded_text"
+        ]
+      },
+      "description": "Quality issues detected that may affect extraction accuracy"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional metadata from classification process",
+      "properties": {
+        "modelUsed": {
+          "type": "string",
+          "description": "Gemini model ID used for classification",
+          "example": "gemini-3.1-flash-lite-preview"
+        },
+        "tokensUsed": {
+          "type": "integer",
+          "description": "Approximate tokens consumed (for cost tracking)",
+          "example": 500
+        },
+        "processingTimeMs": {
+          "type": "integer",
+          "description": "Time taken for classification (milliseconds)",
+          "example": 1234
+        },
+        "apiVersion": {
+          "type": "string",
+          "description": "Gemini API version used",
+          "example": "v1beta"
+        }
+      }
+    },
+    "timestamp": {
+      "type": "number",
+      "description": "Unix timestamp when classification completed",
+      "example": 1710589845123
+    },
+    "errorDetails": {
+      "type": "object",
+      "description": "Present only if classification failed or had issues",
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "API_ERROR",
+            "TIMEOUT",
+            "INVALID_FILE",
+            "RATE_LIMIT",
+            "NETWORK_ERROR",
+            "UNKNOWN"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "description": "User-friendly error message"
+        },
+        "technical": {
+          "type": "string",
+          "description": "Technical error details for debugging"
+        },
+        "retryable": {
+          "type": "boolean",
+          "description": "Whether this error can be retried"
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "type": "receipt",
+      "confidence": 0.92,
+      "reasoning": "Document contains receipt header, itemized list, transaction date, and merchant name. Clear text and standard receipt format.",
+      "detectedElements": [
+        "receipt_header",
+        "vendor_name",
+        "transaction_date",
+        "items_list",
+        "total_amount"
+      ],
+      "extractedData": {
+        "vendorName": "Starbucks Coffee",
+        "totalAmount": 15.50,
+        "currency": "MYR",
+        "date": "2026-03-16",
+        "taxAmount": 0.93
+      },
+      "warnings": [],
+      "metadata": {
+        "modelUsed": "gemini-3.1-flash-lite-preview",
+        "tokensUsed": 450,
+        "processingTimeMs": 1234,
+        "apiVersion": "v1beta"
+      },
+      "timestamp": 1710589845123
+    },
+    {
+      "type": "invoice",
+      "confidence": 0.88,
+      "reasoning": "Document contains invoice header, vendor details, line items, and payment terms. Invoice number clearly visible.",
+      "detectedElements": [
+        "invoice_header",
+        "invoice_number",
+        "vendor_name",
+        "vendor_address",
+        "line_items",
+        "total_amount",
+        "payment_terms",
+        "due_date"
+      ],
+      "extractedData": {
+        "vendorName": "ABC Supplies Sdn Bhd",
+        "totalAmount": 1250.00,
+        "currency": "MYR",
+        "date": "2026-03-15",
+        "invoiceNumber": "INV-2026-003456",
+        "taxAmount": 75.00
+      },
+      "warnings": [],
+      "metadata": {
+        "modelUsed": "gemini-3.1-flash-lite-preview",
+        "tokensUsed": 520,
+        "processingTimeMs": 1567,
+        "apiVersion": "v1beta"
+      },
+      "timestamp": 1710589845123
+    },
+    {
+      "type": "unknown",
+      "confidence": 0.45,
+      "reasoning": "Blurry image with partial text visible. Unable to identify key document elements like invoice number, receipt header, or line items.",
+      "detectedElements": [],
+      "extractedData": {},
+      "warnings": [
+        "blurry_image",
+        "low_resolution",
+        "partial_text"
+      ],
+      "metadata": {
+        "modelUsed": "gemini-3.1-flash-lite-preview",
+        "tokensUsed": 380,
+        "processingTimeMs": 980,
+        "apiVersion": "v1beta"
+      },
+      "timestamp": 1710589845123
+    },
+    {
+      "type": "unknown",
+      "confidence": 0.0,
+      "reasoning": "Classification failed due to API timeout",
+      "detectedElements": [],
+      "extractedData": {},
+      "warnings": [],
+      "metadata": {
+        "modelUsed": "gemini-3.1-flash-lite-preview",
+        "tokensUsed": 0,
+        "processingTimeMs": 30000,
+        "apiVersion": "v1beta"
+      },
+      "timestamp": 1710589845123,
+      "errorDetails": {
+        "code": "TIMEOUT",
+        "message": "Document classification timed out after 30 seconds. Please try again.",
+        "technical": "Gemini API request exceeded 30s timeout. Possible causes: large file size, API overload, network issues.",
+        "retryable": true
+      }
+    }
+  ]
+}

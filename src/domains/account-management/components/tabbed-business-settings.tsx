@@ -1,14 +1,14 @@
 'use client'
 
-import { Suspense, lazy, memo, useCallback } from 'react'
+import { Suspense, lazy, memo, useCallback, useState, useMemo } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
-import { Building2, DollarSign, Users, Key, Loader2, Calendar, Sparkles, User, Plug, Clock, Shield, Gift, FileText, Zap } from 'lucide-react'
+import { Building2, DollarSign, Users, Loader2, Sparkles, User, Gift, Plug } from 'lucide-react'
 import { usePermissions } from '@/contexts/business-context'
 import { isNativePlatform } from '@/lib/capacitor/platform'
 import { useUser } from '@clerk/nextjs'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
-// PERFORMANCE OPTIMIZATION: Dynamic imports for tab content (reuse existing components)
+// PERFORMANCE OPTIMIZATION: Dynamic imports for tab content
 const BusinessProfileSettings = lazy(() => import('@/domains/account-management/components/business-profile-settings'))
 const CategoriesManagementClient = lazy(() => import('@/domains/expense-claims/components/categories-management-client'))
 const TeamsManagementClient = lazy(() => import('@/domains/account-management/components/teams-management-client'))
@@ -20,8 +20,9 @@ const UserProfileSection = lazy(() => import('@/domains/account-management/compo
 const TimesheetSettings = lazy(() => import('@/domains/timesheet-attendance/components/timesheet-settings'))
 const PrivacyDataSection = lazy(() => import('@/domains/account-management/components/privacy-data-section').then(m => ({ default: m.PrivacyDataSection })))
 const ReferralDashboard = lazy(() => import('@/domains/referral/components/referral-dashboard'))
-const EInvoiceSettingsWithTabs = lazy(() => import('@/domains/account-management/components/einvoice-settings-with-tabs'))
+// EInvoiceSettingsWithTabs removed — e-Invoice settings consolidated under Business > e-Invoice tab
 const AIAutomationSettings = lazy(() => import('@/domains/account-management/components/ai-automation-settings').then(m => ({ default: m.AIAutomationSettings })))
+const EmailForwardingSettings = lazy(() => import('@/domains/account-management/components/email-forwarding-settings'))
 
 // Wrapper components for existing components that need userId
 const CategoryManagementTab = ({ userId }: { userId?: string }) => (
@@ -32,352 +33,283 @@ const TeamManagementTab = ({ userId }: { userId?: string }) => (
   userId ? <TeamsManagementClient userId={userId} /> : <div className="text-center py-8"><p className="text-muted-foreground">Please sign in to access this feature.</p></div>
 )
 
+// Consistent class names matching Invoice page pattern
+const topTriggerClassName =
+  'flex items-center gap-2 px-4 py-2.5 rounded-md text-muted-foreground font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm whitespace-nowrap'
+
+const subTriggerClassName =
+  'flex items-center gap-2 px-4 py-2 rounded-md text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm whitespace-nowrap text-sm'
+
+// Loading fallback
+function TabLoader({ title }: { title: string }) {
+  return (
+    <div className="flex items-center justify-center p-8">
+      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <span className="ml-2 text-muted-foreground">Loading {title}...</span>
+    </div>
+  )
+}
+
+/**
+ * Settings Page — Consolidated Tab Layout
+ *
+ * 7 top-level tabs (left-aligned, matching Invoice page):
+ * - Business: Business Profile | e-Invoice | Currency
+ * - Finance: Categories | AI & Automation
+ * - People: Team | Leave | Timesheet
+ * - Integrations: Stripe | API Keys
+ * - Billing: owner-only
+ * - Referral: all users
+ * - Personal: Profile | Privacy & Data
+ *
+ * Tabs + sub-tabs are sticky on scroll.
+ */
 const TabbedBusinessSettings = memo(() => {
-  const { isOwner } = usePermissions()
+  const { isOwner, canChangeSettings } = usePermissions()
   const { user } = useUser()
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
 
-  // URL-based tab persistence: read from ?tab= query param
-  const validTabs = ['business-profile', 'category-management', 'leave-management', 'timesheet', 'team-management', 'api-keys', 'billing', 'integrations', 'einvoice', 'ai-automation', 'referral', 'privacy', 'profile'] as const
-  type TabValue = typeof validTabs[number]
-  const tabFromUrl = searchParams.get('tab') as TabValue | null
-  // Default tab: 'business-profile' for finance_admin/owner, 'profile' for everyone else
-  const defaultTab = isOwner ? 'business-profile' : 'profile'
-  const activeTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : defaultTab
+  const canViewBusinessSettings = canChangeSettings || isOwner
 
-  // Update URL when tab changes (without full page reload)
+  // Resolve legacy tab URLs to new grouped tabs + sub-sections
+  const tabFromUrl = searchParams.get('tab')
+  const subFromUrl = searchParams.get('sub')
+  const defaultTab = canViewBusinessSettings ? 'business' : 'personal'
+
+  const resolved = useMemo(() => {
+    const tab = tabFromUrl || defaultTab
+    const defaults = { finance: 'categories' as const, people: 'team' as const, integrations: 'stripe' as const, personal: 'profile' as const, business: 'profile' as const }
+
+    // Resolve base tab + defaults from legacy URLs
+    let result = (() => {
+      switch (tab) {
+        case 'business-profile': return { tab: 'business', ...defaults }
+        case 'category-management': return { tab: 'finance', ...defaults }
+        case 'ai-automation': return { tab: 'finance', ...defaults, finance: 'ai' as const }
+        case 'team-management': return { tab: 'people', ...defaults }
+        case 'leave-management': return { tab: 'people', ...defaults, people: 'leave' as const }
+        case 'timesheet': return { tab: 'people', ...defaults, people: 'timesheet' as const }
+        case 'einvoice': return { tab: 'business', ...defaults, business: 'einvoice' as const }
+        case 'document-inbox': return { tab: 'business', ...defaults, business: 'document-inbox' as const }
+        case 'api-keys': return { tab: 'integrations', ...defaults, integrations: 'api-keys' as const }
+        case 'privacy': return { tab: 'personal', ...defaults, personal: 'privacy' as const }
+        case 'profile': return { tab: 'personal', ...defaults }
+        default: return { tab, ...defaults }
+      }
+    })()
+
+    // Apply &sub= param override for the active tab group
+    if (subFromUrl) {
+      const s = subFromUrl
+      if (result.tab === 'business') result = { ...result, business: s as typeof defaults.business }
+      else if (result.tab === 'finance') result = { ...result, finance: s as typeof defaults.finance }
+      else if (result.tab === 'people') result = { ...result, people: s as typeof defaults.people }
+      else if (result.tab === 'integrations') result = { ...result, integrations: s as typeof defaults.integrations }
+      else if (result.tab === 'personal') result = { ...result, personal: s as typeof defaults.personal }
+    }
+
+    return result
+  }, [tabFromUrl, subFromUrl, defaultTab])
+
+  const activeTab = resolved.tab
+
+  // Sub-section state — initialized from URL-derived defaults, updated by user clicks
+  const [businessSection, setBusinessSection] = useState<'profile' | 'einvoice' | 'currency' | 'document-inbox'>(resolved.business)
+  const [financeSection, setFinanceSection] = useState<'categories' | 'ai'>(resolved.finance)
+  const [peopleSection, setPeopleSection] = useState<'team' | 'leave' | 'timesheet'>(resolved.people)
+  const [integrationsSection, setIntegrationsSection] = useState<'stripe' | 'api-keys'>(resolved.integrations === 'api-keys' ? 'api-keys' : 'stripe')
+  const [personalSection, setPersonalSection] = useState<'profile' | 'privacy'>(resolved.personal)
+
   const handleTabChange = useCallback((value: string) => {
     const params = new URLSearchParams(searchParams.toString())
     params.set('tab', value)
+    params.delete('sub')
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
   }, [searchParams, router, pathname])
 
+  // Update sub-tab in URL and local state
+  const handleSubTabChange = useCallback((value: string, setter: (v: string) => void) => {
+    setter(value)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('sub', value)
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }, [searchParams, router, pathname])
+
+  // Render sub-tab navigation (matching invoice page style)
+  const renderSubTabs = (
+    tabs: Array<{ value: string; label: string }>,
+    activeValue: string,
+    onChange: (value: string) => void
+  ) => (
+    <Tabs value={activeValue} onValueChange={onChange}>
+      <TabsList className="w-full justify-start border border-border bg-muted rounded-lg p-1 h-auto gap-1">
+        {tabs.map(({ value, label }) => (
+          <TabsTrigger key={value} value={value} className={subTriggerClassName}>
+            {label}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
+  )
+
   return (
-    <div className="w-full space-y-4">
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
-        {/* Tab Navigation - Semantic Design System */}
-        {/* Uses flex-wrap: 1 tab for employee/manager (Profile only), 7 for owner (all tabs) */}
-        <TabsList className="flex flex-wrap h-auto p-1 gap-1 bg-muted border border-border">
-          {isOwner && (
-            <TabsTrigger
-              value="business-profile"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
-              <Building2 className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Business</span>
-              <span className="sm:hidden">Biz</span>
+    <div className="w-full">
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
+        {/* Sticky header area: top tabs + sub-tabs */}
+        <div className="sticky top-0 z-10 bg-background pb-4 space-y-3">
+          {/* Top-level tabs — left-aligned, matching Invoice page */}
+          <TabsList className="w-full justify-start border border-border bg-muted rounded-lg p-1 h-auto gap-1">
+            {canViewBusinessSettings && (
+              <TabsTrigger value="business" className={topTriggerClassName}>
+                <Building2 className="w-4 h-4" />
+                Business
+              </TabsTrigger>
+            )}
+            {canViewBusinessSettings && (
+              <TabsTrigger value="finance" className={topTriggerClassName}>
+                <DollarSign className="w-4 h-4" />
+                Finance
+              </TabsTrigger>
+            )}
+            {canViewBusinessSettings && (
+              <TabsTrigger value="people" className={topTriggerClassName}>
+                <Users className="w-4 h-4" />
+                People
+              </TabsTrigger>
+            )}
+            {canViewBusinessSettings && (
+              <TabsTrigger value="integrations" className={topTriggerClassName}>
+                <Plug className="w-4 h-4" />
+                Integrations
+              </TabsTrigger>
+            )}
+            {isOwner && !isNativePlatform() && (
+              <TabsTrigger value="billing" className={topTriggerClassName}>
+                <Sparkles className="w-4 h-4" />
+                Billing
+              </TabsTrigger>
+            )}
+            <TabsTrigger value="referral" className={topTriggerClassName}>
+              <Gift className="w-4 h-4" />
+              Referral
             </TabsTrigger>
-          )}
-          {isOwner && (
-            <TabsTrigger
-              value="category-management"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
-              <DollarSign className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Categories</span>
-              <span className="sm:hidden">Cat</span>
+            <TabsTrigger value="personal" className={topTriggerClassName}>
+              <User className="w-4 h-4" />
+              Personal
             </TabsTrigger>
-          )}
-          {isOwner && (
-            <TabsTrigger
-              value="leave-management"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
-              <Calendar className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Leave</span>
-              <span className="sm:hidden">Leave</span>
-            </TabsTrigger>
-          )}
-          {isOwner && (
-            <TabsTrigger
-              value="timesheet"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
-              <Clock className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Timesheet</span>
-              <span className="sm:hidden">Time</span>
-            </TabsTrigger>
-          )}
-          {isOwner && (
-            <TabsTrigger
-              value="team-management"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
-              <Users className="w-4 h-4 mr-2" />
-              Team
-            </TabsTrigger>
-          )}
-          {isOwner && (
-            <TabsTrigger
-              value="api-keys"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
-              <Key className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">API Keys</span>
-              <span className="sm:hidden">API</span>
-            </TabsTrigger>
-          )}
-          {isOwner && !isNativePlatform() && (
-            <TabsTrigger
-              value="billing"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
-              <Sparkles className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Billing</span>
-              <span className="sm:hidden">Bill</span>
-            </TabsTrigger>
-          )}
-          {isOwner && (
-            <TabsTrigger
-              value="integrations"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
-              <Plug className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Integrations</span>
-              <span className="sm:hidden">Intg</span>
-            </TabsTrigger>
-          )}
-          {isOwner && (
-            <TabsTrigger
-              value="einvoice"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
-              <FileText className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">e-Invoice</span>
-              <span className="sm:hidden">E-Inv</span>
-            </TabsTrigger>
-          )}
-          {isOwner && (
-            <TabsTrigger
-              value="ai-automation"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-            >
-              <Zap className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">AI & Automation</span>
-              <span className="sm:hidden">AI</span>
-            </TabsTrigger>
-          )}
-          <TabsTrigger
-            value="referral"
-            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-          >
-            <Gift className="w-4 h-4 mr-1.5" />
-            <span className="hidden sm:inline">Referral</span>
-            <span className="sm:hidden">Refer</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="privacy"
-            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-          >
-            <Shield className="w-4 h-4 mr-1.5" />
-            <span className="hidden sm:inline">Privacy & Data</span>
-            <span className="sm:hidden">Privacy</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="profile"
-            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-          >
-            <User className="w-4 h-4 mr-2" />
-            Profile
-          </TabsTrigger>
-        </TabsList>
+          </TabsList>
 
-        {/* Business Profile Tab Content - Finance Admin/Owner only */}
-        {isOwner && (
-          <TabsContent value="business-profile" className="space-y-4">
+          {/* Sub-tabs — shown inline below top tabs, also sticky */}
+          {activeTab === 'business' && canViewBusinessSettings && renderSubTabs(
+            [{ value: 'profile', label: 'Business Profile' }, { value: 'einvoice', label: 'e-Invoice' }, { value: 'currency', label: 'Currency' }, { value: 'document-inbox', label: 'Document Inbox' }],
+            businessSection, (v) => handleSubTabChange(v, (val) => setBusinessSection(val as typeof businessSection))
+          )}
+          {activeTab === 'finance' && canViewBusinessSettings && renderSubTabs(
+            [{ value: 'categories', label: 'Categories' }, { value: 'ai', label: 'AI & Automation' }],
+            financeSection, (v) => handleSubTabChange(v, (val) => setFinanceSection(val as typeof financeSection))
+          )}
+          {activeTab === 'people' && canViewBusinessSettings && renderSubTabs(
+            [{ value: 'team', label: 'Team' }, { value: 'leave', label: 'Leave' }, { value: 'timesheet', label: 'Timesheet' }],
+            peopleSection, (v) => handleSubTabChange(v, (val) => setPeopleSection(val as typeof peopleSection))
+          )}
+          {activeTab === 'integrations' && canViewBusinessSettings && renderSubTabs(
+            [{ value: 'stripe', label: 'Stripe' }, { value: 'api-keys', label: 'API Keys' }],
+            integrationsSection, (v) => handleSubTabChange(v, (val) => setIntegrationsSection(val as typeof integrationsSection))
+          )}
+          {activeTab === 'personal' && renderSubTabs(
+            [{ value: 'profile', label: 'Profile' }, { value: 'privacy', label: 'Privacy & Data' }],
+            personalSection, (v) => handleSubTabChange(v, (val) => setPersonalSection(val as typeof personalSection))
+          )}
+        </div>
+
+        {/* ============================================================ */}
+        {/* BUSINESS — Business Profile | e-Invoice | Currency           */}
+        {/* ============================================================ */}
+        {canViewBusinessSettings && (
+          <TabsContent value="business" className="mt-0">
             <div className="bg-card rounded-lg border border-border p-6">
-              <Suspense fallback={
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">Loading business profile...</span>
-                </div>
-              }>
-                <BusinessProfileSettings />
+              <Suspense fallback={<TabLoader title="business settings" />}>
+                {businessSection === 'document-inbox' ? <EmailForwardingSettings /> : <BusinessProfileSettings section={businessSection} />}
               </Suspense>
             </div>
           </TabsContent>
         )}
 
-        {/* Category Management Tab Content - Finance Admin/Owner only */}
-        {isOwner && (
-          <TabsContent value="category-management" className="space-y-4">
+        {/* ============================================================ */}
+        {/* FINANCE — Categories | AI & Automation                       */}
+        {/* ============================================================ */}
+        {canViewBusinessSettings && (
+          <TabsContent value="finance" className="mt-0">
             <div className="bg-card rounded-lg border border-border p-6">
-              <Suspense fallback={
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">Loading categories...</span>
-                </div>
-              }>
-                <CategoryManagementTab userId={user?.id} />
+              <Suspense fallback={<TabLoader title={financeSection} />}>
+                {financeSection === 'categories' && <CategoryManagementTab userId={user?.id} />}
+                {financeSection === 'ai' && <AIAutomationSettings />}
               </Suspense>
             </div>
           </TabsContent>
         )}
 
-        {/* Leave Management Tab Content - Finance Admin/Owner only */}
-        {isOwner && (
-          <TabsContent value="leave-management" className="space-y-4">
+        {/* ============================================================ */}
+        {/* PEOPLE — Team | Leave | Timesheet                            */}
+        {/* ============================================================ */}
+        {canViewBusinessSettings && (
+          <TabsContent value="people" className="mt-0">
             <div className="bg-card rounded-lg border border-border p-6">
-              <Suspense fallback={
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">Loading leave settings...</span>
-                </div>
-              }>
-                <LeaveManagementSettings />
+              <Suspense fallback={<TabLoader title={peopleSection} />}>
+                {peopleSection === 'team' && <TeamManagementTab userId={user?.id} />}
+                {peopleSection === 'leave' && <LeaveManagementSettings />}
+                {peopleSection === 'timesheet' && <TimesheetSettings />}
               </Suspense>
             </div>
           </TabsContent>
         )}
 
-        {/* Timesheet Settings Tab Content - Owner Only */}
-        {isOwner && (
-          <TabsContent value="timesheet" className="space-y-4">
+        {/* ============================================================ */}
+        {/* INTEGRATIONS — Stripe | e-Invoice (LHDN) | API Keys          */}
+        {/* ============================================================ */}
+        {canViewBusinessSettings && (
+          <TabsContent value="integrations" className="mt-0">
             <div className="bg-card rounded-lg border border-border p-6">
-              <Suspense fallback={
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">Loading timesheet settings...</span>
-                </div>
-              }>
-                <TimesheetSettings />
+              <Suspense fallback={<TabLoader title={integrationsSection} />}>
+                {integrationsSection === 'stripe' && <StripeIntegrationCard />}
+                {integrationsSection === 'api-keys' && <ApiKeysManagementClient />}
               </Suspense>
             </div>
           </TabsContent>
         )}
 
-        {/* Team Management Tab Content - Owner Only */}
-        {isOwner && (
-          <TabsContent value="team-management" className="space-y-4">
-            <div className="bg-card rounded-lg border border-border p-6">
-              <Suspense fallback={
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">Loading team management...</span>
-                </div>
-              }>
-                <TeamManagementTab userId={user?.id} />
-              </Suspense>
-            </div>
-          </TabsContent>
-        )}
-
-        {/* API Keys Tab Content - Owner Only */}
-        {isOwner && (
-          <TabsContent value="api-keys" className="space-y-4">
-            <div className="bg-card rounded-lg border border-border p-6">
-              <Suspense fallback={
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">Loading API keys...</span>
-                </div>
-              }>
-                <ApiKeysManagementClient />
-              </Suspense>
-            </div>
-          </TabsContent>
-        )}
-
-        {/* Billing Tab Content - Owner Only (hidden on native iOS per Apple IAP guidelines) */}
+        {/* ============================================================ */}
+        {/* BILLING — Owner only                                         */}
+        {/* ============================================================ */}
         {isOwner && !isNativePlatform() && (
-          <TabsContent value="billing" className="space-y-4">
-            <Suspense fallback={
-              <div className="flex items-center justify-center p-8">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                <span className="ml-2 text-muted-foreground">Loading billing...</span>
-              </div>
-            }>
+          <TabsContent value="billing" className="mt-0">
+            <Suspense fallback={<TabLoader title="billing" />}>
               <BillingSettingsContent />
             </Suspense>
           </TabsContent>
         )}
 
-        {/* Integrations Tab Content - Owner Only */}
-        {isOwner && (
-          <TabsContent value="integrations" className="space-y-4">
-            <div className="bg-card rounded-lg border border-border p-6">
-              <Suspense fallback={
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">Loading integrations...</span>
-                </div>
-              }>
-                <StripeIntegrationCard />
-              </Suspense>
-            </div>
-          </TabsContent>
-        )}
-
-        {/* e-Invoice Tab Content - Owner Only */}
-        {isOwner && (
-          <TabsContent value="einvoice" className="space-y-4">
-            <div className="bg-card rounded-lg border border-border p-6">
-              <Suspense fallback={
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">Loading e-invoice settings...</span>
-                </div>
-              }>
-                <EInvoiceSettingsWithTabs />
-              </Suspense>
-            </div>
-          </TabsContent>
-        )}
-
-        {/* AI & Automation Tab Content - Owner Only */}
-        {isOwner && (
-          <TabsContent value="ai-automation" className="space-y-4">
-            <div className="bg-card rounded-lg border border-border p-6">
-              <Suspense fallback={
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <span className="ml-2 text-muted-foreground">Loading AI automation stats...</span>
-                </div>
-              }>
-                <AIAutomationSettings />
-              </Suspense>
-            </div>
-          </TabsContent>
-        )}
-
-        {/* Referral Tab Content - Available to ALL users */}
-        <TabsContent value="referral" className="space-y-4">
-          <div className="max-w-2xl mx-auto">
-            <Suspense fallback={
-              <div className="flex items-center justify-center p-8">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                <span className="ml-2 text-muted-foreground">Loading referral program...</span>
-              </div>
-            }>
+        {/* ============================================================ */}
+        {/* REFERRAL — All users                                         */}
+        {/* ============================================================ */}
+        <TabsContent value="referral" className="mt-0">
+          <div className="bg-card rounded-lg border border-border p-6">
+            <Suspense fallback={<TabLoader title="referral" />}>
               <ReferralDashboard />
             </Suspense>
           </div>
         </TabsContent>
 
-        {/* Privacy & Data Tab Content - Available to ALL users */}
-        <TabsContent value="privacy" className="space-y-4">
-          <Suspense fallback={
-            <div className="flex items-center justify-center p-8">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              <span className="ml-2 text-muted-foreground">Loading privacy settings...</span>
-            </div>
-          }>
-            <PrivacyDataSection />
-          </Suspense>
-        </TabsContent>
-
-        {/* Profile Tab Content - Available to ALL users */}
-        <TabsContent value="profile" className="space-y-4">
+        {/* ============================================================ */}
+        {/* PERSONAL — Profile | Privacy & Data                          */}
+        {/* ============================================================ */}
+        <TabsContent value="personal" className="mt-0">
           <div className="bg-card rounded-lg border border-border p-6">
-            <Suspense fallback={
-              <div className="flex items-center justify-center p-8">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                <span className="ml-2 text-muted-foreground">Loading profile...</span>
-              </div>
-            }>
-              <UserProfileSection />
+            <Suspense fallback={<TabLoader title={personalSection} />}>
+              {personalSection === 'profile' && <UserProfileSection />}
+              {personalSection === 'privacy' && <PrivacyDataSection />}
             </Suspense>
           </div>
         </TabsContent>

@@ -142,13 +142,18 @@ export function NativeSignIn({ locale, redirectUrl, signUpUrl }: NativeSignInPro
           </Button>
         </div>
 
-        {/* Sign Up Link */}
-        <p className="text-center text-sm text-muted-foreground">
-          Don&apos;t have an account?{' '}
-          <a href={signUpUrl} className="text-primary hover:underline">
-            Sign up
-          </a>
-        </p>
+        {signUpUrl ? (
+          <p className="text-center text-sm text-muted-foreground">
+            Don&apos;t have an account?{' '}
+            <a href={signUpUrl} className="text-primary hover:underline">
+              Sign up
+            </a>
+          </p>
+        ) : (
+          <p className="text-center text-sm text-muted-foreground">
+            Don&apos;t have an account? Contact your organization administrator to get access.
+          </p>
+        )}
       </CardContent>
     </Card>
   );

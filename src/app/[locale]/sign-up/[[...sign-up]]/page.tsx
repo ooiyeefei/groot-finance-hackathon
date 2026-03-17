@@ -21,8 +21,13 @@ export default function SignUpPage() {
   const [referrerName, setReferrerName] = useState<string | null>(null)
 
   useEffect(() => {
-    setIsNative(isNativePlatform())
-  }, [])
+    const native = isNativePlatform()
+    setIsNative(native)
+    // Apple 3.1.1: No account registration on native iOS — login only
+    if (native) {
+      router.replace(`/${locale}/sign-in`)
+    }
+  }, [router, locale])
 
   // 001-in-app-referral-code: Capture ?ref= param and validate
   useEffect(() => {

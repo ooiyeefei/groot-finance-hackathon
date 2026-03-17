@@ -20,6 +20,7 @@ import {
   FileSpreadsheet,
   ShieldAlert,
   TrendingUp,
+  Inbox,
 } from 'lucide-react'
 
 export interface NavItem {
@@ -60,6 +61,7 @@ export function getNavigationGroups(userRole: UserRole): NavGroup[] {
           { icon: CreditCard, label: 'transactions', path: '/accounting' },
           { icon: ShieldAlert, label: 'vendorIntelligence', path: '/vendor-intelligence/alerts' },
           { icon: TrendingUp, label: 'priceIntelligence', path: '/vendor-intelligence/price-intelligence' },
+          { icon: Inbox, label: 'documentsInbox', path: '/documents-inbox' },
         ]
       : [],
   }

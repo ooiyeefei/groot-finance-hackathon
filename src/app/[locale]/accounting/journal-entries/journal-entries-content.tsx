@@ -294,160 +294,127 @@ export default function JournalEntriesContent() {
         </CardContent>
       </Card>
 
-      {/* Entry Detail Dialog */}
+      {/* Entry Detail Dialog — Clean card layout */}
       <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Journal Entry Details</DialogTitle>
-          </DialogHeader>
-
+        <DialogContent className="max-w-xl p-0 gap-0">
           {selectedEntry && (
-            <div className="space-y-6">
-              {/* Period lock warning banner */}
-              {!isEntryEditable(selectedEntry) && selectedEntry.status !== 'reversed' && (
-                <div className={`rounded-lg p-3 flex items-start gap-2 ${
-                  selectedEntry.isPeriodLocked
-                    ? 'bg-red-500/10 border border-red-500/30'
-                    : 'bg-yellow-500/10 border border-yellow-500/30'
-                }`}>
-                  <Lock className={`w-4 h-4 mt-0.5 shrink-0 ${
-                    selectedEntry.isPeriodLocked
-                      ? 'text-red-600 dark:text-red-400'
-                      : 'text-yellow-600 dark:text-yellow-400'
-                  }`} />
-                  <p className={`text-sm ${
-                    selectedEntry.isPeriodLocked
-                      ? 'text-red-600 dark:text-red-400'
-                      : 'text-yellow-600 dark:text-yellow-400'
-                  }`}>
-                    {selectedEntry.isPeriodLocked
-                      ? 'This entry is locked — it cannot be edited, reversed, or voided.'
-                      : 'This entry belongs to a closed period — reopen the period to modify it.'}
-                  </p>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Date</p>
-                  <p className="text-foreground font-medium">
-                    {formatBusinessDate(selectedEntry.transactionDate)}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-muted-foreground">Status</p>
-                  <div className="flex items-center gap-2">
-                    <Badge className={getStatusBadge(selectedEntry.status)}>
-                      {selectedEntry.status}
-                    </Badge>
-                    {getPeriodBadge(selectedEntry)}
+            <>
+              {/* Header with amount */}
+              <div className="px-6 pt-6 pb-4 border-b border-border">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <DialogTitle className="text-lg font-semibold text-foreground">
+                      {selectedEntry.description}
+                    </DialogTitle>
+                    <p className="text-sm text-muted-foreground">
+                      {formatBusinessDate(selectedEntry.transactionDate)}
+                      {selectedEntry.sourceType && selectedEntry.sourceType !== 'manual' && (
+                        <> &middot; <span className="capitalize">{selectedEntry.sourceType.replace(/_/g, ' ')}</span></>
+                      )}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xl font-bold text-foreground">
+                      {formatCurrency(
+                        selectedEntry.lines?.reduce(
+                          (sum: number, line: any) => sum + (line.debitAmount || 0),
+                          0
+                        ) || 0,
+                        'MYR'
+                      )}
+                    </p>
+                    <div className="flex items-center gap-1.5 justify-end mt-1">
+                      <Badge className={getStatusBadge(selectedEntry.status)}>
+                        {selectedEntry.status}
+                      </Badge>
+                      {getPeriodBadge(selectedEntry)}
+                    </div>
                   </div>
                 </div>
 
-                <div className="col-span-2">
-                  <p className="text-sm text-muted-foreground">Description</p>
-                  <p className="text-foreground">{selectedEntry.description}</p>
-                </div>
-
-                {selectedEntry.sourceType && selectedEntry.sourceType !== 'manual' && (
-                  <>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Source Type</p>
-                      <p className="text-foreground font-medium capitalize">
-                        {selectedEntry.sourceType.replace('_', ' ')}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-sm text-muted-foreground">Source ID</p>
-                      <p className="text-foreground font-mono text-sm">
-                        {selectedEntry.sourceId}
-                      </p>
-                    </div>
-                  </>
+                {/* Period lock warning */}
+                {!isEntryEditable(selectedEntry) && selectedEntry.status !== 'reversed' && (
+                  <div className={`rounded-md p-2.5 mt-3 flex items-center gap-2 text-xs ${
+                    selectedEntry.isPeriodLocked
+                      ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+                      : 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400'
+                  }`}>
+                    <Lock className="w-3.5 h-3.5 shrink-0" />
+                    {selectedEntry.isPeriodLocked
+                      ? 'Locked — cannot be modified'
+                      : 'Period closed — reopen to modify'}
+                  </div>
                 )}
               </div>
 
-              <div>
-                <h3 className="font-semibold text-foreground mb-3">Journal Lines</h3>
-                <div className="border border-border rounded-lg overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-muted">
-                      <tr>
-                        <th className="px-4 py-2 text-left text-sm font-medium text-foreground">
-                          Account
-                        </th>
-                        <th className="px-4 py-2 text-left text-sm font-medium text-foreground">
-                          Description
-                        </th>
-                        <th className="px-4 py-2 text-right text-sm font-medium text-foreground">
-                          Debit
-                        </th>
-                        <th className="px-4 py-2 text-right text-sm font-medium text-foreground">
-                          Credit
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedEntry.lines?.map((line: any, index: number) => (
-                        <tr key={index} className="border-b border-border">
-                          <td className="px-4 py-2 text-sm text-foreground">
-                            <span className="font-mono">{line.accountCode}</span>
-                            <span className="ml-2 text-muted-foreground">
-                              {line.accountName}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2 text-sm text-muted-foreground">
-                            {line.lineDescription || '—'}
-                          </td>
-                          <td className="px-4 py-2 text-sm text-right text-foreground">
-                            {line.debitAmount > 0
-                              ? formatCurrency(line.debitAmount, 'MYR')
-                              : '—'}
-                          </td>
-                          <td className="px-4 py-2 text-sm text-right text-foreground">
-                            {line.creditAmount > 0
-                              ? formatCurrency(line.creditAmount, 'MYR')
-                              : '—'}
-                          </td>
-                        </tr>
-                      ))}
-                      <tr className="bg-muted font-semibold">
-                        <td className="px-4 py-2 text-sm text-foreground" colSpan={2}>
-                          TOTAL
-                        </td>
-                        <td className="px-4 py-2 text-sm text-right text-foreground">
-                          {formatCurrency(
-                            selectedEntry.lines?.reduce(
-                              (sum: number, line: any) => sum + (line.debitAmount || 0),
-                              0
-                            ) || 0,
-                            'MYR'
-                          )}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-right text-foreground">
-                          {formatCurrency(
-                            selectedEntry.lines?.reduce(
-                              (sum: number, line: any) => sum + (line.creditAmount || 0),
-                              0
-                            ) || 0,
-                            'MYR'
-                          )}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+              {/* Journal Lines */}
+              <div className="px-6 py-4">
+                <div className="space-y-2">
+                  {selectedEntry.lines?.map((line: any, index: number) => (
+                    <div key={index} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                            {line.accountCode}
+                          </span>
+                          <span className="text-sm text-foreground truncate">
+                            {line.accountName}
+                          </span>
+                        </div>
+                        {line.lineDescription && (
+                          <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                            {line.lineDescription}
+                          </p>
+                        )}
+                      </div>
+                      <div className="text-right ml-4 shrink-0">
+                        {line.debitAmount > 0 ? (
+                          <span className="text-sm font-medium text-foreground">
+                            {formatCurrency(line.debitAmount, 'MYR')} <span className="text-xs text-muted-foreground">DR</span>
+                          </span>
+                        ) : (
+                          <span className="text-sm font-medium text-foreground">
+                            {formatCurrency(line.creditAmount, 'MYR')} <span className="text-xs text-muted-foreground">CR</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              {selectedEntry.createdBy && (
-                <div className="text-xs text-muted-foreground">
-                  Created by {selectedEntry.createdBy} on{' '}
-                  {new Date(selectedEntry.createdAt).toLocaleString()}
+              {/* Footer */}
+              <div className="px-6 py-3 border-t border-border bg-muted/30 flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">
+                  {selectedEntry.createdBy
+                    ? `Created by ${selectedEntry.createdBy} on ${new Date(selectedEntry.createdAt).toLocaleDateString()}`
+                    : `Created ${new Date(selectedEntry.createdAt).toLocaleDateString()}`}
+                </span>
+                <div className="flex items-center gap-2">
+                  {selectedEntry.status === 'draft' && isEntryEditable(selectedEntry) && (
+                    <Button
+                      size="sm"
+                      onClick={() => { handlePost(selectedEntry._id); setIsDetailDialogOpen(false) }}
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    >
+                      <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
+                      Post
+                    </Button>
+                  )}
+                  {selectedEntry.status === 'posted' && isEntryEditable(selectedEntry) && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => { handleReverse(selectedEntry._id); setIsDetailDialogOpen(false) }}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <XCircle className="w-3.5 h-3.5 mr-1.5" />
+                      Reverse
+                    </Button>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            </>
           )}
         </DialogContent>
       </Dialog>

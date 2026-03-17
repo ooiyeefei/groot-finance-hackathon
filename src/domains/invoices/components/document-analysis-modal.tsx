@@ -2,11 +2,15 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Languages, Eye, FileText, DollarSign, List, Copy, Loader2, ImageIcon } from 'lucide-react'
+import { X, Languages, Eye, FileText, DollarSign, List, Copy, Loader2, ImageIcon, BookOpen, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import DocumentPreviewWithAnnotations from './document-preview-with-annotations'
 import { formatNumber } from '@/lib/utils/format-number'
 import { useInvoiceRealtime } from '../hooks/use-invoices-realtime'
+import { useJournalEntry } from '@/domains/accounting/hooks/use-journal-entries'
+import { formatCurrency } from '@/lib/utils/format-number'
+import { formatBusinessDate } from '@/lib/utils'
+import type { Id } from '../../../../convex/_generated/dataModel'
 
 interface Document {
   id: string
@@ -196,6 +200,16 @@ interface Document {
   confidence_score?: number
   // Line items status for two-phase extraction real-time updates
   line_items_status?: 'pending' | 'extracting' | 'complete' | 'skipped'
+  // Accounting status
+  accountingStatus?: 'draft' | 'posted' | 'voided'
+  journalEntryId?: string
+  linked_transaction?: {
+    id: string
+    description: string
+    original_amount: number
+    original_currency: string
+    created_at: string
+  } | null
 }
 
 interface DocumentAnalysisModalProps {
@@ -253,8 +267,15 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
       status: realtimeInvoice.status as Document['status'] ?? initialDocument.status,
       line_items_status: realtimeInvoice.line_items_status ?? initialDocument.line_items_status,
       confidence_score: realtimeInvoice.confidence_score ?? initialDocument.confidence_score,
+      accountingStatus: realtimeInvoice.accountingStatus as Document['accountingStatus'] ?? initialDocument.accountingStatus,
+      journalEntryId: realtimeInvoice.journalEntryId ?? initialDocument.journalEntryId,
+      linked_transaction: realtimeInvoice.linked_transaction ?? initialDocument.linked_transaction,
     }
   }, [initialDocument, realtimeInvoice])
+
+  // Fetch linked journal entry for posted invoices
+  const jeId = document.journalEntryId ? (document.journalEntryId as Id<'journal_entries'>) : null
+  const { entry: journalEntry } = useJournalEntry(jeId)
 
   // Scroll handler to detect current visible page
   const handleScroll = useCallback(() => {
@@ -1083,6 +1104,40 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
                   <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
                     <h4 className="text-sm font-medium text-destructive mb-2">Processing Issue</h4>
                     <p className="text-sm text-destructive/80 whitespace-pre-wrap">{document.extracted_data.text}</p>
+                  </div>
+                )}
+
+                {/* Journal Entry — shown for posted invoices */}
+                {document.accountingStatus === 'posted' && journalEntry && (
+                  <div className="mb-6 bg-green-500/5 border border-green-500/20 rounded-lg p-4">
+                    <h4 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-green-600 dark:text-green-400" />
+                      Journal Entry
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded-full bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/30">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Posted
+                      </span>
+                    </h4>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      {(journalEntry as any).description} &middot; {formatBusinessDate((journalEntry as any).transactionDate)}
+                    </p>
+                    <div className="space-y-1.5">
+                      {(journalEntry as any).lines?.map((line: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded text-muted-foreground shrink-0">
+                              {line.accountCode}
+                            </span>
+                            <span className="text-foreground truncate">{line.accountName}</span>
+                          </div>
+                          <span className="text-foreground font-medium ml-3 shrink-0">
+                            {line.debitAmount > 0
+                              ? `${formatCurrency(line.debitAmount, 'MYR')} DR`
+                              : `${formatCurrency(line.creditAmount, 'MYR')} CR`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 

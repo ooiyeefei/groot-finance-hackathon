@@ -95,6 +95,11 @@ export interface BusinessProfile {
   country_code?: string | null
   // LHDN self-bill auto-trigger
   auto_self_bill_exempt_vendors?: boolean
+  // 001-doc-email-forward
+  slug?: string
+  emailForwardingEnabled?: boolean
+  emailForwardingPrefix?: string
+  emailForwardingAllowlist?: string[]
 }
 
 export interface UpdateMembershipRequest {
@@ -451,6 +456,11 @@ export async function getBusinessProfile(clerkUserId: string): Promise<BusinessP
     state_code: profile.state_code ?? null,
     postal_code: profile.postal_code ?? null,
     country_code: profile.country_code ?? null,
+    // 001-doc-email-forward
+    slug: profile.slug ?? undefined,
+    emailForwardingEnabled: (profile as any).emailForwardingEnabled ?? false,
+    emailForwardingPrefix: (profile as any).emailForwardingPrefix ?? undefined,
+    emailForwardingAllowlist: (profile as any).emailForwardingAllowlist ?? [],
   }
 }
 
@@ -473,6 +483,9 @@ export async function updateBusinessProfile(
     city?: string; state_code?: string; postal_code?: string; country_code?: string;
     // LHDN self-bill auto-trigger
     auto_self_bill_exempt_vendors?: boolean;
+    // 001-doc-email-forward: Email forwarding settings
+    email_forwarding_enabled?: boolean;
+    email_forwarding_allowlist?: string[];
   }
 ): Promise<BusinessProfile> {
   const {
@@ -481,6 +494,7 @@ export async function updateBusinessProfile(
     lhdn_client_id, peppol_participant_id,
     address_line1, address_line2, address_line3, city, state_code, postal_code, country_code,
     auto_self_bill_exempt_vendors,
+    email_forwarding_enabled, email_forwarding_allowlist,
   } = updates
 
   // Validate input
@@ -528,6 +542,9 @@ export async function updateBusinessProfile(
     postal_code,
     country_code,
     auto_self_bill_exempt_vendors,
+    // 001-doc-email-forward
+    email_forwarding_enabled,
+    email_forwarding_allowlist,
   })
 
   // Fetch updated profile

@@ -89,6 +89,9 @@ interface ConvexInvoice {
   updatedAt?: number
   // Line items status for two-phase extraction
   lineItemsStatus?: 'pending' | 'extracting' | 'complete' | 'skipped'
+  // Accounting status
+  accountingStatus?: 'draft' | 'posted' | 'voided'
+  journalEntryId?: string
   // Joined from journal_entries via Convex query
   linkedTransaction?: ConvexLinkedTransaction | null
 }
@@ -111,6 +114,9 @@ export interface Invoice {
   confidence_score?: number
   // Line items status for two-phase extraction real-time updates
   line_items_status?: 'pending' | 'extracting' | 'complete' | 'skipped'
+  // Accounting status
+  accountingStatus?: 'draft' | 'posted' | 'voided'
+  journalEntryId?: string
   // Linked transaction data (joined from journal_entries)
   linked_transaction?: {
     id: string
@@ -158,6 +164,9 @@ function mapConvexInvoice(invoice: ConvexInvoice): Invoice {
     confidence_score: invoice.confidenceScore,
     // Line items status for two-phase extraction real-time updates
     line_items_status: invoice.lineItemsStatus,
+    // Accounting status
+    accountingStatus: invoice.accountingStatus,
+    journalEntryId: invoice.journalEntryId,
     // Map linked transaction from Convex query join
     linked_transaction: invoice.linkedTransaction
       ? {

@@ -1397,58 +1397,41 @@ export const reportEinvoiceFormFillResult = mutation({
 // ============================================
 
 /**
- * Public Query: Returns businesses with pending e-invoice requests.
+ * Public Query: Returns businesses configured for LHDN polling.
  * Called by LHDN Polling Lambda (via Convex HTTP API) to discover which businesses to poll.
+ *
+ * LHDN polling retrieves INCOMING e-invoices that suppliers submit to LHDN.
+ * This is different from OUTGOING e-invoice requests to merchants (browser automation).
  *
  * Per-business credentials: Each business enters their own LHDN Client ID
  * and Client Secret via business settings UI. Client ID is stored here in
  * Convex, Client Secret is in SSM (read by Lambda at runtime).
  *
- * Returns only businesses that have:
+ * Returns ALL businesses that have:
  * 1. LHDN TIN configured
- * 2. LHDN Client ID configured
- * 3. At least one expense claim with einvoiceRequestStatus = "requesting" or "requested"
+ * 2. LHDN Client ID configured (means they connected their LHDN account)
+ *
+ * NOTE: We poll ALL configured businesses because suppliers can submit e-invoices
+ * to LHDN at ANY time, independent of expense claims or outgoing requests.
  */
 export const getBusinessesForLhdnPolling = query({
   args: {},
   handler: async (ctx) => {
     const businesses = await ctx.db.query("businesses").collect();
-    const lhdnBusinesses = businesses.filter(
-      (b) =>
-        b.lhdnTin &&
-        (b as Record<string, unknown>).lhdnClientId &&
-        !(b as Record<string, unknown>).deletedAt
-    );
 
-    const result: Array<{
-      businessId: string;
-      businessTin: string;
-      lhdnClientId: string;
-    }> = [];
-
-    for (const biz of lhdnBusinesses) {
-      const pendingClaims = await ctx.db
-        .query("expense_claims")
-        .withIndex("by_businessId", (q) => q.eq("businessId", biz._id))
-        .collect();
-
-      const hasPending = pendingClaims.some(
-        (claim) =>
-          !claim.deletedAt &&
-          (claim.einvoiceRequestStatus === "requesting" ||
-            claim.einvoiceRequestStatus === "requested")
-      );
-
-      if (hasPending) {
-        result.push({
-          businessId: biz._id as string,
-          businessTin: biz.lhdnTin as string,
-          lhdnClientId: (biz as Record<string, unknown>).lhdnClientId as string,
-        });
-      }
-    }
-
-    return result;
+    // Return ALL businesses with LHDN credentials configured
+    return businesses
+      .filter(
+        (b) =>
+          b.lhdnTin &&
+          (b as Record<string, unknown>).lhdnClientId &&
+          !(b as Record<string, unknown>).deletedAt
+      )
+      .map((biz) => ({
+        businessId: biz._id as string,
+        businessTin: biz.lhdnTin as string,
+        lhdnClientId: (biz as Record<string, unknown>).lhdnClientId as string,
+      }));
   },
 });
 

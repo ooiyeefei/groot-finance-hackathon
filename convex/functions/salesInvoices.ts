@@ -1587,6 +1587,14 @@ export const getIssuedInvoicesForStatusPolling = query({
     const now = Date.now();
     const seventyTwoHoursAgo = now - 72 * 60 * 60 * 1000;
 
+    // Tiered polling intervals to reduce API calls:
+    // 0-24h: Poll every 5 min (most buyer rejections happen early)
+    // 24-48h: Poll every 30 min (less frequent rejections)
+    // 48-72h: Poll every 2 hours (rare rejections)
+    const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000;
+    const fortyEightHoursAgo = now - 48 * 60 * 60 * 1000;
+    const currentMinute = Math.floor(now / (60 * 1000));
+
     const invoices = await ctx.db
       .query("sales_invoices")
       .filter((q) =>
@@ -1599,16 +1607,32 @@ export const getIssuedInvoicesForStatusPolling = query({
       )
       .collect();
 
-    return invoices.map((inv) => ({
-      _id: inv._id,
-      businessId: inv.businessId,
-      lhdnSubmissionId: inv.lhdnSubmissionId,
-      lhdnDocumentUuid: inv.lhdnDocumentUuid,
-      lhdnStatus: inv.lhdnStatus,
-      lhdnValidatedAt: inv.lhdnValidatedAt,
-      invoiceNumber: inv.invoiceNumber,
-      journalEntryId: inv.journalEntryId,
-    }));
+    // Apply tiered sampling to reduce polling frequency for older invoices
+    return invoices
+      .filter((inv) => {
+        const age = now - (inv.lhdnValidatedAt || 0);
+
+        // 0-24h: Poll every time (no filtering)
+        if (age < 24 * 60 * 60 * 1000) return true;
+
+        // 24-48h: Poll every 30 minutes (keep 1 in 6 invocations)
+        if (age < 48 * 60 * 60 * 1000) {
+          return currentMinute % 6 === 0;
+        }
+
+        // 48-72h: Poll every 2 hours (keep 1 in 24 invocations)
+        return currentMinute % 24 === 0;
+      })
+      .map((inv) => ({
+        _id: inv._id,
+        businessId: inv.businessId,
+        lhdnSubmissionId: inv.lhdnSubmissionId,
+        lhdnDocumentUuid: inv.lhdnDocumentUuid,
+        lhdnStatus: inv.lhdnStatus,
+        lhdnValidatedAt: inv.lhdnValidatedAt,
+        invoiceNumber: inv.invoiceNumber,
+        journalEntryId: inv.journalEntryId,
+      }));
   },
 });
 

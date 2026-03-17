@@ -461,8 +461,8 @@ export default function LandingContent({ country }: { country: string }) {
           </p>
 
           <div className="hero-fade hero-fade-4 flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
-            <a href="/en/sign-up" className="btn-primary px-6 py-3 rounded-lg text-base flex items-center gap-2">
-              <span className="btn-primary-text flex items-center gap-2">{isNativePlatform() ? "Get started" : "Start free trial"} <Sparkles className="w-4 h-4" /></span>
+            <a href={isNativePlatform() ? "/en/sign-in" : "/en/sign-up"} className="btn-primary px-6 py-3 rounded-lg text-base flex items-center gap-2">
+              <span className="btn-primary-text flex items-center gap-2">{isNativePlatform() ? "Sign in" : "Start free trial"} <Sparkles className="w-4 h-4" /></span>
             </a>
             {!isNativePlatform() && (
               <button

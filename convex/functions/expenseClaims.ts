@@ -723,6 +723,18 @@ export const create = mutation({
     duplicateOverrideReason: v.optional(v.string()),
     duplicateOverrideAt: v.optional(v.number()),
     isSplitExpense: v.optional(v.boolean()),
+    // 001-doc-email-forward: Source tracking
+    sourceType: v.optional(
+      v.union(v.literal("manual_upload"), v.literal("email_forward"))
+    ),
+    sourceEmailMetadata: v.optional(
+      v.object({
+        from: v.string(),
+        subject: v.string(),
+        receivedAt: v.number(),
+        messageId: v.string(),
+      })
+    ),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -779,6 +791,9 @@ export const create = mutation({
       duplicateOverrideReason: args.duplicateOverrideReason,
       duplicateOverrideAt: args.duplicateOverrideAt,
       isSplitExpense: args.isSplitExpense,
+      // Source tracking (001-doc-email-forward)
+      sourceType: args.sourceType,
+      sourceEmailMetadata: args.sourceEmailMetadata,
       version: 0,  // Initialize version for optimistic locking
       updatedAt: Date.now(),
     });

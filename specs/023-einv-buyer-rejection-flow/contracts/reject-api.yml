@@ -1,0 +1,317 @@
+openapi: 3.0.3
+info:
+  title: LHDN E-Invoice Buyer Rejection API
+  description: API for rejecting received e-invoices via LHDN MyInvois within the 72-hour window
+  version: 1.0.0
+  contact:
+    name: Groot Finance API Support
+    email: dev@hellogroot.com
+
+servers:
+  - url: https://finance.hellogroot.com/api/v1
+    description: Production
+  - url: http://localhost:3000/api/v1
+    description: Development
+
+paths:
+  /einvoice-received/{uuid}/reject:
+    post:
+      summary: Reject a received e-invoice
+      description: |
+        Rejects a received e-invoice by submitting the rejection to LHDN MyInvois API.
+        Requirements:
+        - User must be authenticated (Clerk)
+        - User role must be owner, finance_admin, or manager
+        - E-invoice status must be "valid"
+        - Rejection must be within 72 hours of LHDN validation timestamp
+        - Rejection reason must be provided (non-empty)
+
+        Side effects:
+        - E-invoice status updated to "rejected" in Groot database
+        - Linked AP invoice or expense claim updated (if any)
+        - In-app notification sent to affected stakeholder
+
+        Idempotency: If the e-invoice is already rejected, returns success immediately without calling LHDN API.
+      operationId: rejectEinvoice
+      tags:
+        - E-Invoice Rejection
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          description: LHDN document UUID (26-character string)
+          schema:
+            type: string
+            minLength: 26
+            maxLength: 26
+            example: "ABCD1234567890EFGH12345678"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+                  description: Rejection reason (free-text, required, non-empty)
+                  minLength: 1
+                  maxLength: 500
+                  example: "Wrong amount - invoice shows RM 1,000 but actual purchase was RM 900"
+            examples:
+              wrong_amount:
+                summary: Wrong Amount
+                value:
+                  reason: "Invoice amount incorrect - actual purchase was lower"
+              duplicate:
+                summary: Duplicate Invoice
+                value:
+                  reason: "Duplicate of invoice already received on 2026-03-10"
+              wrong_items:
+                summary: Wrong Items
+                value:
+                  reason: "Invoice includes items we did not order (SKU-789)"
+      responses:
+        '200':
+          description: Rejection successful
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                  - document
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  document:
+                    $ref: '#/components/schemas/RejectedDocument'
+              examples:
+                successful_rejection:
+                  summary: Successful Rejection
+                  value:
+                    success: true
+                    document:
+                      _id: "j12abc456def789"
+                      lhdnDocumentUuid: "ABCD1234567890EFGH12345678"
+                      status: "rejected"
+                      rejectedAt: 1710580800000
+                      rejectionReason: "Wrong amount - invoice shows RM 1,000 but actual purchase was RM 900"
+                      rejectedByUserId: "user_2abcDefGHIjklMNO"
+                      supplierName: "Supplier ABC Sdn Bhd"
+                      total: 1000.00
+                idempotent_rejection:
+                  summary: Already Rejected (Idempotent)
+                  value:
+                    success: true
+                    message: "E-invoice already rejected"
+                    document:
+                      _id: "j12abc456def789"
+                      lhdnDocumentUuid: "ABCD1234567890EFGH12345678"
+                      status: "rejected"
+                      rejectedAt: 1710580700000
+                      rejectionReason: "Duplicate invoice"
+                      rejectedByUserId: "user_2abcDefGHIjklMNO"
+        '400':
+          description: Bad request - validation failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                window_expired:
+                  summary: 72-Hour Window Expired
+                  value:
+                    error: "Rejection window expired"
+                    message: "E-invoice can only be rejected within 72 hours of LHDN validation"
+                    code: "WINDOW_EXPIRED"
+                invalid_status:
+                  summary: Invalid Status
+                  value:
+                    error: "Invalid document status"
+                    message: "E-invoice status is 'cancelled' - only 'valid' invoices can be rejected"
+                    code: "INVALID_STATUS"
+                empty_reason:
+                  summary: Empty Reason
+                  value:
+                    error: "Validation failed"
+                    message: "Rejection reason is required and cannot be empty"
+                    code: "VALIDATION_ERROR"
+        '401':
+          description: Unauthorized - user not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                not_authenticated:
+                  summary: Not Authenticated
+                  value:
+                    error: "Unauthorized"
+                    message: "Authentication required"
+                    code: "UNAUTHORIZED"
+        '403':
+          description: Forbidden - user role not authorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                insufficient_permissions:
+                  summary: Insufficient Permissions
+                  value:
+                    error: "Forbidden"
+                    message: "User role 'employee' cannot reject e-invoices. Required roles: owner, finance_admin, manager"
+                    code: "FORBIDDEN"
+        '404':
+          description: Not found - document UUID not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                document_not_found:
+                  summary: Document Not Found
+                  value:
+                    error: "Not found"
+                    message: "E-invoice with UUID 'ABCD1234567890EFGH12345678' not found"
+                    code: "NOT_FOUND"
+        '429':
+          description: Too many requests - LHDN API rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                rate_limit_exceeded:
+                  summary: Rate Limit Exceeded
+                  value:
+                    error: "Too many requests"
+                    message: "LHDN API rate limit exceeded. Please try again in 5 seconds."
+                    code: "RATE_LIMIT_EXCEEDED"
+                    retryAfter: 5
+        '500':
+          description: Internal server error - LHDN API failure or Convex error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                lhdn_api_error:
+                  summary: LHDN API Error
+                  value:
+                    error: "LHDN API error"
+                    message: "LHDN service returned error 500. Please try again later."
+                    code: "LHDN_ERROR"
+                convex_error:
+                  summary: Database Error
+                  value:
+                    error: "Internal server error"
+                    message: "Failed to update e-invoice status. Please contact support."
+                    code: "DATABASE_ERROR"
+      security:
+        - ClerkAuth: []
+
+components:
+  schemas:
+    RejectedDocument:
+      type: object
+      required:
+        - _id
+        - lhdnDocumentUuid
+        - status
+        - rejectedAt
+        - rejectionReason
+        - rejectedByUserId
+      properties:
+        _id:
+          type: string
+          description: Convex document ID
+          example: "j12abc456def789"
+        lhdnDocumentUuid:
+          type: string
+          description: LHDN document UUID (26-character)
+          example: "ABCD1234567890EFGH12345678"
+        status:
+          type: string
+          enum: [rejected]
+          description: Document status (always "rejected" after successful rejection)
+        rejectedAt:
+          type: integer
+          format: int64
+          description: Unix timestamp (milliseconds) when rejection was submitted
+          example: 1710580800000
+        rejectionReason:
+          type: string
+          description: User-provided rejection reason
+          example: "Wrong amount - invoice shows RM 1,000 but actual purchase was RM 900"
+        rejectedByUserId:
+          type: string
+          description: Clerk user ID of the user who rejected the e-invoice
+          example: "user_2abcDefGHIjklMNO"
+        supplierName:
+          type: string
+          description: Supplier name (from LHDN e-invoice)
+          example: "Supplier ABC Sdn Bhd"
+        supplierTin:
+          type: string
+          description: Supplier TIN (Tax Identification Number)
+          example: "C1234567890"
+        total:
+          type: number
+          format: double
+          description: Invoice total amount
+          example: 1000.00
+        dateTimeValidated:
+          type: string
+          format: date-time
+          description: LHDN validation timestamp (ISO 8601)
+          example: "2026-03-14T10:30:00Z"
+
+    Error:
+      type: object
+      required:
+        - error
+        - message
+        - code
+      properties:
+        error:
+          type: string
+          description: Short error description
+          example: "Validation failed"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Rejection reason is required and cannot be empty"
+        code:
+          type: string
+          description: Machine-readable error code
+          enum:
+            - UNAUTHORIZED
+            - FORBIDDEN
+            - NOT_FOUND
+            - VALIDATION_ERROR
+            - WINDOW_EXPIRED
+            - INVALID_STATUS
+            - RATE_LIMIT_EXCEEDED
+            - LHDN_ERROR
+            - DATABASE_ERROR
+          example: "VALIDATION_ERROR"
+        retryAfter:
+          type: integer
+          description: Seconds to wait before retrying (only for rate limit errors)
+          example: 5
+
+  securitySchemes:
+    ClerkAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Clerk JWT authentication token (passed in Authorization header)
+
+tags:
+  - name: E-Invoice Rejection
+    description: Operations for rejecting received e-invoices via LHDN MyInvois

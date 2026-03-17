@@ -1,89 +1,81 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useQuery, useMutation } from 'convex/react'
-import { api } from '@/convex/_generated/api'
-import type { Id } from '@/convex/_generated/dataModel'
-import { useBusinessContext } from '@/contexts/business-context'
-import { Switch } from '@/components/ui/switch'
+import { useBusinessProfile } from '@/contexts/business-context'
 import { Label } from '@/components/ui/label'
-import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
 import { Mail, CheckCircle2, Loader2, AlertCircle } from 'lucide-react'
 
+// Simple toggle switch
+function Toggle({ checked, onChange, disabled, id }: { checked: boolean; onChange?: (v: boolean) => void; disabled?: boolean; id?: string }) {
+  return (
+    <button
+      id={id}
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange?.(!checked)}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${
+        disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+      } ${checked ? 'bg-primary' : 'bg-muted'}`}
+    >
+      <span className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
+    </button>
+  )
+}
+
 export default function EInvoiceNotificationSettings() {
-  const { activeContext } = useBusinessContext()
-  const businessId = activeContext?.businessId
+  const { profile, updateProfile } = useBusinessProfile()
   const { addToast } = useToast()
 
-  // Load current business settings
-  const business = useQuery(
-    api.functions.businesses.getById,
-    businessId ? { id: businessId } : 'skip'
-  )
-
-  // Local state for toggle values (defaults to true per spec)
-  const [notifyOnValidation, setNotifyOnValidation] = useState(true)
-  const [notifyOnCancellation, setNotifyOnCancellation] = useState(true)
+  const [autoDelivery, setAutoDelivery] = useState(true)
+  const [buyerNotifications, setBuyerNotifications] = useState(true)
   const [hasChanges, setHasChanges] = useState(false)
-
-  // Update mutation
-  const updateSettings = useMutation(api.functions.businesses.updateNotificationSettings)
   const [isSaving, setIsSaving] = useState(false)
 
-  // Sync local state with loaded business data
   useEffect(() => {
-    if (business) {
-      // Settings default to true if undefined (per spec FR-014)
-      setNotifyOnValidation(business.einvoiceNotifyBuyerOnValidation !== false)
-      setNotifyOnCancellation(business.einvoiceNotifyBuyerOnCancellation !== false)
+    if (profile) {
+      // These fields may be present from the API even if not typed
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const p = profile as any
+      setAutoDelivery(p.einvoice_auto_delivery !== false)
+      setBuyerNotifications(p.einvoice_buyer_notifications !== false)
       setHasChanges(false)
     }
-  }, [business])
+  }, [profile])
 
-  // Handle toggle changes
-  const handleValidationChange = (checked: boolean) => {
-    setNotifyOnValidation(checked)
-    setHasChanges(true)
-  }
-
-  const handleCancellationChange = (checked: boolean) => {
-    setNotifyOnCancellation(checked)
-    setHasChanges(true)
-  }
-
-  // Save settings
   const handleSave = async () => {
-    if (!businessId) return
-
     setIsSaving(true)
     try {
-      await updateSettings({
-        businessId: businessId as Id<'businesses'>,
-        einvoiceNotifyBuyerOnValidation: notifyOnValidation,
-        einvoiceNotifyBuyerOnCancellation: notifyOnCancellation,
-      })
+      const csrfResponse = await fetch('/api/v1/utils/security/csrf-token')
+      const csrfData = await csrfResponse.json()
+      if (!csrfData.success) throw new Error('Failed to get CSRF token')
 
-      addToast({
-        type: 'success',
-        title: 'Settings saved',
-        description: 'E-invoice buyer notification preferences updated successfully',
+      const response = await fetch('/api/v1/account-management/businesses/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfData.data.csrfToken,
+        },
+        body: JSON.stringify({
+          einvoice_auto_delivery: autoDelivery,
+          einvoice_buyer_notifications: buyerNotifications,
+        }),
       })
-
+      const result = await response.json()
+      if (!result.success) throw new Error(result.error || 'Failed to save')
+      updateProfile(result.data)
+      addToast({ type: 'success', title: 'Settings saved', description: 'Notification preferences updated.' })
       setHasChanges(false)
     } catch (error) {
-      console.error('[EInvoiceNotificationSettings] Save failed:', error)
-      addToast({
-        type: 'error',
-        title: error instanceof Error ? error.message : 'Failed to update notification settings',
-      })
+      addToast({ type: 'error', title: error instanceof Error ? error.message : 'Failed to save' })
     } finally {
       setIsSaving(false)
     }
   }
 
-  // Loading state
-  if (!business) {
+  if (!profile) {
     return (
       <div className="flex items-center justify-center p-8">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -94,131 +86,81 @@ export default function EInvoiceNotificationSettings() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-start gap-3">
         <div className="p-2 rounded-lg bg-blue-500/10">
           <Mail className="w-5 h-5 text-blue-600 dark:text-blue-400" />
         </div>
         <div className="flex-1">
-          <h3 className="text-lg font-semibold text-foreground">
-            E-Invoice Buyer Notifications
-          </h3>
+          <h3 className="text-lg font-semibold text-foreground">E-Invoice Notifications</h3>
           <p className="text-sm text-muted-foreground mt-1">
-            Control which email notifications are sent to buyers when you issue e-invoices through LHDN
+            Control email notifications for e-invoice events
           </p>
         </div>
       </div>
 
-      {/* Info Banner */}
-      <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-          <div className="text-sm text-foreground">
-            <p className="font-medium mb-1">How buyer notifications work</p>
-            <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-              <li>Notifications are sent to the buyer's email address from your customer records</li>
-              <li>All emails include invoice details, amount, and a link to view on MyInvois</li>
-              <li>Rejection notifications are always sent (buyer's own action, cannot be disabled)</li>
-              <li>Changes take effect immediately for new invoices</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      {/* Settings Toggles */}
       <div className="space-y-6 bg-card border border-border rounded-lg p-6">
-        {/* Validation Notification Toggle */}
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 space-y-1">
-            <Label htmlFor="notify-validation" className="text-base font-medium text-foreground">
-              Notify buyer when e-invoice is validated by LHDN
+            <Label htmlFor="auto-delivery" className="text-base font-medium text-foreground">
+              Auto-deliver validated e-invoices to buyers
             </Label>
             <p className="text-sm text-muted-foreground">
-              Sends an email to the buyer when LHDN successfully validates your e-invoice, confirming it's officially recognized
+              Automatically email the LHDN-validated PDF to the buyer after successful validation
             </p>
           </div>
-          <Switch
-            id="notify-validation"
-            checked={notifyOnValidation}
-            onCheckedChange={handleValidationChange}
-            aria-label="Toggle validation notification"
+          <Toggle
+            id="auto-delivery"
+            checked={autoDelivery}
+            onChange={(v) => { setAutoDelivery(v); setHasChanges(true) }}
           />
         </div>
 
-        {/* Divider */}
         <div className="border-t border-border" />
 
-        {/* Cancellation Notification Toggle */}
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 space-y-1">
-            <Label htmlFor="notify-cancellation" className="text-base font-medium text-foreground">
-              Notify buyer when I cancel an e-invoice
+            <Label htmlFor="buyer-notif" className="text-base font-medium text-foreground">
+              Send buyer notification emails
             </Label>
             <p className="text-sm text-muted-foreground">
-              Sends an email to the buyer when you cancel an e-invoice (within the 72-hour LHDN window), including your cancellation reason
+              Notify buyers via email on validation, cancellation, and rejection events
             </p>
           </div>
-          <Switch
-            id="notify-cancellation"
-            checked={notifyOnCancellation}
-            onCheckedChange={handleCancellationChange}
-            aria-label="Toggle cancellation notification"
-          />
-        </div>
-
-        {/* Divider */}
-        <div className="border-t border-border" />
-
-        {/* Rejection Notification (Always On) */}
-        <div className="flex items-start justify-between gap-4 opacity-60">
-          <div className="flex-1 space-y-1">
-            <Label className="text-base font-medium text-foreground flex items-center gap-2">
-              Notify buyer when they reject an e-invoice
-              <span className="px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded-md font-normal">
-                Always enabled
-              </span>
-            </Label>
-            <p className="text-sm text-muted-foreground">
-              Sends a confirmation email to the buyer when LHDN processes their rejection (cannot be disabled as it confirms the buyer's own action)
-            </p>
-          </div>
-          <Switch
-            checked={true}
-            disabled={true}
-            aria-label="Rejection notification (always on)"
+          <Toggle
+            id="buyer-notif"
+            checked={buyerNotifications}
+            onChange={(v) => { setBuyerNotifications(v); setHasChanges(true) }}
           />
         </div>
       </div>
 
-      {/* Save Button */}
       {hasChanges && (
-        <div className="flex items-center justify-between bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+        <div className="flex items-center justify-between bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
           <div className="flex items-center gap-2 text-sm text-foreground">
-            <AlertCircle className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+            <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
             <span>You have unsaved changes</span>
           </div>
-          <Button
+          <button
             onClick={handleSave}
             disabled={isSaving}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground"
+            className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md text-sm font-medium disabled:opacity-50 flex items-center gap-2"
           >
             {isSaving ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" />
                 Saving...
               </>
             ) : (
               <>
-                <CheckCircle2 className="w-4 h-4 mr-2" />
+                <CheckCircle2 className="w-4 h-4" />
                 Save Changes
               </>
             )}
-          </Button>
+          </button>
         </div>
       )}
 
-      {/* Success Indicator */}
-      {!hasChanges && !isSaving && business && (
+      {!hasChanges && !isSaving && profile && (
         <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
           <CheckCircle2 className="w-4 h-4" />
           <span>All changes saved</span>

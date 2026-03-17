@@ -60,6 +60,11 @@ interface BusinessProfile {
   country_code?: string | null
   // LHDN self-bill auto-trigger
   auto_self_bill_exempt_vendors?: boolean
+  // 001-doc-email-forward: Email forwarding
+  slug?: string
+  emailForwardingEnabled?: boolean
+  emailForwardingPrefix?: string
+  emailForwardingAllowlist?: string[]
 }
 
 interface BusinessContextState {
@@ -526,18 +531,24 @@ export function BusinessContextProvider({ children }: BusinessContextProviderPro
       // Case 1: User has memberships but no active context (needs auto-switch)
       log.debug(' Auto-switch detected: User has memberships but no active context')
 
-      // Find the most recently accessed business (memberships are ordered by last_accessed_at DESC)
-      const mostRecentBusiness = memberships[0]
+      // Prioritize businesses with active subscriptions over expired/paused ones
+      // This prevents multi-business users from landing on a "Free Trial Ended" screen
+      // when they have another active business
+      const LOCKED_STATUSES = ['paused', 'canceled', 'unpaid']
+      const activeBusiness = memberships.find((m: any) =>
+        m.subscriptionStatus && !LOCKED_STATUSES.includes(m.subscriptionStatus)
+      )
+      const targetBusiness = activeBusiness || memberships[0]
 
-      if (mostRecentBusiness) {
-        log.debug(' Auto-switching to most recent business:', mostRecentBusiness.name)
+      if (targetBusiness) {
+        log.debug(' Auto-switching to business:', targetBusiness.name, 'subscriptionStatus:', (targetBusiness as any).subscriptionStatus)
 
-        // Auto-switch to the most recently accessed business
-        switchActiveBusiness(mostRecentBusiness.id).then((success) => {
+        // Auto-switch to the prioritized business
+        switchActiveBusiness(targetBusiness.id).then((success) => {
           if (success) {
-            log.debug(' Auto-switch successful:', mostRecentBusiness.name)
+            log.debug(' Auto-switch successful:', targetBusiness.name)
           } else {
-            log.error(' Auto-switch failed for business:', mostRecentBusiness.id)
+            log.error(' Auto-switch failed for business:', targetBusiness.id)
           }
         }).catch((error) => {
           log.error(' Auto-switch error:', error)

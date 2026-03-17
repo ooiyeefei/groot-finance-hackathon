@@ -1,0 +1,234 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AWS SES S3 Email Event",
+  "description": "Schema for AWS SES email receiving S3 trigger event sent to Lambda",
+  "type": "object",
+  "required": ["Records"],
+  "properties": {
+    "Records": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["eventSource", "eventName", "s3", "ses"],
+        "properties": {
+          "eventSource": {
+            "type": "string",
+            "const": "aws:s3"
+          },
+          "eventName": {
+            "type": "string",
+            "enum": ["ObjectCreated:Put", "ObjectCreated:Post"]
+          },
+          "s3": {
+            "type": "object",
+            "required": ["bucket", "object"],
+            "properties": {
+              "bucket": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "S3 bucket name where SES stored the email",
+                    "example": "finanseal-bucket"
+                  }
+                }
+              },
+              "object": {
+                "type": "object",
+                "required": ["key", "size"],
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "description": "S3 object key (path) to the email file",
+                    "example": "emails/abc123def456.eml",
+                    "pattern": "^emails/[a-f0-9]+\\.eml$"
+                  },
+                  "size": {
+                    "type": "integer",
+                    "description": "Email file size in bytes",
+                    "minimum": 1,
+                    "maximum": 40000000
+                  }
+                }
+              }
+            }
+          },
+          "ses": {
+            "type": "object",
+            "required": ["mail", "receipt"],
+            "properties": {
+              "mail": {
+                "type": "object",
+                "required": ["timestamp", "source", "messageId", "destination"],
+                "properties": {
+                  "timestamp": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "When SES received the email",
+                    "example": "2026-03-16T10:30:45.123Z"
+                  },
+                  "source": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "Sender email address",
+                    "example": "user@mycompany.com"
+                  },
+                  "messageId": {
+                    "type": "string",
+                    "description": "Unique SES message ID",
+                    "example": "<abc123@mail.mycompany.com>"
+                  },
+                  "destination": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "email"
+                    },
+                    "description": "Recipient email addresses",
+                    "example": ["docs@mycompany.hellogroot.com"]
+                  },
+                  "commonHeaders": {
+                    "type": "object",
+                    "properties": {
+                      "from": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "example": ["John Doe <user@mycompany.com>"]
+                      },
+                      "subject": {
+                        "type": "string",
+                        "example": "Fwd: Receipt from Coffee Shop"
+                      },
+                      "to": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "example": ["docs@mycompany.hellogroot.com"]
+                      }
+                    }
+                  }
+                }
+              },
+              "receipt": {
+                "type": "object",
+                "required": ["recipients", "spfVerdict", "dkimVerdict", "action"],
+                "properties": {
+                  "recipients": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "email"
+                    },
+                    "description": "Final recipients after SES processing",
+                    "example": ["docs@mycompany.hellogroot.com"]
+                  },
+                  "spfVerdict": {
+                    "type": "object",
+                    "required": ["status"],
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "enum": ["PASS", "FAIL", "SOFTFAIL", "NEUTRAL", "NONE"],
+                        "description": "SPF verification result"
+                      }
+                    }
+                  },
+                  "dkimVerdict": {
+                    "type": "object",
+                    "required": ["status"],
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "enum": ["PASS", "FAIL", "GRAY", "NONE"],
+                        "description": "DKIM verification result"
+                      }
+                    }
+                  },
+                  "dmarcVerdict": {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "enum": ["PASS", "FAIL", "NONE"]
+                      }
+                    }
+                  },
+                  "action": {
+                    "type": "object",
+                    "required": ["type"],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "S3",
+                        "description": "SES action that triggered this event"
+                      },
+                      "bucketName": {
+                        "type": "string",
+                        "example": "finanseal-bucket"
+                      },
+                      "objectKey": {
+                        "type": "string",
+                        "example": "emails/abc123def456.eml"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "Records": [
+        {
+          "eventSource": "aws:s3",
+          "eventName": "ObjectCreated:Put",
+          "s3": {
+            "bucket": {
+              "name": "finanseal-bucket"
+            },
+            "object": {
+              "key": "emails/abc123def456.eml",
+              "size": 45678
+            }
+          },
+          "ses": {
+            "mail": {
+              "timestamp": "2026-03-16T10:30:45.123Z",
+              "source": "user@mycompany.com",
+              "messageId": "<abc123@mail.mycompany.com>",
+              "destination": ["docs@mycompany.hellogroot.com"],
+              "commonHeaders": {
+                "from": ["John Doe <user@mycompany.com>"],
+                "subject": "Fwd: Receipt from Coffee Shop",
+                "to": ["docs@mycompany.hellogroot.com"]
+              }
+            },
+            "receipt": {
+              "recipients": ["docs@mycompany.hellogroot.com"],
+              "spfVerdict": {
+                "status": "PASS"
+              },
+              "dkimVerdict": {
+                "status": "PASS"
+              },
+              "dmarcVerdict": {
+                "status": "PASS"
+              },
+              "action": {
+                "type": "S3",
+                "bucketName": "finanseal-bucket",
+                "objectKey": "emails/abc123def456.eml"
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -246,6 +246,37 @@ export default function EinvoiceSection({
     businessId &&
     ['owner', 'finance_admin', 'manager'].includes(userRole || '')
 
+  // T010: Countdown timer for rejection window
+  const [timeRemaining, setTimeRemaining] = useState(0)
+  useEffect(() => {
+    if (!docTimestamp || !withinRejectionWindow) return
+
+    const updateTime = () => {
+      const elapsed = Date.now() - docTimestamp
+      const remaining = REJECTION_WINDOW_MS - elapsed
+      setTimeRemaining(Math.max(0, remaining))
+    }
+
+    updateTime()
+    const interval = setInterval(updateTime, 60 * 1000) // Update every minute
+    return () => clearInterval(interval)
+  }, [docTimestamp, withinRejectionWindow])
+
+  const formatTimeRemaining = (ms: number): string => {
+    if (ms <= 0) return 'Expired'
+    const hours = Math.floor(ms / (60 * 60 * 1000))
+    if (hours < 1) {
+      const minutes = Math.floor(ms / (60 * 1000))
+      return `${minutes}m remaining`
+    }
+    if (hours < 24) {
+      return `${hours}h remaining`
+    }
+    const days = Math.floor(hours / 24)
+    const remainingHours = hours % 24
+    return `${days}d ${remainingHours}h remaining`
+  }
+
   return (
     <Card className="bg-card border-border">
       <CardHeader className="pb-3">
@@ -268,13 +299,27 @@ export default function EinvoiceSection({
             </Tooltip>
           </TooltipProvider>
           {hasAnyEinvoiceData && (
-            <EinvoiceStatusBadge
-              einvoiceRequestStatus={einvoiceRequestStatus}
-              einvoiceAttached={einvoiceAttached}
-              einvoiceSource={einvoiceSource}
-              merchantFormUrl={merchantFormUrl}
-              lhdnReceivedStatus={lhdnReceivedStatus}
-            />
+            <>
+              <EinvoiceStatusBadge
+                einvoiceRequestStatus={einvoiceRequestStatus}
+                einvoiceAttached={einvoiceAttached}
+                einvoiceSource={einvoiceSource}
+                merchantFormUrl={merchantFormUrl}
+                lhdnReceivedStatus={lhdnReceivedStatus}
+              />
+
+              {/* T010: Countdown badge in card header */}
+              {withinRejectionWindow && lhdnReceivedStatus === 'valid' && timeRemaining > 0 && (
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                  timeRemaining < 6 * 60 * 60 * 1000
+                    ? 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30'
+                    : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                }`}>
+                  <Clock className="w-2.5 h-2.5" />
+                  {formatTimeRemaining(timeRemaining)}
+                </span>
+              )}
+            </>
           )}
         </CardTitle>
       </CardHeader>
@@ -314,6 +359,33 @@ export default function EinvoiceSection({
             </div>
           )
         })()}
+
+        {/* LHDN API Connection Info */}
+        {!einvoiceAttached && lhdnReceivedStatus !== 'valid' && (
+          <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+            <div className="flex items-start gap-2">
+              <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-blue-700 dark:text-blue-300 text-sm font-medium">
+                  Enable Automatic E-Invoice Retrieval
+                </p>
+                <p className="text-muted-foreground text-xs mt-1">
+                  Connect your LHDN MyInvois account to automatically receive e-invoices from suppliers and reject incorrect invoices within 72 hours.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-2 text-xs h-7"
+                  asChild
+                >
+                  <a href="/en/business-settings?tab=business-profile">
+                    Connect LHDN MyInvois
+                  </a>
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Error Display */}
         {error && (
@@ -654,14 +726,28 @@ export default function EinvoiceSection({
 
           {/* Reject E-Invoice Button — only for valid LHDN docs within 72-hour window */}
           {canReject && (
-            <Button
-              size="sm"
-              onClick={() => setShowRejectDialog(true)}
-              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
-            >
-              <Ban className="w-4 h-4 mr-1" />
-              Reject E-Invoice
-            </Button>
+            <>
+              <Button
+                size="sm"
+                onClick={() => setShowRejectDialog(true)}
+                className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+              >
+                <Ban className="w-4 h-4 mr-1" />
+                Reject E-Invoice
+              </Button>
+
+              {/* T010: Countdown indicator */}
+              {timeRemaining > 0 && (
+                <div className={`flex items-center gap-1.5 text-xs ${
+                  timeRemaining < 6 * 60 * 60 * 1000
+                    ? 'text-destructive font-medium'
+                    : 'text-muted-foreground'
+                }`}>
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>{formatTimeRemaining(timeRemaining)}</span>
+                </div>
+              )}
+            </>
           )}
         </div>
 

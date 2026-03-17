@@ -18,7 +18,7 @@ export default function AgingReportPage() {
       <Button
         variant="ghost"
         size="sm"
-        onClick={() => router.push(`/${locale}/invoices#debtors`)}
+        onClick={() => router.push(`/${locale}/invoices?tab=ar&sub=debtors`)}
       >
         <ArrowLeft className="h-4 w-4 mr-1" />
         Back to Debtors

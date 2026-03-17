@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, forwardRef, useImperativeHandle, lazy, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { FileText, Image, File, Play, RotateCcw, Eye, FileSearch, Trash2, Plus, Loader2, CheckSquare, Square } from 'lucide-react'
+import { FileText, Image, File, Play, RotateCcw, Eye, FileSearch, Trash2, Plus, Loader2, CheckSquare, Square, CheckCircle2 } from 'lucide-react'
 import SkeletonLoader from '@/components/ui/skeleton-loader'
 import { useDocuments } from '@/domains/invoices/hooks/use-documents'
 import DocumentStatusBadge from './document-status-badge'
@@ -39,6 +39,48 @@ const ConfirmationDialog = lazy(() => import('@/components/ui/confirmation-dialo
 const preloadDocumentAnalysisModal = () => import('./document-analysis-modal')
 const preloadConfirmationDialog = () => import('@/components/ui/confirmation-dialog')
 
+
+// Map raw Post-to-AP errors to user-friendly messages with resolution guidance
+function formatPostToAPError(raw: string): { title: string; description: string } {
+  // Period closed — extract period code from ConvexError JSON or plain text
+  if (raw.includes('PERIOD_CLOSED') || raw.includes('closed accounting period')) {
+    const periodMatch = raw.match(/period(?:Code)?["\s:]+(\d{4}-\d{2})/i)
+    const period = periodMatch?.[1] || 'current period'
+    return {
+      title: 'Accounting period closed',
+      description: `The accounting period ${period} is closed. Go to Settings > Accounting to reopen it, then try again.`
+    }
+  }
+  if (raw.includes('Chart of accounts not configured')) {
+    return {
+      title: 'Chart of accounts missing',
+      description: 'Your business needs Expense (5100) and AP (2100) accounts. Go to Accounting > Chart of Accounts to set them up.'
+    }
+  }
+  if (raw.includes('Invoice not ready for posting')) {
+    return {
+      title: 'Invoice not ready',
+      description: 'The invoice is still processing or missing extracted data. Wait for OCR to complete, then try again.'
+    }
+  }
+  if (raw.includes('Invalid amount')) {
+    return {
+      title: 'Invalid invoice amount',
+      description: 'The invoice total amount is missing or zero. Check the extracted data and correct the amount.'
+    }
+  }
+  if (raw.includes('Already posted')) {
+    return {
+      title: 'Already posted',
+      description: 'This invoice has already been posted to AP. Check the Accounting > Journal Entries page.'
+    }
+  }
+  // Fallback — show cleaned message
+  return {
+    title: 'Post to AP failed',
+    description: raw.length > 150 ? raw.substring(0, 150) + '...' : raw
+  }
+}
 
 interface DocumentsListProps {
   onRefresh?: () => void
@@ -216,22 +258,29 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
         businessId: businessId as Id<"businesses">,
       })
 
-      addToast({
-        type: 'success',
-        title: 'Posted to AP',
-        description: `Successfully posted ${result.succeeded} of ${result.total} invoices to AP`
-      })
+      if (result.succeeded > 0) {
+        addToast({
+          type: 'success',
+          title: 'Posted to AP',
+          description: result.failed > 0
+            ? `Posted ${result.succeeded} of ${result.total} invoices. ${result.failed} failed.`
+            : `Successfully posted ${result.succeeded} invoice${result.succeeded > 1 ? 's' : ''} to AP`
+        })
+      } else {
+        // All failed — show user-friendly error with resolution guidance
+        const firstError = result.results?.find((r: { success: boolean; error?: string }) => !r.success)?.error || 'Unknown error'
+        const { title, description } = formatPostToAPError(firstError)
+        addToast({ type: 'error', title, description })
+      }
 
       // Clear selection and refresh
       setSelectedInvoices(new Set())
       await refreshDocuments()
     } catch (error) {
       console.error('Post to AP failed:', error)
-      addToast({
-        type: 'error',
-        title: 'Post failed',
-        description: error instanceof Error ? error.message : 'Unable to post invoices to AP'
-      })
+      const rawMsg = error instanceof Error ? error.message : 'Unable to post invoices to AP'
+      const { title, description } = formatPostToAPError(rawMsg)
+      addToast({ type: 'error', title, description })
     } finally {
       setIsPostingToAP(false)
     }
@@ -446,20 +495,19 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                   />
                   
                   {/* AP Accounting Status Tag */}
-                  {(document as any).accountingStatus === 'posted' ? (
-                    (document as any).paymentStatus === 'paid' ? (
-                      <span className="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-0.5 text-xs font-medium">
-                        Paid
-                      </span>
-                    ) : (document as any).paymentStatus === 'partial' ? (
-                      <span className="inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-2 py-0.5 text-xs font-medium">
-                        Partial Payment
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-0.5 text-xs font-medium">
-                        Posted to AP
-                      </span>
-                    )
+                  {document.accountingStatus === 'posted' ? (
+                    <button
+                      onClick={() => {
+                        if (document.journalEntryId) {
+                          router.push(`/${locale}/accounting?tab=journal-entries&entry=${document.journalEntryId}`)
+                        }
+                      }}
+                      className="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-0.5 text-xs font-medium hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors cursor-pointer"
+                      title="Click to view journal entry"
+                    >
+                      <CheckCircle2 className="w-3 h-3 mr-1" />
+                      Posted
+                    </button>
                   ) : isCompletedDocument(document.status) && document.extracted_data ? (
                     <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground px-2 py-0.5 text-xs font-medium">
                       Not Posted

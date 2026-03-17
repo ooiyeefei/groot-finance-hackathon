@@ -10,6 +10,7 @@ import { switchActiveBusiness } from '@/domains/account-management/lib/account-m
 import { rateLimit, RATE_LIMIT_CONFIGS } from '@/domains/security/lib/rate-limit'
 import { createErrorResponse, createValidationErrorResponse, ERROR_CODES, withErrorSanitization } from '@/domains/security/lib/error-sanitizer'
 import { apiCache } from '@/lib/cache/api-cache'
+import { redisBusinessContextCache, redisRoleCache, redisCategoryCache } from '@/lib/cache/redis-cache'
 import { z } from 'zod'
 
 const SwitchBusinessSchema = z.object({
@@ -65,16 +66,27 @@ export const POST = withErrorSanitization(async (request: NextRequest) => {
     )
   }
 
-  // Invalidate ALL server-side API caches for this user so the page reload
+  // Invalidate ALL server-side caches for this user so the page reload
   // fetches fresh data for the new business (not stale cached profile,
   // expense claims, team members, analytics, etc.)
   apiCache.invalidate(userId)
 
-  return NextResponse.json({
+  // Invalidate Redis caches — these have 5-30 min TTLs and previously
+  // were NOT cleared on switch, causing 5-minute stale data after switching
+  await Promise.allSettled([
+    redisBusinessContextCache.invalidate(userId),
+    redisRoleCache.invalidate(userId),
+    redisCategoryCache.invalidate(userId),
+  ])
+
+  // Return with no-store to prevent browser from caching this response
+  const response = NextResponse.json({
     success: true,
     message: 'Business switched successfully',
     data: {
       context: result.context
     }
   })
+  response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
+  return response
 }, 'Business Switch API')
