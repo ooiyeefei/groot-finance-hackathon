@@ -167,11 +167,20 @@ Fix errors and repeat until successful.
 - `npx convex dev` from worktrees auto-syncs to the shared deployment, consuming bandwidth and causing "Schema was overwritten" deploy conflicts.
 - Before deploying: `ps aux | grep convex | grep -v grep` — kill any stray `convex dev` processes from other worktrees.
 
+**Rule 5: NEVER run `convex dev` or `npm run dev` from worktrees.**
+- All git worktrees (e.g., `einv-notif-cancel`, `doc-email-forward`) share the **same Convex production deployment** (`kindhearted-lynx-129`). Running `convex dev` from any worktree will **overwrite production functions** with that branch's older code, reverting fixes deployed from `main`.
+- **What happens**: Worktree has old reactive `query` code → `convex dev` auto-deploys it → production functions revert → crashes and bandwidth burn return.
+- **Only run `convex dev` from the main working directory** (`groot-finance/groot-finance`), and only when actively developing.
+- **For worktree development**: Work on code without running `convex dev`. Test by rebasing onto `main` and deploying from `main`.
+- **Before starting any dev session**: Run `ps aux | grep convex | grep -v grep` and kill ALL convex processes. Then run `npx convex deploy --yes` from `main` to ensure production has the latest code.
+- **After finishing a worktree branch**: Remove it with `git worktree remove <name>` to prevent accidental future `convex dev` runs.
+
 **Anti-patterns that burn bandwidth:**
 - `useQuery` with `.collect()` on large tables (reactive re-runs on every change)
 - Crons running hourly/every-5-min that scan entire tables
 - Multiple worktrees running `convex dev` against the same deployment
 - Dashboard widgets using reactive queries for aggregations (use `action` instead)
+- Running `npm run dev` in old worktrees (auto-starts `convex dev` which overwrites production)
 
 ### Security — Least Privilege (CRITICAL)
 
