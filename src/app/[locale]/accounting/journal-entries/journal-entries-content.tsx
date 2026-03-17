@@ -296,7 +296,7 @@ export default function JournalEntriesContent() {
 
       {/* Entry Detail Dialog — Clean card layout */}
       <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-        <DialogContent className="max-w-lg p-0 gap-0">
+        <DialogContent className="max-w-xl p-0 gap-0">
           {selectedEntry && (
             <>
               {/* Header with amount */}
