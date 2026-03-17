@@ -42,24 +42,49 @@ These buyer-side features work immediately after businesses connect their LHDN M
 
 ### Step 1: Register ERP System on LHDN Portal
 
-**Navigate to MyInvois Portal:**
-1. Go to https://myinvois.hasil.gov.my (production) or https://preprod.myinvois.hasil.gov.my (sandbox/testing)
-2. Log in with your business account
-3. Go to **Taxpayer Profile** (left sidebar)
-4. Scroll down to **Representatives** section
-5. Click the **ERP** tab
-6. Click **"Register ERP"** (top-right of the ERP table)
+**Environment URLs:**
+| Environment | Portal URL | When to Use |
+|-------------|-----------|-------------|
+| **Sandbox** | https://preprod-mytax.hasil.gov.my → MyInvois Portal | Testing & development |
+| **Production** | https://mytax.hasil.gov.my → MyInvois Portal | Live businesses |
 
-**Copy Credentials from Dialog:**
-The "Add ERP System" dialog will display three values:
-- **Client ID**: Your unique ERP identifier
-- **Client Secret 1**: First OAuth secret
-- **Client Secret 2**: Second OAuth secret
+⚠️ Sandbox and Production credentials are **NOT interchangeable**.
+
+**Step 1a: Access Taxpayer Profile**
+1. Log in to the MyInvois Portal (Production or Sandbox)
+2. On the **top-right corner**, locate the profile dropdown menu
+3. Choose **"View Taxpayer Profile"**
+
+**Step 1b: Register or Edit ERP**
+1. Scroll down to the **Representatives** section
+2. Click the **ERP** tab (next to "User" and "Intermediaries")
+3. **If no ERP exists:** Click **"Register ERP"** (top-right of the table)
+4. **If ERP already exists:** Click the three-dot menu (⋮) on your ERP row → **"Edit"**
+5. Enter **ERP Name**: "Groot Finance" (or your preferred name)
+6. Optionally check **"Primary ERP System"**
+7. Click **"Save"**
+
+**Step 1c: Copy Credentials**
+After registering, the **"Add ERP System"** dialog appears with three values:
+
+```
+Client ID:       xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+Client Secret 1: ••••••••••••••••••••••
+Client Secret 2: ••••••••••••••••••••••
+```
 
 ⚠️ **Copy all three values immediately — secrets are shown only once!**
-Tick the "I confirm I have copied & saved the Client Secrets" checkbox, then click "Done".
+- Tick the **"I confirm I have copied & saved the Client Secrets"** checkbox
+- Click **"Done"**
 
-> **Why two secrets?** LHDN provides two secrets for zero-downtime rotation. Both are simultaneously valid. You only need ONE for Groot — enter either one. When it expires, use "Regenerate Secrets" on the ERP tab to get a new pair.
+> **Why two secrets?** LHDN provides two secrets for zero-downtime rotation. Both are simultaneously valid. You only need ONE for Groot — enter either one.
+
+**Regenerating Expired Secrets:**
+1. On the ERP row, click the three-dot menu (⋮) → **"Regenerate Secrets"**
+2. Set **Current Secrets Expiration** (e.g., "After 2 hours") — old secrets stay valid during this grace period
+3. Set **New Secrets Expiration** (e.g., "1 Year")
+4. Click **"Generate"**
+5. Copy the new secrets and update them in Groot Finance settings
 
 ---
 

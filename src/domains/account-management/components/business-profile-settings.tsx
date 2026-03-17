@@ -1063,30 +1063,93 @@ export default function BusinessProfileSettings({ section }: BusinessProfileSett
                         <ChevronRight className="w-3.5 h-3.5 transition-transform group-open:rotate-90" />
                         How to get your Client ID and Secret
                       </summary>
-                      <div className="mt-3 pl-5 space-y-2 text-xs text-muted-foreground">
-                        <p className="font-medium text-foreground">Step-by-step guide:</p>
-                        <ol className="list-decimal list-inside space-y-1.5 ml-2">
-                          <li>Log in to <a href="https://myinvois.hasil.gov.my" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">MyInvois Portal</a> (or <a href="https://preprod.myinvois.hasil.gov.my" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">Preprod Portal</a> for testing)</li>
-                          <li>Go to <strong>Taxpayer Profile</strong> (left sidebar)</li>
-                          <li>Scroll to <strong>Representatives</strong> section &gt; click the <strong>ERP</strong> tab</li>
-                          <li>Click <strong>"Register ERP"</strong> (top-right of the ERP table)</li>
-                          <li>A dialog will appear with <strong>Client ID</strong>, <strong>Client Secret 1</strong>, and <strong>Client Secret 2</strong></li>
-                          <li>Copy all three values immediately — <strong>secrets are shown only once!</strong>
-                            <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
-                              <li>Tick the <strong>"I confirm I have copied &amp; saved the Client Secrets"</strong> checkbox</li>
-                              <li>Click <strong>"Done"</strong></li>
-                            </ul>
-                          </li>
-                          <li>Paste the <strong>Client ID</strong> and <strong>either</strong> Secret 1 or Secret 2 below</li>
-                        </ol>
-                        <div className="bg-muted/50 border border-border rounded p-2 mt-3">
+                      <div className="mt-3 pl-5 space-y-3 text-xs text-muted-foreground">
+                        {/* Environment URLs */}
+                        <div className="bg-muted/50 border border-border rounded p-2.5">
+                          <p className="font-medium text-foreground mb-1.5">Portal URLs:</p>
+                          <ul className="space-y-1">
+                            <li><strong>Production:</strong>{' '}<a href="https://mytax.hasil.gov.my" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">mytax.hasil.gov.my</a> → MyInvois Portal (for live businesses)</li>
+                            <li><strong>Sandbox:</strong>{' '}<a href="https://preprod-mytax.hasil.gov.my" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">preprod-mytax.hasil.gov.my</a> → Preprod Portal (for testing)</li>
+                          </ul>
+                        </div>
+
+                        {/* Step 1 */}
+                        <div>
+                          <p className="font-medium text-foreground">Step 1: Access Taxpayer Profile</p>
+                          <ul className="list-disc list-inside ml-2 mt-1 space-y-0.5">
+                            <li>Log in to the MyInvois Portal (Production or Sandbox)</li>
+                            <li>On the top-right corner, locate the <strong>profile dropdown menu</strong></li>
+                            <li>Choose <strong>&quot;View Taxpayer Profile&quot;</strong></li>
+                          </ul>
+                        </div>
+
+                        {/* Step 2 */}
+                        <div>
+                          <p className="font-medium text-foreground">Step 2: Register or Edit ERP</p>
+                          <ul className="list-disc list-inside ml-2 mt-1 space-y-0.5">
+                            <li>Scroll to the <strong>Representatives</strong> section</li>
+                            <li>Click the <strong>ERP</strong> tab</li>
+                            <li>If no ERP exists: click <strong>&quot;Register ERP&quot;</strong> (top-right)</li>
+                            <li>If ERP exists: click the <strong>three-dot menu (⋮)</strong> on your ERP row → <strong>&quot;Edit&quot;</strong></li>
+                            <li>Enter <strong>ERP Name</strong>: &quot;Groot Finance&quot; (or your preferred name)</li>
+                            <li>Optionally check <strong>&quot;Primary ERP System&quot;</strong></li>
+                            <li>Click <strong>&quot;Save&quot;</strong></li>
+                          </ul>
+                        </div>
+
+                        {/* Step 3 */}
+                        <div>
+                          <p className="font-medium text-foreground">Step 3: Get Client ID &amp; Secrets</p>
+                          <ul className="list-disc list-inside ml-2 mt-1 space-y-0.5">
+                            <li>After registering, the <strong>&quot;Add ERP System&quot;</strong> dialog appears with:</li>
+                          </ul>
+                          <div className="bg-card border border-border rounded p-2 mt-1.5 ml-4">
+                            <p className="text-[11px] font-mono space-y-0.5">
+                              <span className="block"><strong>Client ID:</strong> xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</span>
+                              <span className="block"><strong>Client Secret 1:</strong> ••••••••••••••••••••••</span>
+                              <span className="block"><strong>Client Secret 2:</strong> ••••••••••••••••••••••</span>
+                            </p>
+                          </div>
+                          <ul className="list-disc list-inside ml-2 mt-1.5 space-y-0.5">
+                            <li><strong>Copy all three values immediately</strong> — secrets are shown only once!</li>
+                            <li>Tick <strong>&quot;I confirm I have copied &amp; saved the Client Secrets&quot;</strong></li>
+                            <li>Click <strong>&quot;Done&quot;</strong></li>
+                          </ul>
+                        </div>
+
+                        {/* Step 4 - Regeneration */}
+                        <div>
+                          <p className="font-medium text-foreground">Regenerating Expired Secrets</p>
+                          <ul className="list-disc list-inside ml-2 mt-1 space-y-0.5">
+                            <li>On the ERP row, click the three-dot menu (⋮) → <strong>&quot;Regenerate Secrets&quot;</strong></li>
+                            <li>Set <strong>Current Secrets Expiration</strong> (e.g., &quot;After 2 hours&quot;) — old secrets stay valid during this grace period</li>
+                            <li>Set <strong>New Secrets Expiration</strong> (e.g., &quot;1 Year&quot;)</li>
+                            <li>Click <strong>&quot;Generate&quot;</strong></li>
+                            <li>Copy the new secrets and update them below</li>
+                          </ul>
+                        </div>
+
+                        {/* Step 5 */}
+                        <div>
+                          <p className="font-medium text-foreground">Step 4: Enter credentials below</p>
+                          <ul className="list-disc list-inside ml-2 mt-1 space-y-0.5">
+                            <li>Paste <strong>Client ID</strong> into the field below</li>
+                            <li>Paste <strong>either</strong> Client Secret 1 or 2 into the secret field</li>
+                            <li>Click <strong>Save Changes</strong></li>
+                          </ul>
+                        </div>
+
+                        {/* Why two secrets */}
+                        <div className="bg-muted/50 border border-border rounded p-2">
                           <p className="text-xs text-foreground">
-                            <strong>Why two secrets?</strong> LHDN provides two secrets for zero-downtime rotation. Both are valid simultaneously — enter either one here. When it expires, regenerate via the ERP tab &gt; <strong>"Regenerate Secrets"</strong> button, then update it here.
+                            <strong>Why two secrets?</strong> LHDN provides two secrets for zero-downtime rotation. Both are valid simultaneously — enter either one here. When rotating, the old secrets remain valid during the grace period you set, so there&apos;s no service interruption.
                           </p>
                         </div>
-                        <div className="bg-amber-500/10 border border-amber-500/30 rounded p-2 mt-2">
+
+                        {/* Warning */}
+                        <div className="bg-amber-500/10 border border-amber-500/30 rounded p-2">
                           <p className="text-xs text-amber-700 dark:text-amber-300">
-                            <strong>⚠️ Important:</strong> Use <strong>Production</strong> portal credentials for live businesses. <strong>Preprod</strong> credentials only work in LHDN&apos;s sandbox environment. See <a href="https://sdk.myinvois.hasil.gov.my/faq/" target="_blank" rel="noopener noreferrer" className="underline">LHDN FAQ</a> for details.
+                            <strong>⚠️ Important:</strong> Production and Sandbox credentials are <strong>not interchangeable</strong>. Use the correct portal for your environment. See <a href="https://sdk.myinvois.hasil.gov.my/faq/" target="_blank" rel="noopener noreferrer" className="underline">LHDN FAQ</a> for details.
                           </p>
                         </div>
                       </div>
