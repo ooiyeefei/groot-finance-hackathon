@@ -51,7 +51,7 @@ export default function DocumentsInboxClient() {
 
   const handleClassifyClick = (documentId: Id<"document_inbox_entries">) => {
     setSelectedDocument(documentId);
-    setSelectedType("");
+    setSelectedType("receipt");
     setClassifyModalOpen(true);
   };
 
@@ -62,7 +62,7 @@ export default function DocumentsInboxClient() {
       await manuallyClassifyDocument({
         inboxEntryId: selectedDocument,
         classifiedType: selectedType,
-        classifiedBy: businessId, // TODO: Get actual user ID from Convex
+        classifiedBy: undefined, // TODO: Get actual user ID from Convex
       });
 
       toast.success("Document classified", {
@@ -87,7 +87,7 @@ export default function DocumentsInboxClient() {
     try {
       await deleteInboxEntry({
         inboxEntryId: documentId,
-        deletedBy: businessId, // TODO: Get actual user ID from Convex
+        deletedBy: undefined, // TODO: Get actual user ID from Convex
         reason: "User deleted from inbox",
       });
 

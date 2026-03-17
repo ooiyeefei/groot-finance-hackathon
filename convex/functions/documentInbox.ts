@@ -362,7 +362,7 @@ export const manuallyClassifyDocument = mutation({
       v.literal("invoice"),
       v.literal("e_invoice")
     ),
-    classifiedBy: v.id("users"),
+    classifiedBy: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
     // Get inbox entry
@@ -465,7 +465,7 @@ export const getBusinessByPrefix = query({
 export const deleteInboxEntry = mutation({
   args: {
     inboxEntryId: v.id("document_inbox_entries"),
-    deletedBy: v.id("users"),
+    deletedBy: v.optional(v.id("users")),
     reason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {

@@ -2,20 +2,21 @@
  * Email Forwarding Test Script (001-doc-email-forward)
  *
  * Simulates document email forwarding locally for testing.
- * Creates inbox entries directly via Convex without requiring AWS SES.
+ * Calls Convex action directly (same as Lambda does).
  *
  * Usage:
  *   npx tsx scripts/test-email-forward.ts
+ *
+ * Note: This script simulates the Lambda flow but skips actual S3 upload.
+ * The Convex action will fail if the S3 file doesn't exist, so this is
+ * primarily for testing the API contract, not end-to-end flow.
  */
 
-import { ConvexHttpClient } from "convex/browser";
-import { api } from "../convex/_generated/api";
-import fs from "fs";
-import crypto from "crypto";
 import path from "path";
+import fs from "fs";
 
 const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL || "https://kindhearted-lynx-129.convex.cloud";
-const convex = new ConvexHttpClient(CONVEX_URL);
+const S3_BUCKET = process.env.S3_BUCKET_NAME || "finanseal-bucket";
 
 interface TestConfig {
   businessId: string;
@@ -25,31 +26,9 @@ interface TestConfig {
   subject: string;
 }
 
-async function uploadFileToConvex(filePath: string): Promise<string> {
-  // Read file
-  const fileBuffer = fs.readFileSync(filePath);
-  const blob = new Blob([fileBuffer]);
-
-  // Get upload URL
-  const uploadUrl = await convex.mutation(api.functions.files.generateUploadUrl);
-
-  // Upload file
-  const response = await fetch(uploadUrl, {
-    method: "POST",
-    body: blob,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Upload failed: ${response.statusText}`);
-  }
-
-  const result = await response.json();
-  return result.storageId;
-}
-
 async function simulateEmailForward(config: TestConfig) {
-  console.log("\n📧 Email Forwarding Test");
-  console.log("========================\n");
+  console.log("\n📧 Email Forwarding Test (API Contract)");
+  console.log("=========================================\n");
 
   try {
     // 1. Check if test file exists
@@ -61,21 +40,12 @@ async function simulateEmailForward(config: TestConfig) {
 
     console.log(`📄 Test file: ${config.testFilePath}`);
 
-    // 2. Read file and calculate hash
-    const fileBuffer = fs.readFileSync(config.testFilePath);
-    const fileHash = crypto.createHash("md5").update(fileBuffer).digest("hex");
+    // 2. Get file metadata
     const filename = path.basename(config.testFilePath);
-    const fileSize = fileBuffer.length;
+    const stats = fs.statSync(config.testFilePath);
+    console.log(`📊 File size: ${stats.size} bytes`);
 
-    console.log(`📊 File size: ${fileSize} bytes`);
-    console.log(`#️⃣  File hash: ${fileHash}`);
-
-    // 3. Upload to Convex storage
-    console.log("\n📤 Uploading to Convex storage...");
-    const storageId = await uploadFileToConvex(config.testFilePath);
-    console.log(`✅ Storage ID: ${storageId}`);
-
-    // 4. Determine MIME type
+    // 3. Determine MIME type
     const ext = path.extname(filename).toLowerCase();
     let mimeType: "application/pdf" | "image/jpeg" | "image/png";
     if (ext === ".pdf") {
@@ -85,29 +55,61 @@ async function simulateEmailForward(config: TestConfig) {
     } else {
       mimeType = "image/jpeg";
     }
+    console.log(`📋 MIME type: ${mimeType}`);
 
-    // 5. Create inbox entry
-    console.log("\n📝 Creating inbox entry...");
-    const result = await convex.mutation(api.functions.documentInbox.createInboxEntry as any, {
-      businessId: config.businessId,
-      userId: config.userId,
-      fileStorageId: storageId,
-      originalFilename: filename,
-      fileHash,
-      fileSizeBytes: fileSize,
-      mimeType,
-      sourceType: "email_forward",
-      emailMetadata: {
-        from: config.senderEmail,
-        subject: config.subject,
-        body: "Test email forwarding simulation",
-        receivedAt: Date.now(),
-        messageId: `<test-${Date.now()}@simulator>`,
-      },
+    // 4. Simulate S3 staging path (Lambda uploads here)
+    const timestamp = Date.now();
+    const s3Key = `document-inbox-staging/${config.businessId}/${timestamp}-${filename}`;
+    console.log(`📦 Simulated S3 key: ${s3Key}`);
+
+    // 5. Call Convex action (same as Lambda)
+    console.log("\n📤 Calling Convex uploadAndCreateInboxEntry action...");
+    console.log("⚠️  Note: This will fail if S3 file doesn't exist.");
+    console.log("   For full end-to-end test, use real email forwarding.\n");
+
+    const response = await fetch(`${CONVEX_URL}/api/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        path: "functions/documentInboxInternal:uploadAndCreateInboxEntry",
+        args: {
+          s3Bucket: S3_BUCKET,
+          s3Key,
+          originalFilename: filename,
+          mimeType,
+          businessId: config.businessId,
+          userId: config.userId,
+          emailMetadata: {
+            from: config.senderEmail,
+            subject: config.subject,
+            body: "Test email forwarding simulation",
+            receivedAt: timestamp,
+            messageId: `<test-${timestamp}@simulator>`,
+          },
+        },
+        format: "json",
+      }),
     });
+
+    if (!response.ok) {
+      throw new Error(`Convex action HTTP error: ${response.status}`);
+    }
+
+    const actionResult = await response.json();
+    if (actionResult.status === "error") {
+      console.error("\n❌ Convex action failed:");
+      console.error(`   ${actionResult.errorMessage}`);
+      console.log("\n💡 Expected behavior: Action requires actual S3 file to exist.");
+      console.log("   To test end-to-end, send real email to docs@prefix.hellogroot.com");
+      return;
+    }
+
+    const result = actionResult.value;
 
     console.log("\n✅ Success!");
     console.log(`   Inbox Entry ID: ${result.inboxEntryId}`);
+    console.log(`   File Hash: ${result.fileHash}`);
+    console.log(`   File Size: ${result.fileSizeBytes} bytes`);
     console.log(`   Duplicate: ${result.isDuplicate}`);
     if (result.isDuplicate) {
       console.log(`   Original ID: ${result.duplicateOriginalId}`);
@@ -117,16 +119,17 @@ async function simulateEmailForward(config: TestConfig) {
     console.log("\n📊 Next Steps:");
     if (result.isDuplicate) {
       console.log("   - Document marked as duplicate");
-      console.log("   - Status: quarantined");
+      console.log("   - Auto-reply email sent to sender");
     } else {
       console.log("   - Document created in inbox");
-      console.log("   - Status: pending_classification");
+      console.log("   - Lambda will run Gemini classification");
       console.log("   - Check Documents Inbox page: http://localhost:3000/documents-inbox");
     }
   } catch (error) {
     console.error("\n❌ Error:", error);
     if (error instanceof Error) {
       console.error(error.message);
+      console.error(error.stack);
     }
   }
 }
@@ -145,6 +148,10 @@ const config: TestConfig = {
 };
 
 // Run simulation
+console.log("\n⚠️  WARNING: This script tests the API contract only.");
+console.log("It does NOT upload files to S3, so the Convex action will fail.");
+console.log("For full end-to-end testing, send a real email to docs@prefix.hellogroot.com\n");
+
 simulateEmailForward(config).then(() => {
   process.exit(0);
 });
