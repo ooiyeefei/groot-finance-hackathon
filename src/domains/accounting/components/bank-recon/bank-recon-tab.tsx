@@ -8,6 +8,7 @@ import BankAccountsManager from './bank-accounts-manager'
 import ReconciliationDashboard from './reconciliation-dashboard'
 import ReconciliationSummary from './reconciliation-summary'
 import BankImportButton from './bank-import-button'
+import CompactAIPerformanceCard from '@/domains/analytics/components/ai-performance/CompactAIPerformanceCard'
 import { Id } from '../../../../../convex/_generated/dataModel'
 import { Landmark, Plus, RefreshCw, AlertTriangle, CheckCircle2, X, Sparkles, Brain } from 'lucide-react'
 import AccountingTabs from '../../../../app/[locale]/accounting/accounting-tabs'
@@ -263,6 +264,9 @@ export default function BankReconTab() {
           </button>
         </div>
       )}
+
+      {/* AI Performance Compact Card */}
+      {businessId && <CompactAIPerformanceCard businessId={businessId} feature="bank" />}
 
       {/* Top bar: Account selector + actions */}
       <div className="flex items-center justify-between gap-4 flex-wrap">

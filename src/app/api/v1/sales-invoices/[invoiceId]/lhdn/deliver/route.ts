@@ -148,6 +148,34 @@ export async function POST(
     const base64 = Buffer.from(pdfBuffer).toString('base64')
     const filename = `${invoice.invoiceNumber || 'einvoice'}-LHDN.pdf`
 
+    // 001-einv-pdf-gen: Store PDF in S3
+    let s3Path: string | undefined
+    try {
+      const { uploadFile } = await import('@/lib/aws-s3')
+      const pdfBufferForS3 = Buffer.from(base64, 'base64')
+      const s3Key = `${businessId}/${invoiceId}/validated/${filename}`
+
+      const uploadResult = await uploadFile(
+        'einvoices',
+        s3Key,
+        pdfBufferForS3,
+        'application/pdf',
+        {
+          invoice_id: invoiceId,
+          business_id: businessId,
+          generated_at: new Date().toISOString(),
+        }
+      )
+
+      if (uploadResult.success) {
+        s3Path = uploadResult.key
+        console.log(`[LHDN Deliver] PDF stored at S3 path: ${s3Path}`)
+      }
+    } catch (storageError) {
+      console.error('[LHDN Deliver] PDF storage failed:', storageError)
+      // Continue with delivery even if storage fails — non-blocking
+    }
+
     // Send email using existing email service
     const { emailService } = await import('@/lib/services/email-service')
     const result = await emailService.sendInvoiceEmail({
@@ -166,17 +194,29 @@ export async function POST(
 
     if (!result.success) {
       console.error('[LHDN Deliver] Email send failed:', result.error)
+
+      // Update delivery tracking with failure status
+      await convex.mutation(api.functions.salesInvoices.updateLhdnDeliveryStatus, {
+        invoiceId: invoiceId as Id<'sales_invoices'>,
+        businessId: businessId as Id<'businesses'>,
+        s3Path,
+        deliveryStatus: 'failed',
+        deliveryError: result.error || 'Email delivery failed',
+      })
+
       return NextResponse.json(
         { success: false, error: result.error || 'Email delivery failed' },
         { status: 502 }
       )
     }
 
-    // Update delivery tracking on invoice
+    // Update delivery tracking on invoice with success status
     await convex.mutation(api.functions.salesInvoices.updateLhdnDeliveryStatus, {
       invoiceId: invoiceId as Id<'sales_invoices'>,
       businessId: businessId as Id<'businesses'>,
       deliveredTo: buyerEmail,
+      s3Path,
+      deliveryStatus: 'delivered',
     })
 
     console.log(`[LHDN Deliver] E-invoice ${invoice.invoiceNumber} delivered to ${buyerEmail}`)

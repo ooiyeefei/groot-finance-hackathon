@@ -372,15 +372,28 @@ crons.weekly(
 /**
  * Daily AI Intelligence Digest
  *
- * Runs every hour. For each business, checks if it's 6 PM in their timezone.
- * If yes, aggregates AI activity and sends a summary email to admins.
- * Skips weekends — sends combined weekend digest on Monday.
+ * DISABLED: Was running hourly scanning multiple tables for every business,
+ * consuming excessive Database Bandwidth (1.96 GB / 2 GB with no real users).
+ * Re-enable when we have paying customers on a Pro Convex plan.
+ */
+// crons.hourly(
+//   "ai-daily-digest",
+//   { minuteUTC: 0 },
+//   (internal.functions as any).aiDigest.dailyDigest
+// );
+
+/**
+ * Daily Automation Milestone Check (001-surface-automation-rate)
+ *
+ * Runs daily at 10:00 UTC (6 PM SGT) to check all businesses
+ * for milestone achievements (90%, 95%, 99%).
+ * Updates businesses.automationMilestones if threshold newly crossed.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-crons.hourly(
-  "ai-daily-digest",
-  { minuteUTC: 0 },
-  (internal.functions as any).aiDigest.dailyDigest
+crons.daily(
+  "check-automation-milestones",
+  { hourUTC: 10, minuteUTC: 0 },
+  (internal.functions as any).automationRate.checkAllBusinessMilestones
 );
 
 export default crons;

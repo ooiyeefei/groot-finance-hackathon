@@ -11,7 +11,6 @@ import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { authenticate, cancelDocument } from "@/lib/lhdn/client"
 import { LhdnApiError } from "@/lib/lhdn/types"
-import { sendBuyerNotification } from "@/lib/services/buyer-notification-service"
 
 async function getAuthenticatedConvexClient() {
   const url = process.env.NEXT_PUBLIC_CONVEX_URL
@@ -115,39 +114,36 @@ export async function PUT(
     const tokenResult = await authenticate(tenantTin)
     await cancelDocument(documentUuid, reason, tokenResult.accessToken)
 
-    // 4. Send buyer notification (fire-and-forget)
-    const buyerNotificationsEnabled = (business as Record<string, unknown>)?.einvoiceBuyerNotifications !== false
-    if (buyerNotificationsEnabled) {
-      try {
-        const invoice = await convex.query(api.functions.salesInvoices.getById, {
-          id: invoiceId as Id<"sales_invoices">,
-          businessId,
-        })
-        const inv = invoice as Record<string, unknown> | null
-        const buyerEmail = (inv?.customerSnapshot as Record<string, unknown>)?.email as string | undefined
-        const lhdnLongId = inv?.lhdnLongId as string | undefined
+    // 4. Trigger buyer cancellation notification (023-einv-buyer-notifications)
+    // Fire-and-forget: notification failure does not block cancellation response
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "http://localhost:3000")
+      const internalKey = process.env.MCP_INTERNAL_SERVICE_KEY
 
-        if (buyerEmail && lhdnLongId) {
-          const businessName = (business as Record<string, unknown>)?.businessName as string ??
-            (business as Record<string, unknown>)?.name as string ?? "Business"
-          sendBuyerNotification({
-            event: "cancelled",
-            buyerEmail,
-            buyerName: (inv?.customerSnapshot as Record<string, unknown>)?.contactPerson as string ??
-              (inv?.customerSnapshot as Record<string, unknown>)?.businessName as string,
-            invoiceNumber: inv?.invoiceNumber as string ?? "",
-            businessName,
-            amount: (inv?.totalAmount as number) ?? 0,
-            currency: (inv?.currency as string) ?? "MYR",
-            lhdnDocumentUuid: documentUuid,
-            lhdnLongId,
-            reason,
-          }).catch((err) => console.error("[LHDN Cancel] Buyer notification failed:", err))
-        }
-      } catch (notifError) {
-        // Notification failure should not block the cancellation response
-        console.error("[LHDN Cancel] Failed to send buyer notification:", notifError)
+      if (internalKey) {
+        // Trigger the notification asynchronously
+        fetch(`${baseUrl}/api/v1/sales-invoices/${invoiceId}/lhdn/notify`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Internal-Key": internalKey,
+          },
+          body: JSON.stringify({
+            businessId,
+            eventType: "cancellation",
+            cancellationReason: reason,
+          }),
+        }).catch((err) => {
+          console.error("[LHDN Cancel] Buyer notification request failed:", err)
+        })
+      } else {
+        console.warn("[LHDN Cancel] MCP_INTERNAL_SERVICE_KEY not configured, skipping buyer notification")
       }
+    } catch (notifError) {
+      // Notification failure should not block the cancellation response
+      console.error("[LHDN Cancel] Failed to trigger buyer notification:", notifError)
     }
 
     return NextResponse.json({

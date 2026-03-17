@@ -144,6 +144,44 @@ Fix errors and repeat until successful.
   - Adding new Convex modules
 - **Common failure**: Forgetting to deploy to prod after Convex changes — causes "Could not find public function" errors in production
 
+### Convex Bandwidth & Query Budget (CRITICAL)
+
+**Free plan limits**: 2M function calls, **2 GB database bandwidth/month**, 1 GB storage. We are on the Free plan — every byte counts.
+
+**Rule 1: Never use reactive `query` for heavy aggregations.**
+- Convex `query` creates a reactive subscription. Every time ANY document in the queried tables changes, the query re-runs and re-reads ALL documents. Each re-read counts toward bandwidth.
+- **Use `action` + `internalQuery`** for dashboard widgets, analytics, reports, or anything that scans multiple tables. The action runs once on demand; the client stores results in React state.
+- Pattern: `internalQuery` does the DB reads → public `action` calls it via `ctx.runQuery` → client uses `useAction` + `useEffect` on mount.
+- **Use `query`** only for small, single-document lookups or real-time data that genuinely needs live updates (e.g., a single expense claim status).
+
+**Rule 2: Never `.collect()` entire tables without limits.**
+- Always ask: "How many documents could this return at scale?" If the answer is "thousands", use `.take(N)` or add tighter index range filters.
+- Prefer filtering at the index level (`.withIndex(..., q => q.eq(...).gte(...))`) over collecting everything and filtering in JS.
+
+**Rule 3: Audit crons for bandwidth impact.**
+- Every cron that reads data costs bandwidth. Hourly crons that scan multiple tables for all businesses are extremely expensive.
+- Before adding a cron: calculate `(docs_read × avg_doc_size × runs_per_month)`. If it exceeds ~50 MB/month, reconsider the frequency or scope.
+- **Currently disabled**: `ai-daily-digest` (was hourly, scanning multiple tables for all businesses). Re-enable only on Pro plan.
+
+**Rule 4: Kill stray `convex dev` processes.**
+- `npx convex dev` from worktrees auto-syncs to the shared deployment, consuming bandwidth and causing "Schema was overwritten" deploy conflicts.
+- Before deploying: `ps aux | grep convex | grep -v grep` — kill any stray `convex dev` processes from other worktrees.
+
+**Rule 5: NEVER run `convex dev` or `npm run dev` from worktrees.**
+- All git worktrees (e.g., `einv-notif-cancel`, `doc-email-forward`) share the **same Convex production deployment** (`kindhearted-lynx-129`). Running `convex dev` from any worktree will **overwrite production functions** with that branch's older code, reverting fixes deployed from `main`.
+- **What happens**: Worktree has old reactive `query` code → `convex dev` auto-deploys it → production functions revert → crashes and bandwidth burn return.
+- **Only run `convex dev` from the main working directory** (`groot-finance/groot-finance`), and only when actively developing.
+- **For worktree development**: Work on code without running `convex dev`. Test by rebasing onto `main` and deploying from `main`.
+- **Before starting any dev session**: Run `ps aux | grep convex | grep -v grep` and kill ALL convex processes. Then run `npx convex deploy --yes` from `main` to ensure production has the latest code.
+- **After finishing a worktree branch**: Remove it with `git worktree remove <name>` to prevent accidental future `convex dev` runs.
+
+**Anti-patterns that burn bandwidth:**
+- `useQuery` with `.collect()` on large tables (reactive re-runs on every change)
+- Crons running hourly/every-5-min that scan entire tables
+- Multiple worktrees running `convex dev` against the same deployment
+- Dashboard widgets using reactive queries for aggregations (use `action` instead)
+- Running `npm run dev` in old worktrees (auto-starts `convex dev` which overwrites production)
+
 ### Security — Least Privilege (CRITICAL)
 
 **Applies to ALL layers**: application code, infrastructure, database, service-to-service auth.
@@ -456,12 +494,89 @@ const arBalance = arLines.reduce((sum, line) =>
 - Convex (new `matching_settings` table, extended `sales_orders` + `order_matching_corrections`) (003-conditional-auto-approval)
 - TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, @react-pdf/renderer, AWS SDK (Lambda invocation, SES), qrcode (npm) (022-einvoice-lhdn-buyer-flows)
 - Convex (document database with real-time subscriptions), AWS S3 (via CloudFront for signed URLs) (022-einvoice-lhdn-buyer-flows)
+- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, AWS SES, lucide-react (001-einv-poll-status-change)
+- Convex (no schema changes needed — all fields exist) (001-einv-poll-status-change)
+- TypeScript 5.9.3 + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, recharts (already installed), lucide-react (001-ai-perf-widget)
+- Convex document database (existing tables — no new tables) (001-ai-perf-widget)
+- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, @react-pdf/renderer, AWS SES, React 19.1.2 (001-einv-pdf-gen)
+- AWS S3 (einvoices/ prefix) + CloudFront (signed URLs), Convex document database (extended sales_invoices schema) (001-einv-pdf-gen)
+- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, AWS SES (via existing infrastructure), Zod 3.23.8 (023-einv-buyer-notifications)
+- Convex (document database — `sales_invoices`, `businesses` extended), AWS SES (email delivery) (023-einv-buyer-notifications)
 
 ## Recent Changes
 - 022-einvoice-lhdn-buyer-flows: LHDN e-invoice buyer flows — 5 features closing gaps vs Remicle competitor. (1) Status polling: Lambda polls LHDN every 5min for status changes on issued invoices within 72h window, detects buyer rejections/cancellations, updates sales_invoices (new statuses: "rejected", "cancelled_by_buyer"), sets lhdnReviewRequired flag if journal entry exists, sends in-app notifications. (2) Buyer rejection: Users can reject received e-invoices via LHDN API, new API route + dialog + Convex mutation, clears linked expense claim e-invoice attachment, sets einvoiceRejectionWarning. (3) Validated e-invoice PDF with LHDN QR code: PDF template extended with QR code + UUID + validation timestamp, "Download E-Invoice (LHDN)" button on detail page. (4) Buyer notifications: Email service for validation/cancellation/rejection events, wired into cancel route, business settings for auto-delivery + notification toggles. (5) Compliance dashboard: analytics query + recharts dashboard tab with metric cards, monthly charts, error table, activity feed, CSV export, date range filter. Extended tables: sales_invoices (+5 fields), einvoice_received_documents (+3 fields), expense_claims (+1 field), businesses (+2 fields). New files: einvoice-reject-dialog.tsx, einvoice-dashboard.tsx, buyer-notification-service.ts, einvoiceReceivedDocuments.ts, reject API route.
+- 023-einv-buyer-notifications: Buyer email notifications for e-invoice validation, cancellation, rejection. Transactional emails via SES with idempotency (audit log prevents duplicates). Business settings toggles (validation/cancellation, both default ON; rejection always sent). Three notification triggers: (1) LHDN polling detects "valid" → sendValidationNotification action → notify API route → SES email. (2) User cancels via cancel route → sendCancellationNotification action → notify API route with reason → SES email. (3) LHDN polling detects "rejected" → sendRejectionConfirmation action → notify API route → SES email. Email content: invoice number, business name, amount, currency, LHDN UUID/long ID, MyInvois link, Groot footer. Skip conditions: no buyer email, invalid email format, business settings disabled, already sent (idempotent). Extended tables: sales_invoices (+buyerNotificationLog array), businesses (+einvoiceNotifyBuyerOnValidation, +einvoiceNotifyBuyerOnCancellation). New files: buyerNotificationHelper.ts (idempotency/validation logic), einvoice-notification-settings.tsx (React UI with Switch toggles), notify API route (internal service key auth). UI: New "E-Invoice Notifications" tab in business settings (owner-only) with 3 toggles (validation ON/OFF, cancellation ON/OFF, rejection always enabled). Mutations: appendNotificationLogPublic (logs sent/skipped/failed), updateNotificationSettings (persists toggles). Actions: sendValidationNotification, sendCancellationNotification, sendRejectionConfirmation (all fire-and-forget HTTP calls to notify route).
 - 002-unified-ai-transparency: Daily AI Intelligence Digest email. Hourly cron checks timezone → sends at 6 PM local (skip weekends). Aggregates AR/bank/fee AI activity via bridge pattern (gatherAIActivity normalizes from existing tables). Email shows: hero "Hours Saved Today" metric, autonomy rate, trusted suppliers count, auto-approved count, exceptions table with deep links, learning progress. Uses existing SES infrastructure. New file: `convex/functions/aiDigest.ts`. Cron: `ai-daily-digest` (hourly).
 - 003-conditional-auto-approval: Triple-Lock auto-approval for AR matching. Per-business settings (threshold 0.98, min 5 learning cycles, toggle). Triple-Lock gate: setting ON + confidence ≥ threshold + alias matched ≥ minCycles. Auto-posts journal entry with "groot_ai_agent" preparer (LHDN/IFRS audit). Reversal with CRITICAL_FAILURE (5x weight in MIPROv2). Safety valve: auto-disables after 3 failures in 30 days. New table: `matching_settings`. Extended: `sales_orders` (+auto_agent method), `order_matching_corrections` (+weight). UI: settings drawer, "Verified by Groot" badge, reversal button.
 - 001-dspy-ar-smart-matcher: DSPy Smart Matcher for AR order-to-invoice reconciliation — Tier 2 AI matching (ChainOfThought reasoning, BootstrapFewShot learning, MIPROv2 weekly optimization, Assert/Suggest integrity). Auto-triggers after Tier 1, 1-to-N split matches (cap 5), partial payments with residual. New table: `order_matching_corrections`. Extended: `sales_orders` (+aiMatchSuggestions, aiMatchTier, aiMatchStatus). Lambda: `/match_orders` + `/optimize_ar_match_model`. UI: confidence dots, bulk approve/reject, AI detail sheet, metrics dashboard. Learning loop: corrections auto-captured → BootstrapFewShot ≥20 → MIPROv2 ≥100 with accuracy gating.
 - 001-dspy-bank-recon: DSPy-powered bank reconciliation — Tier 1 keyword rules + Tier 2 DSPy AI classification, GL posting (draft JEs), correction feedback loop (BootstrapFewShot), weekly MIPROv2 optimization, batch operations, reconciliation summary. New tables: `bank_recon_corrections`, `bank_recon_classification_rules`. Extended: `bank_accounts` (+glAccountId), `bank_transactions` (+8 classification fields), `dspy_model_versions` (+domain). Lambda extended with `/classify_bank_transaction` and `/optimize_bank_recon_model`.
 - 001-category-3-mcp: Added MCP Server with API key management
 - 001-manager-approval: Added TypeScript 5.9.3, Next.js 15.5.7 + Convex 1.31.3, React 19.1.2, Clerk 6.30.0, Zod 3.23.8
+
+## Automation Rate Metric Pattern (001-surface-automation-rate)
+
+**Pattern**: Computed metrics aggregating from multiple data sources without schema bloat
+
+### Key Principles
+
+1. **No New Tables for Computed Metrics**: Automation rate is calculated on-demand from existing correction tables. Don't create `automation_rate_history` or similar tables.
+
+2. **Deduplication Required**: Multiple corrections for the same document count as ONE review (FR-021):
+   - AR: Deduplicate by `orderReference`
+   - Bank: Deduplicate by `bankTransactionDescription + bankName`
+   - Use `Map` to track unique keys
+
+3. **Immutable Historical Rates**: Historical rates reflect "what was known at that time" (FR-022):
+   - Use `createdAt` range filters on corrections
+   - Never query corrections outside the period being calculated
+   - This prevents retroactive recalculation
+
+4. **Milestone Tracking**: Extend `businesses` table with nested object (not new table):
+   ```typescript
+   automationMilestones: v.optional(v.object({
+     "90": v.optional(v.number()),
+     "95": v.optional(v.number()),
+     "99": v.optional(v.number()),
+   }))
+   ```
+
+5. **Performance Pattern**: Parallel queries with indexed filters:
+   ```typescript
+   const [arCorrections, bankCorrections, arOrders] = await Promise.all([
+     ctx.db.query("order_matching_corrections")
+       .withIndex("by_businessId_createdAt", q =>
+         q.eq("businessId", bid).gte("createdAt", start).lte("createdAt", end))
+       .collect(),
+     // ... other queries
+   ]);
+   ```
+
+### Data Sources
+
+- **AR Recon**: `sales_orders` (AI decisions) + `order_matching_corrections` (reviews)
+- **Bank Recon**: `bank_transactions` (AI decisions) + `bank_recon_corrections` (reviews)
+- **Fee Classification**: `sales_orders.classifiedFees` (tier 2 = AI) + no corrections table yet
+- **Expense OCR**: `expense_claims` (confidenceScore exists = AI) + edits tracked via `version > 1`
+
+### Chart Annotations
+
+Use `dspy_model_versions.trainedAt` for "Model optimized" markers on trend chart:
+```typescript
+const events = await ctx.db.query("dspy_model_versions")
+  .withIndex("by_platform_status", q => q.eq("platform", "ar_matching").eq("status", "active"))
+  .filter(q => q.and(q.gte(q.field("trainedAt"), weekStart), q.lte(q.field("trainedAt"), weekEnd)))
+  .collect();
+```
+
+### Milestone Notification Flow
+
+1. **Cron** (hourly at 6 PM local): Checks rate, updates `businesses.automationMilestones` if threshold crossed
+2. **Client subscription**: React component subscribes to `businesses` table, triggers Sonner toast on milestone change
+3. **Email digest**: `aiDigest.ts` includes milestone achievements from last 24 hours
+
+### Edge Cases
+
+- `totalDecisions === 0` → return `{ message: "No AI activity in this period" }`
+- `totalDecisions < 10` → return `{ hasMinimumData: false, message: "Collecting data..." }`
+- Expense edit tracking: `version > 1` AND `confidenceScore` exists (conservative: any edit = full correction)
+

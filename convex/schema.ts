@@ -251,6 +251,8 @@ export default defineSchema({
     // 022-einvoice-lhdn-buyer-flows: Buyer notification settings
     einvoiceAutoDelivery: v.optional(v.boolean()),
     einvoiceBuyerNotifications: v.optional(v.boolean()),
+    einvoiceNotifyBuyerOnValidation: v.optional(v.boolean()),
+    einvoiceNotifyBuyerOnCancellation: v.optional(v.boolean()),
 
     // 001-in-app-referral-code: Referral attribution
     referredByCode: v.optional(v.string()),
@@ -260,6 +262,13 @@ export default defineSchema({
 
     // Timestamps
     updatedAt: v.optional(v.number()),
+
+    // 001-surface-automation-rate: Milestone tracking
+    automationMilestones: v.optional(v.object({
+      milestone_90: v.optional(v.number()),  // Unix timestamp (ms) when 90% first achieved
+      milestone_95: v.optional(v.number()),  // Unix timestamp (ms) when 95% first achieved
+      milestone_99: v.optional(v.number()),  // Unix timestamp (ms) when 99% first achieved
+    })),
   })
     .index("by_legacyId", ["legacyId"])
     .index("by_stripeCustomerId", ["stripeCustomerId"])
@@ -1839,6 +1848,30 @@ export default defineSchema({
     lhdnReviewRequired: v.optional(v.boolean()),
     lhdnPdfDeliveredAt: v.optional(v.number()),
     lhdnPdfDeliveredTo: v.optional(v.string()),
+
+    // 001-einv-pdf-gen: PDF storage and delivery status tracking
+    lhdnPdfS3Path: v.optional(v.string()),  // S3 key: einvoices/{businessId}/{invoiceId}/validated/{filename}
+    lhdnPdfDeliveryStatus: v.optional(v.string()),  // "pending" | "delivered" | "failed"
+    lhdnPdfDeliveryError: v.optional(v.string()),
+
+    // 023-einv-buyer-notifications: Buyer notification audit log
+    buyerNotificationLog: v.optional(v.array(v.object({
+      eventType: v.union(
+        v.literal("validation"),
+        v.literal("cancellation"),
+        v.literal("rejection")
+      ),
+      recipientEmail: v.string(),
+      timestamp: v.number(),
+      sendStatus: v.union(
+        v.literal("sent"),
+        v.literal("skipped"),
+        v.literal("failed")
+      ),
+      skipReason: v.optional(v.string()),
+      errorMessage: v.optional(v.string()),
+      sesMessageId: v.optional(v.string()),
+    }))),
 
     // 016-e-invoice-schema-change: Peppol InvoiceNow tracking
     peppolDocumentId: v.optional(v.string()),

@@ -52,6 +52,7 @@ import {
 import FeeRulesManager from './fee-rules-manager'
 import AutoApprovalSettings from './auto-approval-settings'
 import { useSalesInvoices } from '../hooks/use-sales-invoices'
+import CompactAIPerformanceCard from '@/domains/analytics/components/ai-performance/CompactAIPerformanceCard'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/toast'
@@ -594,6 +595,9 @@ export default function ARReconciliation() {
           </div>
         </div>
       </div>
+
+      {/* AI Performance Compact Card */}
+      {businessId && <CompactAIPerformanceCard businessId={businessId} feature="ar" />}
 
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">

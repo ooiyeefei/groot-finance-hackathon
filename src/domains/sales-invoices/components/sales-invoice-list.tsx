@@ -20,6 +20,7 @@ import {
   CheckSquare,
   AlertTriangle,
 } from 'lucide-react'
+import { CheckCircle, AlertCircle, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -444,6 +445,9 @@ export default function SalesInvoiceList() {
                   <th className="px-4 py-3 text-center font-medium text-muted-foreground">
                     e-Invoice
                   </th>
+                  <th className="px-4 py-3 text-center font-medium text-muted-foreground">
+                    Delivery
+                  </th>
                   <th className="px-4 py-3 text-right font-medium text-muted-foreground">
                     Actions
                   </th>
@@ -507,6 +511,30 @@ export default function SalesInvoiceList() {
                           </Badge>
                         )}
                       </div>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {invoice.lhdnStatus === 'valid' && invoice.lhdnPdfDeliveryStatus ? (
+                        <div className="flex items-center justify-center">
+                          {invoice.lhdnPdfDeliveryStatus === 'delivered' ? (
+                            <Badge className="bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/30 text-xs">
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Delivered
+                            </Badge>
+                          ) : invoice.lhdnPdfDeliveryStatus === 'failed' ? (
+                            <Badge className="bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30 text-xs">
+                              <AlertCircle className="h-3 w-3 mr-1" />
+                              Failed
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30 text-xs">
+                              <Clock className="h-3 w-3 mr-1" />
+                              Pending
+                            </Badge>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">

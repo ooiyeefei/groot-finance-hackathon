@@ -1,0 +1,77 @@
+openapi: 3.0.0
+info:
+  title: LHDN E-Invoice Send to Buyer API
+  version: 1.0.0
+  description: User-facing endpoint for manually triggering email delivery of validated e-invoices to buyers
+
+paths:
+  /api/v1/sales-invoices/{invoiceId}/lhdn/send-to-buyer:
+    post:
+      summary: Manually send validated e-invoice PDF to buyer via email
+      description: |
+        Triggers email delivery of LHDN-validated e-invoice PDF to the buyer's email address.
+        Requires Clerk authentication. Can be used for first-time send (when auto-delivery is OFF)
+        or to retry failed deliveries.
+      parameters:
+        - name: invoiceId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Convex ID of the sales invoice
+      security:
+        - ClerkAuth: []
+      responses:
+        '200':
+          description: Email sent successfully or skipped (already sent)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  messageId:
+                    type: string
+                    description: SES message ID (if sent)
+                  skipped:
+                    type: boolean
+                    description: True if already delivered
+                  deliveredAt:
+                    type: number
+                    description: Unix timestamp of delivery
+                  deliveredTo:
+                    type: string
+                    description: Buyer email address
+        '400':
+          description: Invalid request (invoice not validated, no buyer email, etc.)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+        '401':
+          description: Unauthorized (no Clerk session)
+        '403':
+          description: Forbidden (user not authorized for this business)
+        '404':
+          description: Invoice not found
+        '500':
+          description: Server error (PDF generation failed, email service failed)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+
+components:
+  securitySchemes:
+    ClerkAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Clerk session JWT from auth() in Next.js API route

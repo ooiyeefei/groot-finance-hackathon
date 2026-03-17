@@ -37,6 +37,7 @@ export const S3_PREFIXES = {
   expense_claims: 'expense_claims',
   business_profiles: 'business-profiles',
   account_deletions: 'account-deletions',
+  einvoices: 'einvoices', // 001-einv-pdf-gen: LHDN-validated e-invoice PDFs
 } as const
 
 export type S3Prefix = keyof typeof S3_PREFIXES

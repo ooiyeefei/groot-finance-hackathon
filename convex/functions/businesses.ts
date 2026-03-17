@@ -2827,3 +2827,67 @@ export const backfillGlCodes = mutation({
     return { dryRun, totalBusinesses: businesses.length, businessesUpdated: totalUpdated, details: results };
   },
 });
+
+// ============================================
+// BUYER NOTIFICATION SETTINGS (023-einv-buyer-notifications)
+// ============================================
+
+/**
+ * Update business-level buyer notification preferences
+ *
+ * Controls which e-invoice lifecycle events trigger buyer notifications:
+ * - einvoiceNotifyBuyerOnValidation: Notify when LHDN validates e-invoice (default: true)
+ * - einvoiceNotifyBuyerOnCancellation: Notify when issuer cancels e-invoice (default: true)
+ *
+ * Note: Rejection confirmation emails are always sent (not configurable),
+ * as they confirm the buyer's own action.
+ */
+export const updateNotificationSettings = mutation({
+  args: {
+    businessId: v.id("businesses"),
+    einvoiceNotifyBuyerOnValidation: v.optional(v.boolean()),
+    einvoiceNotifyBuyerOnCancellation: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    // Verify user has access to this business
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Check user has membership in this business
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      throw new Error("User does not have access to this business");
+    }
+
+    // Check user has admin role (owner or finance_admin)
+    if (membership.role !== "owner" && membership.role !== "finance_admin") {
+      throw new Error("Only owners and finance admins can update notification settings");
+    }
+
+    // Update settings
+    await ctx.db.patch(args.businessId, {
+      ...(args.einvoiceNotifyBuyerOnValidation !== undefined && {
+        einvoiceNotifyBuyerOnValidation: args.einvoiceNotifyBuyerOnValidation,
+      }),
+      ...(args.einvoiceNotifyBuyerOnCancellation !== undefined && {
+        einvoiceNotifyBuyerOnCancellation: args.einvoiceNotifyBuyerOnCancellation,
+      }),
+      updatedAt: Date.now(),
+    });
+
+    return { success: true };
+  },
+});

@@ -7,12 +7,16 @@ import { SUPPORTED_CURRENCIES } from '@/domains/users/hooks/use-home-currency';
 import useFinancialAnalytics from '@/domains/analytics/hooks/use-financial-analytics';
 import { useActiveBusiness } from '@/contexts/business-context';
 import { ProactiveActionCenter } from './action-center';
+import { AutomationRateHero } from './automation-rate-hero';
+import { AutomationRateTrendChart } from './automation-rate-trend-chart';
+import { useMilestoneSubscription } from '../hooks/use-milestone-subscription';
 
 // Lazy load heavy components to improve initial page load
 const CurrencyBreakdown = lazy(() => import('./financial-analytics/CurrencyBreakdown'));
 const CategoryAnalysis = lazy(() => import('./financial-analytics/CategoryAnalysis'));
 const AgedReceivablesWidget = lazy(() => import('./AgedReceivablesWidget'));
 const AgedPayablesWidget = lazy(() => import('./AgedPayablesWidget'));
+const AIPerformanceWidget = lazy(() => import('./ai-performance/AIPerformanceWidget'));
 
 // Loading component for Suspense fallbacks
 // CLS FIX: Height must match actual component heights to prevent layout shift
@@ -67,6 +71,9 @@ export default function CompleteDashboard() {
     setDisplayCurrency(newCurrency);
     // TanStack Query will auto-refetch when displayCurrency changes
   };
+
+  // Milestone subscription — triggers toast notifications when thresholds are crossed
+  useMilestoneSubscription({ businessId: businessId as any, enabled: !!businessId });
 
   const { analytics, trends, loading, error, refresh, lastUpdated } = useFinancialAnalytics({
     period: selectedPeriod,
@@ -234,6 +241,23 @@ export default function CompleteDashboard() {
       {/* Proactive AI Action Center */}
       {businessId && (
         <ProactiveActionCenter businessId={businessId} defaultExpanded={true} />
+      )}
+
+      {/* AI Performance Widget */}
+      {businessId && (
+        <Suspense fallback={<ComponentLoader title="AI Performance" height="chart" />}>
+          <AIPerformanceWidget businessId={businessId} />
+        </Suspense>
+      )}
+
+      {/* AI Automation Rate Hero Metric */}
+      {businessId && (
+        <AutomationRateHero businessId={businessId as any} defaultPeriod="week" />
+      )}
+
+      {/* AI Automation Rate Trend Chart */}
+      {businessId && (
+        <AutomationRateTrendChart businessId={businessId as any} weeks={8} />
       )}
 
       {/* KPI Metrics - 3+2 Grid Layout */}

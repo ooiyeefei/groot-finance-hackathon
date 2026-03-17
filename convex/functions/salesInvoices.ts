@@ -11,7 +11,7 @@
  */
 
 import { v } from "convex/values";
-import { query, mutation, internalMutation, internalQuery } from "../_generated/server";
+import { query, mutation, internalMutation, internalQuery, internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 import {
@@ -1668,8 +1668,12 @@ export const updateLhdnStatusFromPoll = mutation({
       ? `Invoice ${invoice.invoiceNumber} has been ${statusLabel}. Reason: ${args.reason}`
       : `Invoice ${invoice.invoiceNumber} has been ${statusLabel}. Review the invoice and take appropriate action.`;
 
+    // Check if business has email notifications enabled
+    const business = await ctx.db.get(invoice.businessId);
+    const emailEnabled = business?.einvoiceBuyerNotifications !== false;
+
     for (const member of targetMembers) {
-      await ctx.db.insert("notifications", {
+      const notificationId = await ctx.db.insert("notifications", {
         recipientUserId: member.userId,
         businessId: invoice.businessId,
         type: "lhdn_submission",
@@ -1681,10 +1685,35 @@ export const updateLhdnStatusFromPoll = mutation({
         resourceId: invoice._id.toString(),
         createdAt: Date.now(),
       });
+
+      // Schedule email notification if enabled
+      if (emailEnabled) {
+        const user = await ctx.db.get(member.userId);
+        if (user?.email) {
+          await ctx.scheduler.runAfter(
+            0,
+            internal.functions.notifications.sendTransactionalEmail,
+            {
+              notificationId,
+              recipientEmail: user.email,
+              recipientName: user.email,
+              templateType: "notification_lhdn_status_change",
+              templateData: {
+                title,
+                body,
+                invoiceNumber: invoice.invoiceNumber,
+                newStatus: args.newStatus,
+                reason: args.reason,
+              },
+              userId: member.userId,
+            }
+          );
+        }
+      }
     }
 
     console.log(
-      `[updateLhdnStatusFromPoll] Invoice ${invoice.invoiceNumber} status updated to ${args.newStatus}`
+      `[updateLhdnStatusFromPoll] Invoice ${invoice.invoiceNumber} status updated to ${args.newStatus}${emailEnabled ? " (emails scheduled)" : ""}`
     );
   },
 });
@@ -1715,22 +1744,56 @@ export const getInvoiceForDelivery = query({
 
 /**
  * Update delivery tracking after e-invoice PDF is emailed to buyer.
+ * Extended in 001-einv-pdf-gen to support PDF storage and delivery status.
  */
 export const updateLhdnDeliveryStatus = mutation({
   args: {
     invoiceId: v.id("sales_invoices"),
     businessId: v.id("businesses"),
-    deliveredTo: v.string(),
+    deliveredTo: v.optional(v.string()),
+    s3Path: v.optional(v.string()),  // S3 key with prefix
+    deliveryStatus: v.optional(v.string()),  // "pending" | "delivered" | "failed"
+    deliveryError: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const invoice = await ctx.db.get(args.invoiceId);
     if (!invoice || invoice.businessId !== args.businessId) return;
 
-    await ctx.db.patch(args.invoiceId, {
-      lhdnPdfDeliveredAt: Date.now(),
-      lhdnPdfDeliveredTo: args.deliveredTo,
+    const updates: Record<string, unknown> = {
       updatedAt: Date.now(),
-    });
+    };
+
+    // Legacy fields (when delivery succeeds)
+    if (args.deliveredTo) {
+      updates.lhdnPdfDeliveredAt = Date.now();
+      updates.lhdnPdfDeliveredTo = args.deliveredTo;
+    }
+
+    // 001-einv-pdf-gen: New fields for PDF storage and status tracking
+    if (args.s3Path !== undefined) {
+      updates.lhdnPdfS3Path = args.s3Path;
+    }
+    if (args.deliveryStatus !== undefined) {
+      updates.lhdnPdfDeliveryStatus = args.deliveryStatus;
+    }
+    if (args.deliveryError !== undefined) {
+      updates.lhdnPdfDeliveryError = args.deliveryError;
+    }
+
+    await ctx.db.patch(args.invoiceId, updates);
+  },
+});
+
+export const getLhdnPdfPath = query({
+  args: {
+    invoiceId: v.id("sales_invoices"),
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice || invoice.businessId !== args.businessId) return null;
+
+    return invoice.lhdnPdfS3Path || null;
   },
 });
 
@@ -2556,3 +2619,91 @@ function computeNextGenerationDate(currentDate: string, frequency: string): stri
 
   return date.toISOString().split("T")[0];
 }
+
+// ============================================
+// BUYER NOTIFICATION LOG (023-einv-buyer-notifications)
+// ============================================
+
+/**
+ * Append a notification log entry to a sales invoice
+ *
+ * Used to track all buyer notification attempts (sent, skipped, failed)
+ * for idempotency and audit purposes.
+ *
+ * This is an internalMutation - only callable from other Convex functions.
+ */
+export const appendNotificationLog = internalMutation({
+  args: {
+    invoiceId: v.id("sales_invoices"),
+    logEntry: v.object({
+      eventType: v.union(v.literal("validation"), v.literal("cancellation"), v.literal("rejection")),
+      recipientEmail: v.string(),
+      timestamp: v.number(),
+      sendStatus: v.union(v.literal("sent"), v.literal("skipped"), v.literal("failed")),
+      skipReason: v.optional(v.string()),
+      errorMessage: v.optional(v.string()),
+      sesMessageId: v.optional(v.string()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice) {
+      throw new Error(`Invoice ${args.invoiceId} not found`);
+    }
+
+    const existingLog = invoice.buyerNotificationLog || [];
+    const updatedLog = [...existingLog, args.logEntry];
+
+    await ctx.db.patch(args.invoiceId, {
+      buyerNotificationLog: updatedLog,
+    });
+
+    console.log(
+      `[appendNotificationLog] Logged ${args.logEntry.eventType} notification for invoice ${invoice.invoiceNumber}: ` +
+      `status=${args.logEntry.sendStatus}${args.logEntry.skipReason ? `, reason=${args.logEntry.skipReason}` : ""}`
+    );
+  },
+});
+
+/**
+ * Public version of appendNotificationLog for API route usage.
+ * Validates that the invoice belongs to the specified businessId.
+ */
+export const appendNotificationLogPublic = mutation({
+  args: {
+    invoiceId: v.id("sales_invoices"),
+    businessId: v.id("businesses"),
+    logEntry: v.object({
+      eventType: v.union(v.literal("validation"), v.literal("cancellation"), v.literal("rejection")),
+      recipientEmail: v.string(),
+      timestamp: v.number(),
+      sendStatus: v.union(v.literal("sent"), v.literal("skipped"), v.literal("failed")),
+      skipReason: v.optional(v.string()),
+      errorMessage: v.optional(v.string()),
+      sesMessageId: v.optional(v.string()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice) {
+      throw new Error(`Invoice ${args.invoiceId} not found`);
+    }
+
+    // Validate that invoice belongs to the specified business
+    if (invoice.businessId !== args.businessId) {
+      throw new Error("Invoice does not belong to the specified business");
+    }
+
+    const existingLog = invoice.buyerNotificationLog || [];
+    const updatedLog = [...existingLog, args.logEntry];
+
+    await ctx.db.patch(args.invoiceId, {
+      buyerNotificationLog: updatedLog,
+    });
+
+    console.log(
+      `[appendNotificationLogPublic] Logged ${args.logEntry.eventType} notification for invoice ${invoice.invoiceNumber}: ` +
+      `status=${args.logEntry.sendStatus}${args.logEntry.skipReason ? `, reason=${args.logEntry.skipReason}` : ""}`
+    );
+  },
+});

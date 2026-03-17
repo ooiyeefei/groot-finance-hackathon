@@ -1064,6 +1064,8 @@ function getEmailSubject(templateType: string, templateData: any): string {
       return `[Critical] Anomaly detected: ${templateData?.title || "Financial anomaly"}`;
     case "notification_digest":
       return `Your notification digest - ${new Date().toLocaleDateString()}`;
+    case "notification_lhdn_status_change":
+      return `[LHDN] ${templateData?.title || "E-Invoice status changed"}`;
     default:
       return "Notification from Groot Finance";
   }

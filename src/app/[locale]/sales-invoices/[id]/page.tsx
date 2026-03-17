@@ -7,12 +7,14 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { ArrowLeft, Pencil, Send, RotateCw, CreditCard, Ban, Download, Loader2, Trash2, AlertTriangle, ShieldCheck } from 'lucide-react'
+import { LhdnDeliveryStatus } from '@/domains/sales-invoices/components/lhdn-delivery-status'
+import { SendToBuyerButton } from '@/domains/sales-invoices/components/send-to-buyer-button'
 import { Button } from '@/components/ui/button'
 import HeaderWithUser from '@/components/ui/header-with-user'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useUser } from '@clerk/nextjs'
 import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
-import { useSalesInvoice, useSalesInvoiceMutations, useInvoicePdfUrl, useInvoiceDefaults } from '@/domains/sales-invoices/hooks/use-sales-invoices'
+import { useSalesInvoice, useSalesInvoiceMutations, useInvoicePdfUrl, useLhdnPdfUrl, useInvoiceDefaults } from '@/domains/sales-invoices/hooks/use-sales-invoices'
 import { useInvoicePdf, type PdfRenderData } from '@/domains/sales-invoices/hooks/use-invoice-pdf'
 import { InvoicePreview } from '@/domains/sales-invoices/components/invoice-preview'
 import { InvoiceStatusBadge } from '@/domains/sales-invoices/components/invoice-status-badge'
@@ -44,6 +46,7 @@ export default function SalesInvoiceDetailPage() {
   const { sendInvoice, voidInvoice, removeInvoice } = useSalesInvoiceMutations()
   const { generatePdf, generatePdfBlob, isGenerating } = useInvoicePdf()
   const storedPdfUrl = useInvoicePdfUrl(invoiceId)
+  const lhdnPdfUrl = useLhdnPdfUrl(invoiceId)
 
   const [showCreditNoteForm, setShowCreditNoteForm] = useState(false)
   const netOutstanding = useNetOutstandingAmount(invoiceId)
@@ -225,8 +228,19 @@ export default function SalesInvoiceDetailPage() {
   }
 
   const handleDownloadLhdnPdf = async () => {
-    // Uses the same pdfData which already includes LHDN fields
-    await generatePdf(`${invoice.invoiceNumber}-LHDN`, pdfData)
+    // 001-einv-pdf-gen: Check for stored PDF first to avoid regeneration
+    if (lhdnPdfUrl) {
+      // Download stored PDF directly
+      const link = document.createElement('a')
+      link.href = lhdnPdfUrl
+      link.download = `${invoice.invoiceNumber}-LHDN.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } else {
+      // Fallback: generate PDF on-the-fly (for invoices validated before this feature)
+      await generatePdf(`${invoice.invoiceNumber}-LHDN`, pdfData)
+    }
   }
 
   const isLhdnValid = invoice.lhdnStatus === 'valid' && !!invoice.lhdnLongId
@@ -309,19 +323,28 @@ export default function SalesInvoiceDetailPage() {
           </Button>
 
           {isLhdnValid && (
-            <Button
-              size="sm"
-              onClick={handleDownloadLhdnPdf}
-              disabled={isGenerating}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground"
-            >
-              {isGenerating ? (
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              ) : (
-                <ShieldCheck className="h-4 w-4 mr-1" />
-              )}
-              Download E-Invoice (LHDN)
-            </Button>
+            <>
+              <Button
+                size="sm"
+                onClick={handleDownloadLhdnPdf}
+                disabled={isGenerating}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              >
+                {isGenerating ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <ShieldCheck className="h-4 w-4 mr-1" />
+                )}
+                Download E-Invoice (LHDN)
+              </Button>
+              <SendToBuyerButton
+                invoiceId={invoice._id}
+                businessId={invoice.businessId}
+                buyerEmail={invoice.customerSnapshot?.email}
+                disabled={isGenerating}
+                onSuccess={() => window.location.reload()}
+              />
+            </>
           )}
 
           {isDraft && (
@@ -398,6 +421,16 @@ export default function SalesInvoiceDetailPage() {
           )}
         </div>
       </div>
+
+      {/* 001-einv-pdf-gen: LHDN Delivery Status */}
+      {isLhdnValid && (
+        <LhdnDeliveryStatus
+          deliveryStatus={invoice.lhdnPdfDeliveryStatus}
+          deliveredAt={invoice.lhdnPdfDeliveredAt}
+          deliveredTo={invoice.lhdnPdfDeliveredTo}
+          deliveryError={invoice.lhdnPdfDeliveryError}
+        />
+      )}
 
       {/* LHDN Rejected / Cancelled by Buyer — Review Required */}
       {(invoice as any).lhdnReviewRequired && (
@@ -565,7 +598,7 @@ export default function SalesInvoiceDetailPage() {
           />
 
           {/* LHDN e-Invoice section */}
-          <LhdnDetailSection />
+          <LhdnDetailSection invoice={invoice} />
 
           {/* Peppol InvoiceNow — Coming Soon */}
           <PeppolTransmissionPanel />
