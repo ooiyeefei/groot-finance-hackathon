@@ -5,7 +5,6 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { FileText, Loader2, Settings, Mail } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
-// Lazy load the sub-components
 const EInvoiceIntegrationSettings = lazy(() => import('@/domains/account-management/components/einvoice-integration-settings'))
 const EInvoiceComplianceSettings = lazy(() => import('@/domains/account-management/components/einvoice-compliance-settings'))
 const EInvoiceNotificationSettings = lazy(() => import('@/domains/account-management/components/einvoice-notification-settings'))
@@ -15,33 +14,32 @@ export default function EInvoiceSettingsWithTabs() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  // Valid secondary tabs
   const validSecondaryTabs = ['integration', 'compliance', 'notifications'] as const
   type SecondaryTabValue = typeof validSecondaryTabs[number]
 
-  // Read from URL hash (#integration, #compliance, #notifications)
   const [activeSecondaryTab, setActiveSecondaryTab] = useState<SecondaryTabValue>('integration')
 
-  // Sync with URL hash
+  // Sync with URL hash on mount and hash changes
   useEffect(() => {
-    const hash = window.location.hash.replace('#', '') as SecondaryTabValue
-    if (validSecondaryTabs.includes(hash)) {
-      setActiveSecondaryTab(hash)
+    const syncHash = () => {
+      const hash = window.location.hash.replace('#', '') as SecondaryTabValue
+      if (validSecondaryTabs.includes(hash)) {
+        setActiveSecondaryTab(hash)
+      }
     }
+    syncHash()
+    window.addEventListener('hashchange', syncHash)
+    return () => window.removeEventListener('hashchange', syncHash)
   }, [])
 
-  // Update URL hash when tab changes (without scroll)
   const handleSecondaryTabChange = useCallback((value: string) => {
     setActiveSecondaryTab(value as SecondaryTabValue)
-
-    // Update URL hash
     const newUrl = `${pathname}?${searchParams.toString()}#${value}`
     router.replace(newUrl, { scroll: false })
   }, [router, pathname, searchParams])
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-start gap-3">
         <div className="p-2 rounded-lg bg-blue-500/10">
           <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
@@ -54,7 +52,6 @@ export default function EInvoiceSettingsWithTabs() {
         </div>
       </div>
 
-      {/* Secondary Tabs */}
       <Tabs value={activeSecondaryTab} onValueChange={handleSecondaryTabChange} className="space-y-6">
         <TabsList className="grid w-full grid-cols-3 bg-muted border border-border">
           <TabsTrigger
@@ -80,7 +77,6 @@ export default function EInvoiceSettingsWithTabs() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Integration Tab */}
         <TabsContent value="integration" className="space-y-4">
           <Suspense fallback={
             <div className="flex items-center justify-center p-8">
@@ -92,7 +88,6 @@ export default function EInvoiceSettingsWithTabs() {
           </Suspense>
         </TabsContent>
 
-        {/* Compliance Tab */}
         <TabsContent value="compliance" className="space-y-4">
           <Suspense fallback={
             <div className="flex items-center justify-center p-8">
@@ -104,7 +99,6 @@ export default function EInvoiceSettingsWithTabs() {
           </Suspense>
         </TabsContent>
 
-        {/* Notifications Tab */}
         <TabsContent value="notifications" className="space-y-4">
           <Suspense fallback={
             <div className="flex items-center justify-center p-8">
