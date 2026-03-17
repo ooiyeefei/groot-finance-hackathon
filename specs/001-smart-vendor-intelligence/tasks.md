@@ -121,8 +121,8 @@
 
 - [X] T044 [P] [US3] Create `src/domains/vendor-intelligence/hooks/use-cross-vendor-groups.ts` custom hook: Wraps queries and mutations for cross-vendor groups (list, create, update, delete) with optimistic updates
 - [X] T045 [P] [US3] Create `src/domains/vendor-intelligence/components/price-history-chart.tsx` component: Recharts LineChart with ResponsiveContainer → displays PriceTrendDataPoint array → XAxis=date, YAxis=unitPrice → Tooltip with formatCurrency → semantic token colors
-- [ ] T046 [US3] Create `src/domains/vendor-intelligence/components/cross-vendor-comparison-table.tsx` component — deferred to polish
-- [ ] T047 [US3] Create `src/domains/vendor-intelligence/components/item-group-editor.tsx` component — deferred to polish
+- [X] T046 [US3] Create `src/domains/vendor-intelligence/components/cross-vendor-comparison-table.tsx` component
+- [X] T047 [US3] Create `src/domains/vendor-intelligence/components/item-group-editor.tsx` component
 - [X] T048 [US3] Create `src/domains/vendor-intelligence/components/csv-export-button.tsx` component: Button that triggers papaparse client-side export
 - [X] T049 [US3] Create price intelligence dashboard page at `src/app/[locale]/vendor-intelligence/price-intelligence/page.tsx` (server component): Auth check → wrap PriceIntelligenceClient
 - [X] T050 [US3] Create `src/app/[locale]/vendor-intelligence/price-intelligence/price-intelligence-client.tsx` client component: Tabbed interface (Price Trends tab with chart, Cross-Vendor tab with groups list) → CSV export button
@@ -187,11 +187,11 @@
 
 **Purpose**: Improvements that affect multiple user stories and complete the feature
 
-- [ ] T071 [P] Create data archival cron in `convex/crons/vendorIntelligenceCron.ts`: Schedule daily at 2 AM UTC → query vendor_price_history with invoiceDate >2 years old and archivedFlag=false → update archivedFlag=true, archivedTimestamp=now → log archived count
+- [X] T071 [P] Create data archival as on-demand internalMutation (NOT cron — bandwidth-safe per CLAUDE.md Rule 3): vendorPriceHistory.archiveOldRecords with .take(100) batch limit
 - [ ] T072 [P] Create DSPy optimization cron in `convex/crons/vendorIntelligenceCron.ts`: Schedule weekly on Sunday 4 AM UTC → run MIPROv2 optimizer on fuzzy matching module (if ≥50 new user confirmations) → run MIPROv2 optimizer on anomaly detection module (if ≥20 new dismissals) → save optimized models to DSPy state
-- [ ] T073 [P] Add billing frequency change detection to `src/domains/vendor-intelligence/lib/billing-frequency-analyzer.ts`: Calculate vendor's historical invoice frequency (mean days between invoices) → detect ≥50% deviation → create anomaly with alertType="frequency-change", potentialIndicators array
+- [X] T073 [P] Add billing frequency change detection to `src/domains/vendor-intelligence/lib/billing-frequency-analyzer.ts`: Calculate vendor's historical invoice frequency (mean days between invoices) → detect ≥50% deviation → returns potentialIndicators array
 - [ ] T074 [P] Integrate billing frequency detection into `convex/functions/vendorPriceAnomalies/detect.ts`: After price anomaly checks, call billing frequency analyzer → if frequency change detected, insert anomaly record
-- [ ] T075 [P] Add new item detection to `convex/functions/vendorPriceAnomalies/detect.ts`: After price history insert, check if itemIdentifier is new for this vendor (no prior records) → if new, insert anomaly with alertType="new-item"
+- [X] T075 [P] New item detection integrated into recordPriceObservationsBatch: Checks if vendor has prior history but item is new → inserts anomaly with alertType="new-item"
 - [ ] T076 [P] Create price normalizer utility in `src/domains/vendor-intelligence/lib/price-normalizer.ts`: Handle different units (per-piece vs per-box) → display warning in UI when units don't match → implement per-piece conversion where possible
 - [ ] T077 [P] Update `src/domains/vendor-intelligence/components/price-history-chart.tsx` to handle price normalization: Show unit type in tooltip → display normalization warning if units changed
 - [X] T078 [P] Create feature documentation in `src/domains/vendor-intelligence/CLAUDE.md`: Documented architecture, data flow, bandwidth rules, tables, functions, UI pages, hooks
@@ -200,7 +200,7 @@
 - [X] T081 Run `npm run build` to verify no TypeScript/Next.js errors → Build passes with zero errors
 - [X] T082 Run `npx convex deploy --yes` to deploy all Convex functions and schema changes to production → Deployed successfully
 - [ ] T083 Manual UAT with test accounts from `.env.local`: Test P1 (price tracking + alerts), P2 (vendor scorecard), P3 (price dashboard + cross-vendor comparison + CSV export), P4 (risk analysis), P5 (Action Center + AI Digest integration) → document any issues
-- [ ] T084 Update project CLAUDE.md: Add "Smart Vendor Intelligence" to Active Technologies section with tech stack and date
+- [X] T084 Update project CLAUDE.md: Added to Active Technologies + Recent Changes sections
 
 ---
 

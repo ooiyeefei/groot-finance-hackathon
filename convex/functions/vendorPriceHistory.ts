@@ -1270,3 +1270,48 @@ export const getPriceTrendData = query({
     }));
   },
 });
+
+/**
+ * T071: Archive old price history records (>2 years).
+ * On-demand action (NOT a cron — bandwidth-safe per CLAUDE.md Rule 3).
+ * Call manually or from admin tools when needed.
+ * Uses .take(100) to limit bandwidth per invocation.
+ */
+export const archiveOldRecords = internalMutation({
+  args: {
+    businessId: v.id("businesses"),
+    batchSize: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize ?? 100;
+    const twoYearsAgo = new Date();
+    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+    const cutoffDate = twoYearsAgo.toISOString().split("T")[0];
+
+    // Find non-archived records older than 2 years (limited batch for bandwidth)
+    const oldRecords = await ctx.db
+      .query("vendor_price_history")
+      .withIndex("by_businessId", (q) =>
+        q.eq("businessId", args.businessId)
+      )
+      .take(batchSize * 2); // Over-fetch to account for already-archived records
+
+    const toArchive = oldRecords.filter((r) => {
+      if (r.archivedFlag) return false; // Skip already archived
+      const date = r.invoiceDate ?? r.observedAt;
+      return date < cutoffDate;
+    });
+
+    let archivedCount = 0;
+    const now = Date.now();
+    for (const record of toArchive) {
+      await ctx.db.patch(record._id, {
+        archivedFlag: true,
+        archivedTimestamp: now,
+      });
+      archivedCount++;
+    }
+
+    return { archivedCount, hasMore: oldRecords.length === batchSize };
+  },
+});
