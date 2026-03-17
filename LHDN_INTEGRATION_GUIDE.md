@@ -40,22 +40,26 @@ These buyer-side features work immediately after businesses connect their LHDN M
 
 ## 📋 Business Owner Setup Guide
 
-### Step 1: Get LHDN Client ID & Secret
+### Step 1: Register ERP System on LHDN Portal
 
 **Navigate to MyInvois Portal:**
-1. Go to https://myinvois.hasil.gov.my
+1. Go to https://myinvois.hasil.gov.my (production) or https://preprod.myinvois.hasil.gov.my (sandbox/testing)
 2. Log in with your business account
-3. Navigate to **Systems** > **Manage Application**
-4. Click **"Register Application"** or **"Add New Application"**
+3. Go to **Taxpayer Profile** (left sidebar)
+4. Scroll down to **Representatives** section
+5. Click the **ERP** tab
+6. Click **"Register ERP"** (top-right of the ERP table)
 
-**Fill in Application Details:**
-- **Application Name**: "Groot Finance" (or your preferred name)
-- **Description**: "Automated e-invoice management"
-- **Redirect URL**: `https://finance.hellogroot.com`
+**Copy Credentials from Dialog:**
+The "Add ERP System" dialog will display three values:
+- **Client ID**: Your unique ERP identifier
+- **Client Secret 1**: First OAuth secret
+- **Client Secret 2**: Second OAuth secret
 
-**Copy Credentials:**
-- **Client ID**: Unique identifier (e.g., "ABC123DEF456...")
-- **Client Secret**: Secret key (⚠️ **shown only once** - copy immediately!)
+⚠️ **Copy all three values immediately — secrets are shown only once!**
+Tick the "I confirm I have copied & saved the Client Secrets" checkbox, then click "Done".
+
+> **Why two secrets?** LHDN provides two secrets for zero-downtime rotation. Both are simultaneously valid. You only need ONE for Groot — enter either one. When it expires, use "Regenerate Secrets" on the ERP tab to get a new pair.
 
 ---
 
@@ -67,8 +71,8 @@ These buyer-side features work immediately after businesses connect their LHDN M
 3. Expand the **E-Invoice** section
 
 **Enter LHDN Credentials:**
-1. Paste **LHDN Client ID** into the field
-2. Paste **LHDN Client Secret** into the password field
+1. Paste **LHDN Client ID** into the Client ID field
+2. Paste **either Client Secret 1 or 2** into the Client Secret field (both work)
 3. Click **Save Changes**
 
 **Security:**

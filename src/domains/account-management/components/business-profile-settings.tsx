@@ -1066,28 +1066,27 @@ export default function BusinessProfileSettings({ section }: BusinessProfileSett
                       <div className="mt-3 pl-5 space-y-2 text-xs text-muted-foreground">
                         <p className="font-medium text-foreground">Step-by-step guide:</p>
                         <ol className="list-decimal list-inside space-y-1.5 ml-2">
-                          <li>Log in to <a href="https://myinvois.hasil.gov.my" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">MyInvois Portal</a></li>
-                          <li>Navigate to <strong>Systems</strong> &gt; <strong>Manage Application</strong></li>
-                          <li>Click <strong>"Register Application"</strong> or <strong>"Add New Application"</strong></li>
-                          <li>Fill in application details:
+                          <li>Log in to <a href="https://myinvois.hasil.gov.my" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">MyInvois Portal</a> (or <a href="https://preprod.myinvois.hasil.gov.my" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">Preprod Portal</a> for testing)</li>
+                          <li>Go to <strong>Taxpayer Profile</strong> (left sidebar)</li>
+                          <li>Scroll to <strong>Representatives</strong> section &gt; click the <strong>ERP</strong> tab</li>
+                          <li>Click <strong>"Register ERP"</strong> (top-right of the ERP table)</li>
+                          <li>A dialog will appear with <strong>Client ID</strong>, <strong>Client Secret 1</strong>, and <strong>Client Secret 2</strong></li>
+                          <li>Copy all three values immediately — <strong>secrets are shown only once!</strong>
                             <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
-                              <li><strong>Application Name:</strong> "Groot Finance" (or your preferred name)</li>
-                              <li><strong>Description:</strong> "Automated e-invoice management"</li>
-                              <li><strong>Redirect URL:</strong> <code className="bg-muted px-1 py-0.5 rounded">https://finance.hellogroot.com</code></li>
+                              <li>Tick the <strong>"I confirm I have copied &amp; saved the Client Secrets"</strong> checkbox</li>
+                              <li>Click <strong>"Done"</strong></li>
                             </ul>
                           </li>
-                          <li>Click <strong>"Submit"</strong> or <strong>"Register"</strong></li>
-                          <li>You'll receive:
-                            <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
-                              <li><strong>Client ID:</strong> A unique identifier (e.g., "ABC123...")</li>
-                              <li><strong>Client Secret:</strong> A secret key (copy immediately - shown only once)</li>
-                            </ul>
-                          </li>
-                          <li>Copy both values and paste them below</li>
+                          <li>Paste the <strong>Client ID</strong> and <strong>either</strong> Secret 1 or Secret 2 below</li>
                         </ol>
-                        <div className="bg-amber-500/10 border border-amber-500/30 rounded p-2 mt-3">
+                        <div className="bg-muted/50 border border-border rounded p-2 mt-3">
+                          <p className="text-xs text-foreground">
+                            <strong>Why two secrets?</strong> LHDN provides two secrets for zero-downtime rotation. Both are valid simultaneously — enter either one here. When it expires, regenerate via the ERP tab &gt; <strong>"Regenerate Secrets"</strong> button, then update it here.
+                          </p>
+                        </div>
+                        <div className="bg-amber-500/10 border border-amber-500/30 rounded p-2 mt-2">
                           <p className="text-xs text-amber-700 dark:text-amber-300">
-                            <strong>⚠️ Important:</strong> Use <strong>Production</strong> credentials for live businesses. Sandbox credentials only work in LHDN's test environment.
+                            <strong>⚠️ Important:</strong> Use <strong>Production</strong> portal credentials for live businesses. <strong>Preprod</strong> credentials only work in LHDN&apos;s sandbox environment. See <a href="https://sdk.myinvois.hasil.gov.my/faq/" target="_blank" rel="noopener noreferrer" className="underline">LHDN FAQ</a> for details.
                           </p>
                         </div>
                       </div>
@@ -1115,18 +1114,18 @@ export default function BusinessProfileSettings({ section }: BusinessProfileSett
                   {/* LHDN Client Secret */}
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-2 flex items-center gap-2">
-                      LHDN Client Secret
+                      LHDN Client Secret (Secret 1 or 2)
                       <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">Required</span>
                     </label>
                     <input
                       type="password"
                       value={lhdnClientSecret}
                       onChange={(e) => setLhdnClientSecret(e.target.value)}
-                      placeholder="Enter your secret key..."
+                      placeholder="Enter either Client Secret 1 or 2..."
                       className="w-full bg-input border border-input rounded-md px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
                     />
                     <p className="text-xs text-muted-foreground mt-1">
-                      🔒 Stored securely in AWS SSM Parameter Store (encrypted at rest). Required for automatic e-invoice polling and buyer rejection features.
+                      Stored securely in AWS (encrypted at rest). LHDN provides two secrets — enter either one. Both are valid for OAuth authentication.
                     </p>
                   </div>
 
