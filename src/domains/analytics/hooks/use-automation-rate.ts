@@ -230,10 +230,11 @@ export interface UseMilestonesOptions {
 export interface UseMilestonesResult {
   milestones:
     | {
-        milestone_90: number | undefined;
-        milestone_95: number | undefined;
-        milestone_99: number | undefined;
+        milestone_90: number | null | undefined;
+        milestone_95: number | null | undefined;
+        milestone_99: number | null | undefined;
       }
+    | null
     | undefined;
   isLoading: boolean;
 }
