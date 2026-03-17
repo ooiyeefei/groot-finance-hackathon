@@ -92,6 +92,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       )
     }
 
+    // Guard: reject paths that are just a directory prefix (businessId/) without a file
+    // These produce CloudFront 403 errors since you can't GET a directory
+    const pathSegments = actualStoragePath.replace(/\/+$/, '').split('/')
+    if (pathSegments.length < 2) {
+      console.error(`[Invoice Image URL] Storage path too short (likely just businessId): ${actualStoragePath}`)
+      return NextResponse.json(
+        { success: false, error: 'Invalid storage path — missing file reference' },
+        { status: 400 }
+      )
+    }
+
     if (useRawFile) {
       // For raw files: use the exact storagePath — skip S3 HEAD check since
       // storagePath comes from our own DB and CloudFront returns 403 if missing
