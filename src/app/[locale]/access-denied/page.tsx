@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { AlertCircle, ArrowLeft, Mail } from 'lucide-react'
+import { HideOnNative } from '@/components/capacitor/hide-on-native'
 
 interface AccessDeniedPageProps {
   params: Promise<{ locale: string }>
@@ -66,15 +67,17 @@ export default async function AccessDeniedPage({ params }: AccessDeniedPageProps
           </div>
 
           <div className="space-y-3">
-            <Button
-              asChild
-              className="w-full"
-              variant="default"
-            >
-              <a href={`/${locale}/sign-up`}>
-                Create Groot Finance Account
-              </a>
-            </Button>
+            <HideOnNative>
+              <Button
+                asChild
+                className="w-full"
+                variant="default"
+              >
+                <a href={`/${locale}/sign-up`}>
+                  Create Groot Finance Account
+                </a>
+              </Button>
+            </HideOnNative>
 
             <Button
               asChild

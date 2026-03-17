@@ -65,7 +65,7 @@ export default function SignInPage() {
         <NativeSignIn
           locale={locale}
           redirectUrl={redirectUrl}
-          signUpUrl={`/${locale}/sign-up`}
+          signUpUrl=""
         />
       ) : (
         <SignIn

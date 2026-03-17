@@ -142,13 +142,15 @@ export function NativeSignIn({ locale, redirectUrl, signUpUrl }: NativeSignInPro
           </Button>
         </div>
 
-        {/* Sign Up Link */}
-        <p className="text-center text-sm text-muted-foreground">
-          Don&apos;t have an account?{' '}
-          <a href={signUpUrl} className="text-primary hover:underline">
-            Sign up
-          </a>
-        </p>
+        {/* Sign Up Link — hidden on native iOS (Apple 3.1.1: no registration) */}
+        {signUpUrl && (
+          <p className="text-center text-sm text-muted-foreground">
+            Don&apos;t have an account?{' '}
+            <a href={signUpUrl} className="text-primary hover:underline">
+              Sign up
+            </a>
+          </p>
+        )}
       </CardContent>
     </Card>
   );
