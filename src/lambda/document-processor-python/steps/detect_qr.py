@@ -418,22 +418,6 @@ def detect_qr_step(
                     continue
 
                 # Fallback: URL-based classification (if vision didn't classify this QR)
-                if URL_PATTERN.match(data):
-                    merchant_form_urls.append(data)
-                    print(f"[{document_id}] QR Detection: E-invoice form URL (vision confirmed) ✓ {data[:80]}")
-                else:
-                    print(f"[{document_id}] QR Detection: Vision says einvoice but not a URL: {data[:50]}")
-                continue
-            elif vision_label == "lhdn":
-                if URL_PATTERN.match(data):
-                    lhdn_validation_urls.append(data)
-                    print(f"[{document_id}] QR Detection: LHDN validation QR (vision confirmed)")
-                continue
-            elif vision_label in ("app", "other"):
-                print(f"[{document_id}] QR Detection: Skipped QR #{i} (vision: {vision_label})")
-                continue
-
-            # Fallback: URL-based classification (if vision didn't classify this QR)
             if URL_PATTERN.match(data):
                 classification = _classify_url(data, document_id)
                 if classification == "lhdn":
