@@ -1,6 +1,7 @@
 'use client'
 
-import { lazy, Suspense, useState, useEffect } from 'react'
+import { lazy, Suspense, useState, useEffect, useCallback } from 'react'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import {
   BarChart3,
@@ -67,31 +68,37 @@ const AR_SUB_TABS: readonly ARSubTab[] = ['dashboard', 'sales', 'debtors', 'cata
 const AP_SUB_TABS: readonly APSubTab[] = ['dashboard', 'incoming', 'vendors', 'prices', 'purchase-orders', 'goods-received', 'matching']
 
 
-// --- Hash routing ---
-function parseHash(): { topLevel: TopLevelTab; subTab: string } {
-  if (typeof window === 'undefined') return { topLevel: 'ar', subTab: 'dashboard' }
+// --- URL query param routing (?tab=ar&sub=sales) ---
+// Also supports legacy hash format (#ar-sales) for backwards compatibility
+function parseTabParams(searchParams: URLSearchParams): { topLevel: TopLevelTab; subTab: string } {
+  const tab = searchParams.get('tab')
+  const sub = searchParams.get('sub')
 
-  const hash = window.location.hash.replace('#', '')
-  if (!hash) return { topLevel: 'ar', subTab: 'dashboard' }
-
-  const dashIndex = hash.indexOf('-')
-  if (dashIndex === -1) return { topLevel: 'ar', subTab: 'dashboard' }
-
-  const prefix = hash.substring(0, dashIndex)
-  const suffix = hash.substring(dashIndex + 1)
-
-  if (prefix === 'ar' && (AR_SUB_TABS as readonly string[]).includes(suffix)) {
-    return { topLevel: 'ar', subTab: suffix }
+  if (tab === 'ar' || tab === 'ap') {
+    const subTabs = tab === 'ar' ? AR_SUB_TABS : AP_SUB_TABS
+    const validSub = sub && (subTabs as readonly string[]).includes(sub) ? sub : 'dashboard'
+    return { topLevel: tab, subTab: validSub }
   }
-  if (prefix === 'ap' && (AP_SUB_TABS as readonly string[]).includes(suffix)) {
-    return { topLevel: 'ap', subTab: suffix }
+
+  // Legacy hash support: #ar-sales → tab=ar&sub=sales
+  if (typeof window !== 'undefined') {
+    const hash = window.location.hash.replace('#', '')
+    if (hash) {
+      const dashIndex = hash.indexOf('-')
+      if (dashIndex !== -1) {
+        const prefix = hash.substring(0, dashIndex)
+        const suffix = hash.substring(dashIndex + 1)
+        if (prefix === 'ar' && (AR_SUB_TABS as readonly string[]).includes(suffix)) {
+          return { topLevel: 'ar', subTab: suffix }
+        }
+        if (prefix === 'ap' && (AP_SUB_TABS as readonly string[]).includes(suffix)) {
+          return { topLevel: 'ap', subTab: suffix }
+        }
+      }
+    }
   }
 
   return { topLevel: 'ar', subTab: 'dashboard' }
-}
-
-function updateHash(topLevel: TopLevelTab, subTab: string) {
-  window.history.replaceState(null, '', `#${topLevel}-${subTab}`)
 }
 
 const TabLoading = () => (
@@ -107,41 +114,46 @@ const topTriggerClassName =
   'flex items-center gap-2 px-6 py-3 rounded-md text-muted-foreground font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm whitespace-nowrap'
 
 export default function InvoicesTabContainer() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+
   const [topLevel, setTopLevel] = useState<TopLevelTab>('ar')
   const [arSubTab, setArSubTab] = useState<ARSubTab>('dashboard')
   const [apSubTab, setApSubTab] = useState<APSubTab>('dashboard')
 
-  // Sync from hash on mount and hash changes
+  // Sync from URL on mount
   useEffect(() => {
-    const sync = () => {
-      const { topLevel: tl, subTab } = parseHash()
-      setTopLevel(tl)
-      if (tl === 'ar') setArSubTab(subTab as ARSubTab)
-      else setApSubTab(subTab as APSubTab)
-    }
+    const { topLevel: tl, subTab } = parseTabParams(searchParams)
+    setTopLevel(tl)
+    if (tl === 'ar') setArSubTab(subTab as ARSubTab)
+    else setApSubTab(subTab as APSubTab)
+  }, [searchParams])
 
-    sync()
-    window.addEventListener('hashchange', sync)
-    return () => window.removeEventListener('hashchange', sync)
-  }, [])
+  const updateUrl = useCallback((tab: TopLevelTab, sub: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('tab', tab)
+    params.set('sub', sub)
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }, [searchParams, router, pathname])
 
   const handleTopLevelChange = (value: string) => {
     const tl = value as TopLevelTab
     setTopLevel(tl)
     const sub = tl === 'ar' ? arSubTab : apSubTab
-    updateHash(tl, sub)
+    updateUrl(tl, sub)
   }
 
   const handleArSubTabChange = (value: string) => {
     const sub = value as ARSubTab
     setArSubTab(sub)
-    updateHash('ar', sub)
+    updateUrl('ar', sub)
   }
 
   const handleApSubTabChange = (value: string) => {
     const sub = value as APSubTab
     setApSubTab(sub)
-    updateHash('ap', sub)
+    updateUrl('ap', sub)
   }
 
   return (

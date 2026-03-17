@@ -81,7 +81,7 @@ export default function DebtorDetail({ customerId, onBack }: DebtorDetailProps) 
     if (onBack) {
       onBack()
     } else {
-      router.push(`/${locale}/invoices#ar-debtors`)
+      router.push(`/${locale}/invoices?tab=ar&sub=debtors`)
     }
   }
 

@@ -52,7 +52,8 @@
     "teamCalendar": "团队日历",
     "leaveManagement": "休假与考勤",
     "personalSettings": "个人设置",
-    "reporting": "报告与导出"
+    "reporting": "报告与导出",
+    "documentsInbox": "文件收件箱"
   },
   "dashboard": {
     "title": "仪表板",

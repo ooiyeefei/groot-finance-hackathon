@@ -32,7 +32,7 @@ export default function EditSalesInvoicePage() {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-background gap-4">
         <p className="text-muted-foreground">Invoice not found.</p>
-        <Button variant="outline" onClick={() => router.push(`/${locale}/invoices#sales-invoices`)}>Back to Invoices</Button>
+        <Button variant="outline" onClick={() => router.push(`/${locale}/invoices?tab=ar&sub=sales`)}>Back to Invoices</Button>
       </div>
     )
   }

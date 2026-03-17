@@ -312,7 +312,7 @@ export default function InvoiceSettingsForm() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="icon" title="Back to Sales Invoices" onClick={() => router.push(`/${locale}/invoices#sales-invoices`)}>
+          <Button variant="outline" size="icon" title="Back to Sales Invoices" onClick={() => router.push(`/${locale}/invoices?tab=ar&sub=sales`)}>
               <ArrowLeft className="w-4 h-4" />
             </Button>
           <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">

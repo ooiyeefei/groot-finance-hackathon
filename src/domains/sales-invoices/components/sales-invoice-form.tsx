@@ -198,7 +198,7 @@ export function SalesInvoiceForm() {
         await uploadPdfToStorage(invoiceId)
       }
 
-      router.push(`/${locale}/invoices#sales-invoices`)
+      router.push(`/${locale}/invoices?tab=ar&sub=sales`)
     } catch (error) {
       console.error('Failed to save invoice:', error)
     } finally {
@@ -272,7 +272,7 @@ export function SalesInvoiceForm() {
         console.error('Failed to send invoice email:', emailError)
       }
 
-      router.push(`/${locale}/invoices#sales-invoices`)
+      router.push(`/${locale}/invoices?tab=ar&sub=sales`)
     } catch (error) {
       console.error('Failed to save and send invoice:', error)
     } finally {
@@ -332,7 +332,7 @@ export function SalesInvoiceForm() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => router.push(`/${locale}/invoices#sales-invoices`)}>
+          <Button variant="ghost" size="sm" onClick={() => router.push(`/${locale}/invoices?tab=ar&sub=sales`)}>
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div>

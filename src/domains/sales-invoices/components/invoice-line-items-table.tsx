@@ -294,7 +294,7 @@ function CatalogHintText() {
     <p className="text-xs text-muted-foreground">
       Add single, one-time items or products from your{' '}
       <Link
-        href={`/${locale}/invoices#ar-catalog`}
+        href={`/${locale}/invoices?tab=ar&sub=catalog`}
         className="text-primary font-medium hover:underline"
       >
         product catalog

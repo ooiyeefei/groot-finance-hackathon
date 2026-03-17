@@ -42,7 +42,7 @@ export default function RecordPaymentPage() {
         <main className="flex-1 overflow-auto p-card-padding pb-24 sm:pb-4">
           <div className="text-center py-24">
             <p className="text-muted-foreground">Invoice not found.</p>
-            <Button variant="outline" className="mt-4" onClick={() => router.push(`/${locale}/invoices#sales-invoices`)}>Back to Invoices</Button>
+            <Button variant="outline" className="mt-4" onClick={() => router.push(`/${locale}/invoices?tab=ar&sub=sales`)}>Back to Invoices</Button>
           </div>
         </main>
       </>
