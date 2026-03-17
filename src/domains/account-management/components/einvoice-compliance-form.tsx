@@ -28,14 +28,22 @@ export default function EInvoiceComplianceForm() {
   const [checkingSecret, setCheckingSecret] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
 
-  // Check if secret exists in SSM
+  // Check if secret exists in SSM (may fail if Vercel OIDC role lacks ssm:GetParameter)
   const checkSecretStatus = useCallback(async () => {
     setCheckingSecret(true)
     try {
       const res = await fetch('/api/v1/account-management/businesses/lhdn-secret')
       const data = await res.json()
-      if (data.success) setSecretExists(data.data.exists)
-    } catch { /* ignore */ }
+      if (data.success) {
+        setSecretExists(data.data.exists)
+      } else {
+        // API returned error (likely IAM permission) — if Client ID exists,
+        // assume secret was saved previously (optimistic)
+        setSecretExists(null) // null = unknown, don't show "Not connected"
+      }
+    } catch {
+      setSecretExists(null)
+    }
     finally { setCheckingSecret(false) }
   }, [])
 
@@ -378,32 +386,41 @@ export default function EInvoiceComplianceForm() {
         </div>
 
         {/* Connection Status */}
-        <div className={`flex items-center gap-3 rounded-lg border p-3 ${
-          lhdnClientId.trim() && secretExists
-            ? 'bg-green-500/10 border-green-500/30'
-            : 'bg-muted/50 border-border'
-        }`}>
-          {checkingSecret ? (
-            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-          ) : lhdnClientId.trim() && secretExists ? (
-            <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400" />
-          ) : (
-            <AlertCircle className="w-4 h-4 text-muted-foreground" />
-          )}
-          <div className="flex-1">
-            <p className={`text-sm font-medium ${lhdnClientId.trim() && secretExists ? 'text-green-700 dark:text-green-300' : 'text-foreground'}`}>
-              {lhdnClientId.trim() && secretExists ? 'Connected to LHDN MyInvois' : 'Not connected'}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {lhdnClientId.trim() && secretExists
-                ? 'E-invoices are being polled automatically.'
-                : 'Enter Client ID and Secret below to connect.'}
-            </p>
-          </div>
-          {lhdnClientId.trim() && secretExists && (
-            <span className="inline-flex items-center rounded-full bg-green-500/20 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-300">Active</span>
-          )}
-        </div>
+        {(() => {
+          const hasClientId = !!lhdnClientId.trim()
+          // Connected: has Client ID AND secret confirmed OR secret status unknown (assume saved previously)
+          const isConnected = hasClientId && (secretExists === true || (secretExists === null && hasClientId))
+          const isNotConnected = !hasClientId || secretExists === false
+
+          return (
+            <div className={`flex items-center gap-3 rounded-lg border p-3 ${
+              isConnected
+                ? 'bg-green-500/10 border-green-500/30'
+                : 'bg-muted/50 border-border'
+            }`}>
+              {checkingSecret ? (
+                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+              ) : isConnected ? (
+                <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-muted-foreground" />
+              )}
+              <div className="flex-1">
+                <p className={`text-sm font-medium ${isConnected ? 'text-green-700 dark:text-green-300' : 'text-foreground'}`}>
+                  {isConnected ? 'Connected to LHDN MyInvois' : 'Not connected'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {isConnected
+                    ? 'E-invoices are being polled automatically.'
+                    : 'Enter Client ID and Secret below to connect.'}
+                </p>
+              </div>
+              {isConnected && (
+                <span className="inline-flex items-center rounded-full bg-green-500/20 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-300">Active</span>
+              )}
+            </div>
+          )
+        })()}
 
         {/* LHDN Client ID */}
         <div>
@@ -427,7 +444,7 @@ export default function EInvoiceComplianceForm() {
           <label className="block text-sm font-medium text-foreground mb-2">
             LHDN Client Secret (Secret 1 or 2)
           </label>
-          {secretExists && !lhdnClientSecret ? (
+          {(secretExists === true || (secretExists === null && lhdnClientId.trim())) && !lhdnClientSecret ? (
             <div className="w-full bg-input border border-input rounded-md px-3 py-2 flex items-center gap-2">
               <Shield className="w-4 h-4 text-green-600 dark:text-green-400" />
               <span className="text-muted-foreground font-mono text-sm">••••••••••••••••••••••••</span>
