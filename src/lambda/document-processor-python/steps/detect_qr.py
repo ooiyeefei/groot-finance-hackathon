@@ -45,6 +45,88 @@ URL_SHORTENERS = re.compile(
 )
 
 
+def _preprocess_image_for_qr(image: Image.Image) -> List[Image.Image]:
+    """Generate multiple preprocessed versions of the image to improve QR detection."""
+    variants = [image]  # Original
+
+    try:
+        # Variant 1: Increase contrast
+        enhancer = ImageEnhance.Contrast(image)
+        variants.append(enhancer.enhance(1.5))
+
+        # Variant 2: High contrast + sharpening
+        high_contrast = enhancer.enhance(2.0)
+        sharpener = ImageEnhance.Sharpness(high_contrast)
+        variants.append(sharpener.enhance(2.0))
+
+        # Variant 3: Brightness adjustment (for dark photos)
+        brightness = ImageEnhance.Brightness(image)
+        variants.append(brightness.enhance(1.3))
+
+        # Variant 4: Grayscale (sometimes helps with colored backgrounds)
+        variants.append(image.convert('L').convert('RGB'))
+
+    except Exception as e:
+        print(f"Warning: Image preprocessing failed: {e}")
+
+    return variants
+
+
+def _detect_qr_zxingcpp(image_variants: List[Image.Image], document_id: str) -> List[str]:
+    """Try zxingcpp on multiple image variants."""
+    try:
+        import zxingcpp
+        all_qr_data = []
+        seen_data = set()
+
+        for idx, img in enumerate(image_variants):
+            results = zxingcpp.read_barcodes(img)
+            qr_results = [r for r in results if r.format.name == "QRCode"]
+
+            for qr in qr_results:
+                data = qr.text.strip()
+                if data and data not in seen_data:
+                    seen_data.add(data)
+                    all_qr_data.append(data)
+                    if idx > 0:
+                        print(f"[{document_id}] QR Detection: zxingcpp found QR in variant #{idx}: {data[:80]}")
+
+        return all_qr_data
+    except ImportError:
+        print(f"[{document_id}] QR Detection: zxingcpp not available")
+        return []
+    except Exception as e:
+        print(f"[{document_id}] QR Detection: zxingcpp error - {e}")
+        return []
+
+
+def _detect_qr_pyzbar(image_variants: List[Image.Image], document_id: str) -> List[str]:
+    """Fallback to pyzbar (more robust, different algorithm)."""
+    try:
+        from pyzbar import pyzbar
+        all_qr_data = []
+        seen_data = set()
+
+        for idx, img in enumerate(image_variants):
+            img_array = np.array(img)
+            results = pyzbar.decode(img_array, symbols=[pyzbar.ZBarSymbol.QRCODE])
+
+            for qr in results:
+                data = qr.data.decode('utf-8', errors='ignore').strip()
+                if data and data not in seen_data:
+                    seen_data.add(data)
+                    all_qr_data.append(data)
+                    print(f"[{document_id}] QR Detection: pyzbar found QR (variant #{idx}): {data[:80]}")
+
+        return all_qr_data
+    except ImportError:
+        print(f"[{document_id}] QR Detection: pyzbar not available")
+        return []
+    except Exception as e:
+        print(f"[{document_id}] QR Detection: pyzbar error - {e}")
+        return []
+
+
 def _resolve_short_url(url: str, document_id: str) -> str:
     """Follow redirects on shortened URLs to get the final destination URL."""
     try:
