@@ -13,7 +13,7 @@ import {
 import { toast } from "sonner";
 
 export default function EmailForwardingSettings() {
-  const { profile, isLoading, refetch: refreshProfile } = useBusinessProfile();
+  const { profile, isLoading } = useBusinessProfile();
 
   const [saving, setSaving] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
@@ -50,17 +50,17 @@ export default function EmailForwardingSettings() {
           }
         );
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => null);
-          throw new Error(errorData?.error || `Failed to save (${response.status})`);
+        const result = await response.json();
+        console.log("[DocInbox] Toggle response:", response.status, result);
+
+        if (!response.ok || !result.success) {
+          throw new Error(result?.error || `Failed to save (${response.status})`);
         }
 
-        // Refresh profile from server to get updated data
-        await refreshProfile();
-        setLocalEnabled(null); // Clear optimistic state, use server data
-
+        // Keep optimistic state (don't revert to server data which may be stale)
         toast.success(enabled ? "Document Inbox enabled" : "Document Inbox disabled");
       } catch (error) {
+        console.error("[DocInbox] Toggle error:", error);
         // Revert optimistic update
         setLocalEnabled(null);
         toast.error(
@@ -70,7 +70,7 @@ export default function EmailForwardingSettings() {
         setSaving(false);
       }
     },
-    [profile?.id, refreshProfile]
+    [profile?.id]
   );
 
   const copyEmail = () => {
