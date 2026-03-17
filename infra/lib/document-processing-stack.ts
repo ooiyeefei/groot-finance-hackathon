@@ -417,8 +417,81 @@ export class DocumentProcessingStack extends cdk.Stack {
     //
     // Prerequisites (manual DNS):
     // - MX record: docs.hellogroot.com → inbound-smtp.us-west-2.amazonaws.com (priority 10)
+    //
+    // Bucket policy: The bucket is imported (not CDK-managed), so we use a
+    // custom resource to safely merge the SES write permission into the
+    // existing bucket policy without overwriting other statements.
     // ========================================================================
-    receiptRuleSet.addRule('DocumentForwardingReceiptRule', {
+
+    // Step 1: Grant SES permission to write to S3 for document-forwarding prefix.
+    // Uses a Lambda-backed custom resource to GET existing policy, merge, and PUT.
+    const sesBucketPolicyFn = new lambda.Function(this, 'SesBucketPolicyUpdater', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      architecture: lambda.Architecture.ARM_64,
+      handler: 'index.handler',
+      timeout: cdk.Duration.seconds(30),
+      code: lambda.Code.fromInline(`
+const { S3Client, GetBucketPolicyCommand, PutBucketPolicyCommand } = require('@aws-sdk/client-s3');
+const s3 = new S3Client({});
+const BUCKET = 'finanseal-bucket';
+const SID = 'AllowSESDocForwardPuts';
+const STATEMENT = {
+  Sid: SID,
+  Effect: 'Allow',
+  Principal: { Service: 'ses.amazonaws.com' },
+  Action: 's3:PutObject',
+  Resource: 'arn:aws:s3:::finanseal-bucket/ses-emails/document-forwarding/*',
+  Condition: { StringEquals: { 'AWS:SourceAccount': '837224017779' } },
+};
+
+exports.handler = async (event) => {
+  const reqType = event.RequestType;
+  try {
+    let policy = { Version: '2012-10-17', Statement: [] };
+    try {
+      const res = await s3.send(new GetBucketPolicyCommand({ Bucket: BUCKET }));
+      policy = JSON.parse(res.Policy);
+    } catch (e) {
+      if (e.name !== 'NoSuchBucketPolicy') throw e;
+    }
+
+    if (reqType === 'Delete') {
+      policy.Statement = policy.Statement.filter(s => s.Sid !== SID);
+    } else {
+      // Remove existing statement with same Sid, then add updated one
+      policy.Statement = policy.Statement.filter(s => s.Sid !== SID);
+      policy.Statement.push(STATEMENT);
+    }
+
+    await s3.send(new PutBucketPolicyCommand({
+      Bucket: BUCKET,
+      Policy: JSON.stringify(policy),
+    }));
+
+    return { PhysicalResourceId: 'ses-doc-forward-bucket-policy' };
+  } catch (e) {
+    console.error(e);
+    throw e;
+  }
+};
+      `),
+    });
+
+    sesBucketPolicyFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['s3:GetBucketPolicy', 's3:PutBucketPolicy'],
+      resources: ['arn:aws:s3:::finanseal-bucket'],
+    }));
+
+    const sesBucketPolicyProvider = new cr.Provider(this, 'SesBucketPolicyProvider', {
+      onEventHandler: sesBucketPolicyFn,
+    });
+
+    const sesBucketPolicyCr = new cdk.CustomResource(this, 'SesBucketPolicyForDocForwarding', {
+      serviceToken: sesBucketPolicyProvider.serviceToken,
+    });
+
+    // Step 2: Create SES receipt rule (depends on bucket policy being set)
+    const docForwardRule = receiptRuleSet.addRule('DocumentForwardingReceiptRule', {
       recipients: ['docs.hellogroot.com'], // Matches docs@*.hellogroot.com
       actions: [
         new sesActions.S3({
@@ -430,6 +503,9 @@ export class DocumentProcessingStack extends cdk.Stack {
         }),
       ],
     });
+
+    // Ensure bucket policy is set before SES tries to validate S3 access
+    docForwardRule.node.addDependency(sesBucketPolicyCr);
 
     // ========================================================================
     // S3 Lifecycle: SES Email Retention (PDPA compliance)
