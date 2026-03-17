@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { FileText } from 'lucide-react'
+import { FileText, Mail, Bell } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
 import { useBusinessProfile } from '@/contexts/business-context'
 import { useRegisterUnsavedChanges } from '@/components/providers/unsaved-changes-provider'
@@ -22,6 +22,10 @@ export default function EInvoiceComplianceForm() {
   const [lhdnClientSecret, setLhdnClientSecret] = useState('')
   const [peppolParticipantId, setPeppolParticipantId] = useState('')
   const [autoSelfBillExemptVendors, setAutoSelfBillExemptVendors] = useState(false)
+
+  // Notification settings
+  const [autoDelivery, setAutoDelivery] = useState(true)
+  const [buyerNotifications, setBuyerNotifications] = useState(true)
 
   // MSIC combobox state
   const [msicSearch, setMsicSearch] = useState('')
@@ -63,6 +67,11 @@ export default function EInvoiceComplianceForm() {
       setLhdnClientSecret(initial.lhdnClientSecret)
       setPeppolParticipantId(initial.peppolParticipantId)
       setAutoSelfBillExemptVendors(profile.auto_self_bill_exempt_vendors === true)
+      // Notification settings
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const p = profile as any
+      setAutoDelivery(p.einvoice_auto_delivery !== false)
+      setBuyerNotifications(p.einvoice_buyer_notifications !== false)
     }
   }, [profile])
 
@@ -135,6 +144,8 @@ export default function EInvoiceComplianceForm() {
           lhdn_client_id: lhdnClientId.trim(),
           peppol_participant_id: peppolParticipantId.trim(),
           auto_self_bill_exempt_vendors: autoSelfBillExemptVendors,
+          einvoice_auto_delivery: autoDelivery,
+          einvoice_buyer_notifications: buyerNotifications,
         })
       })
 
@@ -381,6 +392,54 @@ export default function EInvoiceComplianceForm() {
             <p className="text-xs text-muted-foreground mt-1">
               When enabled, self-billed e-invoices will be automatically generated for approved expenses and AP invoices from LHDN-exempt vendors.
             </p>
+          </div>
+        </div>
+
+        {/* Notification Settings */}
+        <div className="border-t border-border pt-4 mt-2">
+          <div className="flex items-center gap-2 mb-4">
+            <Bell className="w-4 h-4 text-primary" />
+            <span className="text-sm font-medium text-foreground">E-Invoice Notifications</span>
+          </div>
+          <div className="space-y-4">
+            <label className="flex items-center justify-between gap-4 cursor-pointer">
+              <div className="flex-1">
+                <span className="text-sm font-medium text-foreground">
+                  Auto-deliver validated e-invoices to buyers
+                </span>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Automatically email the LHDN-validated PDF to the buyer after successful validation
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={autoDelivery}
+                onClick={() => setAutoDelivery(!autoDelivery)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 cursor-pointer ${autoDelivery ? 'bg-primary' : 'bg-muted'}`}
+              >
+                <span className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${autoDelivery ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </label>
+            <label className="flex items-center justify-between gap-4 cursor-pointer">
+              <div className="flex-1">
+                <span className="text-sm font-medium text-foreground">
+                  Send buyer notification emails
+                </span>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Notify buyers via email on validation, cancellation, and rejection events
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={buyerNotifications}
+                onClick={() => setBuyerNotifications(!buyerNotifications)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 cursor-pointer ${buyerNotifications ? 'bg-primary' : 'bg-muted'}`}
+              >
+                <span className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${buyerNotifications ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </label>
           </div>
         </div>
 

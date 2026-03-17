@@ -20,7 +20,7 @@ const UserProfileSection = lazy(() => import('@/domains/account-management/compo
 const TimesheetSettings = lazy(() => import('@/domains/timesheet-attendance/components/timesheet-settings'))
 const PrivacyDataSection = lazy(() => import('@/domains/account-management/components/privacy-data-section').then(m => ({ default: m.PrivacyDataSection })))
 const ReferralDashboard = lazy(() => import('@/domains/referral/components/referral-dashboard'))
-const EInvoiceSettingsWithTabs = lazy(() => import('@/domains/account-management/components/einvoice-settings-with-tabs'))
+// EInvoiceSettingsWithTabs removed — e-Invoice settings consolidated under Business > e-Invoice tab
 const AIAutomationSettings = lazy(() => import('@/domains/account-management/components/ai-automation-settings').then(m => ({ default: m.AIAutomationSettings })))
 const EmailForwardingSettings = lazy(() => import('@/domains/account-management/components/email-forwarding-settings'))
 
@@ -57,7 +57,7 @@ function TabLoader({ title }: { title: string }) {
  * - Business: Business Profile | e-Invoice | Currency
  * - Finance: Categories | AI & Automation
  * - People: Team | Leave | Timesheet
- * - Integrations: Stripe | e-Invoice | API Keys
+ * - Integrations: Stripe | API Keys
  * - Billing: owner-only
  * - Referral: all users
  * - Personal: Profile | Privacy & Data
@@ -75,26 +75,43 @@ const TabbedBusinessSettings = memo(() => {
 
   // Resolve legacy tab URLs to new grouped tabs + sub-sections
   const tabFromUrl = searchParams.get('tab')
+  const subFromUrl = searchParams.get('sub')
   const defaultTab = canViewBusinessSettings ? 'business' : 'personal'
 
   const resolved = useMemo(() => {
     const tab = tabFromUrl || defaultTab
     const defaults = { finance: 'categories' as const, people: 'team' as const, integrations: 'stripe' as const, personal: 'profile' as const, business: 'profile' as const }
-    switch (tab) {
-      case 'business-profile': return { tab: 'business', ...defaults }
-      case 'category-management': return { tab: 'finance', ...defaults }
-      case 'ai-automation': return { tab: 'finance', ...defaults, finance: 'ai' as const }
-      case 'team-management': return { tab: 'people', ...defaults }
-      case 'leave-management': return { tab: 'people', ...defaults, people: 'leave' as const }
-      case 'timesheet': return { tab: 'people', ...defaults, people: 'timesheet' as const }
-      case 'einvoice': return { tab: 'integrations', ...defaults, integrations: 'einvoice' as const }
-      case 'email-forwarding': return { tab: 'business', ...defaults, business: 'email-forwarding' as const }
-      case 'api-keys': return { tab: 'integrations', ...defaults, integrations: 'api-keys' as const }
-      case 'privacy': return { tab: 'personal', ...defaults, personal: 'privacy' as const }
-      case 'profile': return { tab: 'personal', ...defaults }
-      default: return { tab, ...defaults }
+
+    // Resolve base tab + defaults from legacy URLs
+    let result = (() => {
+      switch (tab) {
+        case 'business-profile': return { tab: 'business', ...defaults }
+        case 'category-management': return { tab: 'finance', ...defaults }
+        case 'ai-automation': return { tab: 'finance', ...defaults, finance: 'ai' as const }
+        case 'team-management': return { tab: 'people', ...defaults }
+        case 'leave-management': return { tab: 'people', ...defaults, people: 'leave' as const }
+        case 'timesheet': return { tab: 'people', ...defaults, people: 'timesheet' as const }
+        case 'einvoice': return { tab: 'business', ...defaults, business: 'einvoice' as const }
+        case 'email-forwarding': return { tab: 'business', ...defaults, business: 'email-forwarding' as const }
+        case 'api-keys': return { tab: 'integrations', ...defaults, integrations: 'api-keys' as const }
+        case 'privacy': return { tab: 'personal', ...defaults, personal: 'privacy' as const }
+        case 'profile': return { tab: 'personal', ...defaults }
+        default: return { tab, ...defaults }
+      }
+    })()
+
+    // Apply &sub= param override for the active tab group
+    if (subFromUrl) {
+      const s = subFromUrl
+      if (result.tab === 'business') result = { ...result, business: s as typeof defaults.business }
+      else if (result.tab === 'finance') result = { ...result, finance: s as typeof defaults.finance }
+      else if (result.tab === 'people') result = { ...result, people: s as typeof defaults.people }
+      else if (result.tab === 'integrations') result = { ...result, integrations: s as typeof defaults.integrations }
+      else if (result.tab === 'personal') result = { ...result, personal: s as typeof defaults.personal }
     }
-  }, [tabFromUrl, defaultTab])
+
+    return result
+  }, [tabFromUrl, subFromUrl, defaultTab])
 
   const activeTab = resolved.tab
 
@@ -102,12 +119,21 @@ const TabbedBusinessSettings = memo(() => {
   const [businessSection, setBusinessSection] = useState<'profile' | 'einvoice' | 'currency' | 'email-forwarding'>(resolved.business)
   const [financeSection, setFinanceSection] = useState<'categories' | 'ai'>(resolved.finance)
   const [peopleSection, setPeopleSection] = useState<'team' | 'leave' | 'timesheet'>(resolved.people)
-  const [integrationsSection, setIntegrationsSection] = useState<'stripe' | 'einvoice' | 'api-keys'>(resolved.integrations)
+  const [integrationsSection, setIntegrationsSection] = useState<'stripe' | 'api-keys'>(resolved.integrations === 'api-keys' ? 'api-keys' : 'stripe')
   const [personalSection, setPersonalSection] = useState<'profile' | 'privacy'>(resolved.personal)
 
   const handleTabChange = useCallback((value: string) => {
     const params = new URLSearchParams(searchParams.toString())
     params.set('tab', value)
+    params.delete('sub')
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }, [searchParams, router, pathname])
+
+  // Update sub-tab in URL and local state
+  const handleSubTabChange = useCallback((value: string, setter: (v: string) => void) => {
+    setter(value)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('sub', value)
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
   }, [searchParams, router, pathname])
 
@@ -178,23 +204,23 @@ const TabbedBusinessSettings = memo(() => {
           {/* Sub-tabs — shown inline below top tabs, also sticky */}
           {activeTab === 'business' && canViewBusinessSettings && renderSubTabs(
             [{ value: 'profile', label: 'Business Profile' }, { value: 'einvoice', label: 'e-Invoice' }, { value: 'currency', label: 'Currency' }, { value: 'email-forwarding', label: 'Email Forwarding' }],
-            businessSection, (v) => setBusinessSection(v as typeof businessSection)
+            businessSection, (v) => handleSubTabChange(v, (val) => setBusinessSection(val as typeof businessSection))
           )}
           {activeTab === 'finance' && canViewBusinessSettings && renderSubTabs(
             [{ value: 'categories', label: 'Categories' }, { value: 'ai', label: 'AI & Automation' }],
-            financeSection, (v) => setFinanceSection(v as typeof financeSection)
+            financeSection, (v) => handleSubTabChange(v, (val) => setFinanceSection(val as typeof financeSection))
           )}
           {activeTab === 'people' && canViewBusinessSettings && renderSubTabs(
             [{ value: 'team', label: 'Team' }, { value: 'leave', label: 'Leave' }, { value: 'timesheet', label: 'Timesheet' }],
-            peopleSection, (v) => setPeopleSection(v as typeof peopleSection)
+            peopleSection, (v) => handleSubTabChange(v, (val) => setPeopleSection(val as typeof peopleSection))
           )}
           {activeTab === 'integrations' && canViewBusinessSettings && renderSubTabs(
-            [{ value: 'stripe', label: 'Stripe' }, { value: 'einvoice', label: 'e-Invoice' }, { value: 'api-keys', label: 'API Keys' }],
-            integrationsSection, (v) => setIntegrationsSection(v as typeof integrationsSection)
+            [{ value: 'stripe', label: 'Stripe' }, { value: 'api-keys', label: 'API Keys' }],
+            integrationsSection, (v) => handleSubTabChange(v, (val) => setIntegrationsSection(val as typeof integrationsSection))
           )}
           {activeTab === 'personal' && renderSubTabs(
             [{ value: 'profile', label: 'Profile' }, { value: 'privacy', label: 'Privacy & Data' }],
-            personalSection, (v) => setPersonalSection(v as typeof personalSection)
+            personalSection, (v) => handleSubTabChange(v, (val) => setPersonalSection(val as typeof personalSection))
           )}
         </div>
 
@@ -248,7 +274,6 @@ const TabbedBusinessSettings = memo(() => {
             <div className="bg-card rounded-lg border border-border p-6">
               <Suspense fallback={<TabLoader title={integrationsSection} />}>
                 {integrationsSection === 'stripe' && <StripeIntegrationCard />}
-                {integrationsSection === 'einvoice' && <EInvoiceSettingsWithTabs />}
                 {integrationsSection === 'api-keys' && <ApiKeysManagementClient />}
               </Suspense>
             </div>
