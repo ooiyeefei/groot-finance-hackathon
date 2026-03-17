@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, forwardRef, useImperativeHandle, lazy, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { FileText, Image, File, Play, RotateCcw, Eye, FileSearch, Trash2, Plus, Loader2, CheckSquare, Square } from 'lucide-react'
+import { FileText, Image, File, Play, RotateCcw, Eye, FileSearch, Trash2, Plus, Loader2, CheckSquare, Square, CheckCircle2 } from 'lucide-react'
 import SkeletonLoader from '@/components/ui/skeleton-loader'
 import { useDocuments } from '@/domains/invoices/hooks/use-documents'
 import DocumentStatusBadge from './document-status-badge'
@@ -495,20 +495,19 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                   />
                   
                   {/* AP Accounting Status Tag */}
-                  {(document as any).accountingStatus === 'posted' ? (
-                    (document as any).paymentStatus === 'paid' ? (
-                      <span className="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-0.5 text-xs font-medium">
-                        Paid
-                      </span>
-                    ) : (document as any).paymentStatus === 'partial' ? (
-                      <span className="inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-2 py-0.5 text-xs font-medium">
-                        Partial Payment
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-0.5 text-xs font-medium">
-                        Posted to AP
-                      </span>
-                    )
+                  {document.accountingStatus === 'posted' ? (
+                    <button
+                      onClick={() => {
+                        if (document.journalEntryId) {
+                          router.push(`/${locale}/accounting?tab=journal-entries&entry=${document.journalEntryId}`)
+                        }
+                      }}
+                      className="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-0.5 text-xs font-medium hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors cursor-pointer"
+                      title="Click to view journal entry"
+                    >
+                      <CheckCircle2 className="w-3 h-3 mr-1" />
+                      Posted
+                    </button>
                   ) : isCompletedDocument(document.status) && document.extracted_data ? (
                     <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground px-2 py-0.5 text-xs font-medium">
                       Not Posted
