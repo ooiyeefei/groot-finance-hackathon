@@ -100,7 +100,7 @@ async function simulateEmailForward(config: TestConfig) {
       console.error("\n❌ Convex action failed:");
       console.error(`   ${actionResult.errorMessage}`);
       console.log("\n💡 Expected behavior: Action requires actual S3 file to exist.");
-      console.log("   To test end-to-end, send real email to docs@prefix.hellogroot.com");
+      console.log("   To test end-to-end, send real email to inbox@prefix.hellogroot.com");
       return;
     }
 
@@ -150,7 +150,7 @@ const config: TestConfig = {
 // Run simulation
 console.log("\n⚠️  WARNING: This script tests the API contract only.");
 console.log("It does NOT upload files to S3, so the Convex action will fail.");
-console.log("For full end-to-end testing, send a real email to docs@prefix.hellogroot.com\n");
+console.log("For full end-to-end testing, send a real email to inbox@prefix.hellogroot.com\n");
 
 simulateEmailForward(config).then(() => {
   process.exit(0);

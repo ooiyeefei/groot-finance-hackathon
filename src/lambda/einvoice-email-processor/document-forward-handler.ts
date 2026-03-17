@@ -2,7 +2,7 @@
  * Document Forwarding Email Handler
  *
  * Handles general document forwarding emails (receipts & AP invoices).
- * Email format: docs@{business-prefix}.hellogroot.com
+ * Email format: inbox@{business-prefix}.hellogroot.com
  *
  * Flow:
  * 1. Parse email and extract attachments (PDF, JPG, PNG)
@@ -45,10 +45,10 @@ interface BusinessConfig {
 
 /**
  * Parse business prefix from email address
- * Format: docs@{prefix}.hellogroot.com
+ * Format: inbox@{prefix}.hellogroot.com
  */
 export function parseBusinessPrefix(toAddress: string): string | null {
-  const match = toAddress.match(/^docs@([a-z0-9-]+)\.hellogroot\.com$/i);
+  const match = toAddress.match(/^inbox@([a-z0-9-]+)\.hellogroot\.com$/i);
   return match ? match[1] : null;
 }
 

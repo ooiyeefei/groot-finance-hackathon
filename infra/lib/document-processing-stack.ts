@@ -410,13 +410,13 @@ export class DocumentProcessingStack extends cdk.Stack {
     });
 
     // ========================================================================
-    // SES Receiving: docs@*.hellogroot.com (001-doc-email-forward)
+    // SES Receiving: inbox@*.hellogroot.com (001-doc-email-forward)
     //
     // Handles document forwarding emails (receipts & AP invoices).
-    // Format: docs@{business-prefix}.hellogroot.com
+    // Format: inbox@{business-prefix}.hellogroot.com
     //
     // Prerequisites (manual DNS):
-    // - MX record: docs.hellogroot.com → inbound-smtp.us-west-2.amazonaws.com (priority 10)
+    // - MX record: inbox.hellogroot.com → inbound-smtp.us-west-2.amazonaws.com (priority 10)
     //
     // Bucket policy: The bucket is imported (not CDK-managed), so we use a
     // custom resource to safely merge the SES write permission into the
@@ -492,7 +492,7 @@ exports.handler = async (event) => {
 
     // Step 2: Create SES receipt rule (depends on bucket policy being set)
     const docForwardRule = receiptRuleSet.addRule('DocumentForwardingReceiptRule', {
-      recipients: ['docs.hellogroot.com'], // Matches docs@*.hellogroot.com
+      recipients: ['inbox.hellogroot.com'], // Matches inbox@*.hellogroot.com
       actions: [
         new sesActions.S3({
           bucket,

@@ -262,7 +262,7 @@ export default defineSchema({
 
     // 001-doc-email-forward: Email forwarding configuration
     emailForwardingEnabled: v.optional(v.boolean()),
-    emailForwardingDomain: v.optional(v.string()),      // e.g., "docs.hellogroot.com"
+    emailForwardingDomain: v.optional(v.string()),      // e.g., "inbox.hellogroot.com"
     emailForwardingPrefix: v.optional(v.string()),      // e.g., "acme-corp"
     emailForwardingAllowlist: v.optional(v.array(v.string())), // Authorized sender emails
 

@@ -27,7 +27,7 @@ export default function EmailForwardingSettings() {
   const isEnabled = profile?.emailForwardingEnabled ?? false;
   const allowlist: string[] = profile?.emailForwardingAllowlist ?? [];
   const slug = profile?.slug ?? "";
-  const forwardingEmail = slug ? `docs@${slug}.hellogroot.com` : null;
+  const forwardingEmail = slug ? `inbox@${slug}.hellogroot.com` : null;
 
   const saveSettings = useCallback(
     async (updates: Record<string, unknown>) => {

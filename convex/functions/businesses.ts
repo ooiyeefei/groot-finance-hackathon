@@ -738,7 +738,7 @@ export const updateBusinessByStringId = mutation({
     // Auto-set prefix from slug when enabling (zero-config for users)
     if (args.email_forwarding_enabled === true && !business.emailForwardingPrefix && business.slug) {
       updates.emailForwardingPrefix = business.slug;
-      updates.emailForwardingDomain = 'docs.hellogroot.com';
+      updates.emailForwardingDomain = 'inbox.hellogroot.com';
     }
 
     await ctx.db.patch(business._id, updates);
