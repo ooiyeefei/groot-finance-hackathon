@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useBusinessProfile } from '@/contexts/business-context'
 import { useToast } from '@/components/ui/toast'
-import { CheckCircle2, AlertCircle, Loader2, ChevronRight, ExternalLink, Shield } from 'lucide-react'
+import { CheckCircle2, AlertCircle, Loader2, ChevronRight, ExternalLink, Shield, XCircle } from 'lucide-react'
 
 export default function EInvoiceIntegrationSettings() {
   const { profile, updateProfile } = useBusinessProfile()
@@ -13,6 +13,7 @@ export default function EInvoiceIntegrationSettings() {
   const [lhdnClientId, setLhdnClientId] = useState('')
   const [lhdnClientSecret, setLhdnClientSecret] = useState('')
   const [peppolParticipantId, setPeppolParticipantId] = useState('')
+  const [validationError, setValidationError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
   // Connection status
@@ -49,17 +50,47 @@ export default function EInvoiceIntegrationSettings() {
     }
   }, [profile, checkSecretStatus])
 
-  // Save handler
+  // Save handler — validates credentials against LHDN OAuth before saving
   const handleSave = async () => {
     setIsSaving(true)
+    setValidationError(null)
 
     try {
-      // Get CSRF token
+      // Step 1: If new credentials provided, validate them against LHDN first
+      if (lhdnClientId.trim() && lhdnClientSecret.trim()) {
+        const validateRes = await fetch('/api/v1/account-management/businesses/lhdn-validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            client_id: lhdnClientId.trim(),
+            client_secret: lhdnClientSecret.trim(),
+            tin: profile?.lhdn_tin || undefined,
+          }),
+        })
+        const validateData = await validateRes.json()
+
+        if (!validateData.success) {
+          throw new Error(validateData.error || 'Validation request failed')
+        }
+
+        if (!validateData.data.valid) {
+          setValidationError(validateData.data.error || 'Invalid credentials')
+          addToast({
+            type: 'error',
+            title: 'Invalid LHDN credentials',
+            description: validateData.data.error || 'Client ID or Secret is incorrect. Please check and try again.',
+          })
+          setIsSaving(false)
+          return // Don't save invalid credentials
+        }
+      }
+
+      // Step 2: Get CSRF token
       const csrfResponse = await fetch('/api/v1/utils/security/csrf-token')
       const csrfData = await csrfResponse.json()
       if (!csrfData.success) throw new Error('Failed to get CSRF token')
 
-      // Save Client ID and Peppol to Convex via profile API
+      // Step 3: Save Client ID and Peppol to Convex via profile API
       const response = await fetch('/api/v1/account-management/businesses/profile', {
         method: 'PUT',
         headers: {
@@ -75,7 +106,7 @@ export default function EInvoiceIntegrationSettings() {
       const result = await response.json()
       if (!result.success) throw new Error(result.error || 'Failed to save')
 
-      // Save secret to SSM if provided
+      // Step 4: Save secret to SSM if provided
       if (lhdnClientSecret.trim()) {
         const ssmRes = await fetch('/api/v1/account-management/businesses/lhdn-secret', {
           method: 'POST',
@@ -95,10 +126,8 @@ export default function EInvoiceIntegrationSettings() {
 
       addToast({
         type: 'success',
-        title: 'Integration settings saved',
-        description: lhdnClientId.trim()
-          ? 'LHDN credentials updated. Polling will start within 5 minutes.'
-          : 'Settings saved.',
+        title: 'Connected to LHDN MyInvois',
+        description: 'Credentials validated and saved. Polling will start within 5 minutes.',
       })
     } catch (error) {
       addToast({
@@ -255,6 +284,12 @@ export default function EInvoiceIntegrationSettings() {
           <p className="text-xs text-muted-foreground mt-1">
             Stored securely (encrypted at rest). Required for automatic e-invoice retrieval.
           </p>
+          {validationError && (
+            <div className="flex items-center gap-2 mt-2 text-xs text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/30 rounded p-2">
+              <XCircle className="w-3.5 h-3.5 flex-shrink-0" />
+              <span><strong>Invalid credentials:</strong> {validationError}</span>
+            </div>
+          )}
         </div>
 
         {/* Peppol Participant ID */}
