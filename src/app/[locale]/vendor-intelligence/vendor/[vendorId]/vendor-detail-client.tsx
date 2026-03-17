@@ -9,6 +9,9 @@ import { VendorRiskProfile } from "@/domains/vendor-intelligence/components/vend
 import { AnomalyAlertCard } from "@/domains/vendor-intelligence/components/anomaly-alert-card";
 import { Badge } from "@/components/ui/badge";
 import { Id } from "../../../../../../convex/_generated/dataModel";
+import { useAction } from "convex/react";
+import { api } from "../../../../../../convex/_generated/api";
+import { useEffect } from "react";
 
 interface VendorDetailClientProps {
   vendorId: string;
@@ -34,6 +37,17 @@ export default function VendorDetailClient({
   );
   const { alerts, dismissAlert, isLoading: isAlertsLoading } =
     useAnomalyAlerts(businessId);
+
+  // On-demand refresh: recalculate scorecard/risk if stale (bandwidth-safe action pattern)
+  const refreshScorecard = useAction(api.functions.vendorScorecards.refreshIfStale);
+  const refreshRisk = useAction(api.functions.vendorRiskProfiles.refreshIfStale);
+
+  useEffect(() => {
+    if (businessId && typedVendorId) {
+      refreshScorecard({ businessId, vendorId: typedVendorId }).catch(() => {});
+      refreshRisk({ businessId, vendorId: typedVendorId }).catch(() => {});
+    }
+  }, [businessId, typedVendorId, refreshScorecard, refreshRisk]);
 
   // Filter alerts for this vendor
   const vendorAlerts = alerts.filter(

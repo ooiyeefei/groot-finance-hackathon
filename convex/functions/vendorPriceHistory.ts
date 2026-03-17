@@ -9,6 +9,7 @@
 
 import { v } from "convex/values";
 import { query, internalMutation, internalQuery } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { resolveUserByClerkId } from "../lib/resolvers";
 import { Id } from "../_generated/dataModel";
 import {
@@ -573,9 +574,26 @@ export const recordPriceObservationsBatch = internalMutation({
   },
   handler: async (ctx, args) => {
     const priceHistoryIds: Id<"vendor_price_history">[] = [];
+    const now = Date.now();
 
     for (const item of args.lineItems) {
       const trimmedDescription = item.itemDescription.trim();
+
+      // #320: Generate itemIdentifier (item code primary, description hash fallback)
+      const itemCode = item.itemCode?.trim().toUpperCase();
+      const matchedFromItemCode = !!(itemCode && itemCode.length > 0);
+      const itemIdentifier = matchedFromItemCode
+        ? itemCode!
+        : trimmedDescription.toLowerCase().replace(/\s+/g, " ").replace(/[^a-z0-9\s-]/g, "").substring(0, 100);
+
+      // #320: Check existing records for this item+vendor (limit reads for bandwidth)
+      const existingForItem = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_vendor_item", (q) =>
+          q.eq("vendorId", args.vendorId).eq("itemDescription", trimmedDescription)
+        )
+        .take(20); // Limit bandwidth: only need recent history for anomaly detection
+
       const id = await ctx.db.insert("vendor_price_history", {
         businessId: args.businessId,
         vendorId: args.vendorId,
@@ -593,9 +611,104 @@ export const recordPriceObservationsBatch = internalMutation({
         taxRate: item.taxRate,
         itemCategory: item.itemCategory,
         normalizedDescription: trimmedDescription.toLowerCase(),
-        updatedAt: Date.now(),
+        updatedAt: now,
+        // #320: Smart Vendor Intelligence fields
+        itemIdentifier,
+        invoiceDate: args.observedAt,
+        matchedFromItemCode,
+        archivedFlag: false,
+        observationTimestamp: now,
       });
       priceHistoryIds.push(id);
+
+      // #320: Anomaly detection — only if vendor has ≥2 prior records (FR-024)
+      if (existingForItem.length >= 2 && item.unitPrice > 0) {
+        // Per-invoice check: >10% increase from last invoice
+        const sorted = [...existingForItem].sort((a, b) =>
+          b.observedAt.localeCompare(a.observedAt)
+        );
+        const lastPrice = sorted[0].unitPrice;
+        if (lastPrice > 0) {
+          const pctChange = ((item.unitPrice - lastPrice) / lastPrice) * 100;
+          if (pctChange > 10) {
+            const anomalyId = await ctx.db.insert("vendor_price_anomalies", {
+              businessId: args.businessId,
+              vendorId: args.vendorId,
+              itemIdentifier,
+              alertType: "per-invoice",
+              oldValue: lastPrice,
+              newValue: item.unitPrice,
+              percentageChange: Math.round(pctChange * 10) / 10,
+              severityLevel: pctChange > 20 ? "high-impact" : "standard",
+              status: "active",
+              createdTimestamp: now,
+              priceHistoryId: id,
+            });
+            // T063: Generate recommended actions for high-impact anomalies
+            if (pctChange > 20 && anomalyId) {
+              await ctx.scheduler.runAfter(0, internal.functions.vendorRecommendedActions.generate, {
+                businessId: args.businessId,
+                vendorId: args.vendorId,
+                anomalyAlertId: anomalyId,
+              });
+            }
+          }
+        }
+
+        // Trailing 6-month average check: >20% increase
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        const sixMonthsAgoStr = sixMonthsAgo.toISOString().split("T")[0];
+        const recentPrices = sorted.filter((p) => p.observedAt >= sixMonthsAgoStr);
+        if (recentPrices.length >= 2) {
+          const avg = recentPrices.reduce((s, p) => s + p.unitPrice, 0) / recentPrices.length;
+          if (avg > 0) {
+            const trailingPct = ((item.unitPrice - avg) / avg) * 100;
+            if (trailingPct > 20) {
+              const trailingAnomalyId = await ctx.db.insert("vendor_price_anomalies", {
+                businessId: args.businessId,
+                vendorId: args.vendorId,
+                itemIdentifier,
+                alertType: "trailing-average",
+                oldValue: Math.round(avg * 100) / 100,
+                newValue: item.unitPrice,
+                percentageChange: Math.round(trailingPct * 10) / 10,
+                severityLevel: "high-impact",
+                status: "active",
+                createdTimestamp: now,
+                priceHistoryId: id,
+              });
+              // T063: Generate recommended actions for trailing-average (always high-impact)
+              await ctx.scheduler.runAfter(0, internal.functions.vendorRecommendedActions.generate, {
+                businessId: args.businessId,
+                vendorId: args.vendorId,
+                anomalyAlertId: trailingAnomalyId,
+              });
+            }
+          }
+        }
+      } else if (existingForItem.length === 0 && item.unitPrice > 0) {
+        // #320: New item detection (FR-005) — only if vendor has other items
+        const vendorHasHistory = await ctx.db
+          .query("vendor_price_history")
+          .withIndex("by_vendorId", (q) => q.eq("vendorId", args.vendorId))
+          .take(1);
+        if (vendorHasHistory.length > 0) {
+          await ctx.db.insert("vendor_price_anomalies", {
+            businessId: args.businessId,
+            vendorId: args.vendorId,
+            itemIdentifier,
+            alertType: "new-item",
+            oldValue: 0,
+            newValue: item.unitPrice,
+            percentageChange: 100,
+            severityLevel: "standard",
+            status: "active",
+            createdTimestamp: now,
+            priceHistoryId: id,
+          });
+        }
+      }
     }
 
     return priceHistoryIds;

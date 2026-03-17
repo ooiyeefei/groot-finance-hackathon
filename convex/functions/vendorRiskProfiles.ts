@@ -8,7 +8,8 @@
  */
 
 import { v } from "convex/values";
-import { query, internalMutation } from "../_generated/server";
+import { query, action, internalMutation, internalQuery } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { resolveUserByClerkId } from "../lib/resolvers";
 
 /**
@@ -251,5 +252,55 @@ export const list = query({
           ?.category as string | undefined,
       },
     }));
+  },
+});
+
+/**
+ * T056: On-demand risk refresh (bandwidth-safe, no cron).
+ * Per CLAUDE.md Rule 3: Audit crons — use on-demand action instead.
+ * Recalculates if stale >7 days.
+ */
+export const _getExisting = internalQuery({
+  args: {
+    businessId: v.id("businesses"),
+    vendorId: v.id("vendors"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("vendor_risk_profiles")
+      .withIndex("by_business_vendor", (q) =>
+        q.eq("businessId", args.businessId).eq("vendorId", args.vendorId)
+      )
+      .first();
+  },
+});
+
+/**
+ * T056: On-demand risk refresh (bandwidth-safe, no cron).
+ * Per CLAUDE.md Rule 3: Audit crons — use on-demand action instead.
+ * Recalculates if stale >7 days.
+ */
+export const refreshIfStale = action({
+  args: {
+    businessId: v.id("businesses"),
+    vendorId: v.id("vendors"),
+  },
+  handler: async (ctx, args): Promise<{ refreshed: boolean }> => {
+    const existing = await ctx.runQuery(internal.functions.vendorRiskProfiles._getExisting, {
+      businessId: args.businessId,
+      vendorId: args.vendorId,
+    });
+
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    if (existing && Date.now() - existing.lastCalculatedTimestamp < sevenDaysMs) {
+      return { refreshed: false };
+    }
+
+    await ctx.runMutation(internal.functions.vendorRiskProfiles.calculate, {
+      businessId: args.businessId,
+      vendorId: args.vendorId,
+    });
+
+    return { refreshed: true };
   },
 });

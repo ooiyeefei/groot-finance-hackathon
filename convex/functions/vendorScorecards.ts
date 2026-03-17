@@ -9,7 +9,8 @@
  */
 
 import { v } from "convex/values";
-import { query, internalMutation } from "../_generated/server";
+import { query, action, internalMutation, internalQuery } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { resolveUserByClerkId } from "../lib/resolvers";
 
 // ============================================
@@ -261,5 +262,56 @@ export const list = query({
           ?.category as string | undefined,
       },
     }));
+  },
+});
+
+/**
+ * T031: On-demand scorecard refresh (bandwidth-safe alternative to cron).
+ * Per CLAUDE.md Rule 1: Use action + internalMutation instead of reactive cron.
+ * Recalculates if stale >24h, otherwise returns cached.
+ */
+/** Internal query for staleness check (not reactive — only called from action) */
+export const _getExisting = internalQuery({
+  args: {
+    businessId: v.id("businesses"),
+    vendorId: v.id("vendors"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("vendor_scorecards")
+      .withIndex("by_business_vendor", (q) =>
+        q.eq("businessId", args.businessId).eq("vendorId", args.vendorId)
+      )
+      .first();
+  },
+});
+
+/**
+ * T031: On-demand scorecard refresh (bandwidth-safe alternative to cron).
+ * Per CLAUDE.md Rule 1: Use action + internalMutation instead of reactive cron.
+ * Recalculates if stale >24h, otherwise returns cached.
+ */
+export const refreshIfStale = action({
+  args: {
+    businessId: v.id("businesses"),
+    vendorId: v.id("vendors"),
+  },
+  handler: async (ctx, args): Promise<{ refreshed: boolean }> => {
+    const existing = await ctx.runQuery(internal.functions.vendorScorecards._getExisting, {
+      businessId: args.businessId,
+      vendorId: args.vendorId,
+    });
+
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    if (existing && Date.now() - existing.lastUpdatedTimestamp < oneDayMs) {
+      return { refreshed: false };
+    }
+
+    await ctx.runMutation(internal.functions.vendorScorecards.calculate, {
+      businessId: args.businessId,
+      vendorId: args.vendorId,
+    });
+
+    return { refreshed: true };
   },
 });

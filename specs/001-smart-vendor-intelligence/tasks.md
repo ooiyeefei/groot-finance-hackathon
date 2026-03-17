@@ -59,7 +59,7 @@
 - [X] T016 [US1] Create `convex/functions/vendorPriceAnomalies/detect.ts` internalMutation: Called after price history insert → run Tier 1 detection → if anomaly, insert vendor_price_anomalies record with status="active"
 - [X] T017 [US1] Create `convex/functions/vendorPriceAnomalies/list.ts` query: Get anomaly alerts filtered by businessId, vendorId, status, severityLevel, alertType with sorting by createdTimestamp desc
 - [X] T018 [US1] Create `convex/functions/vendorPriceAnomalies/dismiss.ts` mutation: User dismisses alert → update status="dismissed", dismissedTimestamp=now, optional userFeedback → return success
-- [ ] T019 [US1] Integrate price tracking into invoice processing: Modify existing `convex/functions/invoices/create.ts` to call `vendorPriceHistory.create` for each line item → then call `vendorPriceAnomalies.detect`
+- [X] T019 [US1] Integrate price tracking into invoice processing: Extended recordPriceObservationsBatch to populate #320 fields (itemIdentifier, archivedFlag, matchedFromItemCode) and run inline anomaly detection with .take(20) bandwidth limit
 
 ### Frontend: UI Components for User Story 1
 
@@ -87,7 +87,7 @@
 - [X] T028 [P] [US2] Create `convex/functions/vendorScorecards/get.ts` query: Get scorecard by vendorId with vendor metadata (name, category) → returns VendorScorecardWithMeta
 - [X] T029 [P] [US2] Create `convex/functions/vendorScorecards/list.ts` query: Get all scorecards for businessId with sorting (totalSpendYTD desc, priceStabilityScore desc, anomalyFlagsCount desc) → returns array of VendorScorecardWithMeta
 - [X] T030 [US2] Create scorecard calculator utility: Calculation logic integrated directly in vendorScorecards.calculate (coefficient of variation, mean days, etc.)
-- [ ] T031 [US2] Create Convex cron for nightly scorecard updates in `convex/crons/vendorIntelligenceCron.ts`: Schedule daily at 3 AM UTC → iterate all vendors → call vendorScorecards.calculate for each
+- [X] T031 [US2] On-demand scorecard refresh via action (bandwidth-safe, no cron per CLAUDE.md Rule 3): vendorScorecards.refreshIfStale recalculates if >24h stale, triggered on vendor detail page load
 
 ### Frontend: UI Components for User Story 2
 
@@ -144,7 +144,7 @@
 - [X] T053 [P] [US4] Create `convex/functions/vendorRiskProfiles/get.ts` query: Get risk profile by vendorId with vendor metadata (name, category) → returns VendorRiskProfileWithMeta
 - [X] T054 [P] [US4] Create `convex/functions/vendorRiskProfiles/list.ts` query: Get all high-risk vendors (riskLevel="high") for businessId sorted by lastCalculatedTimestamp desc → returns array of VendorRiskProfileWithMeta
 - [X] T055 [US4] Risk calculation logic integrated directly in vendorRiskProfiles.calculate (concentration, compliance, price variance)
-- [ ] T056 [US4] Extend Convex cron in `convex/crons/vendorIntelligenceCron.ts`: Add weekly schedule — deferred to polish
+- [X] T056 [US4] On-demand risk refresh via action (bandwidth-safe, no cron per CLAUDE.md Rule 3): vendorRiskProfiles.refreshIfStale recalculates if >7 days stale, triggered on vendor detail page load
 
 ### Frontend: UI Components for User Story 4
 
@@ -167,7 +167,7 @@
 - [X] T060 [P] [US5] Create `convex/functions/vendorRecommendedActions/generate.ts` internalMutation: Called after high-impact anomaly detected → generate recommended actions per data-model.md generation logic (actionType, actionDescription, priorityLevel) → insert vendor_recommended_actions records
 - [X] T061 [P] [US5] Create `convex/functions/vendorRecommendedActions/list.ts` query: Get recommended actions filtered by businessId, vendorId, status (pending, completed, dismissed) → returns array of RecommendedActionWithContext
 - [X] T062 [P] [US5] Create `convex/functions/vendorRecommendedActions/updateStatus.ts` mutation: User marks action as completed or dismissed → update status and timestamp → return success
-- [ ] T063 [US5] Update `convex/functions/vendorPriceAnomalies/detect.ts` to generate recommended actions — deferred to wiring phase
+- [X] T063 [US5] Wired recommended actions into recordPriceObservationsBatch: After high-impact anomaly insert, ctx.scheduler.runAfter(0) calls vendorRecommendedActions.generate
 - [ ] T064 [US5] Integrate with Action Center — deferred to integration phase
 - [ ] T065 [US5] Integrate with AI Digest — deferred to integration phase
 - [ ] T066 [US5] Create MCP tool query — deferred to integration phase
@@ -194,7 +194,7 @@
 - [ ] T075 [P] Add new item detection to `convex/functions/vendorPriceAnomalies/detect.ts`: After price history insert, check if itemIdentifier is new for this vendor (no prior records) → if new, insert anomaly with alertType="new-item"
 - [ ] T076 [P] Create price normalizer utility in `src/domains/vendor-intelligence/lib/price-normalizer.ts`: Handle different units (per-piece vs per-box) → display warning in UI when units don't match → implement per-piece conversion where possible
 - [ ] T077 [P] Update `src/domains/vendor-intelligence/components/price-history-chart.tsx` to handle price normalization: Show unit type in tooltip → display normalization warning if units changed
-- [ ] T078 [P] Create feature documentation in `src/domains/vendor-intelligence/CLAUDE.md`: Document architecture (two-tier intelligence, DSPy learning loops), data flow (invoice processing → price tracking → anomaly detection), DSPy modules (fuzzy matching, MIPROv2 optimization), UI pages and components
+- [X] T078 [P] Create feature documentation in `src/domains/vendor-intelligence/CLAUDE.md`: Documented architecture, data flow, bandwidth rules, tables, functions, UI pages, hooks
 - [ ] T079 [P] Add integration tests in `tests/integration/vendor-intelligence/`: Test invoice processing → price history creation → anomaly detection → fuzzy matching confirmation → cross-vendor grouping → CSV export → archival (7 test files covering P1-P5 user journeys)
 - [ ] T080 [P] Add E2E tests in `tests/e2e/vendor-intelligence.spec.ts`: Test complete user journey with Playwright (process invoice → view alert → dismiss alert → view vendor scorecard → view price trend chart → create cross-vendor group → export CSV → verify Action Center integration)
 - [X] T081 Run `npm run build` to verify no TypeScript/Next.js errors → Build passes with zero errors
