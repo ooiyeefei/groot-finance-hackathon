@@ -911,6 +911,88 @@ async function runVendorIntelligenceDetection(
   const riskInsights = await runVendorRiskAnalysis(ctx, businessId, memberUserIds);
   insightsCreated += riskInsights;
 
+  // --- #320: PRICE ANOMALY ALERTS (from vendor_price_anomalies table) ---
+  const priceAnomalyInsights = await runPriceAnomalyDetection(ctx, businessId, memberUserIds);
+  insightsCreated += priceAnomalyInsights;
+
+  return insightsCreated;
+}
+
+/**
+ * T064: Surface active price anomalies from #320 vendor_price_anomalies table.
+ * Bandwidth-safe: uses indexed query with .take(10) limit.
+ */
+async function runPriceAnomalyDetection(
+  ctx: any,
+  businessId: any,
+  memberUserIds: string[]
+): Promise<number> {
+  // Get high-impact active anomalies from last 7 days
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+  const anomalies = await ctx.db
+    .query("vendor_price_anomalies")
+    .withIndex("by_business_severity", (q: any) =>
+      q.eq("businessId", businessId).eq("severityLevel", "high-impact").eq("status", "active")
+    )
+    .take(10);
+
+  const recentAnomalies = anomalies.filter(
+    (a: any) => a.createdTimestamp >= sevenDaysAgo
+  );
+
+  if (recentAnomalies.length === 0) return 0;
+
+  let insightsCreated = 0;
+
+  // Group by vendor for summarized insights
+  const byVendor = new Map<string, any[]>();
+  for (const a of recentAnomalies) {
+    const vendorId = a.vendorId.toString();
+    if (!byVendor.has(vendorId)) byVendor.set(vendorId, []);
+    byVendor.get(vendorId)!.push(a);
+  }
+
+  for (const [vendorId, vendorAnomalies] of byVendor) {
+    const vendor = await ctx.db.get(vendorId as any);
+    const vendorName = vendor?.name ?? "Unknown Vendor";
+    const maxChange = Math.max(...vendorAnomalies.map((a: any) => a.percentageChange));
+
+    // Check for duplicate insight
+    const existing = await ctx.db
+      .query("actionCenterInsights")
+      .withIndex("by_businessId_type", (q: any) =>
+        q.eq("businessId", businessId).eq("insightType", "vendor_price_anomaly")
+      )
+      .take(20);
+
+    const alreadyExists = existing.some(
+      (e: any) =>
+        e.metadata?.vendorId === vendorId &&
+        e.status === "active" &&
+        Date.now() - e.createdAt < 7 * 24 * 60 * 60 * 1000
+    );
+
+    if (alreadyExists) continue;
+
+    await ctx.db.insert("actionCenterInsights", {
+      businessId,
+      insightType: "vendor_price_anomaly",
+      title: `${vendorName}: ${vendorAnomalies.length} price anomal${vendorAnomalies.length === 1 ? "y" : "ies"} detected`,
+      description: `Price increases up to ${maxChange.toFixed(1)}% detected for ${vendorName}. Review in Vendor Intelligence.`,
+      severity: "warning",
+      status: "active",
+      category: "vendor",
+      actionUrl: "/vendor-intelligence/alerts",
+      targetUserIds: memberUserIds,
+      metadata: { vendorId, anomalyCount: vendorAnomalies.length, maxPercentChange: maxChange },
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 14 * 24 * 60 * 60 * 1000, // 14 day expiry
+    });
+
+    insightsCreated++;
+  }
+
   return insightsCreated;
 }
 

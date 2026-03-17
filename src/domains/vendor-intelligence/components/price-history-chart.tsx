@@ -21,11 +21,13 @@ interface PriceTrendDataPoint {
 interface PriceHistoryChartProps {
   dataPoints: PriceTrendDataPoint[];
   currency?: string;
+  unitWarning?: string;
 }
 
 export function PriceHistoryChart({
   dataPoints,
   currency = "MYR",
+  unitWarning,
 }: PriceHistoryChartProps) {
   if (dataPoints.length === 0) {
     return (
@@ -41,6 +43,10 @@ export function PriceHistoryChart({
   }));
 
   return (
+    <div>
+      {unitWarning && (
+        <p className="text-xs text-yellow-600 mb-2 px-1">{unitWarning}</p>
+      )}
     <ResponsiveContainer width="100%" height={300}>
       <LineChart
         data={formattedData}
@@ -84,5 +90,6 @@ export function PriceHistoryChart({
         />
       </LineChart>
     </ResponsiveContainer>
+    </div>
   );
 }

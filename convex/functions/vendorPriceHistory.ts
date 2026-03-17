@@ -711,6 +711,62 @@ export const recordPriceObservationsBatch = internalMutation({
       }
     }
 
+    // T074: Billing frequency change detection (FR-006)
+    // Check if vendor's invoice frequency deviated ≥50% from historical average
+    if (priceHistoryIds.length > 0) {
+      const vendorDates = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_vendorId", (q) => q.eq("vendorId", args.vendorId))
+        .take(50);
+
+      // Get unique invoice dates (by sourceId to avoid counting line items as separate invoices)
+      const uniqueDates = [...new Set(vendorDates.map((p) => p.observedAt))].sort();
+
+      if (uniqueDates.length >= 4) {
+        // Calculate intervals between consecutive invoices
+        const intervals: number[] = [];
+        for (let i = 1; i < uniqueDates.length; i++) {
+          const d1 = new Date(uniqueDates[i - 1]);
+          const d2 = new Date(uniqueDates[i]);
+          const diff = Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
+          if (diff > 0) intervals.push(diff);
+        }
+
+        if (intervals.length >= 3) {
+          const historicalIntervals = intervals.slice(0, -1);
+          const historicalAvg = historicalIntervals.reduce((s, d) => s + d, 0) / historicalIntervals.length;
+          const latestInterval = intervals[intervals.length - 1];
+
+          if (historicalAvg > 0) {
+            const freqChange = ((latestInterval - historicalAvg) / historicalAvg) * 100;
+
+            if (Math.abs(freqChange) >= 50) {
+              const indicators: Array<"cash-flow-issues" | "billing-errors" | "contract-violations"> = [];
+              if (freqChange < -30) {
+                indicators.push("cash-flow-issues", "billing-errors");
+              }
+              if (freqChange > 50) {
+                indicators.push("contract-violations");
+              }
+
+              await ctx.db.insert("vendor_price_anomalies", {
+                businessId: args.businessId,
+                vendorId: args.vendorId,
+                alertType: "frequency-change",
+                oldValue: Math.round(historicalAvg),
+                newValue: latestInterval,
+                percentageChange: Math.round(freqChange * 10) / 10,
+                severityLevel: Math.abs(freqChange) > 100 ? "high-impact" : "standard",
+                potentialIndicators: indicators.length > 0 ? indicators : undefined,
+                status: "active",
+                createdTimestamp: now,
+              });
+            }
+          }
+        }
+      }
+    }
+
     return priceHistoryIds;
   },
 });

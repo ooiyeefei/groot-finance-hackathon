@@ -10,12 +10,22 @@ import {
   Clock,
   Eye,
   X,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/format-number";
 import { formatBusinessDate } from "@/lib/utils";
 import type { AlertType, SeverityLevel } from "../types";
 import { Id } from "../../../../convex/_generated/dataModel";
 import { useState } from "react";
+
+interface RecommendedAction {
+  _id: Id<"vendor_recommended_actions">;
+  actionType: string;
+  actionDescription: string;
+  priorityLevel: string;
+  status: string;
+}
 
 interface AnomalyAlertCardProps {
   alert: {
@@ -32,6 +42,9 @@ interface AnomalyAlertCardProps {
   };
   onDismiss: (alertId: Id<"vendor_price_anomalies">, feedback?: string) => void;
   onViewHistory?: () => void;
+  recommendedActions?: RecommendedAction[];
+  onCompleteAction?: (actionId: Id<"vendor_recommended_actions">) => void;
+  onDismissAction?: (actionId: Id<"vendor_recommended_actions">) => void;
 }
 
 const ALERT_TYPE_CONFIG: Record<
@@ -51,6 +64,9 @@ export function AnomalyAlertCard({
   alert,
   onDismiss,
   onViewHistory,
+  recommendedActions,
+  onCompleteAction,
+  onDismissAction,
 }: AnomalyAlertCardProps) {
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedback, setFeedback] = useState("");
@@ -164,6 +180,37 @@ export function AnomalyAlertCard({
             </Button>
           </div>
         </div>
+
+        {/* T068: Recommended Actions */}
+        {recommendedActions && recommendedActions.length > 0 && (
+          <div className="mt-3 border-t border-border pt-3">
+            <p className="text-xs font-medium text-muted-foreground mb-2">Recommended Actions</p>
+            <div className="space-y-1.5">
+              {recommendedActions.filter((a) => a.status === "pending").map((action) => (
+                <div key={action._id} className="flex items-center justify-between gap-2 text-sm">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <Badge variant={action.priorityLevel === "high" ? "error" : "warning"} className="text-xs shrink-0">
+                      {action.priorityLevel}
+                    </Badge>
+                    <span className="text-foreground truncate">{action.actionDescription}</span>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {onCompleteAction && (
+                      <Button variant="ghost" size="sm" onClick={() => onCompleteAction(action._id)} title="Mark Complete">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                      </Button>
+                    )}
+                    {onDismissAction && (
+                      <Button variant="ghost" size="sm" onClick={() => onDismissAction(action._id)} title="Dismiss">
+                        <XCircle className="w-3.5 h-3.5 text-muted-foreground" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {showFeedback && (
           <div className="mt-3 flex gap-2">
