@@ -663,6 +663,9 @@ export const updateBusinessByStringId = mutation({
     postal_code: v.optional(v.string()),
     // LHDN self-bill auto-trigger setting
     auto_self_bill_exempt_vendors: v.optional(v.boolean()),
+    // 001-doc-email-forward: Email forwarding settings
+    email_forwarding_enabled: v.optional(v.boolean()),
+    email_forwarding_allowlist: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -729,6 +732,14 @@ export const updateBusinessByStringId = mutation({
     if (args.postal_code !== undefined) updates.postalCode = args.postal_code;
     // LHDN self-bill auto-trigger
     if (args.auto_self_bill_exempt_vendors !== undefined) updates.autoSelfBillExemptVendors = args.auto_self_bill_exempt_vendors;
+    // 001-doc-email-forward: Email forwarding settings
+    if (args.email_forwarding_enabled !== undefined) updates.emailForwardingEnabled = args.email_forwarding_enabled;
+    if (args.email_forwarding_allowlist !== undefined) updates.emailForwardingAllowlist = args.email_forwarding_allowlist;
+    // Auto-set prefix from slug when enabling (zero-config for users)
+    if (args.email_forwarding_enabled === true && !business.emailForwardingPrefix && business.slug) {
+      updates.emailForwardingPrefix = business.slug;
+      updates.emailForwardingDomain = 'docs.hellogroot.com';
+    }
 
     await ctx.db.patch(business._id, updates);
 

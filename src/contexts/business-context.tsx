@@ -60,6 +60,11 @@ interface BusinessProfile {
   country_code?: string | null
   // LHDN self-bill auto-trigger
   auto_self_bill_exempt_vendors?: boolean
+  // 001-doc-email-forward: Email forwarding
+  slug?: string
+  emailForwardingEnabled?: boolean
+  emailForwardingPrefix?: string
+  emailForwardingAllowlist?: string[]
 }
 
 interface BusinessContextState {

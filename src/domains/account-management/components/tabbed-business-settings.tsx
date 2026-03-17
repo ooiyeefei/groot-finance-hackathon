@@ -22,6 +22,7 @@ const PrivacyDataSection = lazy(() => import('@/domains/account-management/compo
 const ReferralDashboard = lazy(() => import('@/domains/referral/components/referral-dashboard'))
 const EInvoiceSettingsWithTabs = lazy(() => import('@/domains/account-management/components/einvoice-settings-with-tabs'))
 const AIAutomationSettings = lazy(() => import('@/domains/account-management/components/ai-automation-settings').then(m => ({ default: m.AIAutomationSettings })))
+const EmailForwardingSettings = lazy(() => import('@/domains/account-management/components/email-forwarding-settings'))
 
 // Wrapper components for existing components that need userId
 const CategoryManagementTab = ({ userId }: { userId?: string }) => (
@@ -87,6 +88,7 @@ const TabbedBusinessSettings = memo(() => {
       case 'leave-management': return { tab: 'people', ...defaults, people: 'leave' as const }
       case 'timesheet': return { tab: 'people', ...defaults, people: 'timesheet' as const }
       case 'einvoice': return { tab: 'integrations', ...defaults, integrations: 'einvoice' as const }
+      case 'email-forwarding': return { tab: 'business', ...defaults, business: 'email-forwarding' as const }
       case 'api-keys': return { tab: 'integrations', ...defaults, integrations: 'api-keys' as const }
       case 'privacy': return { tab: 'personal', ...defaults, personal: 'privacy' as const }
       case 'profile': return { tab: 'personal', ...defaults }
@@ -97,7 +99,7 @@ const TabbedBusinessSettings = memo(() => {
   const activeTab = resolved.tab
 
   // Sub-section state — initialized from URL-derived defaults, updated by user clicks
-  const [businessSection, setBusinessSection] = useState<'profile' | 'einvoice' | 'currency'>(resolved.business)
+  const [businessSection, setBusinessSection] = useState<'profile' | 'einvoice' | 'currency' | 'email-forwarding'>(resolved.business)
   const [financeSection, setFinanceSection] = useState<'categories' | 'ai'>(resolved.finance)
   const [peopleSection, setPeopleSection] = useState<'team' | 'leave' | 'timesheet'>(resolved.people)
   const [integrationsSection, setIntegrationsSection] = useState<'stripe' | 'einvoice' | 'api-keys'>(resolved.integrations)
@@ -175,7 +177,7 @@ const TabbedBusinessSettings = memo(() => {
 
           {/* Sub-tabs — shown inline below top tabs, also sticky */}
           {activeTab === 'business' && canViewBusinessSettings && renderSubTabs(
-            [{ value: 'profile', label: 'Business Profile' }, { value: 'einvoice', label: 'e-Invoice' }, { value: 'currency', label: 'Currency' }],
+            [{ value: 'profile', label: 'Business Profile' }, { value: 'einvoice', label: 'e-Invoice' }, { value: 'currency', label: 'Currency' }, { value: 'email-forwarding', label: 'Email Forwarding' }],
             businessSection, (v) => setBusinessSection(v as typeof businessSection)
           )}
           {activeTab === 'finance' && canViewBusinessSettings && renderSubTabs(
@@ -203,7 +205,7 @@ const TabbedBusinessSettings = memo(() => {
           <TabsContent value="business" className="mt-0">
             <div className="bg-card rounded-lg border border-border p-6">
               <Suspense fallback={<TabLoader title="business settings" />}>
-                <BusinessProfileSettings section={businessSection} />
+                {businessSection === 'email-forwarding' ? <EmailForwardingSettings /> : <BusinessProfileSettings section={businessSection} />}
               </Suspense>
             </div>
           </TabsContent>

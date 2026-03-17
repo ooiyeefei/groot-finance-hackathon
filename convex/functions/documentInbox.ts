@@ -417,13 +417,23 @@ export const getBusinessByPrefix = query({
     emailForwardingPrefix: v.string(),
   },
   handler: async (ctx, args) => {
-    // Query businesses by slug (which matches email prefix)
-    const business = await ctx.db
+    // Try emailForwardingPrefix first, then fall back to slug
+    let business = await ctx.db
       .query("businesses")
       .filter((q) =>
         q.eq(q.field("emailForwardingPrefix"), args.emailForwardingPrefix)
       )
       .first();
+
+    if (!business) {
+      // Fall back to slug lookup (zero-config: slug is used as prefix)
+      business = await ctx.db
+        .query("businesses")
+        .filter((q) =>
+          q.eq(q.field("slug"), args.emailForwardingPrefix)
+        )
+        .first();
+    }
 
     if (!business) {
       return null;
