@@ -13,13 +13,14 @@ import {
 import { toast } from "sonner";
 
 export default function EmailForwardingSettings() {
-  const { profile, isLoading, updateProfile } = useBusinessProfile();
+  const { profile, isLoading, refetch: refreshProfile } = useBusinessProfile();
 
   const [saving, setSaving] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
+  // Local optimistic state for toggle
+  const [localEnabled, setLocalEnabled] = useState<boolean | null>(null);
 
-  const isEnabled = profile?.emailForwardingEnabled ?? false;
-  // Use slug, emailForwardingPrefix, or slugified business name
+  const isEnabled = localEnabled ?? profile?.emailForwardingEnabled ?? false;
   const slug =
     profile?.slug ||
     profile?.emailForwardingPrefix ||
@@ -31,46 +32,46 @@ export default function EmailForwardingSettings() {
       : "");
   const forwardingEmail = slug ? `inbox@${slug}.hellogroot.com` : null;
 
-  const saveSettings = useCallback(
-    async (updates: Record<string, unknown>) => {
+  const handleToggle = useCallback(
+    async (enabled: boolean) => {
       if (!profile?.id) return;
 
+      // Optimistic update
+      setLocalEnabled(enabled);
       setSaving(true);
+
       try {
         const response = await fetch(
           "/api/v1/account-management/businesses/profile",
           {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(updates),
+            body: JSON.stringify({ email_forwarding_enabled: enabled }),
           }
         );
 
-        if (!response.ok) throw new Error("Failed to update settings");
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => null);
+          throw new Error(errorData?.error || `Failed to save (${response.status})`);
+        }
 
-        const updatedFields: Partial<{
-          emailForwardingEnabled: boolean;
-        }> = {};
-        if ("email_forwarding_enabled" in updates)
-          updatedFields.emailForwardingEnabled =
-            updates.email_forwarding_enabled as boolean;
-        updateProfile(updatedFields as any);
+        // Refresh profile from server to get updated data
+        await refreshProfile();
+        setLocalEnabled(null); // Clear optimistic state, use server data
 
-        toast.success("Settings saved");
+        toast.success(enabled ? "Document Inbox enabled" : "Document Inbox disabled");
       } catch (error) {
+        // Revert optimistic update
+        setLocalEnabled(null);
         toast.error(
-          error instanceof Error ? error.message : "Failed to save"
+          error instanceof Error ? error.message : "Failed to save settings"
         );
       } finally {
         setSaving(false);
       }
     },
-    [profile?.id, updateProfile]
+    [profile?.id, refreshProfile]
   );
-
-  const handleToggle = async (enabled: boolean) => {
-    await saveSettings({ email_forwarding_enabled: enabled });
-  };
 
   const copyEmail = () => {
     if (!forwardingEmail) return;
@@ -111,11 +112,14 @@ export default function EmailForwardingSettings() {
             All team members can forward documents via email
           </div>
         </div>
-        <Switch
-          checked={isEnabled}
-          onCheckedChange={handleToggle}
-          disabled={saving}
-        />
+        <div className="flex items-center gap-2">
+          {saving && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          <Switch
+            checked={isEnabled}
+            onCheckedChange={handleToggle}
+            disabled={saving}
+          />
+        </div>
       </div>
 
       {/* Forwarding Email + How It Works (shown when enabled) */}

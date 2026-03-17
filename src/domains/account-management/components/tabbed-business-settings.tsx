@@ -92,7 +92,7 @@ const TabbedBusinessSettings = memo(() => {
         case 'leave-management': return { tab: 'people', ...defaults, people: 'leave' as const }
         case 'timesheet': return { tab: 'people', ...defaults, people: 'timesheet' as const }
         case 'einvoice': return { tab: 'business', ...defaults, business: 'einvoice' as const }
-        case 'email-forwarding': return { tab: 'business', ...defaults, business: 'email-forwarding' as const }
+        case 'document-inbox': return { tab: 'business', ...defaults, business: 'document-inbox' as const }
         case 'api-keys': return { tab: 'integrations', ...defaults, integrations: 'api-keys' as const }
         case 'privacy': return { tab: 'personal', ...defaults, personal: 'privacy' as const }
         case 'profile': return { tab: 'personal', ...defaults }
@@ -116,7 +116,7 @@ const TabbedBusinessSettings = memo(() => {
   const activeTab = resolved.tab
 
   // Sub-section state — initialized from URL-derived defaults, updated by user clicks
-  const [businessSection, setBusinessSection] = useState<'profile' | 'einvoice' | 'currency' | 'email-forwarding'>(resolved.business)
+  const [businessSection, setBusinessSection] = useState<'profile' | 'einvoice' | 'currency' | 'document-inbox'>(resolved.business)
   const [financeSection, setFinanceSection] = useState<'categories' | 'ai'>(resolved.finance)
   const [peopleSection, setPeopleSection] = useState<'team' | 'leave' | 'timesheet'>(resolved.people)
   const [integrationsSection, setIntegrationsSection] = useState<'stripe' | 'api-keys'>(resolved.integrations === 'api-keys' ? 'api-keys' : 'stripe')
@@ -203,7 +203,7 @@ const TabbedBusinessSettings = memo(() => {
 
           {/* Sub-tabs — shown inline below top tabs, also sticky */}
           {activeTab === 'business' && canViewBusinessSettings && renderSubTabs(
-            [{ value: 'profile', label: 'Business Profile' }, { value: 'einvoice', label: 'e-Invoice' }, { value: 'currency', label: 'Currency' }, { value: 'email-forwarding', label: 'Document Inbox' }],
+            [{ value: 'profile', label: 'Business Profile' }, { value: 'einvoice', label: 'e-Invoice' }, { value: 'currency', label: 'Currency' }, { value: 'document-inbox', label: 'Document Inbox' }],
             businessSection, (v) => handleSubTabChange(v, (val) => setBusinessSection(val as typeof businessSection))
           )}
           {activeTab === 'finance' && canViewBusinessSettings && renderSubTabs(
@@ -231,7 +231,7 @@ const TabbedBusinessSettings = memo(() => {
           <TabsContent value="business" className="mt-0">
             <div className="bg-card rounded-lg border border-border p-6">
               <Suspense fallback={<TabLoader title="business settings" />}>
-                {businessSection === 'email-forwarding' ? <EmailForwardingSettings /> : <BusinessProfileSettings section={businessSection} />}
+                {businessSection === 'document-inbox' ? <EmailForwardingSettings /> : <BusinessProfileSettings section={businessSection} />}
               </Suspense>
             </div>
           </TabsContent>
