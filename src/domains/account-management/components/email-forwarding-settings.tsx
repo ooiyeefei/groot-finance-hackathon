@@ -26,7 +26,16 @@ export default function EmailForwardingSettings() {
 
   const isEnabled = profile?.emailForwardingEnabled ?? false;
   const allowlist: string[] = profile?.emailForwardingAllowlist ?? [];
-  const slug = profile?.slug ?? "";
+  // Use slug, or fall back to slugified business name
+  const slug =
+    profile?.slug ||
+    profile?.emailForwardingPrefix ||
+    (profile?.name
+      ? profile.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "")
+      : "");
   const forwardingEmail = slug ? `inbox@${slug}.hellogroot.com` : null;
 
   const saveSettings = useCallback(
