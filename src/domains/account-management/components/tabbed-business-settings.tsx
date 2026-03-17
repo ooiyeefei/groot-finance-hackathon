@@ -203,7 +203,7 @@ const TabbedBusinessSettings = memo(() => {
 
           {/* Sub-tabs — shown inline below top tabs, also sticky */}
           {activeTab === 'business' && canViewBusinessSettings && renderSubTabs(
-            [{ value: 'profile', label: 'Business Profile' }, { value: 'einvoice', label: 'e-Invoice' }, { value: 'currency', label: 'Currency' }, { value: 'email-forwarding', label: 'Email Forwarding' }],
+            [{ value: 'profile', label: 'Business Profile' }, { value: 'einvoice', label: 'e-Invoice' }, { value: 'currency', label: 'Currency' }, { value: 'email-forwarding', label: 'Document Inbox' }],
             businessSection, (v) => handleSubTabChange(v, (val) => setBusinessSection(val as typeof businessSection))
           )}
           {activeTab === 'finance' && canViewBusinessSettings && renderSubTabs(

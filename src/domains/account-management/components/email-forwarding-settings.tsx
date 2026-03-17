@@ -122,7 +122,7 @@ export default function EmailForwardingSettings() {
       {/* Header */}
       <div>
         <h3 className="text-lg font-semibold text-foreground">
-          Email Forwarding
+          Document Inbox Settings
         </h3>
         <p className="text-sm text-muted-foreground mt-1">
           Forward receipts and invoices to Groot via email. AI auto-classifies
@@ -134,7 +134,7 @@ export default function EmailForwardingSettings() {
       <div className="flex items-center justify-between py-4 border-b">
         <div>
           <div className="font-medium text-foreground">
-            Enable Email Forwarding
+            Enable Document Inbox
           </div>
           <div className="text-sm text-muted-foreground">
             Allow team members to forward documents via email

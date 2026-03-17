@@ -467,11 +467,11 @@ export default function BusinessProfileForm() {
               </div>
             </div>
 
-            {/* Email Forwarding */}
+            {/* Verified Business Email */}
             <div className="bg-muted/30 border border-border rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Mail className="w-4 h-4 text-primary" />
-                <span className="text-sm font-medium text-foreground">Email Forwarding</span>
+                <span className="text-sm font-medium text-foreground">Verified Business Email</span>
                 {sesVerifyStatus === 'verified' && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/30">
                     <CheckCircle2 className="w-3 h-3" />
