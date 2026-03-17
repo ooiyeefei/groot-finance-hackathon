@@ -33,18 +33,21 @@ const TeamManagementTab = ({ userId }: { userId?: string }) => (
 )
 
 const TabbedBusinessSettings = memo(() => {
-  const { isOwner } = usePermissions()
+  const { isOwner, canChangeSettings, canManageSubscription } = usePermissions()
   const { user } = useUser()
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
+
+  // finance_admin and owner can see business settings tabs
+  const canViewBusinessSettings = canChangeSettings || isOwner
 
   // URL-based tab persistence: read from ?tab= query param
   const validTabs = ['business-profile', 'category-management', 'leave-management', 'timesheet', 'team-management', 'api-keys', 'billing', 'integrations', 'einvoice', 'ai-automation', 'referral', 'privacy', 'profile'] as const
   type TabValue = typeof validTabs[number]
   const tabFromUrl = searchParams.get('tab') as TabValue | null
   // Default tab: 'business-profile' for finance_admin/owner, 'profile' for everyone else
-  const defaultTab = isOwner ? 'business-profile' : 'profile'
+  const defaultTab = canViewBusinessSettings ? 'business-profile' : 'profile'
   const activeTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : defaultTab
 
   // Update URL when tab changes (without full page reload)
@@ -58,9 +61,10 @@ const TabbedBusinessSettings = memo(() => {
     <div className="w-full space-y-4">
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
         {/* Tab Navigation - Semantic Design System */}
-        {/* Uses flex-wrap: 1 tab for employee/manager (Profile only), 7 for owner (all tabs) */}
+        {/* Uses flex-wrap: tabs visible based on role permissions */}
+        {/* canViewBusinessSettings = owner OR finance_admin */}
         <TabsList className="flex flex-wrap h-auto p-1 gap-1 bg-muted border border-border">
-          {isOwner && (
+          {canViewBusinessSettings && (
             <TabsTrigger
               value="business-profile"
               className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
@@ -70,7 +74,7 @@ const TabbedBusinessSettings = memo(() => {
               <span className="sm:hidden">Biz</span>
             </TabsTrigger>
           )}
-          {isOwner && (
+          {canViewBusinessSettings && (
             <TabsTrigger
               value="category-management"
               className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
@@ -80,7 +84,7 @@ const TabbedBusinessSettings = memo(() => {
               <span className="sm:hidden">Cat</span>
             </TabsTrigger>
           )}
-          {isOwner && (
+          {canViewBusinessSettings && (
             <TabsTrigger
               value="leave-management"
               className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
@@ -90,7 +94,7 @@ const TabbedBusinessSettings = memo(() => {
               <span className="sm:hidden">Leave</span>
             </TabsTrigger>
           )}
-          {isOwner && (
+          {canViewBusinessSettings && (
             <TabsTrigger
               value="timesheet"
               className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
@@ -100,7 +104,7 @@ const TabbedBusinessSettings = memo(() => {
               <span className="sm:hidden">Time</span>
             </TabsTrigger>
           )}
-          {isOwner && (
+          {canViewBusinessSettings && (
             <TabsTrigger
               value="team-management"
               className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
@@ -109,7 +113,7 @@ const TabbedBusinessSettings = memo(() => {
               Team
             </TabsTrigger>
           )}
-          {isOwner && (
+          {canViewBusinessSettings && (
             <TabsTrigger
               value="api-keys"
               className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
@@ -129,7 +133,7 @@ const TabbedBusinessSettings = memo(() => {
               <span className="sm:hidden">Bill</span>
             </TabsTrigger>
           )}
-          {isOwner && (
+          {canViewBusinessSettings && (
             <TabsTrigger
               value="integrations"
               className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
@@ -139,7 +143,7 @@ const TabbedBusinessSettings = memo(() => {
               <span className="sm:hidden">Intg</span>
             </TabsTrigger>
           )}
-          {isOwner && (
+          {canViewBusinessSettings && (
             <TabsTrigger
               value="einvoice"
               className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
@@ -149,7 +153,7 @@ const TabbedBusinessSettings = memo(() => {
               <span className="sm:hidden">E-Inv</span>
             </TabsTrigger>
           )}
-          {isOwner && (
+          {canViewBusinessSettings && (
             <TabsTrigger
               value="ai-automation"
               className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
@@ -184,8 +188,8 @@ const TabbedBusinessSettings = memo(() => {
           </TabsTrigger>
         </TabsList>
 
-        {/* Business Profile Tab Content - Finance Admin/Owner only */}
-        {isOwner && (
+        {/* Business Profile Tab Content - Finance Admin/Owner */}
+        {canViewBusinessSettings && (
           <TabsContent value="business-profile" className="space-y-4">
             <div className="bg-card rounded-lg border border-border p-6">
               <Suspense fallback={
@@ -200,8 +204,8 @@ const TabbedBusinessSettings = memo(() => {
           </TabsContent>
         )}
 
-        {/* Category Management Tab Content - Finance Admin/Owner only */}
-        {isOwner && (
+        {/* Category Management Tab Content - Finance Admin/Owner */}
+        {canViewBusinessSettings && (
           <TabsContent value="category-management" className="space-y-4">
             <div className="bg-card rounded-lg border border-border p-6">
               <Suspense fallback={
@@ -216,8 +220,8 @@ const TabbedBusinessSettings = memo(() => {
           </TabsContent>
         )}
 
-        {/* Leave Management Tab Content - Finance Admin/Owner only */}
-        {isOwner && (
+        {/* Leave Management Tab Content - Finance Admin/Owner */}
+        {canViewBusinessSettings && (
           <TabsContent value="leave-management" className="space-y-4">
             <div className="bg-card rounded-lg border border-border p-6">
               <Suspense fallback={
@@ -232,8 +236,8 @@ const TabbedBusinessSettings = memo(() => {
           </TabsContent>
         )}
 
-        {/* Timesheet Settings Tab Content - Owner Only */}
-        {isOwner && (
+        {/* Timesheet Settings Tab Content - Finance Admin/Owner */}
+        {canViewBusinessSettings && (
           <TabsContent value="timesheet" className="space-y-4">
             <div className="bg-card rounded-lg border border-border p-6">
               <Suspense fallback={
@@ -248,8 +252,8 @@ const TabbedBusinessSettings = memo(() => {
           </TabsContent>
         )}
 
-        {/* Team Management Tab Content - Owner Only */}
-        {isOwner && (
+        {/* Team Management Tab Content - Finance Admin/Owner */}
+        {canViewBusinessSettings && (
           <TabsContent value="team-management" className="space-y-4">
             <div className="bg-card rounded-lg border border-border p-6">
               <Suspense fallback={
@@ -264,8 +268,8 @@ const TabbedBusinessSettings = memo(() => {
           </TabsContent>
         )}
 
-        {/* API Keys Tab Content - Owner Only */}
-        {isOwner && (
+        {/* API Keys Tab Content - Finance Admin/Owner */}
+        {canViewBusinessSettings && (
           <TabsContent value="api-keys" className="space-y-4">
             <div className="bg-card rounded-lg border border-border p-6">
               <Suspense fallback={
@@ -294,8 +298,8 @@ const TabbedBusinessSettings = memo(() => {
           </TabsContent>
         )}
 
-        {/* Integrations Tab Content - Owner Only */}
-        {isOwner && (
+        {/* Integrations Tab Content - Finance Admin/Owner */}
+        {canViewBusinessSettings && (
           <TabsContent value="integrations" className="space-y-4">
             <div className="bg-card rounded-lg border border-border p-6">
               <Suspense fallback={
@@ -310,8 +314,8 @@ const TabbedBusinessSettings = memo(() => {
           </TabsContent>
         )}
 
-        {/* e-Invoice Tab Content - Owner Only */}
-        {isOwner && (
+        {/* e-Invoice Tab Content - Finance Admin/Owner */}
+        {canViewBusinessSettings && (
           <TabsContent value="einvoice" className="space-y-4">
             <div className="bg-card rounded-lg border border-border p-6">
               <Suspense fallback={
@@ -326,8 +330,8 @@ const TabbedBusinessSettings = memo(() => {
           </TabsContent>
         )}
 
-        {/* AI & Automation Tab Content - Owner Only */}
-        {isOwner && (
+        {/* AI & Automation Tab Content - Finance Admin/Owner */}
+        {canViewBusinessSettings && (
           <TabsContent value="ai-automation" className="space-y-4">
             <div className="bg-card rounded-lg border border-border p-6">
               <Suspense fallback={

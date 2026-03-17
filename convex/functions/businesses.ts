@@ -213,20 +213,22 @@ export const getBusinessContext = query({
     const ownerMembership = bizMemberships.find((m) => m.role === "owner");
     const isOwner = ownerMembership?.userId === user._id;
 
-    // Compute permissions based on role and ownership (simplified: owner > manager > employee)
-    const role = membership.role as "manager" | "employee" | "owner";
+    // Compute permissions based on role and ownership
+    // Hierarchy: owner > finance_admin > manager > employee
+    const role = membership.role as "manager" | "employee" | "owner" | "finance_admin";
+    const isFinanceAdmin = role === "finance_admin";
     const permissions = {
       // Owner-only permissions (business-level)
       canDeleteBusiness: isOwner,
       canManageSubscription: isOwner,
       canTransferOwnership: isOwner,
-      // Operational permissions based on role (owner and manager)
-      canInviteMembers: role === "owner" || role === "manager",
-      canRemoveMembers: role === "owner" || role === "manager",
-      canChangeSettings: role === "owner",
-      canApproveExpenses: role === "owner" || role === "manager",
-      canManageCategories: role === "owner" || role === "manager",
-      canViewAllData: role === "owner" || role === "manager",
+      // Operational permissions (owner, finance_admin, and manager)
+      canInviteMembers: isOwner || isFinanceAdmin || role === "manager",
+      canRemoveMembers: isOwner || isFinanceAdmin || role === "manager",
+      canChangeSettings: isOwner || isFinanceAdmin,
+      canApproveExpenses: isOwner || isFinanceAdmin || role === "manager",
+      canManageCategories: isOwner || isFinanceAdmin || role === "manager",
+      canViewAllData: isOwner || isFinanceAdmin || role === "manager",
     };
 
     return {
