@@ -137,6 +137,8 @@ export const getMyBusinessesWithMemberships = query({
           homeCurrency: business.homeCurrency,
           logoUrl: business.logoStoragePath,
           logoFallbackColor: business.logoFallbackColor,
+          subscriptionStatus: business.subscriptionStatus ?? null,
+          planName: business.planName ?? null,
           membership: {
             id: membership._id,
             userId: membership.userId,

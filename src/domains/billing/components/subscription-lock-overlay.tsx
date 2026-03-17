@@ -178,6 +178,11 @@ export function SubscriptionLockOverlay() {
   // Block when subscription is in a locked state
   if (!LOCKED_STATUSES.has(data.subscription.status)) return null
 
+  // Clear stale subscription cache so hard refresh can switch businesses
+  if (typeof window !== 'undefined') {
+    try { localStorage.removeItem('subscription-data') } catch {}
+  }
+
   // Don't block pricing/billing/settings pages — user needs those to upgrade
   const isUnblockedPath = UNBLOCKED_PATHS.some(path => pathname?.includes(path))
   if (isUnblockedPath) return null
