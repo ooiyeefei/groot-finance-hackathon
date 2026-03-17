@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, lazy, memo, useCallback, useState } from 'react'
+import { Suspense, lazy, memo, useCallback, useState, useMemo } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Building2, DollarSign, Users, Loader2, Sparkles, User, Gift, Plug, Shield } from 'lucide-react'
 import { usePermissions } from '@/contexts/business-context'
@@ -79,40 +79,35 @@ const TabbedBusinessSettings = memo(() => {
 
   const canViewBusinessSettings = canChangeSettings || isOwner
 
-  // Sub-section state for grouped tabs
-  const [financeSection, setFinanceSection] = useState<'categories' | 'ai'>('categories')
-  const [peopleSection, setPeopleSection] = useState<'team' | 'leave' | 'timesheet'>('team')
-  const [integrationsSection, setIntegrationsSection] = useState<'stripe' | 'einvoice' | 'api-keys'>('stripe')
-  const [personalSection, setPersonalSection] = useState<'profile' | 'privacy'>('profile')
-
-  // Tab routing — supports legacy URLs
-  const validTabs = ['business', 'finance', 'people', 'integrations', 'billing', 'referral', 'personal',
-    // Legacy tab values — auto-redirect to new grouped tabs
-    'business-profile', 'category-management', 'leave-management', 'timesheet',
-    'team-management', 'api-keys', 'einvoice', 'ai-automation', 'privacy', 'profile'] as const
-  type TabValue = typeof validTabs[number]
-  const tabFromUrl = searchParams.get('tab') as TabValue | null
+  // Resolve legacy tab URLs to new grouped tabs + sub-sections (pure, no setState during render)
+  const tabFromUrl = searchParams.get('tab')
   const defaultTab = canViewBusinessSettings ? 'business' : 'personal'
 
-  // Map legacy tab values to new grouped tabs
-  function resolveTab(tab: TabValue | null): string {
-    if (!tab) return defaultTab
+  const resolved = useMemo(() => {
+    const tab = tabFromUrl || defaultTab
+    // Map legacy tab → { activeTab, sub-section defaults }
     switch (tab) {
-      case 'business-profile': return 'business'
-      case 'category-management': setFinanceSection('categories'); return 'finance'
-      case 'einvoice': setIntegrationsSection('einvoice'); return 'integrations'
-      case 'ai-automation': setFinanceSection('ai'); return 'finance'
-      case 'team-management': setPeopleSection('team'); return 'people'
-      case 'leave-management': setPeopleSection('leave'); return 'people'
-      case 'timesheet': setPeopleSection('timesheet'); return 'people'
-      case 'api-keys': setIntegrationsSection('api-keys'); return 'integrations'
-      case 'privacy': setPersonalSection('privacy'); return 'personal'
-      case 'profile': setPersonalSection('profile'); return 'personal'
-      default: return tab
+      case 'business-profile': return { tab: 'business', finance: 'categories' as const, people: 'team' as const, integrations: 'stripe' as const, personal: 'profile' as const }
+      case 'category-management': return { tab: 'finance', finance: 'categories' as const, people: 'team' as const, integrations: 'stripe' as const, personal: 'profile' as const }
+      case 'ai-automation': return { tab: 'finance', finance: 'ai' as const, people: 'team' as const, integrations: 'stripe' as const, personal: 'profile' as const }
+      case 'team-management': return { tab: 'people', finance: 'categories' as const, people: 'team' as const, integrations: 'stripe' as const, personal: 'profile' as const }
+      case 'leave-management': return { tab: 'people', finance: 'categories' as const, people: 'leave' as const, integrations: 'stripe' as const, personal: 'profile' as const }
+      case 'timesheet': return { tab: 'people', finance: 'categories' as const, people: 'timesheet' as const, integrations: 'stripe' as const, personal: 'profile' as const }
+      case 'einvoice': return { tab: 'integrations', finance: 'categories' as const, people: 'team' as const, integrations: 'einvoice' as const, personal: 'profile' as const }
+      case 'api-keys': return { tab: 'integrations', finance: 'categories' as const, people: 'team' as const, integrations: 'api-keys' as const, personal: 'profile' as const }
+      case 'privacy': return { tab: 'personal', finance: 'categories' as const, people: 'team' as const, integrations: 'stripe' as const, personal: 'privacy' as const }
+      case 'profile': return { tab: 'personal', finance: 'categories' as const, people: 'team' as const, integrations: 'stripe' as const, personal: 'profile' as const }
+      default: return { tab, finance: 'categories' as const, people: 'team' as const, integrations: 'stripe' as const, personal: 'profile' as const }
     }
-  }
+  }, [tabFromUrl, defaultTab])
 
-  const activeTab = resolveTab(tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : null)
+  const activeTab = resolved.tab
+
+  // Sub-section state — initialized from URL-derived defaults, updated by user clicks
+  const [financeSection, setFinanceSection] = useState<'categories' | 'ai'>(resolved.finance)
+  const [peopleSection, setPeopleSection] = useState<'team' | 'leave' | 'timesheet'>(resolved.people)
+  const [integrationsSection, setIntegrationsSection] = useState<'stripe' | 'einvoice' | 'api-keys'>(resolved.integrations)
+  const [personalSection, setPersonalSection] = useState<'profile' | 'privacy'>(resolved.personal)
 
   const handleTabChange = useCallback((value: string) => {
     const params = new URLSearchParams(searchParams.toString())
