@@ -456,6 +456,11 @@ export async function getBusinessProfile(clerkUserId: string): Promise<BusinessP
     state_code: profile.state_code ?? null,
     postal_code: profile.postal_code ?? null,
     country_code: profile.country_code ?? null,
+    // 001-doc-email-forward
+    slug: profile.slug ?? undefined,
+    emailForwardingEnabled: (profile as any).emailForwardingEnabled ?? false,
+    emailForwardingPrefix: (profile as any).emailForwardingPrefix ?? undefined,
+    emailForwardingAllowlist: (profile as any).emailForwardingAllowlist ?? [],
   }
 }
 

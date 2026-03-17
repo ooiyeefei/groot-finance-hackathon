@@ -481,12 +481,8 @@ export async function handleDocumentForwarding(
     return;
   }
 
-  // 3. Validate sender authorization
-  if (!isAuthorizedSender(fromAddress, businessConfig.emailForwardingAllowlist)) {
-    console.log(`[DocForward] Unauthorized sender: ${fromAddress} (not in allowlist)`);
-    // TODO: Send unauthorized notification email
-    return;
-  }
+  // 3. Log sender (no allowlist restriction — all team members can forward)
+  console.log(`[DocForward] Sender: ${fromAddress}`);
 
   // 4. Parse email and extract attachments
   const parsed = await simpleParser(rawEmailBytes);
