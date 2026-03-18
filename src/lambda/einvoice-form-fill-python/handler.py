@@ -21,7 +21,30 @@ from urllib.request import Request, urlopen
 import nest_asyncio
 nest_asyncio.apply()
 
+import asyncio
 from playwright.sync_api import sync_playwright, Page, Browser
+
+
+def _no_running_loop():
+    """Raise RuntimeError to trick Playwright's asyncio loop detection."""
+    raise RuntimeError("no running event loop")
+
+
+def _start_playwright():
+    """Start sync Playwright, bypassing asyncio loop detection.
+
+    Playwright >=1.49 refuses sync API when an asyncio loop is running.
+    Lambda Python 3.12 always has a running loop. nest_asyncio makes nested
+    event loops work, but Playwright checks BEFORE trying — it calls
+    asyncio.get_running_loop() in start() and raises immediately.
+    Temporarily hide the running loop during the start() call.
+    """
+    orig = asyncio.get_running_loop
+    asyncio.get_running_loop = _no_running_loop
+    try:
+        return sync_playwright().start()
+    finally:
+        asyncio.get_running_loop = orig
 
 # DSPy imported lazily in troubleshoot()/run_tier2() — avoids 10s cold start penalty on every invocation
 dspy = None  # type: ignore
@@ -2481,7 +2504,7 @@ def download_einvoice(event: dict) -> dict:
     print(f"[Download] Starting PDF download: {download_url[:80]}")
 
     try:
-        pw = sync_playwright().start()
+        pw = _start_playwright()
         browser = pw.chromium.launch(
             headless=True,
             args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage",
@@ -2685,7 +2708,7 @@ def handler(event: dict, context=None) -> dict:
             print(f"[Form Fill] 99SM: Constructed URL from receipt data: {receipt_payload}")
 
         # Launch browser — Browserbase for Cloudflare-managed merchants, local for everything else
-        pw = sync_playwright().start()
+        pw = _start_playwright()
         use_bb = needs_browserbase(merchant_hints)
         bb_session_id = None
 
