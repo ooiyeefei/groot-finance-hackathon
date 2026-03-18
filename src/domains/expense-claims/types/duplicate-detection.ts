@@ -48,13 +48,18 @@ export interface DuplicateMatchPreview {
   confidenceScore: number
   isCrossUser: boolean
   matchedClaim: {
+    _id: string
     vendorName: string
     transactionDate: string
     totalAmount: number
     currency: string
+    referenceNumber?: string | null
     status: string
-    submittedBy: string  // User name
+    submittedByName?: string  // User name
+    submittedBy: string  // User name (legacy field)
     createdAt: number
+    submittedAt?: number | null
+    duplicateOverrideReason?: string | null
   }
 }
 
