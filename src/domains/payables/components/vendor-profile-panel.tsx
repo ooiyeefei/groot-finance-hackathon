@@ -13,8 +13,11 @@ import { formatCurrency, formatNumber } from '@/lib/utils/format-number'
 import { useAction } from 'convex/react'
 import { VendorScorecardCard } from '@/domains/vendor-intelligence/components/vendor-scorecard-card'
 import { VendorRiskProfile } from '@/domains/vendor-intelligence/components/vendor-risk-profile'
+import { AnomalyAlertCard } from '@/domains/vendor-intelligence/components/anomaly-alert-card'
 import { useVendorScorecard } from '@/domains/vendor-intelligence/hooks/use-vendor-scorecard'
 import { useVendorRiskProfile } from '@/domains/vendor-intelligence/hooks/use-vendor-risk-profile'
+import { useAnomalyAlerts } from '@/domains/vendor-intelligence/hooks/use-anomaly-alerts'
+import { Badge } from '@/components/ui/badge'
 
 interface VendorProfilePanelProps {
   vendorId: string
@@ -320,6 +323,12 @@ function VendorIntelligenceSection({
 
   const { scorecard, isLoading: scorecardLoading } = useVendorScorecard(bizId, vId)
   const { profile, isLoading: riskLoading } = useVendorRiskProfile(bizId, vId)
+  const { alerts, dismissAlert, isLoading: alertsLoading } = useAnomalyAlerts(bizId)
+
+  // Filter alerts for this vendor only
+  const vendorAlerts = (alerts ?? []).filter(
+    (a) => a.vendorId === vendorId && a.status === 'active'
+  )
 
   // Trigger on-demand refresh (recalculates if stale)
   const refreshScorecard = useAction(api.functions.vendorScorecards.refreshIfStale)
@@ -347,6 +356,28 @@ function VendorIntelligenceSection({
     <div className="space-y-3 pt-2 border-t border-border">
       {scorecard && <VendorScorecardCard scorecard={scorecard} />}
       {profile && <VendorRiskProfile profile={profile} />}
+      {vendorAlerts.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-foreground uppercase tracking-wide">
+              Price Alerts
+            </span>
+            <Badge variant="warning" className="text-xs">{vendorAlerts.length}</Badge>
+          </div>
+          {vendorAlerts.slice(0, 3).map((alert) => (
+            <AnomalyAlertCard
+              key={alert._id}
+              alert={alert}
+              onDismiss={dismissAlert}
+            />
+          ))}
+          {vendorAlerts.length > 3 && (
+            <p className="text-xs text-muted-foreground">
+              +{vendorAlerts.length - 3} more alerts (view in Action Center)
+            </p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
