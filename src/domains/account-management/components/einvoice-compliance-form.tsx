@@ -51,7 +51,19 @@ export default function EInvoiceComplianceForm() {
     finally { setCheckingSecret(false) }
   }, [secretExists])
 
-  useEffect(() => { if (profile) checkSecretStatus() }, [profile, checkSecretStatus])
+  // Reset secret status and re-check when profile (business) changes
+  const lastProfileIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!profile) return
+    // Detect business change — reset secret status to prevent cross-business leak
+    const profileId = (profile as any)?._id || (profile as any)?.id || ''
+    if (lastProfileIdRef.current && lastProfileIdRef.current !== profileId) {
+      setSecretExists(null)
+      lastCheckedRef.current = 0
+    }
+    lastProfileIdRef.current = profileId
+    checkSecretStatus(true) // Force check on every profile change
+  }, [profile, checkSecretStatus])
 
   // Notification settings
   const [autoDelivery, setAutoDelivery] = useState(true)

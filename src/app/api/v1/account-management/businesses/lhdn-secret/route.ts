@@ -155,10 +155,14 @@ export async function GET() {
         Name: parameterPath,
         WithDecryption: false, // Don't need the value, just check existence
       }))
-      return NextResponse.json({ success: true, data: { exists: true } })
+      const response = NextResponse.json({ success: true, data: { exists: true } })
+      response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
+      return response
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'ParameterNotFound') {
-        return NextResponse.json({ success: true, data: { exists: false } })
+        const response = NextResponse.json({ success: true, data: { exists: false } })
+        response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
+        return response
       }
       throw error
     }
