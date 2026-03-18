@@ -2,11 +2,8 @@
 
 import { useState, useCallback, lazy, Suspense, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { useQuery } from 'convex/react'
-import { api } from '@/convex/_generated/api'
 import { useSubmissionDetail, useSubmissionMutations } from '../hooks/use-expense-submissions'
-import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
-import type { Id } from '../../../../convex/_generated/dataModel'
+import { useActiveBusiness } from '@/contexts/business-context'
 import EditExpenseModalNew from './edit-expense-modal-new'
 import UnifiedExpenseDetailsModal from './unified-expense-details-modal'
 import { Badge } from '@/components/ui/badge'
@@ -187,70 +184,32 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
   const [showBatchDuplicateWarning, setShowBatchDuplicateWarning] = useState(false)
   const [batchDuplicateClaims, setBatchDuplicateClaims] = useState<Array<{ claim: any; duplicates: any[] }>>([])
   const [batchDuplicateOverrides, setBatchDuplicateOverrides] = useState<Map<string, { reason: string; isSplitExpense: boolean }>>(new Map())
-  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false)
 
-  // Handle submit with pre-check for duplicates
+  // Handle submit — check if any claims already have duplicate warnings
   const handleSubmit = useCallback(async () => {
-    if (!data?.claims || !businessId) return
+    if (!data?.claims) return
 
+    // Check claims that already have duplicateStatus from the edit/create flow
+    // No API call needed — the status is already on the claim
+    const flaggedClaims = data.claims.filter((claim: any) =>
+      claim.duplicateStatus && claim.duplicateStatus !== 'none' && claim.duplicateStatus !== 'dismissed'
+    )
+
+    if (flaggedClaims.length > 0) {
+      // Show justification form for flagged claims
+      setBatchDuplicateClaims(flaggedClaims.map((claim: any) => ({ claim, duplicates: [] })))
+      setShowBatchDuplicateWarning(true)
+      return
+    }
+
+    // No flagged claims — submit directly
     try {
-      // Check each claim for duplicates before submitting
-      setIsCheckingDuplicates(true)
-      const flaggedClaims: Array<{ claim: any; duplicates: any[] }> = []
-
-      console.log(`[Batch Duplicate Check] Checking ${data.claims.length} claims, businessId=${businessId}`)
-      for (const claim of data.claims) {
-        console.log(`[Batch Duplicate Check] Claim: vendor=${claim.vendorName}, date=${claim.transactionDate}, amount=${claim.totalAmount}, currency=${claim.currency}, status=${claim.status}`)
-        // Skip claims without complete data
-        if (!claim.vendorName || !claim.transactionDate || !claim.totalAmount || !claim.currency) {
-          console.log(`[Batch Duplicate Check] SKIPPED — missing data`)
-          continue
-        }
-        // Skip claims already confirmed as duplicates (but still check 'dismissed' and 'potential' — re-verify)
-        if ((claim as any).duplicateStatus === 'confirmed') continue
-
-        try {
-          const response = await fetch('/api/v1/expense-claims/check-duplicates', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              businessId,
-              vendorName: claim.vendorName,
-              transactionDate: claim.transactionDate,
-              totalAmount: claim.totalAmount,
-              currency: claim.currency,
-              referenceNumber: (claim as any).referenceNumber || undefined,
-              excludeClaimId: claim._id,
-            }),
-          })
-          const result = await response.json()
-          console.log(`[Batch Duplicate Check] Claim ${claim._id} (${claim.vendorName}): success=${result.success}, hasDuplicates=${result.data?.hasDuplicates}, matches=${result.data?.matches?.length}, error=${result.error}`)
-          if (result.success && result.data?.hasDuplicates && result.data?.matches?.length > 0) {
-            flaggedClaims.push({ claim, duplicates: result.data.matches })
-          }
-        } catch (checkError) {
-          console.error(`[Batch Duplicate Check] Error checking claim ${claim._id}:`, checkError)
-          // Non-fatal: if check fails, proceed without blocking
-        }
-      }
-
-      setIsCheckingDuplicates(false)
-
-      if (flaggedClaims.length > 0) {
-        // Show duplicate warning — block submission until resolved
-        setBatchDuplicateClaims(flaggedClaims)
-        setShowBatchDuplicateWarning(true)
-        return
-      }
-
-      // No duplicates — submit directly
       await submitForApproval.mutateAsync(submissionId)
       refetch()
     } catch (e: any) {
-      setIsCheckingDuplicates(false)
       alert(e.message)
     }
-  }, [submissionId, submitForApproval, refetch, data, businessId])
+  }, [submissionId, submitForApproval, refetch, data])
 
   // Handle proceeding after batch duplicate warning
   const handleBatchDuplicateProceed = useCallback(async () => {
@@ -513,12 +472,12 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
             <>
               <Button
                 onClick={handleSubmit}
-                disabled={!canSubmit || submitForApproval.isPending || isCheckingDuplicates}
+                disabled={!canSubmit || submitForApproval.isPending}
                 className="bg-primary hover:bg-primary/90 text-primary-foreground"
                 title={!canSubmit ? (claims.length === 0 ? 'Add at least one claim' : hasProcessingClaims ? 'Wait for claims to finish processing' : '') : ''}
               >
-                {(submitForApproval.isPending || isCheckingDuplicates) ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
-                {isCheckingDuplicates ? 'Checking duplicates...' : 'Submit for Approval'}
+                {submitForApproval.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                Submit for Approval
               </Button>
               <Button variant="destructive" onClick={handleDeleteClick} disabled={deleteSubmission.isPending}>
                 <Trash2 className="h-4 w-4 mr-2" />

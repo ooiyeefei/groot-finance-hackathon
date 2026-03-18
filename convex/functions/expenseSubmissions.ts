@@ -239,6 +239,9 @@ export const getById = query({
         convertedImagePath: c.convertedImagePath,
         fileName: c.fileName,
         lineItemsStatus: c.lineItemsStatus,
+        duplicateStatus: c.duplicateStatus,
+        isSplitExpense: c.isSplitExpense,
+        duplicateOverrideReason: c.duplicateOverrideReason,
         _creationTime: c._creationTime,
       }));
 
