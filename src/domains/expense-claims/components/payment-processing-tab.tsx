@@ -30,6 +30,7 @@ import { formatBusinessDate } from '@/lib/utils'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
+import SharedDuplicateReviewModal from './shared-duplicate-review-modal'
 
 const PAYMENT_METHODS = [
   'Bank Transfer',
@@ -59,6 +60,11 @@ export default function PaymentProcessingTab() {
   const [sendBackReason, setSendBackReason] = useState('')
   const [isSendingBack, setIsSendingBack] = useState(false)
   const [resultMessage, setResultMessage] = useState<string | null>(null)
+
+  // Duplicate review modal state
+  const [showDuplicateReview, setShowDuplicateReview] = useState(false)
+  const [reviewingClaim, setReviewingClaim] = useState<any>(null)
+  const [duplicateMatches, setDuplicateMatches] = useState<any[]>([])
 
   // Filter state
   const [filterEmployee, setFilterEmployee] = useState('')
@@ -252,6 +258,35 @@ export default function PaymentProcessingTab() {
     }
   }
 
+  // Handle duplicate review (finance admin view)
+  const handleReviewDuplicates = async (claim: any) => {
+    try {
+      const response = await fetch('/api/v1/expense-claims/check-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vendorName: claim.vendorName || '',
+          transactionDate: claim.transactionDate || '',
+          totalAmount: claim.totalAmount || 0,
+          currency: claim.currency || 'MYR',
+          referenceNumber: claim.referenceNumber || undefined,
+        }),
+      })
+
+      const result = await response.json()
+      if (result.success && result.data.matches) {
+        const matches = result.data.matches.filter(
+          (m: any) => m.matchedClaim._id !== claim._id
+        )
+        setReviewingClaim(claim)
+        setDuplicateMatches(matches)
+        setShowDuplicateReview(true)
+      }
+    } catch (err) {
+      console.error('[Payment Processing] Error fetching duplicates:', err)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -263,6 +298,7 @@ export default function PaymentProcessingTab() {
   const totalPendingCount = visibleClaimIds.length
 
   return (
+    <>
     <Card className="bg-card border-border">
       <CardHeader>
         <CardTitle className="text-foreground flex items-center gap-2">
@@ -418,6 +454,7 @@ export default function PaymentProcessingTab() {
                               setSendBackClaimId(claim._id)
                               setSendBackReason('')
                             }}
+                            onReviewDuplicates={handleReviewDuplicates}
                           />
                         ))}
                       </div>
@@ -443,6 +480,7 @@ export default function PaymentProcessingTab() {
                           setSendBackClaimId(claim._id)
                           setSendBackReason('')
                         }}
+                        onReviewDuplicates={handleReviewDuplicates}
                       />
                     ))}
                   </div>
@@ -541,6 +579,28 @@ export default function PaymentProcessingTab() {
         )}
       </CardContent>
     </Card>
+
+    {/* Shared Duplicate Review Modal - Finance Admin View */}
+    <SharedDuplicateReviewModal
+      isOpen={showDuplicateReview && duplicateMatches.length > 0 && !!reviewingClaim}
+      onClose={() => {
+        setShowDuplicateReview(false)
+        setDuplicateMatches([])
+        setReviewingClaim(null)
+      }}
+      currentClaim={{
+        id: reviewingClaim?._id || '',
+        vendor_name: reviewingClaim?.vendorName,
+        total_amount: String(reviewingClaim?.totalAmount || 0),
+        currency: reviewingClaim?.currency,
+        transaction_date: reviewingClaim?.transactionDate,
+        reference_number: reviewingClaim?.referenceNumber,
+      }}
+      duplicateMatches={duplicateMatches}
+      viewMode="finance"
+      onViewMatchedClaim={undefined}
+    />
+    </>
   )
 }
 
@@ -550,6 +610,7 @@ function ClaimRow({
   isSelected,
   onToggleSelect,
   onSendBack,
+  onReviewDuplicates,
 }: {
   claim: {
     _id: string
@@ -561,6 +622,7 @@ function ClaimRow({
     referenceNumber: string
     submittedAt?: number
     employeeName: string
+    transactionDate?: string
     duplicateStatus?: string
     duplicateOverrideReason?: string
     isSplitExpense?: boolean
@@ -568,6 +630,7 @@ function ClaimRow({
   isSelected: boolean
   onToggleSelect: () => void
   onSendBack: () => void
+  onReviewDuplicates: (claim: any) => void
 }) {
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 transition-colors">
@@ -581,7 +644,13 @@ function ClaimRow({
             <Badge variant="outline" className="text-[10px] shrink-0">{claim.expenseCategory}</Badge>
           )}
           {claim.duplicateStatus && claim.duplicateStatus !== 'none' && (
-            <Badge className="text-[10px] shrink-0 bg-yellow-500/20 text-yellow-700 border-yellow-500/30 hover:bg-yellow-500/20">
+            <Badge
+              className="text-[10px] shrink-0 bg-yellow-500/20 text-yellow-700 border-yellow-500/30 hover:bg-yellow-500/30 cursor-pointer transition-colors"
+              onClick={(e) => {
+                e.stopPropagation()
+                onReviewDuplicates(claim)
+              }}
+            >
               <AlertTriangle className="w-3 h-3 mr-0.5" />
               {claim.isSplitExpense ? 'Split' : 'Duplicate'}
             </Badge>

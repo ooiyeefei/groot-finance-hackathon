@@ -41,6 +41,7 @@ import DuplicateBadge from './duplicate-badge'
 import CorrectResubmitButton from './correct-resubmit-button'
 import RouteClaimButton from './route-claim-button'
 import EinvoiceSection from './einvoice-section'
+import SharedDuplicateReviewModal from './shared-duplicate-review-modal'
 
 interface UnifiedExpenseDetailsModalProps {
   claimId: string
@@ -695,7 +696,7 @@ export default function UnifiedExpenseDetailsModal({
                                   </p>
                                 </div>
                               </div>
-                              {(viewMode === 'manager' || viewMode === 'personal') && claimDetails.duplicateStatus === 'potential' && (
+                              {claimDetails.duplicateStatus === 'potential' && (
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -1134,150 +1135,29 @@ export default function UnifiedExpenseDetailsModal({
         </div>
       )}
 
-      {/* Duplicate Review Modal */}
-      {showDuplicateReview && duplicateMatches.length > 0 && claimDetails && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
-          <div className="max-w-2xl w-full max-h-[90vh] overflow-hidden bg-card rounded-lg shadow-lg">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-full bg-yellow-500/10">
-                  <AlertTriangle className="w-5 h-5 text-yellow-600" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-foreground">
-                    Duplicate Review
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    {duplicateMatches.length} potential duplicate{duplicateMatches.length > 1 ? 's' : ''} found
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => { setShowDuplicateReview(false); setDuplicateMatches([]); }}
-                className="p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Current claim summary */}
-            <div className="px-6 pt-4">
-              <p className="text-xs font-medium text-muted-foreground mb-2">Current Expense</p>
-              <div className="p-3 rounded-lg border-2 border-primary/30 bg-primary/5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{claimDetails.vendor_name || claimDetails.transaction?.vendor_name || 'Unknown Vendor'}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatBusinessDate(claimDetails.transaction_date || claimDetails.transaction?.transaction_date || '')}
-                      {claimDetails.reference_number && <> &bull; Ref: {claimDetails.reference_number}</>}
-                    </p>
-                  </div>
-                  <p className="text-sm font-semibold text-foreground">
-                    {formatCurrency(parseFloat(claimDetails.total_amount || claimDetails.transaction?.original_amount || '0'), claimDetails.currency || 'MYR')}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* All matching duplicates */}
-            <div className="px-6 py-4 overflow-y-auto max-h-[calc(90vh-280px)] space-y-3">
-              <p className="text-xs font-medium text-muted-foreground">Matching Expenses ({duplicateMatches.length})</p>
-              {duplicateMatches.map((match: any, idx: number) => (
-                <div key={match.matchedClaim?._id || idx} className="p-4 rounded-lg border border-border bg-card hover:bg-card/80 transition-colors">
-                  {/* Header row with badges and submitter */}
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Badge className={`text-[10px] ${match.tier === 'exact' ? 'bg-red-500/20 text-red-700 border-red-500/30' : 'bg-yellow-500/20 text-yellow-700 border-yellow-500/30'}`}>
-                        {match.tier === 'exact' ? 'Exact Match' : 'Strong Match'}
-                      </Badge>
-                      <span className="text-[10px] text-muted-foreground">
-                        {Math.round((match.confidenceScore || 0.5) * 100)}% confidence
-                      </span>
-                      {match.matchedClaim?.submittedByName && (
-                        <Badge variant="outline" className="text-[10px]">
-                          {match.matchedClaim.submittedByName}
-                        </Badge>
-                      )}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 text-xs"
-                      onClick={() => {
-                        // Close duplicate review and open the matched claim
-                        if (match.matchedClaim?._id && onViewMatchedClaim) {
-                          setShowDuplicateReview(false)
-                          setDuplicateMatches([])
-                          onViewMatchedClaim(match.matchedClaim._id)
-                        }
-                      }}
-                    >
-                      View Details
-                    </Button>
-                  </div>
-
-                  {/* Claim details */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">{match.matchedClaim?.vendorName || 'Unknown'}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Transaction: {formatBusinessDate(match.matchedClaim?.transactionDate || '')}
-                          {match.matchedClaim?.submittedAt && (
-                            <> &bull; Submitted: {new Date(match.matchedClaim.submittedAt).toLocaleDateString()}</>
-                          )}
-                        </p>
-                        {match.matchedClaim?.referenceNumber && (
-                          <p className="text-xs text-muted-foreground">
-                            Ref: {match.matchedClaim.referenceNumber}
-                          </p>
-                        )}
-                      </div>
-                      <p className="text-sm font-semibold text-foreground ml-3">
-                        {formatCurrency(match.matchedClaim?.totalAmount || 0, match.matchedClaim?.currency || 'MYR')}
-                      </p>
-                    </div>
-
-                    {/* Matched fields */}
-                    {match.matchedFields?.length > 0 && (
-                      <p className="text-[10px] text-muted-foreground">
-                        Matched on: {match.matchedFields.join(', ')}
-                      </p>
-                    )}
-
-                    {/* Justification from other submitter */}
-                    {match.matchedClaim?.duplicateOverrideReason && (
-                      <div className="mt-2 pt-2 border-t border-border">
-                        <p className="text-xs font-medium text-muted-foreground mb-1">Their Justification:</p>
-                        <p className="text-xs text-foreground bg-muted/50 rounded px-2 py-1">
-                          {match.matchedClaim.duplicateOverrideReason}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Claim ID for reference */}
-                    <p className="text-[10px] text-muted-foreground font-mono">
-                      ID: {(match.matchedClaim?._id || '').slice(0, 12)}...
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Footer with close */}
-            <div className="px-6 py-3 border-t border-border flex justify-end">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => { setShowDuplicateReview(false); setDuplicateMatches([]); }}
-              >
-                Close
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Shared Duplicate Review Modal - used by all roles */}
+      <SharedDuplicateReviewModal
+        isOpen={showDuplicateReview && duplicateMatches.length > 0 && !!claimDetails}
+        onClose={() => {
+          setShowDuplicateReview(false)
+          setDuplicateMatches([])
+        }}
+        currentClaim={{
+          id: claimDetails?.id || '',
+          vendor_name: claimDetails?.vendor_name || claimDetails?.transaction?.vendor_name,
+          total_amount: claimDetails?.total_amount || claimDetails?.transaction?.original_amount,
+          currency: claimDetails?.currency || claimDetails?.transaction?.original_currency,
+          transaction_date: claimDetails?.transaction_date || claimDetails?.transaction?.transaction_date,
+          reference_number: claimDetails?.reference_number || claimDetails?.transaction?.reference_number,
+        }}
+        duplicateMatches={duplicateMatches}
+        viewMode={viewMode === 'personal' ? 'employee' : viewMode}
+        onViewMatchedClaim={(matchedClaimId) => {
+          setShowDuplicateReview(false)
+          setDuplicateMatches([])
+          onViewMatchedClaim?.(matchedClaimId)
+        }}
+      />
     </div>,
     document.body
   )
