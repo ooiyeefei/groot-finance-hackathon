@@ -474,6 +474,10 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
               setDetailsClaimId(null)
             }}
             viewMode="personal"
+            onViewMatchedClaim={(matchedClaimId) => {
+              // Switch to viewing the matched duplicate claim
+              setDetailsClaimId(matchedClaimId)
+            }}
           />
         </Suspense>
       )}

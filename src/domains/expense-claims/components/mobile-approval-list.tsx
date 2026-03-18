@@ -327,6 +327,13 @@ export function MobileApprovalList({ onRefreshNeeded }: MobileApprovalListProps)
               fetchPendingClaims()
               onRefreshNeeded()
             }}
+            onViewMatchedClaim={(matchedClaimId) => {
+              // Switch to viewing the matched duplicate claim
+              const matchedClaim = claims.find(c => c.id === matchedClaimId)
+              if (matchedClaim) {
+                setSelectedClaim(matchedClaim)
+              }
+            }}
           />
         </Suspense>
       )}

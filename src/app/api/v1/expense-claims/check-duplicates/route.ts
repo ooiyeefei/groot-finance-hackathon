@@ -129,6 +129,8 @@ export async function POST(request: NextRequest) {
         status: c.status,
         _creationTime: c._creationTime,
         submittedByName: c.submittedByName,
+        duplicateOverrideReason: c.duplicateOverrideReason ?? null,
+        submittedAt: c.submittedAt ?? null,
       }))
 
     // 7. Run the duplicate detection algorithm

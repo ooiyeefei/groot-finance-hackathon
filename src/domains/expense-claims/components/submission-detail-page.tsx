@@ -786,6 +786,10 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
           isOpen={true}
           onClose={handleClaimModalClose}
           viewMode={isManagerView ? 'manager' : 'personal'}
+          onViewMatchedClaim={(matchedClaimId) => {
+            // Switch to viewing the matched duplicate claim
+            setSelectedClaimId(matchedClaimId)
+          }}
         />
       )}
 

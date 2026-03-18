@@ -537,6 +537,8 @@ export const checkDuplicates = query({
         status: claim.status,
         _creationTime: claim._creationTime,
         submittedByName: user?.fullName || user?.email || "Unknown",
+        duplicateOverrideReason: claim.duplicateOverrideReason,
+        submittedAt: claim.submittedAt,
       };
     });
 

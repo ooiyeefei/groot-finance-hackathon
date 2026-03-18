@@ -53,6 +53,8 @@ interface UnifiedExpenseDetailsModalProps {
   onReject?: (claimId: string, notes?: string) => Promise<void>
   onRouted?: () => void
   onRefreshNeeded?: () => void
+  // Duplicate review callback
+  onViewMatchedClaim?: (claimId: string) => void
 }
 
 interface ClaimDetails {
@@ -149,7 +151,8 @@ export default function UnifiedExpenseDetailsModal({
   onApprove,
   onReject,
   onRouted,
-  onRefreshNeeded
+  onRefreshNeeded,
+  onViewMatchedClaim
 }: UnifiedExpenseDetailsModalProps) {
   const [claimDetails, setClaimDetails] = useState<ClaimDetails | null>(null)
   const [loading, setLoading] = useState(false)
@@ -1181,41 +1184,83 @@ export default function UnifiedExpenseDetailsModal({
             <div className="px-6 py-4 overflow-y-auto max-h-[calc(90vh-280px)] space-y-3">
               <p className="text-xs font-medium text-muted-foreground">Matching Expenses ({duplicateMatches.length})</p>
               {duplicateMatches.map((match: any, idx: number) => (
-                <div key={match.matchedClaim?._id || idx} className="p-3 rounded-lg border border-border bg-muted/50">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
+                <div key={match.matchedClaim?._id || idx} className="p-4 rounded-lg border border-border bg-card hover:bg-card/80 transition-colors">
+                  {/* Header row with badges and submitter */}
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <Badge className={`text-[10px] ${match.tier === 'exact' ? 'bg-red-500/20 text-red-700 border-red-500/30' : 'bg-yellow-500/20 text-yellow-700 border-yellow-500/30'}`}>
                         {match.tier === 'exact' ? 'Exact Match' : 'Strong Match'}
                       </Badge>
-                      {match.isCrossUser && (
-                        <Badge variant="outline" className="text-[10px]">Other User</Badge>
-                      )}
                       <span className="text-[10px] text-muted-foreground">
                         {Math.round((match.confidenceScore || 0.5) * 100)}% confidence
                       </span>
+                      {match.matchedClaim?.submittedByName && (
+                        <Badge variant="outline" className="text-[10px]">
+                          {match.matchedClaim.submittedByName}
+                        </Badge>
+                      )}
                     </div>
-                    <span className="text-[10px] text-muted-foreground font-mono">
-                      {(match.matchedClaim?._id || '').slice(0, 8)}...
-                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        // Close duplicate review and open the matched claim
+                        if (match.matchedClaim?._id && onViewMatchedClaim) {
+                          setShowDuplicateReview(false)
+                          setDuplicateMatches([])
+                          onViewMatchedClaim(match.matchedClaim._id)
+                        }
+                      }}
+                    >
+                      View Details
+                    </Button>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{match.matchedClaim?.vendorName || 'Unknown'}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatBusinessDate(match.matchedClaim?.transactionDate || '')}
-                        {match.matchedClaim?.submittedByName && <> &bull; {match.matchedClaim.submittedByName}</>}
-                        {match.matchedClaim?.referenceNumber && <> &bull; Ref: {match.matchedClaim.referenceNumber}</>}
+
+                  {/* Claim details */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{match.matchedClaim?.vendorName || 'Unknown'}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Transaction: {formatBusinessDate(match.matchedClaim?.transactionDate || '')}
+                          {match.matchedClaim?.submittedAt && (
+                            <> &bull; Submitted: {new Date(match.matchedClaim.submittedAt).toLocaleDateString()}</>
+                          )}
+                        </p>
+                        {match.matchedClaim?.referenceNumber && (
+                          <p className="text-xs text-muted-foreground">
+                            Ref: {match.matchedClaim.referenceNumber}
+                          </p>
+                        )}
+                      </div>
+                      <p className="text-sm font-semibold text-foreground ml-3">
+                        {formatCurrency(match.matchedClaim?.totalAmount || 0, match.matchedClaim?.currency || 'MYR')}
                       </p>
                     </div>
-                    <p className="text-sm font-semibold text-foreground">
-                      {formatCurrency(match.matchedClaim?.totalAmount || 0, match.matchedClaim?.currency || 'MYR')}
+
+                    {/* Matched fields */}
+                    {match.matchedFields?.length > 0 && (
+                      <p className="text-[10px] text-muted-foreground">
+                        Matched on: {match.matchedFields.join(', ')}
+                      </p>
+                    )}
+
+                    {/* Justification from other submitter */}
+                    {match.matchedClaim?.duplicateOverrideReason && (
+                      <div className="mt-2 pt-2 border-t border-border">
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Their Justification:</p>
+                        <p className="text-xs text-foreground bg-muted/50 rounded px-2 py-1">
+                          {match.matchedClaim.duplicateOverrideReason}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Claim ID for reference */}
+                    <p className="text-[10px] text-muted-foreground font-mono">
+                      ID: {(match.matchedClaim?._id || '').slice(0, 12)}...
                     </p>
                   </div>
-                  {match.matchedFields?.length > 0 && (
-                    <p className="text-[10px] text-muted-foreground mt-1">
-                      Matched on: {match.matchedFields.join(', ')}
-                    </p>
-                  )}
                 </div>
               ))}
             </div>
