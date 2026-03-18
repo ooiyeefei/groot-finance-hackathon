@@ -35,21 +35,13 @@ export async function GET(request: NextRequest) {
 
     // 🔧 REPAIR LOGIC: Check for broken user state before fetching profile
     try {
-      // ✅ PERFORMANCE: Cache business profile with 30-minute TTL
-      const profile = await withCache(
-        userId,
-        'business-profile',
-        () => getBusinessProfile(userId),
-        {
-          ttlMs: CACHE_TTL.BUSINESS_SETTINGS,
-          skipCache: false
-        }
-      )
+      // No in-memory cache for business-profile — causes stale data after business switch
+      // (in-memory apiCache is per-serverless-instance, cross-instance invalidation impossible)
+      const profile = await getBusinessProfile(userId)
 
-      return withCacheHeaders(NextResponse.json({
-        success: true,
-        data: profile
-      }), 'stable')
+      const response = NextResponse.json({ success: true, data: profile })
+      response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
+      return response
     } catch (profileError: any) {
       // If business membership validation fails, try repair
       if (profileError.message?.includes('Failed to validate business membership') ||
