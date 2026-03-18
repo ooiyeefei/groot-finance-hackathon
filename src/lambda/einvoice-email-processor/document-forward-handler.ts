@@ -86,11 +86,45 @@ async function getBusinessConfig(prefix: string): Promise<BusinessConfig | null>
 }
 
 /**
- * Validate sender is in allowlist
+ * Validate sender is a team member of the business (Convex query)
+ * Returns: { authorized, userId, role, reason }
  */
-function isAuthorizedSender(senderEmail: string, allowlist: string[]): boolean {
-  const normalized = senderEmail.toLowerCase().trim();
-  return allowlist.some((allowed) => allowed.toLowerCase().trim() === normalized);
+async function validateSenderEmail(
+  businessId: string,
+  senderEmail: string
+): Promise<{
+  authorized: boolean;
+  userId?: string;
+  role?: string;
+  reason: string;
+}> {
+  try {
+    const response = await fetch(`${CONVEX_URL}/api/query`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        path: "functions/documentInbox:validateSender",
+        args: { businessId, senderEmail },
+        format: "json",
+      }),
+    });
+
+    if (!response.ok) {
+      console.log(`[DocForward] Sender validation query failed: ${response.status}`);
+      return { authorized: false, reason: `Validation query failed: ${response.status}` };
+    }
+
+    const result = await response.json();
+    if (result.status === "error") {
+      console.log(`[DocForward] Sender validation error: ${result.errorMessage}`);
+      return { authorized: false, reason: result.errorMessage };
+    }
+
+    return result.value;
+  } catch (error) {
+    console.log(`[DocForward] Sender validation failed: ${error}`);
+    return { authorized: false, reason: `Validation error: ${error}` };
+  }
 }
 
 /**
@@ -481,8 +515,24 @@ export async function handleDocumentForwarding(
     return;
   }
 
-  // 3. Log sender (no allowlist restriction — all team members can forward)
-  console.log(`[DocForward] Sender: ${fromAddress}`);
+  // 3. Validate sender is a team member of this business
+  const senderValidation = await validateSenderEmail(
+    businessConfig.businessId,
+    fromAddress
+  );
+
+  if (!senderValidation.authorized) {
+    console.log(`[DocForward] REJECTED: ${fromAddress} — ${senderValidation.reason}`);
+    return;
+  }
+
+  console.log(
+    `[DocForward] Sender verified: ${fromAddress} (role: ${senderValidation.role}, userId: ${senderValidation.userId})`
+  );
+
+  // Use the sender's actual userId (not the admin fallback)
+  const senderUserId = senderValidation.userId || businessConfig.userId;
+  const senderRole = senderValidation.role || "employee";
 
   // 4. Parse email and extract attachments
   const parsed = await simpleParser(rawEmailBytes);
@@ -543,7 +593,7 @@ export async function handleDocumentForwarding(
         originalFilename: attachment.filename,
         mimeType,
         businessId: businessConfig.businessId,
-        userId: businessConfig.userId,
+        userId: senderUserId,
         emailMetadata,
       });
 
@@ -614,19 +664,32 @@ export async function handleDocumentForwarding(
       if (classification.confidence >= CONFIDENCE_THRESHOLD && classification.type !== "unknown") {
         try {
           let destinationId: string;
+
+          // RBAC: Invoices require finance_admin or owner role
+          const invoiceRoles = ["finance_admin", "owner", "admin"];
+          if (classification.type === "invoice" && !invoiceRoles.includes(senderRole)) {
+            console.log(
+              `[DocForward] RBAC: ${fromAddress} (role: ${senderRole}) cannot create invoices — routing to inbox for review`
+            );
+            // Leave in inbox for a finance_admin to review
+            continue;
+          }
+
           if (classification.type === "receipt") {
+            // Receipts: any team member (employee, manager, finance_admin, owner)
             destinationId = await routeToExpenseClaims({
               businessId: businessConfig.businessId,
-              userId: businessConfig.userId,
-              fileStorageId: result.inboxEntryId, // Placeholder - will use actual storage ID
+              userId: senderUserId,
+              fileStorageId: result.inboxEntryId,
               originalFilename: attachment.filename,
               emailMetadata,
             });
             console.log(`[DocForward] Routed to expense_claims: ${destinationId}`);
           } else {
+            // Invoices: finance_admin/owner only (RBAC checked above)
             destinationId = await routeToInvoices({
               businessId: businessConfig.businessId,
-              userId: businessConfig.userId,
+              userId: senderUserId,
               fileStorageId: result.inboxEntryId,
               originalFilename: attachment.filename,
               emailMetadata,

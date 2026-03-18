@@ -468,6 +468,60 @@ export const getBusinessByPrefix = query({
 });
 
 /**
+ * Validate sender email against team membership + RBAC
+ * Called by: Lambda email processor before processing attachments
+ *
+ * Returns: { authorized, userId, role, reason }
+ * - authorized: true if sender is a team member
+ * - role: their business role (for RBAC checks in Lambda)
+ * - userId: their Convex user ID (for creating records)
+ */
+export const validateSender = query({
+  args: {
+    businessId: v.id("businesses"),
+    senderEmail: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const normalizedEmail = args.senderEmail.toLowerCase().trim();
+
+    // Find user by email
+    const user = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("email"), normalizedEmail))
+      .first();
+
+    if (!user) {
+      return {
+        authorized: false,
+        reason: `No user account found for ${normalizedEmail}`,
+      };
+    }
+
+    // Check team membership
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") {
+      return {
+        authorized: false,
+        reason: `${normalizedEmail} is not an active team member of this business`,
+      };
+    }
+
+    return {
+      authorized: true,
+      userId: user._id,
+      role: membership.role,
+      reason: "Team member verified",
+    };
+  },
+});
+
+/**
  * Delete document from inbox (user action)
  * Called by: Frontend when user clicks "Delete" button
  */
