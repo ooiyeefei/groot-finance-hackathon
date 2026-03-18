@@ -10,6 +10,7 @@ import {
   Loader2,
   Undo2,
   CreditCard,
+  AlertTriangle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -560,6 +561,9 @@ function ClaimRow({
     referenceNumber: string
     submittedAt?: number
     employeeName: string
+    duplicateStatus?: string
+    duplicateOverrideReason?: string
+    isSplitExpense?: boolean
   }
   isSelected: boolean
   onToggleSelect: () => void
@@ -576,7 +580,18 @@ function ClaimRow({
           {claim.expenseCategory && (
             <Badge variant="outline" className="text-[10px] shrink-0">{claim.expenseCategory}</Badge>
           )}
+          {claim.duplicateStatus && claim.duplicateStatus !== 'none' && (
+            <Badge className="text-[10px] shrink-0 bg-yellow-500/20 text-yellow-700 border-yellow-500/30 hover:bg-yellow-500/20">
+              <AlertTriangle className="w-3 h-3 mr-0.5" />
+              {claim.isSplitExpense ? 'Split' : 'Duplicate'}
+            </Badge>
+          )}
         </div>
+        {claim.duplicateStatus && claim.duplicateStatus !== 'none' && claim.duplicateOverrideReason && (
+          <p className="text-[10px] text-yellow-600 truncate">
+            Justification: {claim.duplicateOverrideReason}
+          </p>
+        )}
         <p className="text-xs text-muted-foreground truncate">
           {claim.employeeName}
           {claim.referenceNumber && <> &bull; Ref: {claim.referenceNumber}</>}

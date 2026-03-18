@@ -3469,6 +3469,9 @@ export const getPendingPaymentClaims = query({
             referenceNumber: c.referenceNumber || "",
             submittedAt: c.submittedAt,
             employeeName: userMap[c.userId] || "Unknown",
+            duplicateStatus: c.duplicateStatus,
+            duplicateOverrideReason: c.duplicateOverrideReason,
+            isSplitExpense: c.isSplitExpense,
           })),
         };
       })
@@ -3484,6 +3487,9 @@ export const getPendingPaymentClaims = query({
       referenceNumber: c.referenceNumber || "",
       submittedAt: c.submittedAt,
       employeeName: userMap[c.userId] || "Unknown",
+      duplicateStatus: c.duplicateStatus,
+      duplicateOverrideReason: c.duplicateOverrideReason,
+      isSplitExpense: c.isSplitExpense,
     }));
 
     return { submissions, ungroupedClaims: ungroupedMapped };
