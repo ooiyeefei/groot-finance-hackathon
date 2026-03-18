@@ -301,8 +301,9 @@ export async function handler(event: SESEvent) {
         isDocumentForwarding = true;
         console.log(`[Email] Detected document forwarding email: ${addr}`);
 
-        // Download raw email from S3
-        const rawEmailBytes = await downloadFromS3(rawEmailBucket, rawEmailKey);
+        // Download raw email from S3 (document-forwarding prefix, not einvoice)
+        const docForwardKey = `ses-emails/document-forwarding/${messageId}`;
+        const rawEmailBytes = await downloadFromS3(rawEmailBucket, docForwardKey);
 
         // Route to document forwarding handler
         await handleDocumentForwarding(
