@@ -24,7 +24,7 @@ export default function EmailForwardingSettings() {
           .replace(/[^a-z0-9]+/g, "-")
           .replace(/^-|-$/g, "")
       : "");
-  const forwardingEmail = slug ? `inbox@${slug}.hellogroot.com` : null;
+  const forwardingEmail = slug ? `${slug}@inbox.hellogroot.com` : null;
 
   const handleToggle = async (enabled: boolean) => {
     if (saving) return;

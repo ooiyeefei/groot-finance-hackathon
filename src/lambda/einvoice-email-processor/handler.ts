@@ -292,7 +292,7 @@ export async function handler(event: SESEvent) {
 
     // ===================================================================
     // FEATURE: Document Forwarding (001-doc-email-forward)
-    // Check if this is a document forwarding email (inbox@{prefix}.hellogroot.com)
+    // Check if this is a document forwarding email ({prefix}@inbox.hellogroot.com)
     // If yes, route to document forwarding handler and skip e-invoice processing
     // ===================================================================
     let isDocumentForwarding = false;

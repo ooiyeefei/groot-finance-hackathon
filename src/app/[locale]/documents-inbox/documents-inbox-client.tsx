@@ -63,7 +63,7 @@ export default function DocumentsInboxClient() {
   const businessId = currentBusiness?._id ?? null;
   const forwardingPrefix = currentBusiness?.emailForwardingPrefix ?? currentBusiness?.slug;
   const forwardingEmail = forwardingPrefix
-    ? `inbox@${forwardingPrefix}.hellogroot.com`
+    ? `${forwardingPrefix}@inbox.hellogroot.com`
     : null;
   const forwardingEnabled = currentBusiness?.emailForwardingEnabled ?? false;
 
