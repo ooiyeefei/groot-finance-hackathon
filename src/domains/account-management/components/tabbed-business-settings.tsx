@@ -129,13 +129,14 @@ const TabbedBusinessSettings = memo(() => {
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
   }, [searchParams, router, pathname])
 
-  // Update sub-tab in URL and local state
+  // Update sub-tab in URL and local state (always include tab param for permalink stability)
   const handleSubTabChange = useCallback((value: string, setter: (v: string) => void) => {
     setter(value)
     const params = new URLSearchParams(searchParams.toString())
+    if (!params.has('tab')) params.set('tab', activeTab)
     params.set('sub', value)
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
-  }, [searchParams, router, pathname])
+  }, [searchParams, router, pathname, activeTab])
 
   // Render sub-tab navigation (matching invoice page style)
   const renderSubTabs = (

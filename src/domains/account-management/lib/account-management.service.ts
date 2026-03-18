@@ -579,6 +579,11 @@ export async function updateBusinessProfile(
     country_code: profile?.country_code ?? country_code ?? null,
     // LHDN self-bill auto-trigger
     auto_self_bill_exempt_vendors: profile?.auto_self_bill_exempt_vendors ?? auto_self_bill_exempt_vendors ?? false,
+    // 001-doc-email-forward
+    slug: profile?.slug ?? undefined,
+    emailForwardingEnabled: (profile as any)?.emailForwardingEnabled ?? email_forwarding_enabled ?? false,
+    emailForwardingPrefix: (profile as any)?.emailForwardingPrefix ?? undefined,
+    emailForwardingAllowlist: (profile as any)?.emailForwardingAllowlist ?? [],
   }
 }
 
