@@ -80,7 +80,7 @@ export class DurableWorkflowConstruct extends Construct {
         sourceMap: true, // Enable source maps for stack traces
         // The durable execution SDK is provided by the Lambda Durable runtime
         // Don't bundle it - it's available at runtime via nodejs:22.DurableFunction.v8
-        externalModules: ['@aws/durable-execution-sdk-js'],
+        externalModules: ['@aws/durable-execution-sdk-js', '@aws-sdk/*'],
       },
       // Durable Function configuration
       // executionTimeout: max time for a single execution before checkpoint
