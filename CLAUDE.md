@@ -504,12 +504,9 @@ const arBalance = arLines.reduce((sum, line) =>
 - AWS S3 (einvoices/ prefix) + CloudFront (signed URLs), Convex document database (extended sales_invoices schema) (001-einv-pdf-gen)
 - TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, AWS SES (via existing infrastructure), Zod 3.23.8 (023-einv-buyer-notifications)
 - Convex (document database — `sales_invoices`, `businesses` extended), AWS SES (email delivery) (023-einv-buyer-notifications)
-<<<<<<< HEAD
 - Python 3.11 (Lambda), TypeScript 5.9.3 (Convex + Next.js) + DSPy 2.6+, litellm, boto3 (Lambda); Convex 1.31.3 (backend); React 19.1.2 (frontend) (001-dspy-vendor-item-matcher)
 - S3 (`finanseal-bucket/dspy-models/vendor_item_match_{businessId}/`) for optimized model state; Convex for corrections + model versions (001-dspy-vendor-item-matcher)
-=======
 - TypeScript 5.9.3 (Next.js 15.5.7 + Convex 1.31.3), Node.js 20.x (AWS Lambda runtime), Python 3.11 (existing document processor Lambda) (001-doc-email-forward)
->>>>>>> main
 
 ## Recent Changes
 - 001-smart-vendor-intelligence: AI-powered vendor intelligence with automated price tracking, anomaly detection, vendor scorecards, risk analysis, and smart alerts (#320). Extended vendor_price_history table with itemIdentifier, archivedFlag, matchConfidenceScore fields. 5 new tables (vendor_price_anomalies, vendor_scorecards, vendor_risk_profiles, cross_vendor_item_groups, vendor_recommended_actions). Price tracking runs inline during invoice processing (recordPriceObservationsBatch). Tier 1 anomaly detection: >10% per-invoice (standard), >20% trailing 6-month avg (high-impact), new item detection. Fuzzy matching via Jaccard word-token similarity (≥80% auto-link, 40-79% user confirmation). On-demand scorecard/risk refresh via action pattern (no crons — bandwidth-safe). Recommended actions auto-generated for high-impact anomalies via scheduler.runAfter. 3 UI pages (alerts, price intelligence, vendor detail), 8 components (alert cards, scorecard, risk profile, charts, CSV export, fuzzy match dialog, comparison table, group editor), 6 hooks. Sidebar nav: "Vendor Intelligence" for finance admins.
