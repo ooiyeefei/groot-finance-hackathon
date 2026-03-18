@@ -691,6 +691,9 @@ export async function handleDocumentForwarding(
       );
 
       // Update inbox status with classification result
+      // Update inbox entry with classification result — all documents stay in inbox
+      // for user review. Auto-routing to expense_claims/invoices deferred until
+      // batch submission integration is built.
       await fetch(`${CONVEX_URL}/api/mutation`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -698,10 +701,7 @@ export async function handleDocumentForwarding(
           path: "functions/documentInbox:updateInboxStatus",
           args: {
             inboxEntryId: result.inboxEntryId,
-            status:
-              classification.confidence >= CONFIDENCE_THRESHOLD && classification.type !== "unknown"
-                ? "routed"
-                : "needs_review",
+            status: "needs_review",
             aiDetectedType: classification.type,
             aiConfidence: classification.confidence,
             aiReasoning: classification.reasoning,
@@ -710,63 +710,12 @@ export async function handleDocumentForwarding(
         }),
       });
 
-      // If high confidence, route directly to destination table
       if (classification.confidence >= CONFIDENCE_THRESHOLD && classification.type !== "unknown") {
-        try {
-          let destinationId: string;
-
-          // RBAC: Invoices require finance_admin or owner role
-          const invoiceRoles = ["finance_admin", "owner", "admin"];
-          if (classification.type === "invoice" && !invoiceRoles.includes(senderRole)) {
-            console.log(
-              `[DocForward] RBAC: ${fromAddress} (role: ${senderRole}) cannot create invoices — routing to inbox for review`
-            );
-            // Leave in inbox for a finance_admin to review
-            continue;
-          }
-
-          if (classification.type === "receipt") {
-            // Receipts: any team member (employee, manager, finance_admin, owner)
-            destinationId = await routeToExpenseClaims({
-              businessId: businessConfig.businessId,
-              userId: senderUserId,
-              fileStorageId: result.inboxEntryId,
-              originalFilename: attachment.filename,
-              emailMetadata,
-            });
-            console.log(`[DocForward] Routed to expense_claims: ${destinationId}`);
-          } else {
-            // Invoices: finance_admin/owner only (RBAC checked above)
-            destinationId = await routeToInvoices({
-              businessId: businessConfig.businessId,
-              userId: senderUserId,
-              fileStorageId: result.inboxEntryId,
-              originalFilename: attachment.filename,
-              emailMetadata,
-            });
-            console.log(`[DocForward] Routed to invoices: ${destinationId}`);
-          }
-
-          // Delete inbox entry after successful routing
-          await fetch(`${CONVEX_URL}/api/mutation`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              path: "functions/documentInbox:deleteInboxEntry",
-              args: {
-                inboxEntryId: result.inboxEntryId,
-                deletedBy: businessConfig.userId,
-                reason: "Auto-routed after classification",
-              },
-              format: "json",
-            }),
-          });
-          console.log(`[DocForward] Inbox entry deleted after routing`);
-        } catch (routingError) {
-          console.log(`[DocForward] Routing failed, document left in inbox: ${routingError}`);
-        }
+        console.log(
+          `[DocForward] High confidence ${classification.type} (${classification.confidence}) — in inbox for user review`
+        );
       } else {
-        console.log(`[DocForward] Low confidence or unknown type - document left in inbox for manual review`);
+        console.log(`[DocForward] Low confidence or unknown — in inbox for manual classification`);
       }
     } catch (error) {
       console.log(`[DocForward] Failed to process ${attachment.filename}: ${error}`);
