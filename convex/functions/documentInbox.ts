@@ -161,7 +161,7 @@ export const createInboxEntry = internalMutation({
  * Update inbox entry status after classification
  * Called by: Trigger.dev classify-document task
  */
-export const updateInboxStatus = internalMutation({
+export const updateInboxStatus = mutation({
   args: {
     inboxEntryId: v.id("document_inbox_entries"),
     status: v.union(
