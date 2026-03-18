@@ -27,6 +27,9 @@ interface CategoryLineItem {
   referenceNumber?: string   // Receipt/invoice number
   claimId: string           // For internal tracking
   vendor: string            // Vendor name
+  duplicateStatus?: string   // From DB duplicate detection
+  duplicateOverrideReason?: string
+  isSplitExpense?: boolean
 }
 
 interface CategorySection {
@@ -215,7 +218,10 @@ export async function GET(request: NextRequest) {
           amount: claimAmount,
           referenceNumber: claim.referenceNumber,
           claimId: claim._id,
-          vendor: claim.vendorName || ''
+          vendor: claim.vendorName || '',
+          duplicateStatus: claim.duplicateStatus,
+          duplicateOverrideReason: claim.duplicateOverrideReason,
+          isSplitExpense: claim.isSplitExpense,
         })
       }
 

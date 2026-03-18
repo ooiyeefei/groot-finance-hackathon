@@ -9,7 +9,6 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Printer, Download, AlertTriangle } from 'lucide-react'
 import { useRef, useState, useMemo } from 'react'
-import { normalizeVendorName } from '@/domains/expense-claims/lib/vendor-normalizer'
 
 // Enhanced report interfaces (matching API)
 interface CategoryLineItem {
@@ -19,6 +18,9 @@ interface CategoryLineItem {
   referenceNumber?: string
   claimId: string
   vendor: string
+  duplicateStatus?: string
+  duplicateOverrideReason?: string
+  isSplitExpense?: boolean
 }
 
 interface CategorySection {
@@ -65,74 +67,17 @@ interface FormattedExpenseReportProps {
   reportData: FormattedExpenseReport
 }
 
-// Duplicate detection types
-interface DuplicateInfo {
-  claimId: string
-  duplicateOf: string  // The first claim in the duplicate group
-  tier: 'exact' | 'strong'
-  matchedFields: string[]
-}
-
-// Detect duplicates among report line items
-function detectReportDuplicates(sections: CategorySection[]): Map<string, DuplicateInfo> {
-  const duplicates = new Map<string, DuplicateInfo>()
-  const allItems: (CategoryLineItem & { categoryName: string })[] = []
-
-  // Flatten all line items
+// Count duplicates from DB-sourced duplicateStatus field
+function countDuplicatesFromDB(sections: CategorySection[]): Set<string> {
+  const flagged = new Set<string>()
   for (const section of sections) {
     for (const item of section.lineItems) {
-      allItems.push({ ...item, categoryName: section.categoryName })
-    }
-  }
-
-  // Check each pair for duplicates
-  for (let i = 0; i < allItems.length; i++) {
-    for (let j = i + 1; j < allItems.length; j++) {
-      const item1 = allItems[i]
-      const item2 = allItems[j]
-
-      // Skip if already marked as duplicate
-      if (duplicates.has(item2.claimId)) continue
-
-      // Tier 1: Exact match on reference number
-      if (item1.referenceNumber && item2.referenceNumber) {
-        const ref1 = item1.referenceNumber.trim().toLowerCase()
-        const ref2 = item2.referenceNumber.trim().toLowerCase()
-        if (ref1 === ref2 && ref1.length > 0) {
-          duplicates.set(item2.claimId, {
-            claimId: item2.claimId,
-            duplicateOf: item1.claimId,
-            tier: 'exact',
-            matchedFields: ['referenceNumber']
-          })
-          continue
-        }
-      }
-
-      // Tier 2: Strong match (same vendor + date + amount)
-      const vendor1 = normalizeVendorName(item1.vendor || '')
-      const vendor2 = normalizeVendorName(item2.vendor || '')
-      const sameVendor = vendor1 === vendor2 && vendor1.length > 0
-      const sameDate = item1.date === item2.date
-      const sameAmount = Math.abs(item1.amount - item2.amount) < 0.01
-
-      if (sameVendor && sameDate && sameAmount) {
-        const matchedFields: string[] = []
-        if (sameVendor) matchedFields.push('vendor')
-        if (sameDate) matchedFields.push('date')
-        if (sameAmount) matchedFields.push('amount')
-
-        duplicates.set(item2.claimId, {
-          claimId: item2.claimId,
-          duplicateOf: item1.claimId,
-          tier: 'strong',
-          matchedFields
-        })
+      if (item.duplicateStatus && item.duplicateStatus !== 'none') {
+        flagged.add(item.claimId)
       }
     }
   }
-
-  return duplicates
+  return flagged
 }
 
 export default function FormattedExpenseReport({ reportData }: FormattedExpenseReportProps) {
@@ -140,9 +85,9 @@ export default function FormattedExpenseReport({ reportData }: FormattedExpenseR
   const reportRef = useRef<HTMLDivElement>(null)
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false)
 
-  // Detect duplicates in the report
-  const duplicateMap = useMemo(() => detectReportDuplicates(categorySections), [categorySections])
-  const duplicateCount = duplicateMap.size
+  // Detect duplicates from DB-sourced duplicateStatus (consolidated with Layer 1/2/3 detection)
+  const duplicateSet = useMemo(() => countDuplicatesFromDB(categorySections), [categorySections])
+  const duplicateCount = duplicateSet.size
 
   const handlePrint = () => {
     window.print()
@@ -453,8 +398,7 @@ export default function FormattedExpenseReport({ reportData }: FormattedExpenseR
 
                   {/* Category Line Items */}
                   {category.lineItems.map((item, itemIndex) => {
-                    const duplicateInfo = duplicateMap.get(item.claimId)
-                    const isDuplicate = !!duplicateInfo
+                    const isDuplicate = item.duplicateStatus && item.duplicateStatus !== 'none'
 
                     return (
                     <tr
@@ -478,15 +422,16 @@ export default function FormattedExpenseReport({ reportData }: FormattedExpenseR
                             <div className="text-gray-600 text-xs mt-1">{item.vendor}</div>
                           )}
                           {item.referenceNumber && (
-                            <div className={`text-xs ${isDuplicate && duplicateInfo?.tier === 'exact' ? 'text-red-700 font-semibold' : 'text-gray-500'}`}>
+                            <div className={`text-xs ${isDuplicate ? 'text-red-700 font-semibold' : 'text-gray-500'}`}>
                               Ref: {item.referenceNumber}
-                              {isDuplicate && duplicateInfo?.tier === 'exact' && ' ⚠️ DUPLICATE'}
                             </div>
                           )}
                           {isDuplicate && (
                             <div className="text-red-700 text-xs font-medium mt-1">
-                              ⚠️ {duplicateInfo?.tier === 'exact' ? 'EXACT DUPLICATE' : 'LIKELY DUPLICATE'}
-                              {duplicateInfo?.matchedFields && ` (${duplicateInfo.matchedFields.join(', ')})`}
+                              ⚠️ {item.isSplitExpense ? 'SPLIT EXPENSE' : item.duplicateStatus === 'confirmed' ? 'CONFIRMED DUPLICATE' : 'POTENTIAL DUPLICATE'}
+                              {item.duplicateOverrideReason && (
+                                <span className="text-red-600 font-normal"> — Justification: {item.duplicateOverrideReason}</span>
+                              )}
                             </div>
                           )}
                         </div>

@@ -55,6 +55,9 @@ interface CategoryLineItem {
   referenceNumber?: string
   claimId: string
   vendor: string
+  duplicateStatus?: string
+  duplicateOverrideReason?: string
+  isSplitExpense?: boolean
 }
 
 interface CategorySection {
