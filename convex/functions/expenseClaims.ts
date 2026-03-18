@@ -3219,6 +3219,12 @@ export const resubmitRejectedClaim = mutation({
       confidenceScore: originalClaim.confidenceScore,
       processingMetadata: originalClaim.processingMetadata,
       lineItemsStatus: originalClaim.lineItemsStatus,
+      // Preserve duplicate detection fields so manager sees warnings on resubmit
+      duplicateStatus: originalClaim.duplicateStatus,
+      duplicateGroupId: originalClaim.duplicateGroupId,
+      duplicateOverrideReason: originalClaim.duplicateOverrideReason,
+      duplicateOverrideAt: originalClaim.duplicateOverrideAt,
+      isSplitExpense: originalClaim.isSplitExpense,
       // Link to original rejected claim
       resubmittedFromId: args.claimId,
       updatedAt: now,
