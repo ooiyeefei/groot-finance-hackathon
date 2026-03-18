@@ -24,7 +24,8 @@ import {
   Image as ImageIcon,
   Loader2,
   Eye,
-  Copy
+  Copy,
+  AlertTriangle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -32,10 +33,11 @@ import { useBusinessProfile } from '@/contexts/business-context'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { formatBusinessDate } from '@/lib/utils'
+import { formatCurrency } from '@/lib/utils/format-number'
 import DocumentPreviewWithAnnotations from '@/domains/invoices/components/document-preview-with-annotations'
 import { getCategoryName, type DynamicExpenseCategory } from '../hooks/use-expense-categories'
 import DuplicateBadge from './duplicate-badge'
-import DuplicateComparisonPanel from './duplicate-comparison-panel'
 import CorrectResubmitButton from './correct-resubmit-button'
 import RouteClaimButton from './route-claim-button'
 import EinvoiceSection from './einvoice-section'
@@ -1132,44 +1134,102 @@ export default function UnifiedExpenseDetailsModal({
       {/* Duplicate Review Modal */}
       {showDuplicateReview && duplicateMatches.length > 0 && claimDetails && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
-          <div className="max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <DuplicateComparisonPanel
-              match={{
-                _id: duplicateMatches[0]?.matchedClaim?._id || '',
-                matchTier: duplicateMatches[0]?.tier || 'strong',
-                matchedFields: duplicateMatches[0]?.matchedFields || [],
-                confidenceScore: duplicateMatches[0]?.confidenceScore || 0.5,
-                isCrossUser: duplicateMatches[0]?.isCrossUser || false,
-                status: claimDetails.duplicateStatus === 'confirmed' ? 'confirmed_duplicate' : 'pending',
-              }}
-              sourceClaim={{
-                _id: claimDetails.id,
-                vendorName: claimDetails.vendor_name || claimDetails.transaction?.vendor_name || '',
-                transactionDate: claimDetails.transaction_date || claimDetails.transaction?.transaction_date || '',
-                totalAmount: parseFloat(claimDetails.total_amount || claimDetails.transaction?.original_amount || '0'),
-                currency: claimDetails.currency || claimDetails.transaction?.original_currency || 'MYR',
-                referenceNumber: claimDetails.reference_number || claimDetails.transaction?.reference_number || null,
-                status: claimDetails.status,
-                submitter: { _id: '', fullName: claimDetails.employee_name || 'Unknown', email: '' },
-              }}
-              matchedClaim={{
-                _id: duplicateMatches[0]?.matchedClaim?._id || '',
-                vendorName: duplicateMatches[0]?.matchedClaim?.vendorName || '',
-                transactionDate: duplicateMatches[0]?.matchedClaim?.transactionDate || '',
-                totalAmount: duplicateMatches[0]?.matchedClaim?.totalAmount || 0,
-                currency: duplicateMatches[0]?.matchedClaim?.currency || 'MYR',
-                referenceNumber: duplicateMatches[0]?.matchedClaim?.referenceNumber || null,
-                status: duplicateMatches[0]?.matchedClaim?.status || 'draft',
-                submitter: { _id: '', fullName: duplicateMatches[0]?.matchedClaim?.submittedByName || 'Unknown', email: '' },
-              }}
-              onDismiss={handleDismissDuplicate}
-              onConfirm={handleConfirmDuplicate}
-              onClose={() => {
-                setShowDuplicateReview(false)
-                setDuplicateMatches([])
-              }}
-              isLoading={duplicateLoading}
-            />
+          <div className="max-w-2xl w-full max-h-[90vh] overflow-hidden bg-card rounded-lg shadow-lg">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-full bg-yellow-500/10">
+                  <AlertTriangle className="w-5 h-5 text-yellow-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground">
+                    Duplicate Review
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {duplicateMatches.length} potential duplicate{duplicateMatches.length > 1 ? 's' : ''} found
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setShowDuplicateReview(false); setDuplicateMatches([]); }}
+                className="p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Current claim summary */}
+            <div className="px-6 pt-4">
+              <p className="text-xs font-medium text-muted-foreground mb-2">Current Expense</p>
+              <div className="p-3 rounded-lg border-2 border-primary/30 bg-primary/5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{claimDetails.vendor_name || claimDetails.transaction?.vendor_name || 'Unknown Vendor'}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatBusinessDate(claimDetails.transaction_date || claimDetails.transaction?.transaction_date || '')}
+                      {claimDetails.reference_number && <> &bull; Ref: {claimDetails.reference_number}</>}
+                    </p>
+                  </div>
+                  <p className="text-sm font-semibold text-foreground">
+                    {formatCurrency(parseFloat(claimDetails.total_amount || claimDetails.transaction?.original_amount || '0'), claimDetails.currency || 'MYR')}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* All matching duplicates */}
+            <div className="px-6 py-4 overflow-y-auto max-h-[calc(90vh-280px)] space-y-3">
+              <p className="text-xs font-medium text-muted-foreground">Matching Expenses ({duplicateMatches.length})</p>
+              {duplicateMatches.map((match: any, idx: number) => (
+                <div key={match.matchedClaim?._id || idx} className="p-3 rounded-lg border border-border bg-muted/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Badge className={`text-[10px] ${match.tier === 'exact' ? 'bg-red-500/20 text-red-700 border-red-500/30' : 'bg-yellow-500/20 text-yellow-700 border-yellow-500/30'}`}>
+                        {match.tier === 'exact' ? 'Exact Match' : 'Strong Match'}
+                      </Badge>
+                      {match.isCrossUser && (
+                        <Badge variant="outline" className="text-[10px]">Other User</Badge>
+                      )}
+                      <span className="text-[10px] text-muted-foreground">
+                        {Math.round((match.confidenceScore || 0.5) * 100)}% confidence
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {(match.matchedClaim?._id || '').slice(0, 8)}...
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{match.matchedClaim?.vendorName || 'Unknown'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatBusinessDate(match.matchedClaim?.transactionDate || '')}
+                        {match.matchedClaim?.submittedByName && <> &bull; {match.matchedClaim.submittedByName}</>}
+                        {match.matchedClaim?.referenceNumber && <> &bull; Ref: {match.matchedClaim.referenceNumber}</>}
+                      </p>
+                    </div>
+                    <p className="text-sm font-semibold text-foreground">
+                      {formatCurrency(match.matchedClaim?.totalAmount || 0, match.matchedClaim?.currency || 'MYR')}
+                    </p>
+                  </div>
+                  {match.matchedFields?.length > 0 && (
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Matched on: {match.matchedFields.join(', ')}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Footer with close */}
+            <div className="px-6 py-3 border-t border-border flex justify-end">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => { setShowDuplicateReview(false); setDuplicateMatches([]); }}
+              >
+                Close
+              </Button>
+            </div>
           </div>
         </div>
       )}
