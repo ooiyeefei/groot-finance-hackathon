@@ -352,15 +352,71 @@ def _vision_classify_qr_codes(image_bytes: bytes, qr_data_list: list, document_i
     return {}
 
 
+def _vision_locate_qr_regions(image_bytes: bytes, dimensions: Tuple[int, int], document_id: str) -> dict:
+    """Ask Gemini vision to count and locate QR code regions on the receipt.
+    Used only in Tier 3 to rescue QR codes that zxingcpp/pyzbar missed
+    (e.g. Shell receipts with 2 QRs side-by-side where only 1 was decoded).
+
+    Returns: {"count": N, "regions": [{"bbox": {"x", "y", "width", "height"}}, ...]}
+    """
+    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    if not gemini_key:
+        return {"count": 0, "regions": []}
+
+    try:
+        import base64
+        from urllib.request import Request, urlopen
+
+        image_b64 = base64.b64encode(image_bytes).decode()
+        w, h = dimensions
+
+        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key={gemini_key}"
+        payload = {
+            "contents": [{"role": "user", "parts": [
+                {"text":
+                    f"Look at this receipt image ({w}x{h} pixels). "
+                    f"Count how many QR codes are visible. "
+                    f"For each QR code, estimate its bounding box in pixels.\n\n"
+                    f"Respond in JSON ONLY: "
+                    f'{{\"count\": N, \"regions\": [{{\"bbox\": {{\"x\": 0, \"y\": 0, \"width\": 100, \"height\": 100}}}}, ...]}}'
+                },
+                {"inlineData": {"mimeType": "image/jpeg", "data": image_b64}},
+            ]}],
+            "generationConfig": {"temperature": 0.0, "maxOutputTokens": 300},
+        }
+        req = Request(api_url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+        with urlopen(req, timeout=15) as resp:
+            r = json.loads(resp.read())
+            answer = r.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+            json_match = re.search(r'\{.*\}', answer, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group())
+                print(f"[{document_id}] QR Vision locate: {result.get('count', 0)} QR regions found")
+                return result
+    except Exception as e:
+        print(f"[{document_id}] QR Vision locate failed: {e}")
+    return {"count": 0, "regions": []}
+
+
 def detect_qr_step(
     document_id: str,
     image_bytes: bytes,
     mime_type: str = "image/png",
 ) -> dict:
     """
-    Detect QR codes in a receipt image and extract URLs.
-    Uses Gemini vision to read labels next to QR codes for accurate classification.
-    Falls back to URL-based classification if vision is unavailable.
+    Detect QR codes in a receipt image and extract e-invoice / LHDN URLs.
+
+    Architecture: DETECT → CLASSIFY (always, regardless of QR count)
+
+    Detection tiers (find QR codes):
+      Tier 1: zxingcpp on original image (fast)
+      Tier 2: zxingcpp on preprocessed variants + pyzbar fallback
+      Tier 3: Gemini Vision crop+decode rescue (only for multi-QR edge cases
+              like Shell where library can only decode 1 of 2 side-by-side QRs)
+
+    Classification (determine what each QR is):
+      - Single QR: URL pattern matching → page fetch → LLM (no vision needed)
+      - Multiple QRs: Gemini vision reads labels to disambiguate which is e-invoice
     """
     print(f"[{document_id}] QR Detection: Starting multi-tier detection")
 
@@ -376,6 +432,10 @@ def detect_qr_step(
         w, h = image.size
         print(f"[{document_id}] QR Detection: Image {w}x{h}")
 
+        # ===================================================================
+        # PHASE 1: DETECTION — find all QR codes in the image
+        # ===================================================================
+
         # Tier 1: zxingcpp on original image (fast path)
         qr_data_list = _detect_qr_zxingcpp([image], document_id)
         print(f"[{document_id}] QR Detection: Tier 1 (zxingcpp on original) found {len(qr_data_list)} QR codes")
@@ -384,12 +444,10 @@ def detect_qr_step(
         if len(qr_data_list) < 2:
             print(f"[{document_id}] QR Detection: Activating Tier 2 (preprocessing + fallback detectors)")
 
-            # Generate preprocessed variants
             image_variants = _preprocess_image_for_qr(image)
             print(f"[{document_id}] QR Detection: Created {len(image_variants)} image variants")
 
-            # Try zxingcpp on variants (skip original since we already did it)
-            for variant in image_variants[1:]:  # Skip first (original)
+            for variant in image_variants[1:]:
                 variant_results = _detect_qr_zxingcpp([variant], document_id)
                 for data in variant_results:
                     if data not in qr_data_list:
@@ -397,13 +455,52 @@ def detect_qr_step(
 
             print(f"[{document_id}] QR Detection: Tier 2a (zxingcpp on variants) total={len(qr_data_list)} QR codes")
 
-            # If still <2, try pyzbar
             if len(qr_data_list) < 2:
                 pyzbar_results = _detect_qr_pyzbar(image_variants, document_id)
                 for data in pyzbar_results:
                     if data not in qr_data_list:
                         qr_data_list.append(data)
                 print(f"[{document_id}] QR Detection: Tier 2b (pyzbar) total={len(qr_data_list)} QR codes")
+
+        # Tier 3: Vision crop+decode rescue
+        # Handles two cases:
+        #   - 0 QRs decoded: library failed but there IS a QR (blurry/damaged)
+        #   - 1 QR decoded: Shell-type receipt where library missed the 2nd QR
+        # If we already have 2+ QRs, no rescue needed — go straight to classification.
+        if len(qr_data_list) < 2:
+            # We have 0-1 QRs — check if Gemini vision sees MORE QRs we missed
+            try:
+                vision_locate_result = _vision_locate_qr_regions(image_bytes, (w, h), document_id)
+                vision_qr_count = vision_locate_result.get("count", 0)
+
+                if vision_qr_count > len(qr_data_list):
+                    print(f"[{document_id}] QR Detection: Tier 3 — Vision sees {vision_qr_count} QRs but library decoded {len(qr_data_list)}, cropping missing regions...")
+                    for region in vision_locate_result.get("regions", []):
+                        bbox = region.get("bbox", {})
+                        if bbox.get("x") is not None and bbox.get("y") is not None:
+                            x, y = bbox["x"], bbox["y"]
+                            w_bbox = bbox.get("width", 150)
+                            h_bbox = bbox.get("height", 150)
+                            padding = int(max(w_bbox, h_bbox) * 0.2)
+                            x1, y1 = max(0, x - padding), max(0, y - padding)
+                            x2, y2 = min(w, x + w_bbox + padding), min(h, y + h_bbox + padding)
+
+                            cropped = image.crop((x1, y1, x2, y2))
+                            print(f"[{document_id}] QR Detection: Cropped region ({x1},{y1}) to ({x2},{y2})")
+
+                            cropped_variants = _preprocess_image_for_qr(cropped)
+                            cropped_data = _detect_qr_zxingcpp(cropped_variants, document_id)
+                            if not cropped_data:
+                                cropped_data = _detect_qr_pyzbar(cropped_variants, document_id)
+
+                            for data in (cropped_data or []):
+                                if data not in qr_data_list:
+                                    qr_data_list.append(data)
+                                    print(f"[{document_id}] QR Detection: Decoded from crop: {data[:80]}")
+                else:
+                    print(f"[{document_id}] QR Detection: Vision confirms {vision_qr_count} QR(s) — no hidden QRs to rescue")
+            except Exception as e:
+                print(f"[{document_id}] QR Detection: Tier 3 vision rescue skipped ({e})")
 
         # Auto-prepend https:// for www. URLs
         for i in range(len(qr_data_list)):
@@ -413,79 +510,38 @@ def detect_qr_step(
 
         detected_qr_codes = qr_data_list.copy()
 
-        # Tier 3: Gemini Vision (only if still <2 QRs after Tier 2)
-        vision_labels = {}
-        if len(qr_data_list) < 2:
-            print(f"[{document_id}] QR Detection: Activating Tier 3 (vision localization + crop + decode)")
-            w, h = image.size
-            vision_result = _vision_locate_and_classify_qr_codes(image_bytes, (w, h), document_id)
-            vision_qr_codes = vision_result.get("qr_codes", [])
+        # ===================================================================
+        # PHASE 2: CLASSIFICATION — determine what each QR code is
+        # Always runs, regardless of how many QRs were found.
+        # ===================================================================
 
-            # If vision found MORE QRs, try cropping and decoding those regions
-            if len(vision_qr_codes) > len(qr_data_list):
-                print(f"[{document_id}] QR Detection: Vision located {len(vision_qr_codes)} QRs total, trying to decode missing ones...")
+        if not qr_data_list:
+            print(f"[{document_id}] QR Detection: No QR codes to classify")
+        elif len(qr_data_list) == 1:
+            # SINGLE QR — common case (Din Tai Fung, FamilyMart, MR.DIY, etc.)
+            # No ambiguity about "which QR" — classify directly via URL analysis.
+            # No vision call needed — saves cost and latency.
+            data = qr_data_list[0]
+            print(f"[{document_id}] QR Detection: Single QR — classifying: {data[:100]}")
 
-                for qr_info in vision_qr_codes:
-                    idx = qr_info.get("index", -1)
-                    if idx >= len(qr_data_list):  # This QR wasn't decoded yet
-                        bbox = qr_info.get("bbox", {})
-                        if bbox.get("x") is not None and bbox.get("y") is not None:
-                            # Crop to QR region with padding
-                            x, y, w_bbox, h_bbox = bbox["x"], bbox["y"], bbox.get("width", 150), bbox.get("height", 150)
-                            padding = int(max(w_bbox, h_bbox) * 0.2)  # 20% padding
-                            x1 = max(0, x - padding)
-                            y1 = max(0, y - padding)
-                            x2 = min(w, x + w_bbox + padding)
-                            y2 = min(h, y + h_bbox + padding)
-
-                            cropped = image.crop((x1, y1, x2, y2))
-                            print(f"[{document_id}] QR Detection: Cropped QR #{idx} region: ({x1},{y1}) to ({x2},{y2})")
-
-                            # Try decoders on cropped region (use variants for better accuracy)
-                            cropped_variants = _preprocess_image_for_qr(cropped)
-                            cropped_data = _detect_qr_zxingcpp(cropped_variants, document_id)
-                            if not cropped_data:
-                                cropped_data = _detect_qr_pyzbar(cropped_variants, document_id)
-
-                            if cropped_data:
-                                for data in cropped_data:
-                                    if data not in qr_data_list:
-                                        qr_data_list.append(data)
-                                        detected_qr_codes.append(data)
-                                        print(f"[{document_id}] QR Detection: Decoded QR #{idx} from cropped region: {data[:80]}")
-
-            # Build vision labels for classification
-            for qr_info in vision_qr_codes:
-                idx = qr_info.get("index", -1)
-                if idx >= 0:
-                    vision_labels[str(idx)] = qr_info.get("label", "").lower()
+            if URL_PATTERN.match(data):
+                classification = _classify_url(data, document_id)
+                if classification == "lhdn":
+                    lhdn_validation_urls.append(data)
+                    print(f"[{document_id}] QR Detection: LHDN validation QR ✓")
+                elif classification == "einvoice":
+                    merchant_form_urls.append(data)
+                    print(f"[{document_id}] QR Detection: E-invoice form URL ✓ {data[:80]}")
+                else:
+                    print(f"[{document_id}] QR Detection: Non-einvoice URL (skipped)")
+            else:
+                print(f"[{document_id}] QR Detection: Non-URL QR data: {data[:50]}...")
         else:
-            # Fast path: We found 2+ QRs, get labels quickly without localization
-            print(f"[{document_id}] QR Detection: Found {len(qr_data_list)} QRs, getting labels for classification...")
-            w, h = image.size
-            vision_result = _vision_locate_and_classify_qr_codes(image_bytes, (w, h), document_id)
-            vision_qr_codes = vision_result.get("qr_codes", [])
-            for qr_info in vision_qr_codes:
-                idx = qr_info.get("index", -1)
-                if idx >= 0:
-                    vision_labels[str(idx)] = qr_info.get("label", "").lower()
-
-            # Collect all QR data first
-            qr_data_list = []
-            for i, qr in enumerate(qr_results):
-                data = qr.text.strip()
-                print(f"[{document_id}] QR Detection: Code #{i} data: {data[:150]}")
-                detected_qr_codes.append(data)
-                # Auto-prepend https:// for www. URLs
-                if data.lower().startswith("www."):
-                    data = "https://" + data
-                    print(f"[{document_id}] QR Detection: Added https:// prefix → {data[:80]}")
-                qr_data_list.append(data)
-
-            # Step 1: Use Gemini vision to classify QR codes by reading labels on the receipt
+            # MULTIPLE QRs — edge case (Shell, some restaurants with loyalty + e-invoice)
+            # Use Gemini vision to read labels next to each QR for disambiguation.
+            print(f"[{document_id}] QR Detection: {len(qr_data_list)} QRs — using vision to disambiguate...")
             vision_labels = _vision_classify_qr_codes(image_bytes, qr_data_list, document_id)
 
-            # Step 2: Classify each QR code
             for i, data in enumerate(qr_data_list):
                 vision_label = vision_labels.get(str(i), "").lower()
 
@@ -503,7 +559,7 @@ def detect_qr_step(
                         print(f"[{document_id}] QR Detection: LHDN validation QR (vision confirmed)")
                     continue
                 elif vision_label in ("app", "other"):
-                    print(f"[{document_id}] QR Detection: Skipped (vision: {vision_label})")
+                    print(f"[{document_id}] QR Detection: Skipped QR #{i} (vision: {vision_label})")
                     continue
 
                 # Fallback: URL-based classification (if vision didn't classify this QR)
