@@ -502,11 +502,15 @@ def detect_qr_step(
             except Exception as e:
                 print(f"[{document_id}] QR Detection: Tier 3 vision rescue skipped ({e})")
 
-        # Auto-prepend https:// for www. URLs
+        # Auto-prepend https:// for URLs without scheme
+        # Handles: www.example.com, invois.dintaifung-my.com/#/dtf/VL, etc.
         for i in range(len(qr_data_list)):
-            if qr_data_list[i].lower().startswith("www."):
-                qr_data_list[i] = "https://" + qr_data_list[i]
-                print(f"[{document_id}] QR Detection: Added https:// prefix to QR #{i}")
+            data = qr_data_list[i]
+            if not data.lower().startswith("http"):
+                # Check if it looks like a domain (has a dot, no spaces, reasonable length)
+                if "." in data and " " not in data and len(data) < 500:
+                    qr_data_list[i] = "https://" + data
+                    print(f"[{document_id}] QR Detection: Added https:// prefix to QR #{i}: {qr_data_list[i][:80]}")
 
         detected_qr_codes = qr_data_list.copy()
 
