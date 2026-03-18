@@ -9,7 +9,12 @@ import { Button } from '@/components/ui/button'
 import { Loader2, Save, User, Globe, FileText, ShieldAlert } from 'lucide-react'
 import VendorBankDetails from './vendor-bank-details'
 import { PAYMENT_TERMS_OPTIONS } from '@/lib/constants/statuses'
-import { formatCurrency } from '@/lib/utils/format-number'
+import { formatCurrency, formatNumber } from '@/lib/utils/format-number'
+import { useAction } from 'convex/react'
+import { VendorScorecardCard } from '@/domains/vendor-intelligence/components/vendor-scorecard-card'
+import { VendorRiskProfile } from '@/domains/vendor-intelligence/components/vendor-risk-profile'
+import { useVendorScorecard } from '@/domains/vendor-intelligence/hooks/use-vendor-scorecard'
+import { useVendorRiskProfile } from '@/domains/vendor-intelligence/hooks/use-vendor-risk-profile'
 
 interface VendorProfilePanelProps {
   vendorId: string
@@ -287,6 +292,61 @@ export default function VendorProfilePanel({ vendorId, onClose }: VendorProfileP
           </p>
         </div>
       )}
+
+      {/* AI-Powered Vendor Intelligence (#320) */}
+      {!isEditing && (
+        <VendorIntelligenceSection
+          businessId={businessId as string}
+          vendorId={vendorId}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * Vendor Intelligence Section — scorecard + risk profile.
+ * Uses on-demand action refresh (bandwidth-safe, no reactive subscription for heavy aggregation).
+ */
+function VendorIntelligenceSection({
+  businessId,
+  vendorId,
+}: {
+  businessId: string
+  vendorId: string
+}) {
+  const bizId = businessId as Id<'businesses'>
+  const vId = vendorId as Id<'vendors'>
+
+  const { scorecard, isLoading: scorecardLoading } = useVendorScorecard(bizId, vId)
+  const { profile, isLoading: riskLoading } = useVendorRiskProfile(bizId, vId)
+
+  // Trigger on-demand refresh (recalculates if stale)
+  const refreshScorecard = useAction(api.functions.vendorScorecards.refreshIfStale)
+  const refreshRisk = useAction(api.functions.vendorRiskProfiles.refreshIfStale)
+
+  useEffect(() => {
+    if (businessId && vendorId) {
+      refreshScorecard({ businessId: bizId, vendorId: vId }).catch(() => {})
+      refreshRisk({ businessId: bizId, vendorId: vId }).catch(() => {})
+    }
+  }, [businessId, vendorId, bizId, vId, refreshScorecard, refreshRisk])
+
+  if (scorecardLoading && riskLoading) {
+    return (
+      <div className="space-y-2">
+        <div className="h-4 w-32 bg-muted rounded animate-pulse" />
+        <div className="h-20 bg-muted rounded animate-pulse" />
+      </div>
+    )
+  }
+
+  if (!scorecard && !profile) return null
+
+  return (
+    <div className="space-y-3 pt-2 border-t border-border">
+      {scorecard && <VendorScorecardCard scorecard={scorecard} />}
+      {profile && <VendorRiskProfile profile={profile} />}
     </div>
   )
 }

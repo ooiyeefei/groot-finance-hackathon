@@ -16,6 +16,7 @@ import {
   ClipboardList,
   Link2,
   ShieldCheck,
+  AlertTriangle,
 } from 'lucide-react'
 import DocumentsContainer from './documents-container'
 
@@ -58,14 +59,17 @@ const GoodsReceivedTab = lazy(
 const MatchingTab = lazy(
   () => import('@/domains/payables/components/matching-tab')
 )
+const VendorAlertsTab = lazy(
+  () => import('@/domains/payables/components/vendor-alerts-tab')
+)
 
 // --- Types ---
 type TopLevelTab = 'ar' | 'ap'
 type ARSubTab = 'dashboard' | 'sales' | 'debtors' | 'catalog' | 'reconciliation' | 'einvoice-compliance'
-type APSubTab = 'dashboard' | 'incoming' | 'vendors' | 'prices' | 'purchase-orders' | 'goods-received' | 'matching'
+type APSubTab = 'dashboard' | 'incoming' | 'vendors' | 'prices' | 'alerts' | 'purchase-orders' | 'goods-received' | 'matching'
 
 const AR_SUB_TABS: readonly ARSubTab[] = ['dashboard', 'sales', 'debtors', 'catalog', 'reconciliation', 'einvoice-compliance']
-const AP_SUB_TABS: readonly APSubTab[] = ['dashboard', 'incoming', 'vendors', 'prices', 'purchase-orders', 'goods-received', 'matching']
+const AP_SUB_TABS: readonly APSubTab[] = ['dashboard', 'incoming', 'vendors', 'prices', 'alerts', 'purchase-orders', 'goods-received', 'matching']
 
 
 // --- URL query param routing (?tab=ar&sub=sales) ---
@@ -257,6 +261,10 @@ export default function InvoicesTabContainer() {
                 <TrendingUp className="h-4 w-4" />
                 Price Intelligence
               </TabsTrigger>
+              <TabsTrigger value="alerts" className={subTriggerClassName}>
+                <AlertTriangle className="h-4 w-4" />
+                Alerts
+              </TabsTrigger>
               <TabsTrigger value="purchase-orders" className={subTriggerClassName}>
                 <ClipboardList className="h-4 w-4" />
                 Purchase Orders
@@ -290,6 +298,12 @@ export default function InvoicesTabContainer() {
             <TabsContent value="prices" className="mt-4">
               <Suspense fallback={<TabLoading />}>
                 <PriceIntelligence />
+              </Suspense>
+            </TabsContent>
+
+            <TabsContent value="alerts" className="mt-4">
+              <Suspense fallback={<TabLoading />}>
+                <VendorAlertsTab />
               </Suspense>
             </TabsContent>
 
