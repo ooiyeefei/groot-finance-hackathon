@@ -59,8 +59,8 @@
 
 - [X] T024 [P] `npm run build` — Compiled successfully
 - [X] T025 [P] `npx convex deploy --yes` — Deployed successfully
-- [ ] T026 Update `src/domains/vendor-intelligence/CLAUDE.md` with DSPy Tier 2 docs
-- [ ] T027 Update project `CLAUDE.md` Recent Changes section
+- [X] T026 Update `src/domains/vendor-intelligence/CLAUDE.md` with DSPy Tier 2 docs — already done
+- [X] T027 Update project `CLAUDE.md` Recent Changes section — already done via update-agent-context.sh
 
 ---
 

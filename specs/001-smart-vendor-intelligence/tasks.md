@@ -109,7 +109,7 @@
 ### Backend: Convex Functions for User Story 3
 
 - [X] T036 [P] [US3] Create `convex/functions/vendorPriceHistory/getTrendData.ts` query: Get price history for itemIdentifier+vendorId → transform to PriceTrendDataPoint array (date, unitPrice, currency, invoiceId) sorted by invoiceDate
-- [ ] T037 [P] [US3] Create `convex/functions/crossVendorItemGroups/suggestMatches.ts` action: DSPy semantic matching — deferred to polish phase (requires Lambda integration)
+- [X] T037 [P] [US3] DSPy semantic matching implemented in vendorItemMatching.ts suggestMatches action + vendor_item_matcher.py Lambda module (001-dspy-vendor-item-matcher branch)
 - [X] T038 [P] [US3] Create `convex/functions/crossVendorItemGroups/createGroup.ts` mutation: User confirms AI suggestion OR manually creates group → insert cross_vendor_item_groups record → link price records by updating itemGroupId field
 - [X] T039 [P] [US3] Create `convex/functions/crossVendorItemGroups/updateGroup.ts` mutation: User adds/removes items from group → update itemReferences array → re-link price records
 - [X] T040 [P] [US3] Create `convex/functions/crossVendorItemGroups/deleteGroup.ts` mutation: User rejects AI suggestion or deletes manually created group → delete group → unlink price records (set itemGroupId=null)
@@ -188,7 +188,7 @@
 **Purpose**: Improvements that affect multiple user stories and complete the feature
 
 - [X] T071 [P] Create data archival as on-demand internalMutation (NOT cron — bandwidth-safe per CLAUDE.md Rule 3): vendorPriceHistory.archiveOldRecords with .take(100) batch limit
-- [ ] T072 [P] Create DSPy optimization cron in `convex/crons/vendorIntelligenceCron.ts`: Schedule weekly on Sunday 4 AM UTC → run MIPROv2 optimizer on fuzzy matching module (if ≥50 new user confirmations) → run MIPROv2 optimizer on anomaly detection module (if ≥20 new dismissals) → save optimized models to DSPy state
+- [X] T072 [P] DSPy optimization implemented as on-demand triggerOptimization action in vendorItemMatching.ts (no cron — bandwidth-safe). MIPROv2 via Lambda optimize_vendor_item_model route. Existing EventBridge 3-day schedule can call this route.
 - [X] T073 [P] Add billing frequency change detection to `src/domains/vendor-intelligence/lib/billing-frequency-analyzer.ts`: Calculate vendor's historical invoice frequency (mean days between invoices) → detect ≥50% deviation → returns potentialIndicators array
 - [X] T074 [P] Integrate billing frequency detection into recordPriceObservationsBatch: After price observations, checks invoice date intervals → detects ≥50% deviation → inserts frequency-change anomaly with potentialIndicators
 - [X] T075 [P] New item detection integrated into recordPriceObservationsBatch: Checks if vendor has prior history but item is new → inserts anomaly with alertType="new-item"
