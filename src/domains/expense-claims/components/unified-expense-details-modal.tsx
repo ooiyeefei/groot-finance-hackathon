@@ -664,6 +664,63 @@ export default function UnifiedExpenseDetailsModal({
                   {/* Right Panel - Details and Line Items (full width mobile, 60% desktop) */}
                   <div className="w-full md:w-3/5 overflow-y-auto">
                     <div className="p-6 space-y-6">
+                      {/* Duplicate Detection Warning — shown ABOVE manager actions for visibility */}
+                      {claimDetails.duplicateStatus && claimDetails.duplicateStatus !== 'none' && (
+                        <Card className="bg-yellow-500/10 border-yellow-500/30">
+                          <CardContent className="p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <DuplicateBadge
+                                  matchTier={claimDetails.duplicateStatus === 'confirmed' ? 'exact' : 'strong'}
+                                  size="md"
+                                  showTooltip={false}
+                                />
+                                <div>
+                                  <p className="text-foreground font-medium text-sm">
+                                    {claimDetails.duplicateStatus === 'confirmed'
+                                      ? 'Confirmed Duplicate'
+                                      : claimDetails.duplicateStatus === 'potential'
+                                      ? 'Potential Duplicate Detected'
+                                      : 'Duplicate Dismissed'}
+                                  </p>
+                                  <p className="text-muted-foreground text-xs">
+                                    {claimDetails.isSplitExpense
+                                      ? 'Marked as split expense by employee'
+                                      : 'This claim may be a duplicate of another expense'}
+                                  </p>
+                                </div>
+                              </div>
+                              {(viewMode === 'manager' || viewMode === 'personal') && claimDetails.duplicateStatus === 'potential' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={handleReviewDuplicates}
+                                  disabled={duplicateLoading}
+                                >
+                                  {duplicateLoading ? (
+                                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                  ) : null}
+                                  Review Duplicates
+                                </Button>
+                              )}
+                            </div>
+
+                            {/* Employee's justification — shown to managers and admins */}
+                            {(claimDetails as any).duplicateOverrideReason && (
+                              <div className="bg-card/50 rounded-md p-3 border border-border">
+                                <p className="text-xs font-medium text-muted-foreground mb-1">Employee&apos;s Justification</p>
+                                <p className="text-sm text-foreground">{(claimDetails as any).duplicateOverrideReason}</p>
+                                {(claimDetails as any).duplicateOverrideAt && (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Acknowledged on {new Date((claimDetails as any).duplicateOverrideAt).toLocaleDateString()}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      )}
+
                       {/* Manager Approval Section - Show for manager mode and move to top */}
                       {viewMode === 'manager' && (
                         <Card className="bg-record-layer-2 border-record-border">
@@ -971,63 +1028,6 @@ export default function UnifiedExpenseDetailsModal({
                                     style={{ width: `${claimDetails.document.processing_progress}%` }}
                                   />
                                 </div>
-                              </div>
-                            )}
-                          </CardContent>
-                        </Card>
-                      )}
-
-                      {/* Duplicate Detection Indicator + Employee Justification */}
-                      {claimDetails.duplicateStatus && claimDetails.duplicateStatus !== 'none' && (
-                        <Card className="bg-yellow-500/10 border-yellow-500/30">
-                          <CardContent className="p-4 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <DuplicateBadge
-                                  matchTier={claimDetails.duplicateStatus === 'confirmed' ? 'exact' : 'strong'}
-                                  size="md"
-                                  showTooltip={false}
-                                />
-                                <div>
-                                  <p className="text-foreground font-medium text-sm">
-                                    {claimDetails.duplicateStatus === 'confirmed'
-                                      ? 'Confirmed Duplicate'
-                                      : claimDetails.duplicateStatus === 'potential'
-                                      ? 'Potential Duplicate Detected'
-                                      : 'Duplicate Dismissed'}
-                                  </p>
-                                  <p className="text-muted-foreground text-xs">
-                                    {claimDetails.isSplitExpense
-                                      ? 'Marked as split expense by employee'
-                                      : 'This claim may be a duplicate of another expense'}
-                                  </p>
-                                </div>
-                              </div>
-                              {(viewMode === 'manager' || viewMode === 'personal') && claimDetails.duplicateStatus === 'potential' && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={handleReviewDuplicates}
-                                  disabled={duplicateLoading}
-                                >
-                                  {duplicateLoading ? (
-                                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                                  ) : null}
-                                  Review Duplicates
-                                </Button>
-                              )}
-                            </div>
-
-                            {/* Employee's justification — shown to managers and admins */}
-                            {(claimDetails as any).duplicateOverrideReason && (
-                              <div className="bg-card/50 rounded-md p-3 border border-border">
-                                <p className="text-xs font-medium text-muted-foreground mb-1">Employee&apos;s Justification</p>
-                                <p className="text-sm text-foreground">{(claimDetails as any).duplicateOverrideReason}</p>
-                                {(claimDetails as any).duplicateOverrideAt && (
-                                  <p className="text-xs text-muted-foreground mt-1">
-                                    Acknowledged on {new Date((claimDetails as any).duplicateOverrideAt).toLocaleDateString()}
-                                  </p>
-                                )}
                               </div>
                             )}
                           </CardContent>
