@@ -1,26 +1,20 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { useBusinessProfile } from "@/contexts/business-context";
-import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 import { Switch } from "@/components/ui/switch";
-import {
-  Mail,
-  Copy,
-  Check,
-  Loader2,
-} from "lucide-react";
-import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Mail, Copy, Check, Loader2 } from "lucide-react";
 
 export default function EmailForwardingSettings() {
-  const { profile, isLoading } = useBusinessProfile();
+  const { profile, isLoading, updateProfile } = useBusinessProfile();
+  const { addToast } = useToast();
 
   const [saving, setSaving] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
-  // Local optimistic state for toggle
-  const [localEnabled, setLocalEnabled] = useState<boolean | null>(null);
 
-  const isEnabled = localEnabled ?? profile?.emailForwardingEnabled ?? false;
+  const isEnabled = profile?.emailForwardingEnabled ?? false;
   const slug =
     profile?.slug ||
     profile?.emailForwardingPrefix ||
@@ -32,52 +26,62 @@ export default function EmailForwardingSettings() {
       : "");
   const forwardingEmail = slug ? `inbox@${slug}.hellogroot.com` : null;
 
-  const handleToggle = useCallback(
-    async (enabled: boolean) => {
-      if (!profile?.id) return;
+  const handleToggle = async (enabled: boolean) => {
+    if (saving) return;
 
-      // Optimistic update
-      setLocalEnabled(enabled);
+    try {
       setSaving(true);
 
-      try {
-        const response = await fetch(
-          "/api/v1/account-management/businesses/profile",
-          {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email_forwarding_enabled: enabled }),
-          }
-        );
+      // Get CSRF token (same pattern as currency-preferences.tsx)
+      const csrfResponse = await fetch("/api/v1/utils/security/csrf-token");
+      if (!csrfResponse.ok) throw new Error("Failed to get CSRF token");
+      const csrfData = await csrfResponse.json();
+      if (!csrfData.success) throw new Error(csrfData.error || "Failed to get CSRF token");
 
-        const result = await response.json();
-        console.log("[DocInbox] Toggle response:", response.status, result);
-
-        if (!response.ok || !result.success) {
-          throw new Error(result?.error || `Failed to save (${response.status})`);
+      const response = await fetch(
+        "/api/v1/account-management/businesses/profile",
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrfData.data.csrfToken,
+          },
+          body: JSON.stringify({ email_forwarding_enabled: enabled }),
         }
+      );
 
-        // Keep optimistic state (don't revert to server data which may be stale)
-        toast.success(enabled ? "Document Inbox enabled" : "Document Inbox disabled");
-      } catch (error) {
-        console.error("[DocInbox] Toggle error:", error);
-        // Revert optimistic update
-        setLocalEnabled(null);
-        toast.error(
-          error instanceof Error ? error.message : "Failed to save settings"
-        );
-      } finally {
-        setSaving(false);
+      const result = await response.json();
+
+      if (result.success) {
+        updateProfile(result.data);
+        addToast({
+          type: "success",
+          title: enabled ? "Document Inbox enabled" : "Document Inbox disabled",
+          description: enabled
+            ? "Team members can now forward documents via email"
+            : "Email forwarding has been turned off",
+        });
+      } else {
+        throw new Error(result.error || "Failed to update settings");
       }
-    },
-    [profile?.id]
-  );
+    } catch (error) {
+      console.error("[Document Inbox Settings] Failed to toggle:", error);
+      addToast({
+        type: "error",
+        title: "Failed to update settings",
+        description:
+          error instanceof Error ? error.message : "Unable to save",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const copyEmail = () => {
     if (!forwardingEmail) return;
     navigator.clipboard.writeText(forwardingEmail);
     setEmailCopied(true);
-    toast.success("Email copied to clipboard");
+    addToast({ type: "success", title: "Email copied to clipboard" });
     setTimeout(() => setEmailCopied(false), 2000);
   };
 
@@ -113,7 +117,9 @@ export default function EmailForwardingSettings() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {saving && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          {saving && (
+            <span className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          )}
           <Switch
             checked={isEnabled}
             onCheckedChange={handleToggle}
