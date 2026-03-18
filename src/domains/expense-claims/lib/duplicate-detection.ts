@@ -30,6 +30,8 @@ interface ExpenseClaimCandidate {
   _creationTime: number
   // For display
   submittedByName?: string
+  duplicateOverrideReason?: string | null
+  submittedAt?: number | null
 }
 
 interface CheckDuplicatesInput {
@@ -162,13 +164,18 @@ function createMatch(
     confidenceScore: confidence,
     isCrossUser,
     matchedClaim: {
+      _id: claim._id,
       vendorName: claim.vendorName || 'Unknown',
       transactionDate: claim.transactionDate || '',
       totalAmount: claim.totalAmount || 0,
       currency: claim.currency || 'MYR',
+      referenceNumber: claim.referenceNumber || null,
       status: claim.status,
+      submittedByName: claim.submittedByName || 'Unknown',
       submittedBy: claim.submittedByName || 'Unknown',
       createdAt: claim._creationTime,
+      submittedAt: claim.submittedAt || null,
+      duplicateOverrideReason: claim.duplicateOverrideReason || null,
     },
   }
 }
