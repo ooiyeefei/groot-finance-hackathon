@@ -18,8 +18,6 @@ import {
   FileCheck,
   CalendarDays,
   FileSpreadsheet,
-  ShieldAlert,
-  TrendingUp,
   Inbox,
 } from 'lucide-react'
 
@@ -59,8 +57,6 @@ export function getNavigationGroups(userRole: UserRole): NavGroup[] {
           { icon: Home, label: 'dashboard', path: '/' },
           { icon: FileText, label: 'invoices', path: '/invoices' },
           { icon: CreditCard, label: 'transactions', path: '/accounting' },
-          { icon: ShieldAlert, label: 'vendorIntelligence', path: '/vendor-intelligence/alerts' },
-          { icon: TrendingUp, label: 'priceIntelligence', path: '/vendor-intelligence/price-intelligence' },
           { icon: Inbox, label: 'documentsInbox', path: '/documents-inbox' },
         ]
       : [],
