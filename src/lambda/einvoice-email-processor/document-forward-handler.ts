@@ -445,6 +445,48 @@ Groot Finance Team`,
 }
 
 /**
+ * Send rejection email to unauthorized sender (not a team member)
+ */
+async function sendUnauthorizedSenderEmail(
+  toEmail: string,
+  businessName: string
+): Promise<void> {
+  try {
+    await ses.send(
+      new SendEmailCommand({
+        Source: SYSTEM_EMAIL,
+        Destination: { ToAddresses: [toEmail] },
+        Message: {
+          Subject: { Data: `[Groot Finance] Unable to process your forwarded document` },
+          Body: {
+            Text: {
+              Data: `Hello,
+
+We received your email but were unable to process it.
+
+Your email address (${toEmail}) is not registered as a team member of "${businessName}" on Groot Finance. Only registered team members can forward documents for processing.
+
+What to do:
+- Ask your company administrator to add you as a team member on Groot Finance
+- Once added, you can forward receipts and invoices to this email address and they will be processed automatically
+
+If you believe this is an error, please contact your company's Groot Finance administrator.
+
+Best regards,
+Groot Finance Team
+https://finance.hellogroot.com`,
+            },
+          },
+        },
+      })
+    );
+    console.log(`[DocForward] Sent unauthorized sender notification to ${toEmail}`);
+  } catch (error) {
+    console.log(`[DocForward] Failed to send unauthorized sender notification: ${error}`);
+  }
+}
+
+/**
  * Send batch rejection email (too many attachments)
  */
 async function sendBatchRejectionEmail(
@@ -523,6 +565,7 @@ export async function handleDocumentForwarding(
 
   if (!senderValidation.authorized) {
     console.log(`[DocForward] REJECTED: ${fromAddress} — ${senderValidation.reason}`);
+    await sendUnauthorizedSenderEmail(fromAddress, businessConfig.businessName);
     return;
   }
 
