@@ -377,7 +377,7 @@ export class DocumentProcessingStack extends cdk.Stack {
 
     // SES send permission: forward e-invoice emails to user
     emailProcessorFunction.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['ses:SendRawEmail'],
+      actions: ['ses:SendRawEmail', 'ses:SendEmail'],
       resources: ['*'], // SES requires * for SendRawEmail
     }));
 
