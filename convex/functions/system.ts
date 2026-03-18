@@ -1309,8 +1309,12 @@ export const reportEinvoiceFormFillResult = mutation({
       einvoiceRequestStatus: args.status === "success" ? "requested" : "failed",
       updatedAt: Date.now(),
     };
-    if (args.status === "failed" && args.errorMessage) {
-      claimUpdate.einvoiceAgentError = args.errorMessage;
+    if (args.status === "failed") {
+      // Prefer verifyEvidence (human-readable from Gemini) over raw errorMessage (technical)
+      // for the user-facing error. Technical errors like asyncio/network/timeout are
+      // translated by the frontend's getUserFriendlyError; merchant-side messages
+      // (e.g. "Transaction no longer eligible") should be shown as-is.
+      claimUpdate.einvoiceAgentError = args.verifyEvidence || args.errorMessage || "Unknown error";
     }
     if (args.status === "success" && args.merchantSlug) {
       claimUpdate.einvoiceMerchantSlug = args.merchantSlug;

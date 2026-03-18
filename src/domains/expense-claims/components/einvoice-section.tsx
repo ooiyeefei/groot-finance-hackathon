@@ -36,24 +36,53 @@ import EinvoiceRejectDialog from '@/domains/sales-invoices/components/einvoice-r
 function getUserFriendlyError(rawError: string | null): string {
   if (!rawError) return 'Something went wrong. Please try again or fill the form manually.'
   const e = rawError.toLowerCase()
+
+  // ── Handled by separate amber banner (return empty to hide red error) ──
   if (e.includes('bot_blocked') || e.includes('cloudflare') || e.includes('403'))
-    return '' // Handled by the amber BOT_BLOCKED banner
+    return ''
   if (e.includes('manual_only'))
-    return '' // Handled by the amber BOT_BLOCKED banner (same UX — manual fill required)
-  if (e.includes('asyncio') || e.includes('playwright sync'))
+    return ''
+
+  // ── Technical errors (hide details, show friendly message) ──
+  if (e.includes('asyncio') || e.includes('playwright') || e.includes('chromium') || e.includes('running event loop'))
     return 'A temporary system error occurred. Please retry — this usually resolves on the next attempt.'
+  if (e.includes('page.goto') || e.includes('err_') || e.includes('tunnel') || e.includes('connection_refused'))
+    return 'Could not reach the merchant\'s website. The site may be temporarily down.'
   if (e.includes('timeout') || e.includes('timed out'))
     return 'The merchant form took too long to process. Please retry or fill the form manually.'
   if (e.includes('navigation') || e.includes('goto'))
     return 'Could not reach the merchant\'s website. The site may be temporarily down.'
+  if (e.includes('gemini') || e.includes('api error') || e.includes('api_key') || e.includes('ssm'))
+    return 'Our AI service had a temporary issue. Please retry.'
+
+  // ── Business/config errors ──
   if (e.includes('no_merchant_form_url'))
     return 'No e-invoice form found for this merchant. You can fill it manually if you know the URL.'
-  if (e.includes('validation') || e.includes('required'))
-    return 'The merchant form has required fields we couldn\'t fill automatically. Please fill the form manually.'
   if (e.includes('no_business_details'))
     return 'Company details are missing. Please update your business settings and retry.'
-  if (e.includes('gemini') || e.includes('api error'))
-    return 'Our AI service had a temporary issue. Please retry.'
+  if (e.includes('validation') || e.includes('required'))
+    return 'The merchant form has required fields we couldn\'t fill automatically. Please fill the form manually.'
+
+  // ── Merchant-side rejection messages (from verifyEvidence — show clearly) ──
+  if (e.includes('no longer eligible') || e.includes('not eligible'))
+    return 'The merchant says this receipt is no longer eligible for e-invoice. The submission window may have expired.'
+  if (e.includes('not available') || e.includes('bill is not available') || e.includes('not found in'))
+    return 'The merchant\'s system could not find this receipt. It may have been removed or the reference is incorrect.'
+  if (e.includes('already submitted') || e.includes('already been'))
+    return 'An e-invoice has already been submitted for this receipt.'
+  if (e.includes('expired') || e.includes('expir'))
+    return 'The e-invoice submission window has expired for this receipt.'
+  if (e.includes('invalid receipt') || e.includes('invalid transaction'))
+    return 'The merchant marked this receipt as invalid.'
+
+  // ── verifyEvidence passthrough: if it looks like a Gemini description, extract the message ──
+  if (rawError.length > 30 && /^The page displays/i.test(rawError)) {
+    const cleaned = rawError
+      .replace(/^The page displays (an |a )?error message stating ['"]?/i, '')
+      .replace(/['"]?\s*\.?\s*$/, '')
+    return cleaned.charAt(0).toUpperCase() + cleaned.slice(1)
+  }
+
   return 'We couldn\'t submit the form automatically. You can retry or fill the form manually.'
 }
 
