@@ -2751,6 +2751,7 @@ def handler(event: dict, context=None) -> dict:
                 http_url = "http://" + url[len("https://"):]
                 print(f"[Browser] HTTPS pre-flight failed for {hostname}:443 ({sock_err}), switching to HTTP: {http_url}")
                 url = http_url
+                event["merchantFormUrl"] = http_url  # Update event for browser-use fallback
 
         # Launch browser — Browserbase for Cloudflare-managed merchants, local for everything else
         pw = _start_playwright()

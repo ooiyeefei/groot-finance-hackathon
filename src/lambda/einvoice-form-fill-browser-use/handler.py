@@ -18,7 +18,32 @@ from urllib.request import Request, urlopen
 
 SCREEN_W, SCREEN_H = 1440, 900
 CONVEX_URL = os.environ.get("NEXT_PUBLIC_CONVEX_URL", "")
-GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
+
+# Gemini API key cache (read from SSM on first use)
+_gemini_key_cache: str | None = None
+
+def _get_gemini_key() -> str:
+    """Read Gemini API key from SSM Parameter Store with caching."""
+    global _gemini_key_cache
+    if _gemini_key_cache:
+        return _gemini_key_cache
+
+    ssm_param = os.environ.get("GEMINI_API_KEY_SSM_PARAM", "")
+    if not ssm_param:
+        print("[Config] GEMINI_API_KEY_SSM_PARAM not set")
+        return os.environ.get("GEMINI_API_KEY", "")
+
+    try:
+        import boto3
+        ssm_client = boto3.client("ssm")
+        resp = ssm_client.get_parameter(Name=ssm_param, WithDecryption=True)
+        _gemini_key_cache = resp["Parameter"]["Value"]
+        return _gemini_key_cache
+    except Exception as e:
+        print(f"[Config] SSM read for Gemini key failed: {e}")
+        return os.environ.get("GEMINI_API_KEY", "")
+
+GEMINI_KEY = _get_gemini_key()
 os.environ["GOOGLE_API_KEY"] = GEMINI_KEY  # langchain-google-genai convention
 
 STATE_CODES = {
@@ -85,6 +110,11 @@ Respond in JSON only:
 async def fill_form(url: str, buyer: dict, receipt: dict) -> dict:
     """Use browser-use agent to fill the form. Returns {success, evidence, confidence}."""
     from browser_use import Agent, BrowserProfile, ChatGoogle
+    import os
+
+    # Increase browser-use internal timeouts via environment variable (if supported)
+    os.environ.setdefault("BROWSER_USE_BROWSER_LAUNCH_TIMEOUT", "90")
+    os.environ.setdefault("BROWSER_USE_TIMEOUT", "90")
 
     llm = ChatGoogle(model="gemini-3.1-flash-lite-preview")
 
@@ -95,8 +125,19 @@ async def fill_form(url: str, buyer: dict, receipt: dict) -> dict:
             "--no-sandbox",
             "--disable-setuid-sandbox",
             "--disable-dev-shm-usage",
-            "--disable-gpu",
-            "--single-process",
+            "--disable-software-rasterizer",
+            # Aggressive flags for faster Lambda cold start
+            "--no-zygote",
+            "--no-first-run",
+            "--disable-extensions",
+            "--disable-background-networking",
+            "--disable-default-apps",
+            "--disable-sync",
+            "--metrics-recording-only",
+            "--mute-audio",
+            "--no-pings",
+            "--disable-breakpad",
+            "--disable-component-update",
         ],
         minimum_wait_page_load_time=1.0,
         wait_between_actions=0.5,

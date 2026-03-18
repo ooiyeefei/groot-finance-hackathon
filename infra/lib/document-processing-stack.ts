@@ -62,8 +62,8 @@ export class DocumentProcessingStack extends cdk.Stack {
       SENTRY_ENVIRONMENT: 'production',
       // Convex production URL (hardcoded for reliability)
       NEXT_PUBLIC_CONVEX_URL: 'https://kindhearted-lynx-129.convex.cloud',
-      // Gemini API key for DSPy
-      GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+      // Gemini API key stored in SSM (read at runtime, not baked in)
+      GEMINI_API_KEY_SSM_PARAM: '/finanseal/gemini-api-key',
       // S3 bucket name
       S3_BUCKET_NAME: 'finanseal-bucket',
       // Note: AWS_REGION is set automatically by Lambda runtime
@@ -112,6 +112,12 @@ export class DocumentProcessingStack extends cdk.Stack {
 
     // S3 read/write permissions
     bucket.grantReadWrite(this.documentProcessorFunction);
+
+    // Gemini API key (SSM SecureString) — read at runtime
+    const geminiKeyParamForDocProcessor = ssm.StringParameter.fromSecureStringParameterAttributes(this, 'GeminiApiKeyDocProcessor', {
+      parameterName: '/finanseal/gemini-api-key',
+    });
+    geminiKeyParamForDocProcessor.grantRead(this.documentProcessorFunction);
 
     // ========================================================================
     // Lambda Version and Alias
@@ -244,11 +250,11 @@ export class DocumentProcessingStack extends cdk.Stack {
       architecture: lambda.Architecture.X86_64,
       functionName: 'finanseal-einvoice-form-fill-bu',
       description: 'E-Invoice form fill — browser-use + Gemini Flash (Tier 2B, CUA 429 fallback)',
-      memorySize: 2048,
+      memorySize: 3008,  // Max Lambda memory for faster Chromium startup (more CPU)
       timeout: cdk.Duration.minutes(5),
       logGroup: formFillBuLogGroup,
       environment: {
-        GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+        GEMINI_API_KEY_SSM_PARAM: '/finanseal/gemini-api-key',
         NEXT_PUBLIC_CONVEX_URL: 'https://kindhearted-lynx-129.convex.cloud',
         PLAYWRIGHT_BROWSERS_PATH: '/opt/pw-browsers',
       },
@@ -256,6 +262,12 @@ export class DocumentProcessingStack extends cdk.Stack {
 
     // browser-use Lambda also needs S3 read for receipt images
     bucket.grantRead(formFillBuFunction);
+
+    // Gemini API key (SSM SecureString) — read at runtime
+    const geminiKeyParamForBrowserUse = ssm.StringParameter.fromSecureStringParameterAttributes(this, 'GeminiApiKeyBrowserUse', {
+      parameterName: '/finanseal/gemini-api-key',
+    });
+    geminiKeyParamForBrowserUse.grantRead(formFillBuFunction);
 
     // Main form-fill Lambda can invoke browser-use Lambda
     formFillBuFunction.grantInvoke(formFillFunction);
@@ -363,7 +375,7 @@ export class DocumentProcessingStack extends cdk.Stack {
       environment: {
         NEXT_PUBLIC_CONVEX_URL: 'https://kindhearted-lynx-129.convex.cloud',
         S3_BUCKET_NAME: 'finanseal-bucket',
-        GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+        GEMINI_API_KEY_SSM_PARAM: '/finanseal/gemini-api-key',
         RESEND_API_KEY: process.env.RESEND_API_KEY || '',
         EINVOICE_FORM_FILL_LAMBDA_ARN: formFillFunction.functionArn,
       },
@@ -377,6 +389,12 @@ export class DocumentProcessingStack extends cdk.Stack {
 
     // S3 read/write: read raw email from SES bucket, write processed files to main bucket
     bucket.grantReadWrite(emailProcessorFunction);
+
+    // Gemini API key (SSM SecureString) — read at runtime
+    const geminiKeyParamForEmailProcessor = ssm.StringParameter.fromSecureStringParameterAttributes(this, 'GeminiApiKeyEmailProcessor', {
+      parameterName: '/finanseal/gemini-api-key',
+    });
+    geminiKeyParamForEmailProcessor.grantRead(emailProcessorFunction);
 
     // Allow email processor to invoke form-fill Lambda for Playwright PDF downloads
     formFillFunction.grantInvoke(emailProcessorFunction);
@@ -611,7 +629,7 @@ exports.handler = async (event) => {
       timeout: cdk.Duration.minutes(15),  // Optimization can take several minutes
       logGroup: optimizerLogGroup,
       environment: {
-        GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+        GEMINI_API_KEY_SSM_PARAM: '/finanseal/gemini-api-key',
         NEXT_PUBLIC_CONVEX_URL: 'https://kindhearted-lynx-129.convex.cloud',
         S3_BUCKET_NAME: 'finanseal-bucket',
         DSPY_CACHEDIR: '/tmp/dspy_cache',
@@ -622,6 +640,12 @@ exports.handler = async (event) => {
 
     // S3 read/write for dspy-modules/
     bucket.grantReadWrite(optimizerFunction);
+
+    // Gemini API key (SSM SecureString) — read at runtime
+    const geminiKeyParamForOptimizer = ssm.StringParameter.fromSecureStringParameterAttributes(this, 'GeminiApiKeyOptimizer', {
+      parameterName: '/finanseal/gemini-api-key',
+    });
+    geminiKeyParamForOptimizer.grantRead(optimizerFunction);
 
     // EventBridge rule: every 3 days
     const optimizerRule = new events.Rule(this, 'DspyOptimizerSchedule', {

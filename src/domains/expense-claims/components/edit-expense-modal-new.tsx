@@ -526,12 +526,7 @@ export default function EditExpenseModalNew({
 
         <div className="overflow-hidden h-[calc(90vh-120px)]">
           <div className="p-0 h-full">
-            {loading ? (
-              <div className="text-center py-12">
-                <Loader2 className="w-12 h-12 mx-auto text-primary mb-4 animate-spin" />
-                <p className="text-muted-foreground">Loading expense details...</p>
-              </div>
-            ) : loadError ? (
+            {loadError ? (
               <div className="text-center py-12">
                 <AlertCircle className="w-12 h-12 mx-auto text-destructive mb-4" />
                 <p className="text-destructive mb-4">{loadError}</p>
@@ -542,6 +537,11 @@ export default function EditExpenseModalNew({
                 >
                   Try Again
                 </Button>
+              </div>
+            ) : loading ? (
+              <div className="text-center py-12">
+                <Loader2 className="w-12 h-12 mx-auto text-primary mb-4 animate-spin" />
+                <p className="text-muted-foreground">Loading expense details...</p>
               </div>
             ) : (
               <div className="flex flex-col h-full">
