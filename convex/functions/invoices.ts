@@ -2243,6 +2243,7 @@ export const postToAP = mutation({
     if (!user) throw new Error("User not found");
 
     const results: Array<{ invoiceId: string; success: boolean; error?: string }> = [];
+    const promotedVendors: string[] = [];
 
     for (const invoiceId of args.invoiceIds) {
       try {
@@ -2342,9 +2343,12 @@ export const postToAP = mutation({
             .filter((q) => q.eq(q.field("name"), vendorName))
             .first();
           if (vendor && vendor.status === "prospective") {
-            await ctx.runMutation(internal.functions.vendors.promoteIfProspective, {
+            const promotion = await ctx.runMutation(internal.functions.vendors.promoteIfProspective, {
               vendorId: vendor._id,
             });
+            if (promotion.promoted) {
+              promotedVendors.push(vendorName);
+            }
           }
         }
 
@@ -2363,6 +2367,7 @@ export const postToAP = mutation({
       succeeded: results.filter(r => r.success).length,
       failed: results.filter(r => !r.success).length,
       results,
+      promotedVendors, // Vendors promoted from "prospective" to "active"
     };
   },
 });

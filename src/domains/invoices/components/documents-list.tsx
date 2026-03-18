@@ -259,12 +259,15 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
       })
 
       if (result.succeeded > 0) {
+        const vendorNote = result.promotedVendors?.length > 0
+          ? `. Vendor${result.promotedVendors.length > 1 ? 's' : ''} ${result.promotedVendors.join(', ')} now active.`
+          : ''
         addToast({
           type: 'success',
           title: 'Posted to AP',
           description: result.failed > 0
-            ? `Posted ${result.succeeded} of ${result.total} invoices. ${result.failed} failed.`
-            : `Successfully posted ${result.succeeded} invoice${result.succeeded > 1 ? 's' : ''} to AP`
+            ? `Posted ${result.succeeded} of ${result.total} invoices. ${result.failed} failed${vendorNote}`
+            : `Successfully posted ${result.succeeded} invoice${result.succeeded > 1 ? 's' : ''} to AP${vendorNote}`
         })
       } else {
         // All failed — show user-friendly error with resolution guidance
