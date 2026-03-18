@@ -13,7 +13,8 @@
  * 6. Send duplicate detection auto-reply if needed
  */
 
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
 import { simpleParser, ParsedMail, Attachment } from "mailparser";
 import crypto from "crypto";
@@ -365,8 +366,7 @@ async function routeToInvoices(params: {
  * Call Convex action to create inbox entry
  */
 async function createInboxEntry(params: {
-  s3Bucket: string;
-  s3Key: string;
+  presignedUrl: string;
   originalFilename: string;
   mimeType: "application/pdf" | "image/jpeg" | "image/png";
   businessId: string;
@@ -619,6 +619,14 @@ export async function handleDocumentForwarding(
 
       console.log(`[DocForward] Uploaded to S3: ${s3Key}`);
 
+      // Generate pre-signed URL for Convex to download (Convex can't use AWS SDK)
+      const presignedUrl = await getSignedUrl(
+        s3,
+        new GetObjectCommand({ Bucket: S3_BUCKET, Key: s3Key }),
+        { expiresIn: 300 } // 5 minutes
+      );
+      console.log(`[DocForward] Generated pre-signed URL for Convex download`);
+
       // Normalize MIME type
       let mimeType: "application/pdf" | "image/jpeg" | "image/png";
       if (attachment.contentType.includes("pdf")) {
@@ -629,10 +637,9 @@ export async function handleDocumentForwarding(
         mimeType = "image/jpeg";
       }
 
-      // Create inbox entry via Convex
+      // Create inbox entry via Convex (pass pre-signed URL instead of bucket/key)
       const result = await createInboxEntry({
-        s3Bucket: S3_BUCKET,
-        s3Key,
+        presignedUrl,
         originalFilename: attachment.filename,
         mimeType,
         businessId: businessConfig.businessId,

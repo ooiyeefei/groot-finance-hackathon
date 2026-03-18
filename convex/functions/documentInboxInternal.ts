@@ -13,22 +13,12 @@ import { internal } from "../_generated/api";
 import crypto from "crypto";
 
 /**
- * Upload file from S3 to Convex storage and create inbox entry
- * Called by: Lambda email processor after receiving forwarded document
- *
- * @param s3Bucket - S3 bucket name
- * @param s3Key - S3 object key
- * @param originalFilename - Original attachment filename
- * @param mimeType - File MIME type
- * @param businessId - Business ID
- * @param userId - User ID (determined from email sender)
- * @param emailMetadata - Email metadata (from, subject, etc.)
- * @returns Inbox entry creation result
+ * Upload file from pre-signed URL to Convex storage and create inbox entry.
+ * Lambda generates a pre-signed S3 URL (valid 5 min) so Convex doesn't need AWS credentials.
  */
 export const uploadAndCreateInboxEntry = action({
   args: {
-    s3Bucket: v.string(),
-    s3Key: v.string(),
+    presignedUrl: v.string(),
     originalFilename: v.string(),
     mimeType: v.union(
       v.literal("application/pdf"),
@@ -53,20 +43,13 @@ export const uploadAndCreateInboxEntry = action({
     fileHash: string;
     fileSizeBytes: number;
   }> => {
-    // 1. Download file from S3
-    const { S3Client, GetObjectCommand } = await import("@aws-sdk/client-s3");
-    const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
-
-    const response = await s3.send(
-      new GetObjectCommand({ Bucket: args.s3Bucket, Key: args.s3Key })
-    );
-
-    // Convert stream to buffer
-    const chunks: Uint8Array[] = [];
-    for await (const chunk of response.Body as any) {
-      chunks.push(chunk);
+    // 1. Download file via pre-signed URL (no AWS SDK needed)
+    const response = await fetch(args.presignedUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
     }
-    const fileBuffer = Buffer.concat(chunks);
+
+    const fileBuffer = Buffer.from(await response.arrayBuffer());
 
     // 2. Calculate file hash
     const fileHash = crypto.createHash("md5").update(fileBuffer).digest("hex");
