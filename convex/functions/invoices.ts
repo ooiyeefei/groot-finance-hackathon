@@ -1099,6 +1099,13 @@ export const internalUpdateExtraction = internalMutation({
             accountingStatus: "posted",
           });
 
+          // Promote vendor from "prospective" to "active" on journal entry posting
+          if (matchedVendor) {
+            await ctx.runMutation(internal.functions.vendors.promoteIfProspective, {
+              vendorId: matchedVendor._id,
+            });
+          }
+
           console.log(`[Convex Internal] Auto-posted journal entry ${journalEntryId} for AP invoice ${args.id}`);
         } else {
           console.log(`[Convex Internal] Skipped auto-post for invoice ${args.id} — accounting entry already exists`);
@@ -2326,6 +2333,20 @@ export const postToAP = mutation({
           accountingStatus: "posted",
           updatedAt: Date.now(),
         });
+
+        // Promote vendor from "prospective" to "active" on journal entry posting
+        if (vendorName && vendorName !== "Unknown Vendor") {
+          const vendor = await ctx.db
+            .query("vendors")
+            .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+            .filter((q) => q.eq(q.field("name"), vendorName))
+            .first();
+          if (vendor && vendor.status === "prospective") {
+            await ctx.runMutation(internal.functions.vendors.promoteIfProspective, {
+              vendorId: vendor._id,
+            });
+          }
+        }
 
         results.push({ invoiceId, success: true });
       } catch (error: any) {
