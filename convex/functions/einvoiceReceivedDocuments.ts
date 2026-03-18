@@ -121,33 +121,10 @@ export const rejectReceivedDocument = mutation({
     // Handle side effects based on what this e-invoice is linked to
     const supplierName = doc.supplierName || "Unknown Supplier";
 
-    // Check if linked to AP invoice (supplier invoices)
-    if (doc.matchedApInvoiceId) {
-      const invoice = await ctx.db.get(doc.matchedApInvoiceId);
-      if (invoice) {
-        // Mark invoice as e-invoice rejected
-        await ctx.db.patch(invoice._id, {
-          einvoiceRejected: true,
-          einvoiceRejectionReason: args.reason,
-          einvoiceRejectedAt: Date.now(),
-          updatedAt: Date.now(),
-        });
+    // AP invoice rejection moved to POST /api/v1/invoices/{id}/lhdn/reject (024-einv-buyer-reject-pivot)
 
-        // Notify invoice creator
-        await createRejectionNotification(
-          ctx,
-          invoice.userId,
-          doc.businessId,
-          supplierName,
-          args.reason,
-          `/invoices/${invoice._id}`
-        );
-
-        console.log(`[E-Invoice Reject] AP invoice ${invoice._id} marked as e-invoice rejected`);
-      }
-    }
     // Check if linked to expense claim (small merchant e-invoices)
-    else if (doc.matchedExpenseClaimId) {
+    if (doc.matchedExpenseClaimId) {
       const claim = await ctx.db.get(doc.matchedExpenseClaimId);
       if (claim) {
         // Clear e-invoice attachment from claim

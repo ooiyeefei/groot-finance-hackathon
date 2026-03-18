@@ -950,10 +950,15 @@ export default defineSchema({
       messageId: v.string(),
     })),
 
-    // 023-einv-buyer-rejection-flow: Received e-invoice rejection tracking
-    einvoiceRejected: v.optional(v.boolean()),
-    einvoiceRejectionReason: v.optional(v.string()),
-    einvoiceRejectedAt: v.optional(v.number()),
+    // 024-einv-buyer-reject-pivot: Upload-based LHDN verification + buyer rejection
+    lhdnVerificationStatus: v.optional(v.union(
+      v.literal("pending"),
+      v.literal("verified"),
+      v.literal("failed"),
+      v.literal("not_einvoice")
+    )),
+    lhdnRejectedAt: v.optional(v.number()),
+    lhdnRejectionReason: v.optional(v.string()),
 
     deletedAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),

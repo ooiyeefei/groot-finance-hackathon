@@ -2345,3 +2345,35 @@ export const postToAP = mutation({
     };
   },
 });
+
+// ============================================
+// 024-einv-buyer-reject-pivot: LHDN Buyer Rejection
+// ============================================
+
+/**
+ * Update invoice after LHDN rejection is confirmed.
+ * Called from the rejection API route after LHDN API accepts the rejection.
+ */
+export const updateLhdnRejection = mutation({
+  args: {
+    invoiceId: v.id("invoices"),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice) throw new Error("Invoice not found");
+
+    await ctx.db.patch(args.invoiceId, {
+      lhdnStatus: "rejected",
+      lhdnRejectedAt: Date.now(),
+      lhdnRejectionReason: args.reason,
+      updatedAt: Date.now(),
+    });
+
+    console.log(`[LHDN Reject] Invoice ${args.invoiceId} rejected: ${args.reason.substring(0, 50)}`);
+    return args.invoiceId;
+  },
+});

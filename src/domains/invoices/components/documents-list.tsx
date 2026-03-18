@@ -516,12 +516,48 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
 
                   {/* Show confidence score for completed documents */}
                   {isCompletedDocument(document.status) && document.confidence_score && (
-                    <ConfidenceScoreMeter 
-                      score={document.confidence_score} 
+                    <ConfidenceScoreMeter
+                      score={document.confidence_score}
                       entityCount={document.extracted_data?.entities?.length}
                       size="sm"
                     />
                   )}
+
+                  {/* 024-einv-buyer-reject-pivot: LHDN e-invoice status badge */}
+                  {(() => {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const doc = document as any
+                    const verStatus = doc.lhdnVerificationStatus as string | undefined
+                    const lhdnStatus = doc.lhdnStatus as string | undefined
+                    const validatedAt = doc.lhdnValidatedAt as number | undefined
+                    if (!verStatus || verStatus === 'not_einvoice') return null
+
+                    const isRejected = lhdnStatus === 'rejected'
+                    const withinWindow = validatedAt ? Date.now() - validatedAt < 72 * 60 * 60 * 1000 : false
+                    const hoursLeft = validatedAt ? Math.max(0, Math.floor((72 * 60 * 60 * 1000 - (Date.now() - validatedAt)) / (60 * 60 * 1000))) : 0
+
+                    if (isRejected) return (
+                      <span className="inline-flex items-center rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-2 py-0.5 text-xs font-medium">
+                        Rejected
+                      </span>
+                    )
+                    if (verStatus === 'verified' && withinWindow) return (
+                      <span className="inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-2 py-0.5 text-xs font-medium">
+                        {hoursLeft}h left to reject
+                      </span>
+                    )
+                    if (verStatus === 'verified') return (
+                      <span className="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-0.5 text-xs font-medium">
+                        LHDN ✓
+                      </span>
+                    )
+                    if (verStatus === 'pending') return (
+                      <span className="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-0.5 text-xs font-medium">
+                        LHDN...
+                      </span>
+                    )
+                    return null
+                  })()}
                 </div>
                 
                 <div className="doc-actions flex items-center flex-wrap gap-2">
