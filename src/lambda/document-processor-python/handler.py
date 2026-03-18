@@ -904,6 +904,12 @@ def handler(event: dict, context: DurableContext):
                 print(f"[{doc_id}] SKIPPING vendor processing (test_mode=True)")
                 return {"success": True, "reason": "test_mode"}
 
+            # FIXED: Do NOT create vendors from expense claims — they are merchants
+            # (restaurants, clinics, petrol stations), not AP suppliers.
+            if request.domain == "expense_claims":
+                print(f"[{doc_id}] SKIPPING vendor creation for expense claim (merchants != vendors)")
+                return {"success": True, "reason": "expense_claim_skipped"}
+
             print(f"[{doc_id}] Step: Processing vendor from extraction")
             try:
                 result = convex.process_vendor_from_extraction(

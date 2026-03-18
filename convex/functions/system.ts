@@ -1153,7 +1153,14 @@ export const processVendorFromInvoiceExtraction = mutation({
 
 /**
  * Process vendor from expense claim extraction (system access)
- * Called by Lambda after successful expense claim data extraction
+ *
+ * DEPRECATED: This function is intentionally disabled. Expense claim merchants
+ * (restaurants, clinics, petrol stations) should NOT be created as AP vendors.
+ * Only AP invoices create vendors — via processVendorFromInvoiceExtraction.
+ *
+ * The Lambda document processor now skips this call for expense_claims domain.
+ * This stub remains to avoid "function not found" errors from any in-flight
+ * Lambda invocations during the deployment window.
  */
 export const processVendorFromExpenseClaimExtraction = mutation({
   args: {
@@ -1163,15 +1170,8 @@ export const processVendorFromExpenseClaimExtraction = mutation({
     | { success: false; reason: string }
     | { success: true; vendorId: string; vendorCreated: boolean; priceObservationsCount: number }
   > => {
-    console.log(`[System] Processing vendor from expense claim extraction: ${args.claimId}`);
-
-    // Call the internal mutation that handles vendor upsert and price history
-    const result = await ctx.runMutation(
-      internal.functions.expenseClaims.internalProcessVendorFromExtraction,
-      { claimId: args.claimId }
-    );
-
-    return result;
+    console.log(`[System] DEPRECATED: processVendorFromExpenseClaimExtraction called for ${args.claimId} — skipping. Expense claim merchants are not AP vendors.`);
+    return { success: false, reason: "deprecated_expense_claims_do_not_create_vendors" };
   },
 });
 

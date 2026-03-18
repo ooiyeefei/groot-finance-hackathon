@@ -970,6 +970,79 @@ export const deleteExpenseOnlyVendors = internalMutation({
 });
 
 /**
+ * Cleanup: delete expense-only vendors across ALL businesses.
+ * Run once after fixing the Lambda to stop creating vendors from expense claims.
+ */
+export const deleteExpenseOnlyVendorsAllBusinesses = internalMutation({
+  args: {
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    // Get all businesses
+    const businesses = await ctx.db.query("businesses").take(100);
+    const allResults: Array<{ businessId: string; businessName: string; vendorsDeleted: number }> = [];
+
+    for (const business of businesses) {
+      const vendors = await ctx.db
+        .query("vendors")
+        .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+        .collect();
+
+      let vendorsDeleted = 0;
+
+      for (const vendor of vendors) {
+        if (vendor.status === "inactive") continue;
+
+        // Check if vendor has any invoice-sourced journal entries
+        const vendorLines = await ctx.db
+          .query("journal_entry_lines")
+          .withIndex("by_entity", (q) =>
+            q.eq("entityType", "vendor").eq("entityId", vendor._id)
+          )
+          .take(20);
+
+        let hasInvoiceEntry = false;
+        for (const line of vendorLines) {
+          const je = await ctx.db.get(line.journalEntryId);
+          if (je && (je as any).referenceType !== "expense_claim") {
+            hasInvoiceEntry = true;
+            break;
+          }
+        }
+
+        if (!hasInvoiceEntry) {
+          if (!args.dryRun) {
+            // Delete price history
+            const priceHistory = await ctx.db
+              .query("vendor_price_history")
+              .withIndex("by_vendorId", (q) => q.eq("vendorId", vendor._id))
+              .collect();
+            for (const ph of priceHistory) await ctx.db.delete(ph._id);
+            await ctx.db.delete(vendor._id);
+          }
+          vendorsDeleted++;
+        }
+      }
+
+      if (vendorsDeleted > 0) {
+        allResults.push({
+          businessId: business._id,
+          businessName: business.name,
+          vendorsDeleted,
+        });
+      }
+    }
+
+    return {
+      dryRun: args.dryRun ?? false,
+      businessesAffected: allResults.length,
+      totalVendorsDeleted: allResults.reduce((s, r) => s + r.vendorsDeleted, 0),
+      details: allResults,
+    };
+  },
+});
+
+/**
  * Get vendor by name (internal query)
  *
  * Case-insensitive exact match lookup.
