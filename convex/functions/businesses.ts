@@ -623,6 +623,10 @@ export const getBusinessProfileByStringId = query({
       postal_code: business.postalCode ?? null,
       // LHDN self-bill auto-trigger
       auto_self_bill_exempt_vendors: business.autoSelfBillExemptVendors ?? false,
+      // 001-doc-email-forward
+      emailForwardingEnabled: business.emailForwardingEnabled ?? false,
+      emailForwardingPrefix: business.emailForwardingPrefix ?? null,
+      emailForwardingAllowlist: business.emailForwardingAllowlist ?? [],
       created_at: new Date(business._creationTime).toISOString(),
       updated_at: business.updatedAt
         ? new Date(business.updatedAt).toISOString()
