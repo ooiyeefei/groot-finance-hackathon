@@ -201,8 +201,8 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
       for (const claim of data.claims) {
         // Skip claims without complete data
         if (!claim.vendorName || !claim.transactionDate || !claim.totalAmount || !claim.currency) continue
-        // Skip claims already flagged
-        if ((claim as any).duplicateStatus === 'potential' || (claim as any).duplicateStatus === 'confirmed') continue
+        // Skip claims already confirmed as duplicates (but still check 'dismissed' and 'potential' — re-verify)
+        if ((claim as any).duplicateStatus === 'confirmed') continue
 
         try {
           const response = await fetch('/api/v1/expense-claims/check-duplicates', {
@@ -219,8 +219,8 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
             }),
           })
           const result = await response.json()
-          if (result.success && result.data?.duplicates?.length > 0) {
-            flaggedClaims.push({ claim, duplicates: result.data.duplicates })
+          if (result.success && result.data?.hasDuplicates && result.data?.matches?.length > 0) {
+            flaggedClaims.push({ claim, duplicates: result.data.matches })
           }
         } catch {
           // Non-fatal: if check fails, proceed without blocking
@@ -944,29 +944,101 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
         </div>
       )}
 
-      {/* Batch Duplicate Warning — shown when Submit for Approval detects duplicates */}
+      {/* Batch Duplicate Warning — full justification form per flagged claim */}
       {showBatchDuplicateWarning && batchDuplicateClaims.length > 0 && (
-        <ConfirmationDialog
-          isOpen={showBatchDuplicateWarning}
-          onClose={() => setShowBatchDuplicateWarning(false)}
-          onConfirm={() => {
-            // Check all flagged claims have justification
-            const allResolved = batchDuplicateClaims.every(({ claim }) =>
-              batchDuplicateOverrides.has(claim._id) &&
-              (batchDuplicateOverrides.get(claim._id)?.reason?.length ?? 0) >= 10
-            )
-            if (!allResolved) {
-              alert('Please provide justification (min 10 characters) for all flagged claims before proceeding.')
-              return
-            }
-            handleBatchDuplicateProceed()
-          }}
-          title={`Duplicate Claims Detected (${batchDuplicateClaims.length})`}
-          message={`${batchDuplicateClaims.length} claim(s) in this submission have potential duplicates. Please provide justification for each before submitting. You can review each claim's matches below.`}
-          confirmText="Submit with Justification"
-          cancelText="Cancel"
-          confirmVariant="primary"
-        />
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0"
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(4px)' }}
+            onClick={() => setShowBatchDuplicateWarning(false)}
+          />
+          <div className="relative bg-card rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="p-6 space-y-5">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-full bg-yellow-500/10">
+                  <AlertCircle className="w-5 h-5 text-yellow-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground">
+                    Duplicate Claims Detected ({batchDuplicateClaims.length})
+                  </h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Provide justification for each flagged claim before submitting.
+                  </p>
+                </div>
+              </div>
+
+              {batchDuplicateClaims.map(({ claim, duplicates }) => {
+                const override = batchDuplicateOverrides.get(claim._id)
+                return (
+                  <div key={claim._id} className="border border-border rounded-lg p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-foreground text-sm">{claim.vendorName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatCurrency(claim.totalAmount, claim.currency)} &middot; {formatBusinessDate(claim.transactionDate)} &middot; {duplicates.length} match(es)
+                        </p>
+                      </div>
+                      <Badge className="bg-yellow-500/10 text-yellow-600 border border-yellow-500/30 text-xs">
+                        Duplicate
+                      </Badge>
+                    </div>
+
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox
+                        checked={override?.isSplitExpense || false}
+                        onCheckedChange={(checked) => {
+                          setBatchDuplicateOverrides(prev => {
+                            const next = new Map(prev)
+                            next.set(claim._id, { reason: override?.reason || '', isSplitExpense: !!checked })
+                            return next
+                          })
+                        }}
+                      />
+                      <span className="text-sm text-foreground">This is a split expense (shared bill)</span>
+                    </label>
+
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">Justification *</label>
+                      <Textarea
+                        value={override?.reason || ''}
+                        onChange={(e) => {
+                          setBatchDuplicateOverrides(prev => {
+                            const next = new Map(prev)
+                            next.set(claim._id, { reason: e.target.value, isSplitExpense: override?.isSplitExpense || false })
+                            return next
+                          })
+                        }}
+                        placeholder="Explain why this is not a duplicate (min 10 characters)..."
+                        className="mt-1 text-sm"
+                        rows={2}
+                      />
+                      {override?.reason && override.reason.length > 0 && override.reason.length < 10 && (
+                        <p className="text-xs text-destructive mt-1">{10 - override.reason.length} more characters needed</p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+
+              <div className="flex justify-end gap-3 pt-2">
+                <Button variant="secondary" onClick={() => setShowBatchDuplicateWarning(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                  disabled={!batchDuplicateClaims.every(({ claim }) => {
+                    const o = batchDuplicateOverrides.get(claim._id)
+                    return o && o.reason.length >= 10
+                  })}
+                  onClick={handleBatchDuplicateProceed}
+                >
+                  Submit with Justification
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

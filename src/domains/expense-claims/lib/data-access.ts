@@ -385,7 +385,7 @@ export async function createExpenseClaim(
       ...(request.submissionId ? { submissionId: request.submissionId as any } : {}),
       // Duplicate override fields (if user acknowledged duplicates)
       ...(request.duplicateOverride ? {
-        duplicateStatus: 'dismissed' as const,
+        duplicateStatus: 'potential' as const,
         duplicateOverrideReason: request.duplicateOverride.reason,
         duplicateOverrideAt: Date.now(),
         isSplitExpense: request.duplicateOverride.isSplitExpense
