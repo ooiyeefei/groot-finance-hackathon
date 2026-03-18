@@ -156,6 +156,8 @@ class ConvexClient:
         extracted_data: Dict[str, Any],
         confidence_score: float,
         extraction_method: str = "dspy_gemini",
+        lhdn_long_id: Optional[str] = None,
+        lhdn_validation_url: Optional[str] = None,
     ) -> str:
         """
         Update invoice with extraction results.
@@ -165,18 +167,27 @@ class ConvexClient:
             extracted_data: Extracted financial data
             confidence_score: Extraction confidence (0-1)
             extraction_method: Method used for extraction
+            lhdn_long_id: LHDN document long ID (from QR code URL)
+            lhdn_validation_url: LHDN validation URL (e.g., myinvois.hasil.gov.my/{longId}/share)
 
         Returns:
             Updated document ID
         """
+        args = {
+            "id": document_id,
+            "extractedData": extracted_data,
+            "confidenceScore": confidence_score,
+            "extractionMethod": extraction_method,
+        }
+        if lhdn_long_id:
+            args["lhdnLongId"] = lhdn_long_id
+            args["lhdnVerificationStatus"] = "pending"
+        if lhdn_validation_url:
+            args["lhdnValidationUrl"] = lhdn_validation_url
+
         return self._mutation(
             "functions/system:updateInvoiceExtraction",
-            {
-                "id": document_id,
-                "extractedData": extracted_data,
-                "confidenceScore": confidence_score,
-                "extractionMethod": extraction_method,
-            },
+            args,
         )
 
     def update_expense_claim_extraction(

@@ -599,11 +599,17 @@ def handler(event: dict, context: DurableContext):
             print(f"[{doc_id}] Passing to Convex - business_purpose: '{extraction_result.get('business_purpose')}'")
 
             if request.domain == "invoices":
+                # 024-einv-buyer-reject-pivot: Pass LHDN long ID for upload-based verification
+                lhdn_long_id = qr_result.get("lhdn_long_id") if qr_result else None
+                lhdn_validation_url = (qr_result.get("lhdn_validation_urls") or [None])[0] if qr_result else None
+
                 convex.update_invoice_extraction(
                     document_id=doc_id,
                     extracted_data=extraction_result,
                     confidence_score=extraction_result.get("confidence", 0.0),
                     extraction_method="dspy_gemini",
+                    lhdn_long_id=lhdn_long_id,
+                    lhdn_validation_url=lhdn_validation_url,
                 )
                 return {"claimId": doc_id, "emailRef": None, "requestLogId": None}
             else:

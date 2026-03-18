@@ -2209,6 +2209,54 @@ export const internalUpdateExtraction = internalMutation({
       updateData.transactionDate = args.transactionDate;
     }
 
+    // Auto-detect duplicates after extraction completes
+    // Check if any existing claims match on vendor+date+amount or referenceNumber
+    const vendorName = (updateData.vendorName as string) || claim.vendorName;
+    const totalAmount = (updateData.totalAmount as number) || claim.totalAmount;
+    const transactionDate = (updateData.transactionDate as string) || claim.transactionDate;
+    const referenceNumber = claim.referenceNumber;
+
+    if (vendorName && totalAmount && transactionDate && claim.businessId) {
+      try {
+        const candidates = await ctx.db
+          .query("expense_claims")
+          .withIndex("by_businessId", (q) => q.eq("businessId", claim.businessId))
+          .filter((q) =>
+            q.and(
+              q.eq(q.field("deletedAt"), undefined),
+              q.neq(q.field("status"), "rejected"),
+              q.neq(q.field("status"), "failed"),
+              q.neq(q.field("_id"), claim._id),
+              q.or(
+                q.eq(q.field("transactionDate"), transactionDate),
+                ...(referenceNumber ? [q.eq(q.field("referenceNumber"), referenceNumber)] : [])
+              )
+            )
+          )
+          .collect();
+
+        // Check for matches: same vendor (case-insensitive) + date + amount
+        const vendorLower = vendorName.toLowerCase();
+        const hasDuplicate = candidates.some((c) => {
+          // Tier 1: exact reference number match
+          if (referenceNumber && c.referenceNumber === referenceNumber) return true;
+          // Tier 2: vendor + date + amount
+          if (c.vendorName?.toLowerCase() === vendorLower &&
+              c.transactionDate === transactionDate &&
+              c.totalAmount === totalAmount) return true;
+          return false;
+        });
+
+        if (hasDuplicate) {
+          updateData.duplicateStatus = "potential";
+          console.log(`[Convex Internal] Auto-detected duplicate for claim ${args.id}: vendor=${vendorName}, amount=${totalAmount}`);
+        }
+      } catch (dupError) {
+        // Non-fatal — don't block extraction completion
+        console.error(`[Convex Internal] Duplicate check failed for ${args.id}:`, dupError);
+      }
+    }
+
     await ctx.db.patch(claim._id, updateData);
     console.log(`[Convex Internal] Updated expense claim ${args.id} extraction results`);
     return claim._id;

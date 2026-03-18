@@ -74,6 +74,7 @@ import type * as functions_leaveRequests from "../functions/leaveRequests.js";
 import type * as functions_leaveTypes from "../functions/leaveTypes.js";
 import type * as functions_lhdnJobs from "../functions/lhdnJobs.js";
 import type * as functions_lhdnTokens from "../functions/lhdnTokens.js";
+import type * as functions_lhdnVerification from "../functions/lhdnVerification.js";
 import type * as functions_manualExchangeRates from "../functions/manualExchangeRates.js";
 import type * as functions_matchingSettings from "../functions/matchingSettings.js";
 import type * as functions_mcpApiKeys from "../functions/mcpApiKeys.js";
@@ -202,6 +203,7 @@ declare const fullApi: ApiFromModules<{
   "functions/leaveTypes": typeof functions_leaveTypes;
   "functions/lhdnJobs": typeof functions_lhdnJobs;
   "functions/lhdnTokens": typeof functions_lhdnTokens;
+  "functions/lhdnVerification": typeof functions_lhdnVerification;
   "functions/manualExchangeRates": typeof functions_manualExchangeRates;
   "functions/matchingSettings": typeof functions_matchingSettings;
   "functions/mcpApiKeys": typeof functions_mcpApiKeys;

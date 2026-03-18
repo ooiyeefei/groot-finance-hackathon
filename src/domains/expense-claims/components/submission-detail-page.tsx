@@ -185,18 +185,48 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
   const [batchDuplicateClaims, setBatchDuplicateClaims] = useState<Array<{ claim: any; duplicates: any[] }>>([])
   const [batchDuplicateOverrides, setBatchDuplicateOverrides] = useState<Map<string, { reason: string; isSplitExpense: boolean }>>(new Map())
 
-  // Handle submit — check if any claims already have duplicate warnings
+  // Handle submit — check if any claims have duplicate warnings
   const handleSubmit = useCallback(async () => {
     if (!data?.claims) return
 
-    // Check claims that already have duplicateStatus from the edit/create flow
-    // No API call needed — the status is already on the claim
+    // Claims with duplicateStatus already set (from extraction or edit flow)
     const flaggedClaims = data.claims.filter((claim: any) =>
       claim.duplicateStatus && claim.duplicateStatus !== 'none' && claim.duplicateStatus !== 'dismissed'
     )
 
+    // Also check claims that haven't been checked yet (duplicateStatus undefined)
+    // This handles legacy claims uploaded before auto-detection was added
+    const uncheckedClaims = data.claims.filter((claim: any) =>
+      !claim.duplicateStatus && claim.vendorName && claim.transactionDate && claim.totalAmount && claim.currency
+    )
+
+    if (uncheckedClaims.length > 0 && businessId) {
+      for (const claim of uncheckedClaims) {
+        try {
+          const response = await fetch('/api/v1/expense-claims/check-duplicates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              businessId,
+              vendorName: claim.vendorName,
+              transactionDate: claim.transactionDate,
+              totalAmount: claim.totalAmount,
+              currency: claim.currency,
+              referenceNumber: (claim as any).referenceNumber || undefined,
+              excludeClaimId: claim._id,
+            }),
+          })
+          const result = await response.json()
+          if (result.success && result.data?.hasDuplicates && result.data?.matches?.length > 0) {
+            flaggedClaims.push(claim)
+          }
+        } catch {
+          // Non-fatal
+        }
+      }
+    }
+
     if (flaggedClaims.length > 0) {
-      // Show justification form for flagged claims
       setBatchDuplicateClaims(flaggedClaims.map((claim: any) => ({ claim, duplicates: [] })))
       setShowBatchDuplicateWarning(true)
       return
@@ -209,7 +239,7 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
     } catch (e: any) {
       alert(e.message)
     }
-  }, [submissionId, submitForApproval, refetch, data])
+  }, [submissionId, submitForApproval, refetch, data, businessId])
 
   // Handle proceeding after batch duplicate warning
   const handleBatchDuplicateProceed = useCallback(async () => {

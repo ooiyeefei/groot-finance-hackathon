@@ -18,6 +18,13 @@ import numpy as np
 # LHDN validation QR — these are verification links, not submission forms
 LHDN_QR_PATTERN = re.compile(r"myinvois\.hasil\.gov\.my", re.IGNORECASE)
 
+# 024-einv-buyer-reject-pivot: Extract long ID from LHDN validation URL
+# Format: https://myinvois.hasil.gov.my/{longId}/share
+LHDN_LONG_ID_PATTERN = re.compile(
+    r"myinvois\.hasil\.gov\.my/([A-Za-z0-9_-]+)/share",
+    re.IGNORECASE
+)
+
 # Valid URL pattern
 URL_PATTERN = re.compile(r"^https?://", re.IGNORECASE)
 
@@ -518,12 +525,23 @@ def detect_qr_step(
     except Exception as e:
         print(f"[{document_id}] QR Detection: Error - {str(e)}")
 
+    # 024-einv-buyer-reject-pivot: Extract LHDN long ID from validation URL
+    lhdn_long_id = None
+    if lhdn_validation_urls:
+        for url in lhdn_validation_urls:
+            match = LHDN_LONG_ID_PATTERN.search(url)
+            if match:
+                lhdn_long_id = match.group(1)
+                print(f"[{document_id}] QR Detection: Extracted LHDN long ID: {lhdn_long_id}")
+                break
+
     result = {
         "detected_qr_codes": detected_qr_codes,
         "merchant_form_urls": merchant_form_urls,
         "lhdn_validation_urls": lhdn_validation_urls,
         "merchant_form_url": merchant_form_urls[0] if merchant_form_urls else None,
+        "lhdn_long_id": lhdn_long_id,
     }
 
-    print(f"[{document_id}] QR Detection: Complete - {len(merchant_form_urls)} merchant URLs, {len(lhdn_validation_urls)} LHDN URLs")
+    print(f"[{document_id}] QR Detection: Complete - {len(merchant_form_urls)} merchant URLs, {len(lhdn_validation_urls)} LHDN URLs, LHDN long ID: {lhdn_long_id or 'none'}")
     return result

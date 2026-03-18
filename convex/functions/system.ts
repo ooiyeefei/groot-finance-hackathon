@@ -116,6 +116,10 @@ export const updateInvoiceExtraction = mutation({
     confidenceScore: v.optional(v.number()),
     extractionMethod: v.optional(v.string()),
     modelUsed: v.optional(v.string()),
+    // 024-einv-buyer-reject-pivot: LHDN e-invoice detection from QR code
+    lhdnLongId: v.optional(v.string()),
+    lhdnValidationUrl: v.optional(v.string()),
+    lhdnVerificationStatus: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const invoice = await resolveById(ctx.db, "invoices", args.id);
@@ -125,18 +129,11 @@ export const updateInvoiceExtraction = mutation({
 
     const now = Date.now();
 
-    // DEBUG: Log extractedData being stored to trace category fields
-    console.log(`[System Debug] Storing extractedData for invoice ${args.id}`);
-    console.log(`[System Debug] extractedData keys:`, Object.keys(args.extractedData || {}));
-    console.log(`[System Debug] suggested_category:`, args.extractedData?.suggested_category);
-    console.log(`[System Debug] accounting_category:`, args.extractedData?.accounting_category);
-
     const updateData: Record<string, unknown> = {
       status: "pending", // Extraction complete, ready for review
       extractedData: args.extractedData,
       processedAt: now,
       updatedAt: now,
-      // Clear stale error fields from any previous failed attempts
       errorMessage: undefined,
       failedAt: undefined,
     };
@@ -148,8 +145,33 @@ export const updateInvoiceExtraction = mutation({
       updateData.processingMethod = args.extractionMethod;
     }
 
+    // 024-einv-buyer-reject-pivot: Store LHDN long ID from QR detection
+    if (args.lhdnLongId) {
+      updateData.lhdnLongId = args.lhdnLongId;
+      updateData.lhdnVerificationStatus = args.lhdnVerificationStatus || "pending";
+      console.log(`[System] LHDN e-invoice detected for ${args.id}: longId=${args.lhdnLongId}`);
+    }
+    if (args.lhdnValidationUrl) {
+      updateData.lhdnValidationUrl = args.lhdnValidationUrl;
+    }
+
     await ctx.db.patch(invoice._id, updateData);
     console.log(`[System] Updated invoice ${args.id} extraction results`);
+
+    // 024-einv-buyer-reject-pivot: Trigger LHDN verification if QR detected
+    if (args.lhdnLongId && invoice.businessId) {
+      await ctx.scheduler.runAfter(
+        0, // Run immediately
+        internal.functions.lhdnVerification.verifyDocument,
+        {
+          invoiceId: invoice._id,
+          lhdnLongId: args.lhdnLongId,
+          businessId: invoice.businessId,
+        }
+      );
+      console.log(`[System] Scheduled LHDN verification for invoice ${args.id}`);
+    }
+
     return invoice._id;
   },
 });
