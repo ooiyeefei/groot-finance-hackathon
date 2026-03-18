@@ -360,32 +360,6 @@ export default function EinvoiceSection({
           )
         })()}
 
-        {/* LHDN API Connection Info */}
-        {!einvoiceAttached && lhdnReceivedStatus !== 'valid' && (
-          <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
-            <div className="flex items-start gap-2">
-              <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-blue-700 dark:text-blue-300 text-sm font-medium">
-                  Enable Automatic E-Invoice Retrieval
-                </p>
-                <p className="text-muted-foreground text-xs mt-1">
-                  Connect your LHDN MyInvois account to automatically receive e-invoices from suppliers and reject incorrect invoices within 72 hours.
-                </p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="mt-2 text-xs h-7"
-                  asChild
-                >
-                  <a href="/en/business-settings?tab=business-profile">
-                    Connect LHDN MyInvois
-                  </a>
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Error Display */}
         {error && (
