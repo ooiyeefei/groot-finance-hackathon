@@ -611,6 +611,7 @@ export default defineSchema({
     // Approval Routing
     designatedApproverId: v.optional(v.id("users")), // Target approver (set on submission)
     approvedBy: v.optional(v.id("users")),           // Who approved
+    approvalNotes: v.optional(v.string()),            // Manager's notes when approving
 
     // Timestamps
     submittedAt: v.optional(v.number()),

@@ -112,9 +112,9 @@ export function useSubmissionMutations() {
 
   const submitMutation = useMutation(api.functions.expenseSubmissions.submit)
   const [submitPending, setSubmitPending] = useState(false)
-  const submitForApprovalMutateAsync = useCallback(async (id: string) => {
+  const submitForApprovalMutateAsync = useCallback(async (id: string, duplicateOverrides?: Array<{ claimId: string; reason: string; isSplitExpense?: boolean }>) => {
     setSubmitPending(true)
-    try { return await submitMutation({ id }) }
+    try { return await submitMutation({ id, duplicateOverrides }) }
     finally { setSubmitPending(false) }
   }, [submitMutation])
   const submitForApproval = { mutateAsync: submitForApprovalMutateAsync, isPending: submitPending }

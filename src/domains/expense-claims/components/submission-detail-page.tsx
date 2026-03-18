@@ -2,8 +2,11 @@
 
 import { useState, useCallback, lazy, Suspense, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQuery } from 'convex/react'
+import { api } from '@/convex/_generated/api'
 import { useSubmissionDetail, useSubmissionMutations } from '../hooks/use-expense-submissions'
-import { useActiveBusiness } from '@/contexts/business-context'
+import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
+import type { Id } from '../../../../convex/_generated/dataModel'
 import EditExpenseModalNew from './edit-expense-modal-new'
 import UnifiedExpenseDetailsModal from './unified-expense-details-modal'
 import { Badge } from '@/components/ui/badge'
@@ -180,15 +183,85 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
     refetch()
   }, [editTitle, submissionId, updateSubmission, refetch])
 
-  // Handle submit
+  // Duplicate check state for batch submission
+  const [showBatchDuplicateWarning, setShowBatchDuplicateWarning] = useState(false)
+  const [batchDuplicateClaims, setBatchDuplicateClaims] = useState<Array<{ claim: any; duplicates: any[] }>>([])
+  const [batchDuplicateOverrides, setBatchDuplicateOverrides] = useState<Map<string, { reason: string; isSplitExpense: boolean }>>(new Map())
+  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false)
+
+  // Handle submit with pre-check for duplicates
   const handleSubmit = useCallback(async () => {
+    if (!data?.claims || !businessId) return
+
     try {
+      // Check each claim for duplicates before submitting
+      setIsCheckingDuplicates(true)
+      const flaggedClaims: Array<{ claim: any; duplicates: any[] }> = []
+
+      for (const claim of data.claims) {
+        // Skip claims without complete data
+        if (!claim.vendorName || !claim.transactionDate || !claim.totalAmount || !claim.currency) continue
+        // Skip claims already flagged
+        if ((claim as any).duplicateStatus === 'potential' || (claim as any).duplicateStatus === 'confirmed') continue
+
+        try {
+          const response = await fetch('/api/v1/expense-claims/check-duplicates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              businessId,
+              vendorName: claim.vendorName,
+              transactionDate: claim.transactionDate,
+              totalAmount: claim.totalAmount,
+              currency: claim.currency,
+              referenceNumber: (claim as any).referenceNumber || undefined,
+              excludeClaimId: claim._id,
+            }),
+          })
+          const result = await response.json()
+          if (result.success && result.data?.duplicates?.length > 0) {
+            flaggedClaims.push({ claim, duplicates: result.data.duplicates })
+          }
+        } catch {
+          // Non-fatal: if check fails, proceed without blocking
+        }
+      }
+
+      setIsCheckingDuplicates(false)
+
+      if (flaggedClaims.length > 0) {
+        // Show duplicate warning — block submission until resolved
+        setBatchDuplicateClaims(flaggedClaims)
+        setShowBatchDuplicateWarning(true)
+        return
+      }
+
+      // No duplicates — submit directly
       await submitForApproval.mutateAsync(submissionId)
+      refetch()
+    } catch (e: any) {
+      setIsCheckingDuplicates(false)
+      alert(e.message)
+    }
+  }, [submissionId, submitForApproval, refetch, data, businessId])
+
+  // Handle proceeding after batch duplicate warning
+  const handleBatchDuplicateProceed = useCallback(async () => {
+    try {
+      const overrides = Array.from(batchDuplicateOverrides.entries()).map(([claimId, override]) => ({
+        claimId,
+        reason: override.reason,
+        isSplitExpense: override.isSplitExpense,
+      }))
+      await submitForApproval.mutateAsync(submissionId, overrides)
+      setShowBatchDuplicateWarning(false)
+      setBatchDuplicateClaims([])
+      setBatchDuplicateOverrides(new Map())
       refetch()
     } catch (e: any) {
       alert(e.message)
     }
-  }, [submissionId, submitForApproval, refetch])
+  }, [submissionId, submitForApproval, refetch, batchDuplicateOverrides])
 
   // Handle delete
   const handleDeleteClick = useCallback(() => {
@@ -433,12 +506,12 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
             <>
               <Button
                 onClick={handleSubmit}
-                disabled={!canSubmit || submitForApproval.isPending}
+                disabled={!canSubmit || submitForApproval.isPending || isCheckingDuplicates}
                 className="bg-primary hover:bg-primary/90 text-primary-foreground"
                 title={!canSubmit ? (claims.length === 0 ? 'Add at least one claim' : hasProcessingClaims ? 'Wait for claims to finish processing' : '') : ''}
               >
-                {submitForApproval.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
-                Submit for Approval
+                {(submitForApproval.isPending || isCheckingDuplicates) ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                {isCheckingDuplicates ? 'Checking duplicates...' : 'Submit for Approval'}
               </Button>
               <Button variant="destructive" onClick={handleDeleteClick} disabled={deleteSubmission.isPending}>
                 <Trash2 className="h-4 w-4 mr-2" />
@@ -869,6 +942,31 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
             </div>
           </div>
         </div>
+      )}
+
+      {/* Batch Duplicate Warning — shown when Submit for Approval detects duplicates */}
+      {showBatchDuplicateWarning && batchDuplicateClaims.length > 0 && (
+        <ConfirmationDialog
+          isOpen={showBatchDuplicateWarning}
+          onClose={() => setShowBatchDuplicateWarning(false)}
+          onConfirm={() => {
+            // Check all flagged claims have justification
+            const allResolved = batchDuplicateClaims.every(({ claim }) =>
+              batchDuplicateOverrides.has(claim._id) &&
+              (batchDuplicateOverrides.get(claim._id)?.reason?.length ?? 0) >= 10
+            )
+            if (!allResolved) {
+              alert('Please provide justification (min 10 characters) for all flagged claims before proceeding.')
+              return
+            }
+            handleBatchDuplicateProceed()
+          }}
+          title={`Duplicate Claims Detected (${batchDuplicateClaims.length})`}
+          message={`${batchDuplicateClaims.length} claim(s) in this submission have potential duplicates. Please provide justification for each before submitting. You can review each claim's matches below.`}
+          confirmText="Submit with Justification"
+          cancelText="Cancel"
+          confirmVariant="primary"
+        />
       )}
     </div>
   )

@@ -977,10 +977,10 @@ export default function UnifiedExpenseDetailsModal({
                         </Card>
                       )}
 
-                      {/* Duplicate Detection Indicator */}
+                      {/* Duplicate Detection Indicator + Employee Justification */}
                       {claimDetails.duplicateStatus && claimDetails.duplicateStatus !== 'none' && (
                         <Card className="bg-yellow-500/10 border-yellow-500/30">
-                          <CardContent className="p-4">
+                          <CardContent className="p-4 space-y-3">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
                                 <DuplicateBadge
@@ -998,12 +998,12 @@ export default function UnifiedExpenseDetailsModal({
                                   </p>
                                   <p className="text-muted-foreground text-xs">
                                     {claimDetails.isSplitExpense
-                                      ? 'Marked as split expense'
+                                      ? 'Marked as split expense by employee'
                                       : 'This claim may be a duplicate of another expense'}
                                   </p>
                                 </div>
                               </div>
-                              {viewMode === 'manager' && claimDetails.duplicateStatus === 'potential' && (
+                              {(viewMode === 'manager' || viewMode === 'personal') && claimDetails.duplicateStatus === 'potential' && (
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -1015,6 +1015,58 @@ export default function UnifiedExpenseDetailsModal({
                                   ) : null}
                                   Review Duplicates
                                 </Button>
+                              )}
+                            </div>
+
+                            {/* Employee's justification — shown to managers and admins */}
+                            {(claimDetails as any).duplicateOverrideReason && (
+                              <div className="bg-card/50 rounded-md p-3 border border-border">
+                                <p className="text-xs font-medium text-muted-foreground mb-1">Employee&apos;s Justification</p>
+                                <p className="text-sm text-foreground">{(claimDetails as any).duplicateOverrideReason}</p>
+                                {(claimDetails as any).duplicateOverrideAt && (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Acknowledged on {new Date((claimDetails as any).duplicateOverrideAt).toLocaleDateString()}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      {/* Approval History — shown for approved/reimbursed claims */}
+                      {(claimDetails.status === 'approved' || claimDetails.status === 'reimbursed') && (
+                        <Card className="border-border">
+                          <CardContent className="p-4">
+                            <p className="text-sm font-medium text-foreground mb-3">Approval History</p>
+                            <div className="space-y-2 text-sm">
+                              {/* Submission step */}
+                              {(claimDetails as any).submittedAt && (
+                                <div className="flex items-start gap-2">
+                                  <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
+                                  <div>
+                                    <span className="text-foreground">Submitted for approval</span>
+                                    <span className="text-muted-foreground ml-1">
+                                      {new Date((claimDetails as any).submittedAt).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                              {/* Approval step */}
+                              {(claimDetails as any).approver && (
+                                <div className="flex items-start gap-2">
+                                  <div className="w-2 h-2 rounded-full bg-green-500 mt-1.5 shrink-0" />
+                                  <div>
+                                    <span className="text-foreground">
+                                      Approved by {(claimDetails as any).approver?.fullName || (claimDetails as any).approver?.email || 'Manager'}
+                                    </span>
+                                    {(claimDetails as any).approvedAt && (
+                                      <span className="text-muted-foreground ml-1">
+                                        {new Date((claimDetails as any).approvedAt).toLocaleDateString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
                               )}
                             </div>
                           </CardContent>

@@ -291,6 +291,7 @@ export const getById = query({
         claimNotes: submission.claimNotes,
         designatedApproverId: submission.designatedApproverId,
         approvedBy: submission.approvedBy,
+        approvalNotes: submission.approvalNotes,
         submittedAt: submission.submittedAt,
         approvedAt: submission.approvedAt,
         rejectedAt: submission.rejectedAt,
@@ -581,6 +582,11 @@ export const update = mutation({
 export const submit = mutation({
   args: {
     id: v.string(),
+    duplicateOverrides: v.optional(v.array(v.object({
+      claimId: v.string(),
+      reason: v.string(),
+      isSplitExpense: v.optional(v.boolean()),
+    }))),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -688,13 +694,29 @@ export const submit = mutation({
       updatedAt: now,
     });
 
-    // Update all claims to submitted
+    // Build map of duplicate overrides by claim ID for fast lookup
+    const overrideMap = new Map<string, { reason: string; isSplitExpense?: boolean }>();
+    if (args.duplicateOverrides) {
+      for (const override of args.duplicateOverrides) {
+        overrideMap.set(override.claimId, override);
+      }
+    }
+
+    // Update all claims to submitted (with duplicate overrides if provided)
     for (const claim of activeClaims) {
+      const override = overrideMap.get(claim._id);
       await ctx.db.patch(claim._id, {
         status: "submitted",
         submittedAt: now,
         designatedApproverId: designatedApproverId || undefined,
         updatedAt: now,
+        // Persist duplicate override if employee acknowledged duplicates for this claim
+        ...(override ? {
+          duplicateStatus: "potential" as const,
+          duplicateOverrideReason: override.reason,
+          duplicateOverrideAt: now,
+          isSplitExpense: override.isSplitExpense || false,
+        } : {}),
       });
     }
 
@@ -912,11 +934,12 @@ export const approve = mutation({
       if (entryId) accountingEntriesCreated++;
     }
 
-    // Update submission
+    // Update submission — persist approval notes
     await ctx.db.patch(submission._id, {
       status: "approved",
       approvedBy: user._id,
       approvedAt: now,
+      approvalNotes: args.notes || undefined,
       updatedAt: now,
     });
 
