@@ -1178,12 +1178,13 @@ export const reject = mutation({
     }));
 
     // Update submission back to draft with rejection info
+    // Keep designatedApproverId so rejected submissions still appear
+    // in the manager's history (getManagerSubmissions query)
     await ctx.db.patch(submission._id, {
       status: "draft",
       rejectionReason: args.reason,
       claimNotes: claimNotes,
       rejectedAt: now,
-      designatedApproverId: undefined,
       updatedAt: now,
     });
 

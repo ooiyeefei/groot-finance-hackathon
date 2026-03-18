@@ -6,9 +6,9 @@
 
 'use client'
 
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { Clock, CheckCircle, BarChart3, DollarSign, Loader2, Send, ChevronRight } from 'lucide-react'
+import { Clock, CheckCircle, BarChart3, DollarSign, Loader2, Send, ChevronRight, Filter } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -191,51 +191,13 @@ export default function EnhancedApprovalDashboard({ userId }: EnhancedApprovalDa
             </Card>
           )}
 
-          {/* Submission History (approved, rejected, reimbursed) */}
-          {(() => {
-            const historySubmissions = allManagerSubmissions.filter(
-              (s: any) => s.status !== 'submitted'
-            )
-            if (allSubmissionsLoading || historySubmissions.length === 0) return null
-            return (
-              <Card className="bg-card border-border">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-foreground flex items-center gap-2 text-lg">
-                    <Clock className="w-4 h-4" />
-                    Submission History ({historySubmissions.length})
-                  </CardTitle>
-                  <CardDescription className="text-sm">Previously reviewed submissions</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {historySubmissions.map((sub: any) => (
-                      <div
-                        key={sub._id}
-                        className="flex items-center justify-between p-3 rounded-md border border-border hover:bg-muted/50 cursor-pointer transition-colors"
-                        onClick={() => router.push(`/${locale}/manager/approvals/submissions/${sub._id}`)}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">{sub.title}</p>
-                          <div className="flex items-center gap-3 mt-1">
-                            <span className="text-xs text-muted-foreground">
-                              {sub.claimCount || 0} claims
-                            </span>
-                            {sub.submitterName && (
-                              <span className="text-xs text-muted-foreground">by {sub.submitterName}</span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <SubmissionStatusBadge status={sub.status} />
-                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })()}
+          {/* Submission History — includes approved, rejected (draft with rejectedAt), reimbursed */}
+          <SubmissionHistorySection
+            submissions={allManagerSubmissions}
+            isLoading={allSubmissionsLoading}
+            locale={locale}
+            router={router}
+          />
         </TabsContent>
 
         <TabsContent value="leave-requests" className="space-y-4">
@@ -685,6 +647,120 @@ function ManagementSummaryCard({ title, value, icon, variant }: {
 }
 
 
+
+// Submission history with filters
+function SubmissionHistorySection({ submissions, isLoading, locale, router }: {
+  submissions: any[]
+  isLoading: boolean
+  locale: string
+  router: ReturnType<typeof useRouter>
+}) {
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [employeeFilter, setEmployeeFilter] = useState<string>('all')
+
+  // Get history: everything except currently pending (status=submitted)
+  // Include rejected submissions (status=draft but has rejectedAt)
+  const historySubmissions = useMemo(() => {
+    return submissions
+      .filter((s: any) => s.status !== 'submitted')
+      .map((s: any) => ({
+        ...s,
+        // Determine display status: if draft AND has rejectedAt → show as "rejected"
+        displayStatus: s.status === 'draft' && s.rejectedAt ? 'rejected' : s.status,
+      }))
+  }, [submissions])
+
+  // Unique employee names for filter
+  const employeeNames = useMemo(() => {
+    const names = new Set(historySubmissions.map((s: any) => s.submitterName).filter(Boolean))
+    return Array.from(names).sort()
+  }, [historySubmissions])
+
+  // Apply filters
+  const filtered = useMemo(() => {
+    return historySubmissions.filter((s: any) => {
+      if (statusFilter !== 'all' && s.displayStatus !== statusFilter) return false
+      if (employeeFilter !== 'all' && s.submitterName !== employeeFilter) return false
+      return true
+    })
+  }, [historySubmissions, statusFilter, employeeFilter])
+
+  if (isLoading || historySubmissions.length === 0) return null
+
+  return (
+    <Card className="bg-card border-border">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-foreground flex items-center gap-2 text-lg">
+              <Clock className="w-4 h-4" />
+              Submission History ({filtered.length})
+            </CardTitle>
+            <CardDescription className="text-sm">Previously reviewed submissions</CardDescription>
+          </div>
+        </div>
+        {/* Filters */}
+        <div className="flex items-center gap-3 mt-3">
+          <Filter className="w-4 h-4 text-muted-foreground shrink-0" />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="text-sm bg-input border border-border rounded-md px-2 py-1 text-foreground"
+          >
+            <option value="all">All statuses</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+            <option value="reimbursed">Reimbursed</option>
+            <option value="draft">Draft</option>
+          </select>
+          {employeeNames.length > 1 && (
+            <select
+              value={employeeFilter}
+              onChange={(e) => setEmployeeFilter(e.target.value)}
+              className="text-sm bg-input border border-border rounded-md px-2 py-1 text-foreground"
+            >
+              <option value="all">All employees</option>
+              {employeeNames.map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          {filtered.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">No submissions match the selected filters.</p>
+          ) : (
+            filtered.map((sub: any) => (
+              <div
+                key={sub._id}
+                className="flex items-center justify-between p-3 rounded-md border border-border hover:bg-muted/50 cursor-pointer transition-colors"
+                onClick={() => router.push(`/${locale}/manager/approvals/submissions/${sub._id}`)}
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{sub.title}</p>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-xs text-muted-foreground">
+                      {sub.claimCount || 0} claims
+                    </span>
+                    {sub.submitterName && (
+                      <span className="text-xs text-muted-foreground">by {sub.submitterName}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <SubmissionStatusBadge status={sub.displayStatus} />
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
 
 // Status badge for submission history
 function SubmissionStatusBadge({ status }: { status: string }) {
