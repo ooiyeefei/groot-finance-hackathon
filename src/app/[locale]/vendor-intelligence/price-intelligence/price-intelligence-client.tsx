@@ -35,17 +35,22 @@ export default function PriceIntelligenceClient() {
   // Get unique items for the price trends tab
   const uniqueItems = [
     ...new Map(
-      items.map((item) => [
-        `${item.vendorId}-${item.itemIdentifier ?? item.itemDescription}`,
-        {
-          vendorId: item.vendorId,
-          vendorName: item.vendor?.name ?? "Unknown",
-          itemIdentifier: item.itemIdentifier ?? item.itemDescription,
-          itemDescription: item.itemDescription,
-          currentPrice: item.unitPrice,
-          currency: item.currency,
-        },
-      ])
+      items.map((item: Record<string, unknown>) => {
+        const vendor = item.vendor as { name?: string } | undefined;
+        const vendorId = item.vendorId as string;
+        const itemId = (item.itemIdentifier ?? item.itemDescription) as string;
+        return [
+          `${vendorId}-${itemId}`,
+          {
+            vendorId,
+            vendorName: vendor?.name ?? "Unknown",
+            itemIdentifier: itemId,
+            itemDescription: item.itemDescription as string,
+            currentPrice: item.unitPrice as number,
+            currency: item.currency as string,
+          },
+        ] as const;
+      })
     ).values(),
   ];
 
@@ -55,7 +60,7 @@ export default function PriceIntelligenceClient() {
         <h2 className="text-lg font-semibold text-foreground">
           Price Intelligence
         </h2>
-        <CsvExportButton data={items} />
+        <CsvExportButton data={items as any} />
       </div>
 
       <Tabs defaultValue="trends" className="w-full">
@@ -102,15 +107,15 @@ export default function PriceIntelligenceClient() {
                     <PriceHistoryChart
                       dataPoints={items
                         .filter(
-                          (r) =>
+                          (r: Record<string, unknown>) =>
                             r.vendorId === item.vendorId &&
-                            (r.itemIdentifier ?? r.itemDescription) ===
+                            ((r.itemIdentifier ?? r.itemDescription) as string) ===
                               item.itemIdentifier
                         )
-                        .map((r) => ({
-                          date: r.invoiceDate ?? r.observedAt,
-                          unitPrice: r.unitPrice,
-                          currency: r.currency,
+                        .map((r: Record<string, unknown>) => ({
+                          date: (r.invoiceDate ?? r.observedAt) as string,
+                          unitPrice: r.unitPrice as number,
+                          currency: r.currency as string,
                         }))}
                       currency={item.currency}
                     />

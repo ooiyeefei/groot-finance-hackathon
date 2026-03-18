@@ -1,13 +1,17 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useQuery, useAction } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 /**
- * T020: Custom hook for price history queries.
- * Wraps Convex useQuery with filter state and pagination.
+ * T020: Custom hook for price history.
+ *
+ * BANDWIDTH-SAFE: Uses action + useState instead of reactive useQuery.
+ * Per CLAUDE.md Rule 1: vendor_price_history is a large table —
+ * reactive query would re-read ALL records on every change.
+ * Action runs once on mount + when filters change.
  */
 export function usePriceHistory(businessId: Id<"businesses"> | undefined) {
   const [vendorId, setVendorId] = useState<Id<"vendors"> | undefined>();
@@ -16,23 +20,48 @@ export function usePriceHistory(businessId: Id<"businesses"> | undefined) {
   const [limit, setLimit] = useState(50);
   const [cursor, setCursor] = useState(0);
 
-  const result = useQuery(
-    api.functions.vendorPriceHistory.listPriceHistory,
-    businessId
-      ? {
-          businessId,
-          vendorId,
-          itemIdentifier,
-          includeArchived,
-          limit,
-          cursor,
-        }
-      : "skip"
-  );
+  const [items, setItems] = useState<Array<Record<string, unknown>>>([]);
+  const [nextCursor, setNextCursor] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchAction = useAction(api.functions.vendorPriceHistory.listPriceHistory);
+
+  const refresh = useCallback(async () => {
+    if (!businessId) {
+      setItems([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const result = await fetchAction({
+        businessId,
+        vendorId,
+        itemIdentifier,
+        includeArchived,
+        limit,
+        cursor,
+      });
+      setItems(result.items);
+      setNextCursor(result.nextCursor);
+    } catch (e) {
+      console.error("[usePriceHistory] Fetch failed:", e);
+      setItems([]);
+      setNextCursor(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [businessId, vendorId, itemIdentifier, includeArchived, limit, cursor, fetchAction]);
+
+  // Fetch on mount and when filters change
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   const loadMore = () => {
-    if (result && result.nextCursor !== null) {
-      setCursor(result.nextCursor);
+    if (nextCursor !== null) {
+      setCursor(nextCursor);
     }
   };
 
@@ -44,9 +73,9 @@ export function usePriceHistory(businessId: Id<"businesses"> | undefined) {
   };
 
   return {
-    items: result?.items ?? [],
-    nextCursor: result?.nextCursor ?? null,
-    isLoading: result === undefined,
+    items,
+    nextCursor,
+    isLoading,
     // Filter setters
     setVendorId,
     setItemIdentifier,
@@ -54,9 +83,11 @@ export function usePriceHistory(businessId: Id<"businesses"> | undefined) {
     setLimit,
     // Pagination
     loadMore,
-    hasMore: result?.nextCursor !== null && result?.nextCursor !== undefined,
+    hasMore: nextCursor !== null,
     // Reset
     resetFilters,
+    // Manual refresh (e.g., after creating a new record)
+    refresh,
     // Current filters
     filters: { vendorId, itemIdentifier, includeArchived },
   };
@@ -64,6 +95,7 @@ export function usePriceHistory(businessId: Id<"businesses"> | undefined) {
 
 /**
  * Hook for single item-vendor price timeline (for charts).
+ * Uses reactive query — this is a SMALL result set (single item + vendor).
  */
 export function useItemVendorTimeline(
   businessId: Id<"businesses"> | undefined,
@@ -85,6 +117,7 @@ export function useItemVendorTimeline(
 
 /**
  * Hook for price trend data (Recharts format).
+ * Uses reactive query — this is a SMALL result set (single item + vendor).
  */
 export function usePriceTrendData(
   businessId: Id<"businesses"> | undefined,

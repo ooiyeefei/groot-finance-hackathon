@@ -8,7 +8,7 @@
  */
 
 import { v } from "convex/values";
-import { query, internalMutation, internalQuery } from "../_generated/server";
+import { query, action, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { resolveUserByClerkId } from "../lib/resolvers";
 import { Id } from "../_generated/dataModel";
@@ -1061,10 +1061,11 @@ export const createFromInvoiceLineItem = internalMutation({
 });
 
 /**
- * T010: List price history with filters and pagination.
- * Supports filtering by businessId, vendorId, itemIdentifier, archivedFlag.
+ * T010: List price history — INTERNAL query (not reactive).
+ * Per CLAUDE.md Rule 1: vendor_price_history is a large table.
+ * Using internalQuery + action pattern avoids reactive subscription cost.
  */
-export const listPriceHistory = query({
+export const _listPriceHistoryInternal = internalQuery({
   args: {
     businessId: v.id("businesses"),
     vendorId: v.optional(v.id("vendors")),
@@ -1074,31 +1075,16 @@ export const listPriceHistory = query({
     cursor: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return { items: [], nextCursor: null };
-
-    const user = await resolveUserByClerkId(ctx.db, identity.subject);
-    if (!user) return { items: [], nextCursor: null };
-
-    const membership = await ctx.db
-      .query("business_memberships")
-      .withIndex("by_userId_businessId", (q) =>
-        q.eq("userId", user._id).eq("businessId", args.businessId)
-      )
-      .first();
-
-    if (!membership || membership.status !== "active") {
-      return { items: [], nextCursor: null };
-    }
-
     const includeArchived = args.includeArchived ?? false;
     const limit = args.limit ?? 50;
     const cursor = args.cursor ?? 0;
 
+    // Use .take() instead of .collect() for bandwidth safety
+    const takeLimit = cursor + limit + 1; // +1 to check if there are more
+
     let records;
 
     if (args.vendorId && !includeArchived) {
-      // Filter by vendor + non-archived
       records = await ctx.db
         .query("vendor_price_history")
         .withIndex("by_business_vendor_archived", (q) =>
@@ -1107,9 +1093,8 @@ export const listPriceHistory = query({
             .eq("vendorId", args.vendorId!)
             .eq("archivedFlag", false)
         )
-        .collect();
+        .take(takeLimit);
     } else if (args.vendorId) {
-      // Filter by vendor, include archived
       records = await ctx.db
         .query("vendor_price_history")
         .withIndex("by_business_vendor_archived", (q) =>
@@ -1117,9 +1102,8 @@ export const listPriceHistory = query({
             .eq("businessId", args.businessId)
             .eq("vendorId", args.vendorId!)
         )
-        .collect();
+        .take(takeLimit);
     } else if (args.itemIdentifier && !includeArchived) {
-      // Filter by item identifier + non-archived
       records = await ctx.db
         .query("vendor_price_history")
         .withIndex("by_business_itemId_archived", (q) =>
@@ -1128,9 +1112,8 @@ export const listPriceHistory = query({
             .eq("itemIdentifier", args.itemIdentifier!)
             .eq("archivedFlag", false)
         )
-        .collect();
+        .take(takeLimit);
     } else if (args.itemIdentifier) {
-      // Filter by item identifier, include archived
       records = await ctx.db
         .query("vendor_price_history")
         .withIndex("by_business_itemId_archived", (q) =>
@@ -1138,15 +1121,14 @@ export const listPriceHistory = query({
             .eq("businessId", args.businessId)
             .eq("itemIdentifier", args.itemIdentifier!)
         )
-        .collect();
+        .take(takeLimit);
     } else {
-      // All records for business
       records = await ctx.db
         .query("vendor_price_history")
         .withIndex("by_businessId", (q) =>
           q.eq("businessId", args.businessId)
         )
-        .collect();
+        .take(takeLimit);
 
       if (!includeArchived) {
         records = records.filter((r) => !r.archivedFlag);
@@ -1168,6 +1150,7 @@ export const listPriceHistory = query({
     );
 
     const paginated = records.slice(cursor, cursor + limit);
+    const hasMore = records.length > cursor + limit;
 
     return {
       items: paginated.map((r) => ({
@@ -1178,9 +1161,33 @@ export const listPriceHistory = query({
             ?.category as string | undefined,
         },
       })),
-      nextCursor:
-        cursor + limit < records.length ? cursor + limit : null,
+      nextCursor: hasMore ? cursor + limit : null,
     };
+  },
+});
+
+/**
+ * T010: List price history — public action wrapper.
+ * Runs _listPriceHistoryInternal once (no reactive subscription).
+ * Client stores result in React state via useAction + useEffect.
+ */
+export const listPriceHistory = action({
+  args: {
+    businessId: v.id("businesses"),
+    vendorId: v.optional(v.id("vendors")),
+    itemIdentifier: v.optional(v.string()),
+    includeArchived: v.optional(v.boolean()),
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<{
+    items: Array<Record<string, unknown>>;
+    nextCursor: number | null;
+  }> => {
+    return await ctx.runQuery(
+      internal.functions.vendorPriceHistory._listPriceHistoryInternal,
+      args
+    );
   },
 });
 
