@@ -8,7 +8,8 @@
  */
 
 import { v } from "convex/values";
-import { query, internalMutation, internalQuery } from "../_generated/server";
+import { query, action, internalMutation, internalQuery } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { resolveUserByClerkId } from "../lib/resolvers";
 import { Id } from "../_generated/dataModel";
 import {
@@ -573,9 +574,26 @@ export const recordPriceObservationsBatch = internalMutation({
   },
   handler: async (ctx, args) => {
     const priceHistoryIds: Id<"vendor_price_history">[] = [];
+    const now = Date.now();
 
     for (const item of args.lineItems) {
       const trimmedDescription = item.itemDescription.trim();
+
+      // #320: Generate itemIdentifier (item code primary, description hash fallback)
+      const itemCode = item.itemCode?.trim().toUpperCase();
+      const matchedFromItemCode = !!(itemCode && itemCode.length > 0);
+      const itemIdentifier = matchedFromItemCode
+        ? itemCode!
+        : trimmedDescription.toLowerCase().replace(/\s+/g, " ").replace(/[^a-z0-9\s-]/g, "").substring(0, 100);
+
+      // #320: Check existing records for this item+vendor (limit reads for bandwidth)
+      const existingForItem = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_vendor_item", (q) =>
+          q.eq("vendorId", args.vendorId).eq("itemDescription", trimmedDescription)
+        )
+        .take(20); // Limit bandwidth: only need recent history for anomaly detection
+
       const id = await ctx.db.insert("vendor_price_history", {
         businessId: args.businessId,
         vendorId: args.vendorId,
@@ -593,9 +611,188 @@ export const recordPriceObservationsBatch = internalMutation({
         taxRate: item.taxRate,
         itemCategory: item.itemCategory,
         normalizedDescription: trimmedDescription.toLowerCase(),
-        updatedAt: Date.now(),
+        updatedAt: now,
+        // #320: Smart Vendor Intelligence fields
+        itemIdentifier,
+        invoiceDate: args.observedAt,
+        matchedFromItemCode,
+        archivedFlag: false,
+        observationTimestamp: now,
       });
       priceHistoryIds.push(id);
+
+      // #320: Anomaly detection — only if vendor has ≥2 prior records (FR-024)
+      if (existingForItem.length >= 2 && item.unitPrice > 0) {
+        // Per-invoice check: >10% increase from last invoice
+        const sorted = [...existingForItem].sort((a, b) =>
+          b.observedAt.localeCompare(a.observedAt)
+        );
+        const lastPrice = sorted[0].unitPrice;
+        if (lastPrice > 0) {
+          const pctChange = ((item.unitPrice - lastPrice) / lastPrice) * 100;
+          if (pctChange > 10) {
+            const anomalyId = await ctx.db.insert("vendor_price_anomalies", {
+              businessId: args.businessId,
+              vendorId: args.vendorId,
+              itemIdentifier,
+              alertType: "per-invoice",
+              oldValue: lastPrice,
+              newValue: item.unitPrice,
+              percentageChange: Math.round(pctChange * 10) / 10,
+              severityLevel: pctChange > 20 ? "high-impact" : "standard",
+              status: "active",
+              createdTimestamp: now,
+              priceHistoryId: id,
+            });
+            // T063: Generate recommended actions for high-impact anomalies
+            if (pctChange > 20 && anomalyId) {
+              await ctx.scheduler.runAfter(0, internal.functions.vendorRecommendedActions.generate, {
+                businessId: args.businessId,
+                vendorId: args.vendorId,
+                anomalyAlertId: anomalyId,
+              });
+            }
+          }
+        }
+
+        // Trailing 6-month average check: >20% increase
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        const sixMonthsAgoStr = sixMonthsAgo.toISOString().split("T")[0];
+        const recentPrices = sorted.filter((p) => p.observedAt >= sixMonthsAgoStr);
+        if (recentPrices.length >= 2) {
+          const avg = recentPrices.reduce((s, p) => s + p.unitPrice, 0) / recentPrices.length;
+          if (avg > 0) {
+            const trailingPct = ((item.unitPrice - avg) / avg) * 100;
+            if (trailingPct > 20) {
+              const trailingAnomalyId = await ctx.db.insert("vendor_price_anomalies", {
+                businessId: args.businessId,
+                vendorId: args.vendorId,
+                itemIdentifier,
+                alertType: "trailing-average",
+                oldValue: Math.round(avg * 100) / 100,
+                newValue: item.unitPrice,
+                percentageChange: Math.round(trailingPct * 10) / 10,
+                severityLevel: "high-impact",
+                status: "active",
+                createdTimestamp: now,
+                priceHistoryId: id,
+              });
+              // T063: Generate recommended actions for trailing-average (always high-impact)
+              await ctx.scheduler.runAfter(0, internal.functions.vendorRecommendedActions.generate, {
+                businessId: args.businessId,
+                vendorId: args.vendorId,
+                anomalyAlertId: trailingAnomalyId,
+              });
+            }
+          }
+        }
+      } else if (existingForItem.length === 0 && item.unitPrice > 0) {
+        // #320: New item detection (FR-005) — only if vendor has other items
+        const vendorHasHistory = await ctx.db
+          .query("vendor_price_history")
+          .withIndex("by_vendorId", (q) => q.eq("vendorId", args.vendorId))
+          .take(1);
+        if (vendorHasHistory.length > 0) {
+          await ctx.db.insert("vendor_price_anomalies", {
+            businessId: args.businessId,
+            vendorId: args.vendorId,
+            itemIdentifier,
+            alertType: "new-item",
+            oldValue: 0,
+            newValue: item.unitPrice,
+            percentageChange: 100,
+            severityLevel: "standard",
+            status: "active",
+            createdTimestamp: now,
+            priceHistoryId: id,
+          });
+        }
+      }
+    }
+
+    // T011: DSPy Tier 2 auto-suggest — if Tier 1 Jaccard score was 40-79%,
+    // trigger Lambda DSPy matching for that specific item
+    for (const item of args.lineItems) {
+      // Find the priceHistory record we just inserted that had a fuzzy match score in the uncertain range
+      const recentRecords = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_vendorId", (q) => q.eq("vendorId", args.vendorId))
+        .take(5);
+      const justInserted = recentRecords.find(
+        (r) =>
+          r.matchConfidenceScore !== undefined &&
+          r.matchConfidenceScore !== null &&
+          r.matchConfidenceScore >= 40 &&
+          r.matchConfidenceScore < 80 &&
+          r.itemDescription === item.itemDescription.trim()
+      );
+      if (justInserted && args.businessId) {
+        // Schedule DSPy Tier 2 matching for this uncertain item
+        // Note: suggestMatches is a public action — schedule via _autoSuggestTrigger internalAction
+        await ctx.scheduler.runAfter(
+          0,
+          internal.functions.vendorItemMatching._autoSuggestTrigger,
+          { businessId: args.businessId }
+        );
+        break; // Only trigger once per batch, not per item
+      }
+    }
+
+    // T074: Billing frequency change detection (FR-006)
+    // Check if vendor's invoice frequency deviated ≥50% from historical average
+    if (priceHistoryIds.length > 0) {
+      const vendorDates = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_vendorId", (q) => q.eq("vendorId", args.vendorId))
+        .take(50);
+
+      // Get unique invoice dates (by sourceId to avoid counting line items as separate invoices)
+      const uniqueDates = [...new Set(vendorDates.map((p) => p.observedAt))].sort();
+
+      if (uniqueDates.length >= 4) {
+        // Calculate intervals between consecutive invoices
+        const intervals: number[] = [];
+        for (let i = 1; i < uniqueDates.length; i++) {
+          const d1 = new Date(uniqueDates[i - 1]);
+          const d2 = new Date(uniqueDates[i]);
+          const diff = Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
+          if (diff > 0) intervals.push(diff);
+        }
+
+        if (intervals.length >= 3) {
+          const historicalIntervals = intervals.slice(0, -1);
+          const historicalAvg = historicalIntervals.reduce((s, d) => s + d, 0) / historicalIntervals.length;
+          const latestInterval = intervals[intervals.length - 1];
+
+          if (historicalAvg > 0) {
+            const freqChange = ((latestInterval - historicalAvg) / historicalAvg) * 100;
+
+            if (Math.abs(freqChange) >= 50) {
+              const indicators: Array<"cash-flow-issues" | "billing-errors" | "contract-violations"> = [];
+              if (freqChange < -30) {
+                indicators.push("cash-flow-issues", "billing-errors");
+              }
+              if (freqChange > 50) {
+                indicators.push("contract-violations");
+              }
+
+              await ctx.db.insert("vendor_price_anomalies", {
+                businessId: args.businessId,
+                vendorId: args.vendorId,
+                alertType: "frequency-change",
+                oldValue: Math.round(historicalAvg),
+                newValue: latestInterval,
+                percentageChange: Math.round(freqChange * 10) / 10,
+                severityLevel: Math.abs(freqChange) > 100 ? "high-impact" : "standard",
+                potentialIndicators: indicators.length > 0 ? indicators : undefined,
+                status: "active",
+                createdTimestamp: now,
+              });
+            }
+          }
+        }
+      }
     }
 
     return priceHistoryIds;
@@ -710,5 +907,502 @@ export const getPriceObservationsBySource = internalQuery({
         q.eq("sourceType", args.sourceType).eq("sourceId", args.sourceId)
       )
       .collect();
+  },
+});
+
+// ============================================
+// SMART VENDOR INTELLIGENCE (#320)
+// ============================================
+
+/**
+ * T009: Create price history record from invoice line item.
+ * Called when AP invoice is processed — extracts line items and stores price history.
+ * Generates itemIdentifier from item code (primary) or description hash (fallback).
+ */
+export const createFromInvoiceLineItem = internalMutation({
+  args: {
+    businessId: v.id("businesses"),
+    vendorId: v.id("vendors"),
+    invoiceId: v.id("invoices"),
+    itemCode: v.optional(v.string()),
+    itemDescription: v.string(),
+    unitPrice: v.number(),
+    quantity: v.number(),
+    currency: v.string(),
+    invoiceDate: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Validation
+    if (args.unitPrice <= 0) {
+      throw new Error("Unit price must be positive");
+    }
+    if (args.quantity <= 0) {
+      throw new Error("Quantity must be positive");
+    }
+
+    // Generate item identifier: item code first, fallback to description hash
+    const itemCode = args.itemCode?.trim().toUpperCase();
+    const matchedFromItemCode = !!(itemCode && itemCode.length > 0);
+    const itemIdentifier = matchedFromItemCode
+      ? itemCode!
+      : args.itemDescription
+          .toLowerCase()
+          .trim()
+          .replace(/\s+/g, " ")
+          .replace(/[^a-z0-9\s-]/g, "")
+          .substring(0, 100);
+
+    // Check for existing records with same itemIdentifier for this vendor
+    const existingRecords = await ctx.db
+      .query("vendor_price_history")
+      .withIndex("by_business_itemId_archived", (q) =>
+        q
+          .eq("businessId", args.businessId)
+          .eq("itemIdentifier", itemIdentifier)
+          .eq("archivedFlag", false)
+      )
+      .collect();
+
+    // Filter to same vendor
+    const vendorRecords = existingRecords.filter(
+      (r) => r.vendorId === args.vendorId
+    );
+
+    // If no item code and we have no match, check fuzzy matching via description
+    let matchConfidenceScore: number | undefined;
+    let userConfirmedFlag = false;
+
+    if (!matchedFromItemCode && vendorRecords.length === 0) {
+      // Try fuzzy match against existing items for this vendor
+      const vendorItems = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_vendorId", (q) => q.eq("vendorId", args.vendorId))
+        .collect();
+
+      // Simple fuzzy match: normalized description similarity
+      const normalizedNew = args.itemDescription.toLowerCase().trim();
+      const uniqueDescriptions = [
+        ...new Set(vendorItems.map((i) => i.itemDescription)),
+      ];
+
+      let bestMatch: { description: string; score: number } | null = null;
+
+      for (const desc of uniqueDescriptions) {
+        const normalizedExisting = desc.toLowerCase().trim();
+        // Calculate similarity (Jaccard index on word tokens)
+        const wordsA = new Set(normalizedNew.split(/\s+/));
+        const wordsB = new Set(normalizedExisting.split(/\s+/));
+        const intersection = new Set(
+          [...wordsA].filter((w) => wordsB.has(w))
+        );
+        const union = new Set([...wordsA, ...wordsB]);
+        const score =
+          union.size > 0
+            ? Math.round((intersection.size / union.size) * 100)
+            : 0;
+
+        if (!bestMatch || score > bestMatch.score) {
+          bestMatch = { description: desc, score };
+        }
+      }
+
+      if (bestMatch && bestMatch.score >= 80) {
+        // Auto-link: confidence >= 80%
+        matchConfidenceScore = bestMatch.score;
+        userConfirmedFlag = false; // Auto-linked, no user confirmation needed
+      } else if (bestMatch && bestMatch.score >= 40) {
+        // Flag for user confirmation: confidence 40-79%
+        matchConfidenceScore = bestMatch.score;
+        userConfirmedFlag = false; // Needs user confirmation
+      }
+      // Below 40% — treat as new item, no match attempt
+    }
+
+    const now = Date.now();
+
+    // Insert price history record
+    const priceHistoryId = await ctx.db.insert("vendor_price_history", {
+      businessId: args.businessId,
+      vendorId: args.vendorId,
+      invoiceId: args.invoiceId,
+      itemIdentifier,
+      itemCode: args.itemCode,
+      itemDescription: args.itemDescription,
+      unitPrice: args.unitPrice,
+      quantity: args.quantity,
+      currency: args.currency,
+      invoiceDate: args.invoiceDate,
+      observationTimestamp: now,
+      matchConfidenceScore,
+      userConfirmedFlag,
+      matchedFromItemCode,
+      archivedFlag: false,
+      // Legacy fields for backward compat
+      sourceType: "invoice" as const,
+      sourceId: args.invoiceId as unknown as string,
+      observedAt: args.invoiceDate,
+      isConfirmed: false,
+      normalizedDescription: args.itemDescription.toLowerCase().trim(),
+    });
+
+    return {
+      priceHistoryId,
+      itemIdentifier,
+      matchedFromItemCode,
+      matchConfidenceScore,
+      needsUserConfirmation:
+        matchConfidenceScore !== undefined &&
+        matchConfidenceScore < 80 &&
+        matchConfidenceScore >= 40,
+      isNewItem: vendorRecords.length === 0 && !matchConfidenceScore,
+      previousRecordCount: vendorRecords.length,
+    };
+  },
+});
+
+/**
+ * T010: List price history — INTERNAL query (not reactive).
+ * Per CLAUDE.md Rule 1: vendor_price_history is a large table.
+ * Using internalQuery + action pattern avoids reactive subscription cost.
+ */
+export const _listPriceHistoryInternal = internalQuery({
+  args: {
+    businessId: v.id("businesses"),
+    vendorId: v.optional(v.id("vendors")),
+    itemIdentifier: v.optional(v.string()),
+    includeArchived: v.optional(v.boolean()),
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const includeArchived = args.includeArchived ?? false;
+    const limit = args.limit ?? 50;
+    const cursor = args.cursor ?? 0;
+
+    // Use .take() instead of .collect() for bandwidth safety
+    const takeLimit = cursor + limit + 1; // +1 to check if there are more
+
+    let records;
+
+    if (args.vendorId && !includeArchived) {
+      records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_business_vendor_archived", (q) =>
+          q
+            .eq("businessId", args.businessId)
+            .eq("vendorId", args.vendorId!)
+            .eq("archivedFlag", false)
+        )
+        .take(takeLimit);
+    } else if (args.vendorId) {
+      records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_business_vendor_archived", (q) =>
+          q
+            .eq("businessId", args.businessId)
+            .eq("vendorId", args.vendorId!)
+        )
+        .take(takeLimit);
+    } else if (args.itemIdentifier && !includeArchived) {
+      records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_business_itemId_archived", (q) =>
+          q
+            .eq("businessId", args.businessId)
+            .eq("itemIdentifier", args.itemIdentifier!)
+            .eq("archivedFlag", false)
+        )
+        .take(takeLimit);
+    } else if (args.itemIdentifier) {
+      records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_business_itemId_archived", (q) =>
+          q
+            .eq("businessId", args.businessId)
+            .eq("itemIdentifier", args.itemIdentifier!)
+        )
+        .take(takeLimit);
+    } else {
+      records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_businessId", (q) =>
+          q.eq("businessId", args.businessId)
+        )
+        .take(takeLimit);
+
+      if (!includeArchived) {
+        records = records.filter((r) => !r.archivedFlag);
+      }
+    }
+
+    // Sort by invoiceDate descending (newest first)
+    records.sort((a, b) => {
+      const dateA = a.invoiceDate ?? a.observedAt;
+      const dateB = b.invoiceDate ?? b.observedAt;
+      return dateB.localeCompare(dateA);
+    });
+
+    // Enrich with vendor names
+    const vendorIds = [...new Set(records.map((r) => r.vendorId))];
+    const vendors = await Promise.all(vendorIds.map((id) => ctx.db.get(id)));
+    const vendorMap = new Map(
+      vendors.filter(Boolean).map((v) => [v!._id, v!])
+    );
+
+    const paginated = records.slice(cursor, cursor + limit);
+    const hasMore = records.length > cursor + limit;
+
+    return {
+      items: paginated.map((r) => ({
+        ...r,
+        vendor: {
+          name: vendorMap.get(r.vendorId)?.name ?? "Unknown Vendor",
+          category: (vendorMap.get(r.vendorId) as Record<string, unknown>)
+            ?.category as string | undefined,
+        },
+      })),
+      nextCursor: hasMore ? cursor + limit : null,
+    };
+  },
+});
+
+/**
+ * T010: List price history — public action wrapper.
+ * Runs _listPriceHistoryInternal once (no reactive subscription).
+ * Client stores result in React state via useAction + useEffect.
+ */
+export const listPriceHistory = action({
+  args: {
+    businessId: v.id("businesses"),
+    vendorId: v.optional(v.id("vendors")),
+    itemIdentifier: v.optional(v.string()),
+    includeArchived: v.optional(v.boolean()),
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<{
+    items: Array<Record<string, unknown>>;
+    nextCursor: number | null;
+  }> => {
+    return await ctx.runQuery(
+      internal.functions.vendorPriceHistory._listPriceHistoryInternal,
+      args
+    );
+  },
+});
+
+/**
+ * T011: Get single item-vendor price timeline sorted by invoiceDate.
+ * Returns all price observations for a specific item from a specific vendor.
+ */
+export const getItemVendorTimeline = query({
+  args: {
+    businessId: v.id("businesses"),
+    vendorId: v.id("vendors"),
+    itemIdentifier: v.string(),
+    includeArchived: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) return [];
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") return [];
+
+    const includeArchived = args.includeArchived ?? false;
+
+    // Query by item identifier with archived filter
+    let records;
+    if (!includeArchived) {
+      records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_business_itemId_archived", (q) =>
+          q
+            .eq("businessId", args.businessId)
+            .eq("itemIdentifier", args.itemIdentifier)
+            .eq("archivedFlag", false)
+        )
+        .collect();
+    } else {
+      records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_business_itemId_archived", (q) =>
+          q
+            .eq("businessId", args.businessId)
+            .eq("itemIdentifier", args.itemIdentifier)
+        )
+        .collect();
+    }
+
+    // Filter to specific vendor
+    records = records.filter((r) => r.vendorId === args.vendorId);
+
+    // Sort by invoiceDate ascending (chronological for charts)
+    records.sort((a, b) => {
+      const dateA = a.invoiceDate ?? a.observedAt;
+      const dateB = b.invoiceDate ?? b.observedAt;
+      return dateA.localeCompare(dateB);
+    });
+
+    return records;
+  },
+});
+
+/**
+ * T014: Confirm or reject a fuzzy-matched price history record.
+ * User confirms <80% confidence matches to link to existing item history,
+ * or rejects to treat as a new distinct item.
+ */
+export const confirmFuzzyMatch = internalMutation({
+  args: {
+    priceHistoryId: v.id("vendor_price_history"),
+    confirmed: v.boolean(),
+    confirmedItemIdentifier: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const record = await ctx.db.get(args.priceHistoryId);
+    if (!record) {
+      throw new Error("Price history record not found");
+    }
+
+    if (args.confirmed && args.confirmedItemIdentifier) {
+      // User confirmed: link to existing item identifier
+      await ctx.db.patch(args.priceHistoryId, {
+        itemIdentifier: args.confirmedItemIdentifier,
+        userConfirmedFlag: true,
+        matchConfidenceScore: 100, // User-confirmed = 100% confidence
+      });
+    } else {
+      // User rejected: keep separate, mark as confirmed (new item)
+      await ctx.db.patch(args.priceHistoryId, {
+        userConfirmedFlag: true,
+        matchConfidenceScore: 0, // Explicitly rejected
+      });
+    }
+
+    return { success: true };
+  },
+});
+
+/**
+ * T036: Get price trend data for charts (Recharts format).
+ * Returns PriceTrendDataPoint[] for a specific item-vendor pair.
+ */
+export const getPriceTrendData = query({
+  args: {
+    businessId: v.id("businesses"),
+    vendorId: v.id("vendors"),
+    itemIdentifier: v.string(),
+    includeArchived: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) return [];
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") return [];
+
+    const includeArchived = args.includeArchived ?? false;
+
+    let records;
+    if (!includeArchived) {
+      records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_business_itemId_archived", (q) =>
+          q
+            .eq("businessId", args.businessId)
+            .eq("itemIdentifier", args.itemIdentifier)
+            .eq("archivedFlag", false)
+        )
+        .collect();
+    } else {
+      records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_business_itemId_archived", (q) =>
+          q
+            .eq("businessId", args.businessId)
+            .eq("itemIdentifier", args.itemIdentifier)
+        )
+        .collect();
+    }
+
+    records = records.filter((r) => r.vendorId === args.vendorId);
+
+    // Sort chronologically
+    records.sort((a, b) => {
+      const dateA = a.invoiceDate ?? a.observedAt;
+      const dateB = b.invoiceDate ?? b.observedAt;
+      return dateA.localeCompare(dateB);
+    });
+
+    return records.map((r) => ({
+      date: r.invoiceDate ?? r.observedAt,
+      unitPrice: r.unitPrice,
+      currency: r.currency,
+      invoiceId: r.invoiceId,
+    }));
+  },
+});
+
+/**
+ * T071: Archive old price history records (>2 years).
+ * On-demand action (NOT a cron — bandwidth-safe per CLAUDE.md Rule 3).
+ * Call manually or from admin tools when needed.
+ * Uses .take(100) to limit bandwidth per invocation.
+ */
+export const archiveOldRecords = internalMutation({
+  args: {
+    businessId: v.id("businesses"),
+    batchSize: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize ?? 100;
+    const twoYearsAgo = new Date();
+    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+    const cutoffDate = twoYearsAgo.toISOString().split("T")[0];
+
+    // Find non-archived records older than 2 years (limited batch for bandwidth)
+    const oldRecords = await ctx.db
+      .query("vendor_price_history")
+      .withIndex("by_businessId", (q) =>
+        q.eq("businessId", args.businessId)
+      )
+      .take(batchSize * 2); // Over-fetch to account for already-archived records
+
+    const toArchive = oldRecords.filter((r) => {
+      if (r.archivedFlag) return false; // Skip already archived
+      const date = r.invoiceDate ?? r.observedAt;
+      return date < cutoffDate;
+    });
+
+    let archivedCount = 0;
+    const now = Date.now();
+    for (const record of toArchive) {
+      await ctx.db.patch(record._id, {
+        archivedFlag: true,
+        archivedTimestamp: now,
+      });
+      archivedCount++;
+    }
+
+    return { archivedCount, hasMore: oldRecords.length === batchSize };
   },
 });

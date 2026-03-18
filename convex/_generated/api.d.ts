@@ -35,6 +35,7 @@ import type * as functions_chartOfAccounts from "../functions/chartOfAccounts.js
 import type * as functions_consent from "../functions/consent.js";
 import type * as functions_conversations from "../functions/conversations.js";
 import type * as functions_creditPacks from "../functions/creditPacks.js";
+import type * as functions_crossVendorItemGroups from "../functions/crossVendorItemGroups.js";
 import type * as functions_csvImportTemplates from "../functions/csvImportTemplates.js";
 import type * as functions_customers from "../functions/customers.js";
 import type * as functions_documentInbox from "../functions/documentInbox.js";
@@ -110,7 +111,13 @@ import type * as functions_systemMonitoring from "../functions/systemMonitoring.
 import type * as functions_teamCalendar from "../functions/teamCalendar.js";
 import type * as functions_timesheets from "../functions/timesheets.js";
 import type * as functions_users from "../functions/users.js";
+import type * as functions_vendorIntelligenceMCP from "../functions/vendorIntelligenceMCP.js";
+import type * as functions_vendorItemMatching from "../functions/vendorItemMatching.js";
+import type * as functions_vendorPriceAnomalies from "../functions/vendorPriceAnomalies.js";
 import type * as functions_vendorPriceHistory from "../functions/vendorPriceHistory.js";
+import type * as functions_vendorRecommendedActions from "../functions/vendorRecommendedActions.js";
+import type * as functions_vendorRiskProfiles from "../functions/vendorRiskProfiles.js";
+import type * as functions_vendorScorecards from "../functions/vendorScorecards.js";
 import type * as functions_vendors from "../functions/vendors.js";
 import type * as functions_webhooks from "../functions/webhooks.js";
 import type * as functions_workSchedules from "../functions/workSchedules.js";
@@ -164,6 +171,7 @@ declare const fullApi: ApiFromModules<{
   "functions/consent": typeof functions_consent;
   "functions/conversations": typeof functions_conversations;
   "functions/creditPacks": typeof functions_creditPacks;
+  "functions/crossVendorItemGroups": typeof functions_crossVendorItemGroups;
   "functions/csvImportTemplates": typeof functions_csvImportTemplates;
   "functions/customers": typeof functions_customers;
   "functions/documentInbox": typeof functions_documentInbox;
@@ -239,7 +247,13 @@ declare const fullApi: ApiFromModules<{
   "functions/teamCalendar": typeof functions_teamCalendar;
   "functions/timesheets": typeof functions_timesheets;
   "functions/users": typeof functions_users;
+  "functions/vendorIntelligenceMCP": typeof functions_vendorIntelligenceMCP;
+  "functions/vendorItemMatching": typeof functions_vendorItemMatching;
+  "functions/vendorPriceAnomalies": typeof functions_vendorPriceAnomalies;
   "functions/vendorPriceHistory": typeof functions_vendorPriceHistory;
+  "functions/vendorRecommendedActions": typeof functions_vendorRecommendedActions;
+  "functions/vendorRiskProfiles": typeof functions_vendorRiskProfiles;
+  "functions/vendorScorecards": typeof functions_vendorScorecards;
   "functions/vendors": typeof functions_vendors;
   "functions/webhooks": typeof functions_webhooks;
   "functions/workSchedules": typeof functions_workSchedules;
