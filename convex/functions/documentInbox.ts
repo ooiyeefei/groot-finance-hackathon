@@ -364,22 +364,18 @@ export const manuallyClassifyDocument = mutation({
     classifiedBy: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
     // Get inbox entry
     const inboxEntry = await ctx.db.get(args.inboxEntryId);
     if (!inboxEntry) {
       throw new Error("Document not found");
     }
 
-    // Update classification
-    await ctx.db.patch(args.inboxEntryId, {
-      manuallyClassifiedType: args.classifiedType,
-      classifiedBy: args.classifiedBy,
-      classifiedAt: Date.now(),
-      status: "classifying",
-      updatedAt: Date.now(),
-    });
-
-    // Determine destination domain
+    // Determine destination
     let destinationDomain: "expense_claims" | "invoices" | "einvoice";
     if (args.classifiedType === "receipt") {
       destinationDomain = "expense_claims";
@@ -389,20 +385,75 @@ export const manuallyClassifyDocument = mutation({
       destinationDomain = "invoices";
     }
 
-    // Route document (will call internal routing logic)
-    // For now, we'll just update the status - actual routing happens in background task
+    let destinationRecordId: string | null = null;
+
+    // Route receipt → find/create draft submission → create expense claim
+    if (args.classifiedType === "receipt") {
+      // Find existing draft submission for this user, or create one
+      let submission = await ctx.db
+        .query("expense_submissions")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("businessId"), inboxEntry.businessId),
+            q.eq(q.field("userId"), inboxEntry.userId),
+            q.eq(q.field("status"), "draft")
+          )
+        )
+        .order("desc")
+        .first();
+
+      if (!submission) {
+        // Create new draft submission
+        const now = new Date();
+        const title = `Email Forwarded - ${now.toLocaleString("en-US", { month: "short", day: "numeric" })} ${now.getFullYear()}`;
+        const submissionId = await ctx.db.insert("expense_submissions", {
+          businessId: inboxEntry.businessId,
+          userId: inboxEntry.userId,
+          title,
+          status: "draft",
+          updatedAt: Date.now(),
+        });
+        submission = await ctx.db.get(submissionId);
+      }
+
+      // Get file URL for the expense claim
+      const fileUrl = await ctx.storage.getUrl(inboxEntry.fileStorageId);
+
+      // Create expense claim linked to submission
+      const claimId = await ctx.db.insert("expense_claims", {
+        businessId: inboxEntry.businessId,
+        userId: inboxEntry.userId,
+        submissionId: submission!._id,
+        businessPurpose: `Forwarded: ${inboxEntry.emailMetadata.subject || inboxEntry.originalFilename}`,
+        storagePath: inboxEntry.fileStorageId,
+        fileName: inboxEntry.originalFilename,
+        fileType: inboxEntry.mimeType,
+        status: "draft",
+        sourceType: "email_forward",
+        updatedAt: Date.now(),
+      });
+
+      destinationRecordId = claimId;
+    }
+
+    // Update inbox entry status
     await ctx.db.patch(args.inboxEntryId, {
+      manuallyClassifiedType: args.classifiedType,
+      classifiedBy: args.classifiedBy,
+      classifiedAt: Date.now(),
       destinationDomain,
+      destinationRecordId: destinationRecordId as any,
       status: "routed",
       updatedAt: Date.now(),
     });
 
-    // Return success - actual destination record will be created by background task
     return {
       success: true,
       destinationDomain,
-      destinationRecordId: inboxEntry._id as any, // Placeholder
-      message: `Document classified as ${args.classifiedType} and routed successfully`,
+      destinationRecordId,
+      message: args.classifiedType === "receipt"
+        ? "Receipt added to your expense submission draft"
+        : `Document classified as ${args.classifiedType} and routed`,
     };
   },
 });
