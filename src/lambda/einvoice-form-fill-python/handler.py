@@ -25,11 +25,6 @@ import asyncio
 from playwright.sync_api import sync_playwright, Page, Browser
 
 
-def _no_running_loop():
-    """Raise RuntimeError to trick Playwright's asyncio loop detection."""
-    raise RuntimeError("no running event loop")
-
-
 def _start_playwright():
     """Start sync Playwright, bypassing asyncio loop detection.
 
@@ -37,10 +32,20 @@ def _start_playwright():
     Lambda Python 3.12 always has a running loop. nest_asyncio makes nested
     event loops work, but Playwright checks BEFORE trying — it calls
     asyncio.get_running_loop() in start() and raises immediately.
-    Temporarily hide the running loop during the start() call.
+
+    Fix: patch get_running_loop to raise ONLY on the first call (the check),
+    then restore for all subsequent calls so internal asyncio code works.
     """
     orig = asyncio.get_running_loop
-    asyncio.get_running_loop = _no_running_loop
+    _bypassed = [False]
+
+    def _bypass_once():
+        if not _bypassed[0]:
+            _bypassed[0] = True
+            raise RuntimeError("no running event loop")
+        return orig()
+
+    asyncio.get_running_loop = _bypass_once
     try:
         return sync_playwright().start()
     finally:
