@@ -198,9 +198,14 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
       setIsCheckingDuplicates(true)
       const flaggedClaims: Array<{ claim: any; duplicates: any[] }> = []
 
+      console.log(`[Batch Duplicate Check] Checking ${data.claims.length} claims, businessId=${businessId}`)
       for (const claim of data.claims) {
+        console.log(`[Batch Duplicate Check] Claim: vendor=${claim.vendorName}, date=${claim.transactionDate}, amount=${claim.totalAmount}, currency=${claim.currency}, status=${claim.status}`)
         // Skip claims without complete data
-        if (!claim.vendorName || !claim.transactionDate || !claim.totalAmount || !claim.currency) continue
+        if (!claim.vendorName || !claim.transactionDate || !claim.totalAmount || !claim.currency) {
+          console.log(`[Batch Duplicate Check] SKIPPED — missing data`)
+          continue
+        }
         // Skip claims already confirmed as duplicates (but still check 'dismissed' and 'potential' — re-verify)
         if ((claim as any).duplicateStatus === 'confirmed') continue
 
@@ -219,10 +224,12 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
             }),
           })
           const result = await response.json()
+          console.log(`[Batch Duplicate Check] Claim ${claim._id} (${claim.vendorName}): success=${result.success}, hasDuplicates=${result.data?.hasDuplicates}, matches=${result.data?.matches?.length}, error=${result.error}`)
           if (result.success && result.data?.hasDuplicates && result.data?.matches?.length > 0) {
             flaggedClaims.push({ claim, duplicates: result.data.matches })
           }
-        } catch {
+        } catch (checkError) {
+          console.error(`[Batch Duplicate Check] Error checking claim ${claim._id}:`, checkError)
           // Non-fatal: if check fails, proceed without blocking
         }
       }
