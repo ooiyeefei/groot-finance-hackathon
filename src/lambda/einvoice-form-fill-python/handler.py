@@ -75,8 +75,32 @@ def _rate_limit_domain(url: str):
 SCREEN_W, SCREEN_H = 1440, 900
 MAX_TURNS = 50
 CONVEX_URL = os.environ.get("NEXT_PUBLIC_CONVEX_URL", "")
-GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_KEY_SSM = os.environ.get("GEMINI_API_KEY_SSM_PARAM", "/finanseal/gemini-api-key")
 BU_LAMBDA_ARN = os.environ.get("EINVOICE_FORM_FILL_BU_LAMBDA_ARN", "")
+
+# ── Gemini API key (SSM, cached for warm starts) ────────────
+_gemini_key_cache: str | None = None
+
+def _get_gemini_key() -> str:
+    """Read Gemini API key from SSM (cached for Lambda warm starts).
+    Falls back to GEMINI_API_KEY env var for backward compatibility."""
+    global _gemini_key_cache
+    if _gemini_key_cache:
+        return _gemini_key_cache
+    # Try SSM first
+    try:
+        import boto3
+        ssm_client = boto3.client("ssm")
+        resp = ssm_client.get_parameter(Name=GEMINI_KEY_SSM, WithDecryption=True)
+        _gemini_key_cache = resp["Parameter"]["Value"]
+        return _gemini_key_cache
+    except Exception as e:
+        print(f"[Config] SSM read for Gemini key failed: {e}")
+    # Fall back to env var (backward compat during migration)
+    fallback = os.environ.get("GEMINI_API_KEY", "")
+    if fallback:
+        _gemini_key_cache = fallback
+    return fallback
 BB_API_KEY_SSM = os.environ.get("BROWSERBASE_API_KEY_SSM_PARAM", "/finanseal/browserbase-api-key")
 BB_PROJECT_ID_SSM = os.environ.get("BROWSERBASE_PROJECT_ID_SSM_PARAM", "/finanseal/browserbase-project-id")
 
@@ -491,7 +515,7 @@ def _debug_fields() -> dict:
 
 def gemini_cua(contents: list[dict]) -> dict:
     """Call Gemini CUA model (computer use agent)."""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-computer-use-preview-10-2025:generateContent?key={GEMINI_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-computer-use-preview-10-2025:generateContent?key={_get_gemini_key()}"
     payload = {
         "contents": contents,
         "tools": [{"computerUse": {"environment": "ENVIRONMENT_BROWSER"}}],
@@ -516,7 +540,7 @@ def gemini_cua(contents: list[dict]) -> dict:
 
 def gemini_flash(prompt: str, image_b64: str) -> str:
     """Call Gemini Flash for vision analysis (recon / troubleshooting)."""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key={GEMINI_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key={_get_gemini_key()}"
     payload = {
         "contents": [{"role": "user", "parts": [
             {"text": prompt},
@@ -2282,7 +2306,7 @@ def _init_dspy():
     """Lazy-initialize DSPy with Gemini Flash-Lite. Call once per troubleshoot/recon invocation."""
     os.environ["DSPY_CACHEDIR"] = "/tmp/dspy_cache"
     import dspy as _dspy
-    lm = _dspy.LM("gemini/gemini-3.1-flash-lite-preview", api_key=GEMINI_KEY, max_tokens=2048, temperature=0.1)
+    lm = _dspy.LM("gemini/gemini-3.1-flash-lite-preview", api_key=_get_gemini_key(), max_tokens=2048, temperature=0.1)
     _dspy.settings.configure(lm=lm, adapter=_dspy.JSONAdapter())
     return _dspy
 
@@ -2613,8 +2637,8 @@ def handler(event: dict, context=None) -> dict:
     receipt_image_local: str | None = None  # Temp file path for form upload (cleaned up in finally)
 
     try:
-        if not GEMINI_KEY:
-            raise RuntimeError("GEMINI_API_KEY not configured")
+        if not _get_gemini_key():
+            raise RuntimeError("GEMINI_API_KEY not configured (check SSM /finanseal/gemini-api-key)")
 
         # Report starting
         convex_mutation("functions/system:reportEinvoiceFormFillResult", {

@@ -166,11 +166,17 @@ export class DocumentProcessingStack extends cdk.Stack {
       timeout: cdk.Duration.minutes(8), // Long forms (MR. D.I.Y. = 20+ fields) need up to 7 min
       logGroup: formFillLogGroup,
       environment: {
-        GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
         NEXT_PUBLIC_CONVEX_URL: 'https://kindhearted-lynx-129.convex.cloud',
         PLAYWRIGHT_BROWSERS_PATH: '/opt/pw-browsers',
       },
     });
+
+    // Gemini API key (SSM SecureString) — read at runtime, never baked into env
+    const geminiKeyParam = ssm.StringParameter.fromSecureStringParameterAttributes(this, 'GeminiApiKey', {
+      parameterName: '/finanseal/gemini-api-key',
+    });
+    geminiKeyParam.grantRead(formFillFunction);
+    formFillFunction.addEnvironment('GEMINI_API_KEY_SSM_PARAM', '/finanseal/gemini-api-key');
 
     // CapSolver API key (SSM SecureString) — read at runtime, not baked into env
     const capsolverParam = ssm.StringParameter.fromSecureStringParameterAttributes(this, 'CapsolverKey', {
