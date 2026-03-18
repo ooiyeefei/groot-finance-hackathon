@@ -2736,6 +2736,22 @@ def handler(event: dict, context=None) -> dict:
             url = f"https://99einvoice.com/?ReceiptDetails={receipt_b64}"
             print(f"[Form Fill] 99SM: Constructed URL from receipt data: {receipt_payload}")
 
+        # Pre-flight: check if HTTPS is reachable. Some merchants (e.g. Din Tai Fung)
+        # have broken TLS (port 443 refuses) but serve fine on HTTP port 80.
+        # Check once here to avoid wasting time on Browserbase escalation.
+        if url.startswith("https://"):
+            import socket
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            hostname = parsed.hostname
+            try:
+                sock = socket.create_connection((hostname, 443), timeout=5)
+                sock.close()
+            except (socket.timeout, ConnectionRefusedError, OSError) as sock_err:
+                http_url = "http://" + url[len("https://"):]
+                print(f"[Browser] HTTPS pre-flight failed for {hostname}:443 ({sock_err}), switching to HTTP: {http_url}")
+                url = http_url
+
         # Launch browser — Browserbase for Cloudflare-managed merchants, local for everything else
         pw = _start_playwright()
         use_bb = needs_browserbase(merchant_hints)
