@@ -27,6 +27,26 @@ export default async function DspyObservabilityPage() {
     redirect("/sign-in");
   }
 
+  // Restrict to Groot team members only
+  const { sessionClaims } = await auth();
+  const userEmail = sessionClaims?.email as string | undefined;
+
+  if (!userEmail?.endsWith("@hellogroot.com")) {
+    return (
+      <ClientProviders>
+        <div className="flex h-screen bg-background items-center justify-center">
+          <div className="text-center space-y-4">
+            <h1 className="text-2xl font-semibold text-foreground">Access Denied</h1>
+            <p className="text-muted-foreground max-w-md">
+              This dashboard is for Groot team members only. If you believe this is an error,
+              please contact your administrator.
+            </p>
+          </div>
+        </div>
+      </ClientProviders>
+    );
+  }
+
   return (
     <ClientProviders>
       <div className="flex h-screen bg-background">
