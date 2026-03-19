@@ -21,6 +21,7 @@
 
 import { S3Client, GetObjectCommand, CopyObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { SESClient, SendRawEmailCommand } from "@aws-sdk/client-ses";
+import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { simpleParser, ParsedMail } from "mailparser";
 import { Readable } from "stream";
@@ -72,12 +73,37 @@ interface ClassificationResult {
 
 const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
 const ses = new SESClient({ region: process.env.AWS_REGION || "us-west-2" });
+const ssmClient = new SSMClient({ region: process.env.AWS_REGION || "us-west-2" });
 const lambdaClient = new LambdaClient({ region: process.env.AWS_REGION || "us-west-2" });
 const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL || "";
 const S3_BUCKET = process.env.S3_BUCKET_NAME || "finanseal-bucket";
-const GEMINI_KEY = process.env.GEMINI_API_KEY || "";
+let GEMINI_KEY = process.env.GEMINI_API_KEY || "";
 const FORWARD_FROM = "noreply@notifications.hellogroot.com";
 const FORM_FILL_LAMBDA_ARN = process.env.EINVOICE_FORM_FILL_LAMBDA_ARN || "";
+
+/**
+ * Resolve GEMINI_API_KEY from SSM SecureString at cold start.
+ * Cached across invocations via the module-level variable + process.env.
+ */
+async function resolveGeminiKey(): Promise<void> {
+  if (GEMINI_KEY) return; // Already resolved or set directly
+  const ssmParam = process.env.GEMINI_API_KEY_SSM_PARAM;
+  if (!ssmParam) {
+    console.log("[Init] No GEMINI_API_KEY or GEMINI_API_KEY_SSM_PARAM — Gemini classification disabled");
+    return;
+  }
+  try {
+    const result = await ssmClient.send(new GetParameterCommand({
+      Name: ssmParam,
+      WithDecryption: true,
+    }));
+    GEMINI_KEY = result.Parameter?.Value || "";
+    process.env.GEMINI_API_KEY = GEMINI_KEY; // Also set for document-forward-handler
+    console.log(`[Init] Resolved GEMINI_API_KEY from SSM (${ssmParam})`);
+  } catch (err) {
+    console.log(`[Init] Failed to resolve GEMINI_API_KEY from SSM: ${err}`);
+  }
+}
 
 // ── HTTP helpers ───────────────────────────────────────────
 
@@ -275,6 +301,9 @@ Respond in JSON only:
 
 export async function handler(event: SESEvent) {
   const startTime = Date.now();
+
+  // Resolve GEMINI_API_KEY from SSM on first invocation (cold start)
+  await resolveGeminiKey();
 
   for (const record of event.Records) {
     const ses = record.ses;
