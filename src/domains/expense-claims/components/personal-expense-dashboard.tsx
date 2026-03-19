@@ -8,10 +8,12 @@
 
 import { useState, useEffect, useCallback, lazy, Suspense, useMemo } from 'react'
 import { useSearchParams, useRouter, useParams } from 'next/navigation'
-import { FileText, Clock, CheckCircle, XCircle, Edit3, BarChart3, Eye, Trash2, Loader2, RotateCcw, Brain, AlertCircle, Send, AlertTriangle } from 'lucide-react'
+import { FileText, Clock, CheckCircle, XCircle, Edit3, BarChart3, Eye, Trash2, Loader2, RotateCcw, Brain, AlertCircle, Send, AlertTriangle, Search, Filter } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import ExpenseStatusBadge from './expense-status-badge'
 import DuplicateBadge from './duplicate-badge'
 import EinvoiceStatusBadge from './einvoice-status-badge'
@@ -68,7 +70,7 @@ export default function PersonalExpenseDashboard({ userId }: PersonalExpenseDash
     deleting: convexDeleting,
     submitClaim: convexSubmitClaim,
     submitting: convexSubmitting,
-  } = useExpenseClaimsRealtime(businessId, { limit: 10 })
+  } = useExpenseClaimsRealtime(businessId, { limit: 500 })
 
   // Fetch expense categories for displaying category names instead of IDs
   const { categories, loading: categoriesLoading } = useExpenseCategories({ includeDisabled: true })
@@ -552,8 +554,23 @@ function ExpenseClaimCard({ claim, index, context, categories, setEditingClaimId
   handleReprocessClick: (claimId: string, storagePath: string) => Promise<void>
   reprocessingClaims: Set<string>
 }) {
+  const handleCardClick = () => {
+    // Processing states — no modal to open yet
+    const processingStates = ['uploading', 'analyzing', 'classifying', 'processing']
+    if (processingStates.includes(claim.status)) return
+
+    const isDraft = claim.status === 'draft' || claim.status === 'failed' || claim.status === 'classification_failed'
+    if (isDraft) {
+      setEditingClaimId(claim.id)
+      setShowEditModal(true)
+    } else {
+      setDetailsClaimId(claim.id)
+      setShowDetailsModal(true)
+    }
+  }
+
   return (
-    <div key={`${context}-${claim.id}-${index}`} className={`p-${context === 'overview' ? '3' : '4'} bg-muted/50 rounded-lg border border-border min-h-[140px] ${context === 'history' ? 'hover:border-muted-foreground transition-colors' : ''}`}>
+    <div key={`${context}-${claim.id}-${index}`} onClick={handleCardClick} className={`p-${context === 'overview' ? '3' : '4'} bg-muted/50 rounded-lg border border-border min-h-[140px] cursor-pointer ${context === 'history' ? 'hover:border-muted-foreground transition-colors' : 'hover:border-muted-foreground transition-colors'}`}>
       {/* Claim Header */}
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1">
@@ -726,7 +743,7 @@ function ExpenseClaimCard({ claim, index, context, categories, setEditingClaimId
       )}
 
       {/* Action buttons - Unified row for all claim states */}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className="mt-3 flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
         {/* Draft claim actions */}
         {claim.status === 'draft' && (
           <>
@@ -772,7 +789,7 @@ function ExpenseClaimCard({ claim, index, context, categories, setEditingClaimId
           <Button
             onClick={() => handleReprocessClick(claim.id, claim.storage_path)}
             disabled={reprocessingClaims.has(claim.id)}
-            variant="primary"
+            className="bg-secondary hover:bg-secondary/80 text-secondary-foreground"
             size="sm"
           >
             {reprocessingClaims.has(claim.id) ? (
@@ -810,7 +827,7 @@ function ExpenseClaimCard({ claim, index, context, categories, setEditingClaimId
               <Button
                 onClick={() => handleReprocessClick(claim.id, claim.storage_path)}
                 disabled={reprocessingClaims.has(claim.id)}
-                variant="primary"
+                className="bg-secondary hover:bg-secondary/80 text-secondary-foreground"
                 size="sm"
               >
                 {reprocessingClaims.has(claim.id) ? (
@@ -861,6 +878,17 @@ function ExpenseClaimCard({ claim, index, context, categories, setEditingClaimId
   )
 }
 
+// Status options for the filter dropdown
+const STATUS_OPTIONS = [
+  { value: 'all', label: 'All Statuses' },
+  { value: 'draft', label: 'Draft' },
+  { value: 'submitted', label: 'Submitted' },
+  { value: 'approved', label: 'Approved' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'reimbursed', label: 'Reimbursed' },
+  { value: 'failed', label: 'Failed' },
+] as const
+
 // Personal History Content - Now uses unified card
 function PersonalHistoryContent({ data, categories, setEditingClaimId, setShowEditModal, setDetailsClaimId, setShowDetailsModal, deleteClaim, submitClaim, submittingClaims, fetchDashboardData, setToastMessage, setToastType, handleReprocessClick, reprocessingClaims }: {
   data: PersonalDashboardData
@@ -878,6 +906,53 @@ function PersonalHistoryContent({ data, categories, setEditingClaimId, setShowEd
   handleReprocessClick: (claimId: string, storagePath: string) => Promise<void>
   reprocessingClaims: Set<string>
 }) {
+  const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+
+  // Client-side filtering
+  const filteredClaims = useMemo(() => {
+    let claims = data.recent_claims
+
+    // Search filter — case-insensitive substring match across key fields
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase()
+      claims = claims.filter((claim: any) => {
+        const vendorName = (claim.vendor_name || claim.transaction?.vendor_name || '').toLowerCase()
+        const description = (claim.transaction?.description || claim.description || '').toLowerCase()
+        const amount = String(claim.total_amount || '')
+        const category = getCategoryName(claim.expense_category, categories).toLowerCase()
+        return vendorName.includes(q) || description.includes(q) || amount.includes(q) || category.includes(q)
+      })
+    }
+
+    // Status filter
+    if (statusFilter !== 'all') {
+      claims = claims.filter((claim: any) => claim.status === statusFilter)
+    }
+
+    // Date range filter — uses transaction_date or created_at
+    if (dateFrom) {
+      claims = claims.filter((claim: any) => {
+        const claimDate = claim.transaction_date || claim.transaction?.transaction_date || ''
+        if (!claimDate) return true
+        return claimDate >= dateFrom
+      })
+    }
+    if (dateTo) {
+      claims = claims.filter((claim: any) => {
+        const claimDate = claim.transaction_date || claim.transaction?.transaction_date || ''
+        if (!claimDate) return true
+        return claimDate <= dateTo
+      })
+    }
+
+    return claims
+  }, [data.recent_claims, searchQuery, statusFilter, dateFrom, dateTo, categories])
+
+  const hasActiveFilters = searchQuery.trim() !== '' || statusFilter !== 'all' || dateFrom !== '' || dateTo !== ''
+
   return (
     <Card className="bg-card border-border">
       <CardHeader>
@@ -885,15 +960,100 @@ function PersonalHistoryContent({ data, categories, setEditingClaimId, setShowEd
         <CardDescription>All your expense claims over time</CardDescription>
       </CardHeader>
       <CardContent>
+        {/* Filters and Search Bar */}
+        <div className="mb-4 space-y-3">
+          {/* Search bar */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by vendor, description, amount, or category..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+
+          {/* Filter row */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Status filter */}
+            <div className="w-[180px]">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger>
+                  <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
+                  <SelectValue placeholder="All Statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Date from */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">From</span>
+              <Input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="w-[150px]"
+              />
+            </div>
+
+            {/* Date to */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">To</span>
+              <Input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="w-[150px]"
+              />
+            </div>
+
+            {/* Clear filters */}
+            {hasActiveFilters && (
+              <Button
+                onClick={() => {
+                  setSearchQuery('')
+                  setStatusFilter('all')
+                  setDateFrom('')
+                  setDateTo('')
+                }}
+                className="bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+                size="sm"
+              >
+                Clear Filters
+              </Button>
+            )}
+          </div>
+
+          {/* Result count */}
+          {hasActiveFilters && (
+            <p className="text-xs text-muted-foreground">
+              Showing {filteredClaims.length} of {data.recent_claims.length} claims
+            </p>
+          )}
+        </div>
+
         {data.recent_claims.length === 0 ? (
           <div className="text-center text-muted-foreground py-12">
             <FileText className="w-12 h-12 mx-auto mb-4" />
             <p>No expense history yet</p>
             <p className="text-sm">Your submitted claims will appear here</p>
           </div>
+        ) : filteredClaims.length === 0 ? (
+          <div className="text-center text-muted-foreground py-12">
+            <Search className="w-12 h-12 mx-auto mb-4" />
+            <p>No matching claims found</p>
+            <p className="text-sm">Try adjusting your search or filters</p>
+          </div>
         ) : (
           <div className="space-y-4">
-            {data.recent_claims.map((claim: any, index: number) => (
+            {filteredClaims.map((claim: any, index: number) => (
               <ExpenseClaimCard
                 key={`history-${claim.id}-${index}`}
                 claim={claim}

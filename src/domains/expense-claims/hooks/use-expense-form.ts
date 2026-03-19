@@ -926,12 +926,23 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
 
         const claimData = statusResult.data
         const processingMetadata = claimData.processing_metadata || {}
+        const claimStatus = claimData.status
 
-        console.log(`[useExpenseForm] Polling attempt ${attempts + 1}, metadata:`, {
+        console.log(`[useExpenseForm] Polling attempt ${attempts + 1}, status: ${claimStatus}, metadata:`, {
           hasMetadata: !!processingMetadata,
           extractionMethod: processingMetadata.extraction_method,
           confidenceScore: processingMetadata.confidence_score
         })
+
+        // Check for error states — stop polling immediately
+        if (claimStatus === 'classification_failed') {
+          const errorMsg = processingMetadata.error_message || 'Document classification failed. Please try uploading a clearer image.'
+          throw new Error(errorMsg)
+        }
+        if (claimStatus === 'failed') {
+          const errorMsg = processingMetadata.error_message || 'Processing failed. Please try again.'
+          throw new Error(errorMsg)
+        }
 
         // Check if new extraction data is available
         if (processingMetadata.financial_data && processingMetadata.extraction_timestamp) {

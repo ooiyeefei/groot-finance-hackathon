@@ -241,7 +241,7 @@ export default function LeaveApprovalsContent({ onRefreshNeeded }: LeaveApproval
               endDate: string;
               totalDays: number;
               notes?: string;
-              employee?: { fullName?: string; email?: string };
+              user?: { fullName?: string; email?: string } | null;
             }) => {
               const leaveType = leaveTypeMap.get(request.leaveTypeId);
 
@@ -270,7 +270,7 @@ export default function LeaveApprovalsContent({ onRefreshNeeded }: LeaveApproval
                   {/* Employee Info */}
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <User className="w-4 h-4" />
-                    <span>{request.employee?.fullName || request.employee?.email || 'Unknown Employee'}</span>
+                    <span>{request.user?.fullName || request.user?.email || 'Unknown Employee'}</span>
                   </div>
 
                   {/* Date Range */}
@@ -310,16 +310,15 @@ export default function LeaveApprovalsContent({ onRefreshNeeded }: LeaveApproval
                     <Button
                       size="sm"
                       onClick={() => openActionDialog(request._id, 'approve')}
-                      className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                      className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
                     >
                       <CheckCircle className="w-4 h-4 mr-1" />
                       Approve
                     </Button>
                     <Button
                       size="sm"
-                      variant="outline"
                       onClick={() => openActionDialog(request._id, 'reject')}
-                      className="flex-1 border-red-500/50 text-red-600 hover:bg-red-500/10"
+                      className="flex-1 bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                     >
                       <XCircle className="w-4 h-4 mr-1" />
                       Reject
@@ -361,13 +360,13 @@ export default function LeaveApprovalsContent({ onRefreshNeeded }: LeaveApproval
                 />
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <Button variant="outline" onClick={() => setActionType(null)}>
+                <Button onClick={() => setActionType(null)} className="bg-secondary hover:bg-secondary/80 text-secondary-foreground">
                   Cancel
                 </Button>
                 <Button
                   onClick={handleApprove}
                   disabled={isApproving}
-                  className="bg-green-600 hover:bg-green-700 text-white"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
                 >
                   {isApproving ? (
                     <>
@@ -422,7 +421,7 @@ export default function LeaveApprovalsContent({ onRefreshNeeded }: LeaveApproval
                 )}
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <Button variant="outline" onClick={() => setActionType(null)}>
+                <Button onClick={() => setActionType(null)} className="bg-secondary hover:bg-secondary/80 text-secondary-foreground">
                   Cancel
                 </Button>
                 <Button

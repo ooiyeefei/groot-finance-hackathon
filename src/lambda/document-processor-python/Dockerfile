@@ -28,7 +28,7 @@ RUN pip install --no-cache-dir \
     --only-binary=numpy,tiktoken,zxing-cpp,pillow-heif,pyzbar \
     -r requirements.txt
 
-# Copy function code
+# Copy function code (SSM resolution added 2026-03-19)
 COPY handler.py ${LAMBDA_TASK_ROOT}/
 COPY types_def.py ${LAMBDA_TASK_ROOT}/
 COPY steps/ ${LAMBDA_TASK_ROOT}/steps/

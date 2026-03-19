@@ -378,6 +378,7 @@ export default function PaymentProcessingTab() {
                 size="sm"
                 onClick={() => setShowPaymentDialog(true)}
                 disabled={selectedClaims.size === 0 || isProcessing}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
               >
                 {isProcessing ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -526,7 +527,7 @@ export default function PaymentProcessingTab() {
                 <Button variant="outline" size="sm" onClick={() => setShowPaymentDialog(false)}>
                   Cancel
                 </Button>
-                <Button size="sm" onClick={handleMarkAsPaid} disabled={isProcessing}>
+                <Button size="sm" onClick={handleMarkAsPaid} disabled={isProcessing} className="bg-primary hover:bg-primary/90 text-primary-foreground">
                   {isProcessing ? (
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   ) : (

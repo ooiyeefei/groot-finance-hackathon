@@ -70,6 +70,14 @@ def validate_document_step(
     except Exception as e:
         error_msg = f"Validation failed: {str(e)}"
         print(f"[{document_id}] {error_msg}")
+
+        # Infra errors (missing API key, network, rate limit) should NOT reject
+        # the document as "invalid". Re-raise so the workflow retries or fails
+        # with a proper error status instead of classification_failed.
+        infra_error_keywords = ["API_KEY", "api_key", "rate limit", "quota", "timeout", "connection", "503", "500"]
+        if any(kw in str(e) for kw in infra_error_keywords):
+            raise  # Let handler.py catch and mark as 'failed' (not 'classification_failed')
+
         return {
             "is_supported": False,
             "document_type": "unknown",

@@ -26,6 +26,7 @@ import {
   Eye,
   Copy,
   AlertTriangle,
+  ZoomIn,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -159,6 +160,7 @@ export default function UnifiedExpenseDetailsModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showDocument, setShowDocument] = useState(false)
+  const [showMobileImageOverlay, setShowMobileImageOverlay] = useState(false)
   const [categories, setCategories] = useState<DynamicExpenseCategory[]>([])
   const [signedImageUrl, setSignedImageUrl] = useState<string | null>(null)
   const [imageLoading, setImageLoading] = useState(false)
@@ -180,6 +182,7 @@ export default function UnifiedExpenseDetailsModal({
       setApprovalNotes('')
       setShowDuplicateReview(false)
       setDuplicateMatches([])
+      setShowMobileImageOverlay(false)
     }
   }, [isOpen])
 
@@ -559,13 +562,13 @@ export default function UnifiedExpenseDetailsModal({
                           {claimDetails.currency || claimDetails.transaction?.original_currency || 'MYR'} {parseFloat(claimDetails.total_amount || claimDetails.transaction?.original_amount || '0').toFixed(2)}
                         </span>
                       </div>
-                      <div className="hidden md:flex items-center gap-2">
-                        <Building className="w-5 h-5 text-primary" />
-                        <span className="font-semibold text-lg">{claimDetails.vendor_name || claimDetails.transaction?.vendor_name || 'N/A'}</span>
+                      <div className="flex items-center gap-1 md:gap-2">
+                        <Building className="w-4 md:w-5 h-4 md:h-5 text-primary" />
+                        <span className="font-semibold text-sm md:text-lg truncate max-w-[140px] md:max-w-none">{claimDetails.vendor_name || claimDetails.transaction?.vendor_name || 'N/A'}</span>
                       </div>
-                      <div className="hidden md:flex items-center gap-2">
-                        <Calendar className="w-5 h-5 text-foreground" />
-                        <span className="font-semibold text-lg">{new Date(claimDetails.transaction_date || claimDetails.transaction?.transaction_date || '').toLocaleDateString()}</span>
+                      <div className="flex items-center gap-1 md:gap-2">
+                        <Calendar className="w-4 md:w-5 h-4 md:h-5 text-foreground" />
+                        <span className="font-semibold text-sm md:text-lg">{formatBusinessDate(claimDetails.transaction_date || claimDetails.transaction?.transaction_date || '')}</span>
                       </div>
                     </div>
 
@@ -627,10 +630,10 @@ export default function UnifiedExpenseDetailsModal({
                   </div>
                 )}
 
-                {/* Bottom Section - Stacked on mobile, 40/60 Split on desktop */}
+                {/* Bottom Section - Single scroll on mobile, 40/60 Split on desktop */}
                 <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
-                  {/* Left Panel - Receipt Preview (full width mobile, 40% desktop) */}
-                  <div className="w-full md:w-2/5 border-b md:border-b-0 md:border-r border-record-border flex flex-col h-48 md:h-auto">
+                  {/* Left Panel - Receipt Preview (DESKTOP ONLY - hidden on mobile) */}
+                  <div className="hidden md:flex w-2/5 border-r border-record-border flex-col">
                     <div className="flex-1 bg-record-layer-1 overflow-hidden">
                       {imageLoading ? (
                         <div className="flex items-center justify-center h-full">
@@ -669,7 +672,53 @@ export default function UnifiedExpenseDetailsModal({
 
                   {/* Right Panel - Details and Line Items (full width mobile, 60% desktop) */}
                   <div className="w-full md:w-3/5 overflow-y-auto">
-                    <div className="p-6 space-y-6">
+                    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+                      {/* Mobile Receipt Preview — compact row with thumbnail + view button */}
+                      <div className="flex md:hidden items-center gap-3 bg-record-layer-2 rounded-lg border border-record-border p-3">
+                        {imageLoading ? (
+                          <div className="w-12 h-12 rounded bg-muted flex items-center justify-center shrink-0">
+                            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : signedImageUrl || claimDetails.document?.annotated_image_url ? (
+                          <button
+                            onClick={() => setShowMobileImageOverlay(true)}
+                            className="w-12 h-12 rounded bg-muted overflow-hidden shrink-0 relative group"
+                          >
+                            <img
+                              src={claimDetails.document?.annotated_image_url || signedImageUrl || ''}
+                              alt="Receipt"
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-black/30 opacity-0 group-active:opacity-100 flex items-center justify-center transition-opacity">
+                              <ZoomIn className="w-4 h-4 text-white" />
+                            </div>
+                          </button>
+                        ) : (
+                          <div className="w-12 h-12 rounded bg-muted flex items-center justify-center shrink-0">
+                            <Receipt className="w-5 h-5 text-muted-foreground" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {claimDetails.document?.original_filename || 'Receipt'}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {claimDetails.document?.file_type?.toUpperCase() || 'Image'} • {claimDetails.document?.ocr_processing_status?.replace('_', ' ') || 'Processed'}
+                          </p>
+                        </div>
+                        {(signedImageUrl || claimDetails.document?.annotated_image_url) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setShowMobileImageOverlay(true)}
+                            className="shrink-0"
+                          >
+                            <Eye className="w-4 h-4 mr-1" />
+                            View
+                          </Button>
+                        )}
+                      </div>
+
                       {/* Duplicate Detection Warning — shown ABOVE manager actions for visibility */}
                       {claimDetails.duplicateStatus && claimDetails.duplicateStatus !== 'none' && (
                         <Card className="bg-yellow-500/10 border-yellow-500/30">
@@ -1105,6 +1154,33 @@ export default function UnifiedExpenseDetailsModal({
           </CardContent>
         </div>
       </Card>
+
+      {/* Mobile Image Overlay — full-screen closeable preview */}
+      {showMobileImageOverlay && (signedImageUrl || claimDetails?.document?.annotated_image_url) && (
+        <div
+          className="fixed inset-0 bg-black/90 z-[110] flex flex-col md:hidden"
+          onClick={() => setShowMobileImageOverlay(false)}
+        >
+          <div className="flex items-center justify-between p-3 shrink-0">
+            <span className="text-white/70 text-sm truncate pr-4">
+              {claimDetails?.document?.original_filename || 'Receipt'}
+            </span>
+            <button
+              onClick={() => setShowMobileImageOverlay(false)}
+              className="bg-white/10 hover:bg-white/20 text-white rounded-full p-2 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-auto flex items-center justify-center p-2" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={claimDetails?.document?.annotated_image_url || signedImageUrl || ''}
+              alt="Receipt"
+              className="max-w-full max-h-full object-contain"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Document Viewer Modal - Full Screen */}
       {showDocument && claimDetails?.document?.annotated_image_url && (

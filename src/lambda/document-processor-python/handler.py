@@ -22,6 +22,24 @@ import traceback
 from typing import Any, Optional
 from dataclasses import dataclass
 
+# =============================================================================
+# Resolve GEMINI_API_KEY from SSM at cold start (BEFORE any imports that need it)
+# CDK sets GEMINI_API_KEY_SSM_PARAM='/finanseal/gemini-api-key' but Python code
+# reads GEMINI_API_KEY directly. This bridge fetches the actual key from SSM.
+# =============================================================================
+if not os.environ.get("GEMINI_API_KEY") and os.environ.get("GEMINI_API_KEY_SSM_PARAM"):
+    try:
+        import boto3
+        _ssm = boto3.client("ssm")
+        _param = _ssm.get_parameter(
+            Name=os.environ["GEMINI_API_KEY_SSM_PARAM"],
+            WithDecryption=True,
+        )
+        os.environ["GEMINI_API_KEY"] = _param["Parameter"]["Value"]
+        print(f"[SSM] Resolved GEMINI_API_KEY from {os.environ['GEMINI_API_KEY_SSM_PARAM']}")
+    except Exception as _ssm_err:
+        print(f"[SSM] ERROR: Failed to resolve GEMINI_API_KEY from SSM: {_ssm_err}")
+
 # Register HEIC/HEIF support with Pillow (iPhone photos)
 try:
     from pillow_heif import register_heif_opener
