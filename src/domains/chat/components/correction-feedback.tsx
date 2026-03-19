@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useMutation } from 'convex/react';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _api: any = require('../../../../convex/_generated/api').api;
-import { ThumbsDown } from 'lucide-react';
+import { ThumbsUp, ThumbsDown } from 'lucide-react';
 
 interface CorrectionFeedbackProps {
   messageId?: string;
@@ -51,6 +51,7 @@ export function CorrectionFeedback({
   const [correctionType, setCorrectionType] = useState<string | null>(null);
   const [correctedValue, setCorrectedValue] = useState<string>('');
   const [submitted, setSubmitted] = useState(false);
+  const [feedback, setFeedback] = useState<'positive' | 'negative' | null>(null);
 
   const submitCorrection = useMutation(_api.functions.chatCorrections.submit);
 
@@ -83,17 +84,55 @@ export function CorrectionFeedback({
 
   if (submitted) {
     return (
-      <span className="text-xs text-muted-foreground ml-2">
-        Thanks for the feedback!
+      <span className="inline-flex items-center gap-1 ml-2">
+        {feedback === 'positive' ? (
+          <ThumbsUp className="h-3.5 w-3.5 text-green-500" />
+        ) : (
+          <ThumbsDown className="h-3.5 w-3.5 text-destructive" />
+        )}
+        <span className="text-xs text-muted-foreground">Thanks!</span>
       </span>
     );
   }
 
   return (
     <span className="inline-flex items-center ml-2">
+      {/* Thumbs up = positive signal (confirms correct intent/tool/params) */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+        onClick={() => {
+          setFeedback('positive');
+          submitCorrection({
+            messageId,
+            conversationId,
+            correctionType: 'intent',
+            originalQuery,
+            originalIntent,
+            correctedIntent: originalIntent || 'personal_data',
+          }).then(() => {
+            setSubmitted(true);
+          }).catch(() => {
+            // Still show feedback even if save fails
+            setSubmitted(true);
+          });
+        }}
+        className={`p-1 rounded hover:bg-muted transition-colors ${
+          feedback === 'positive' ? 'text-green-500' : 'text-muted-foreground hover:text-foreground'
+        }`}
+        title="Good response"
+        aria-label="Good response"
+      >
+        <ThumbsUp className="h-3.5 w-3.5" />
+      </button>
+
+      {/* Thumbs down = negative signal → opens correction dropdown */}
+      <button
+        onClick={() => {
+          setFeedback('negative');
+          setIsOpen(!isOpen);
+        }}
+        className={`p-1 rounded hover:bg-muted transition-colors ${
+          feedback === 'negative' ? 'text-destructive' : 'text-muted-foreground hover:text-foreground'
+        }`}
         title="Report incorrect response"
         aria-label="Report incorrect response"
       >
@@ -122,7 +161,6 @@ export function CorrectionFeedback({
                   key={opt.value}
                   onClick={() => {
                     setCorrectedValue(opt.value);
-                    // Auto-submit for intent corrections
                     submitCorrection({
                       messageId,
                       conversationId,
@@ -137,6 +175,7 @@ export function CorrectionFeedback({
                         setSubmitted(false);
                         setCorrectionType(null);
                         setCorrectedValue('');
+                        setFeedback(null);
                       }, 1500);
                     });
                   }}
@@ -182,6 +221,7 @@ export function CorrectionFeedback({
               setIsOpen(false);
               setCorrectionType(null);
               setCorrectedValue('');
+              setFeedback(null);
             }}
             className="px-1 py-1 text-muted-foreground hover:text-foreground"
           >
