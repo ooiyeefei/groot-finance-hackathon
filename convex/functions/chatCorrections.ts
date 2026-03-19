@@ -7,6 +7,7 @@
 
 import { v } from "convex/values";
 import { mutation, internalQuery } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { getAuthenticatedUser } from "../lib/resolvers";
 
 /**
@@ -61,6 +62,19 @@ export const submit = mutation({
       createdBy: user.clerkUserId,
       createdAt: Date.now(),
       consumed: false,
+    });
+
+    // Record override for DSPy metrics (027-dspy-dash)
+    // Map correctionType to dashboard tool name
+    const toolMap: Record<string, string> = {
+      intent: "chat_intent",
+      tool_selection: "chat_tool_selector",
+      parameter_extraction: "chat_param_extractor",
+    };
+    const dashboardTool = toolMap[args.correctionType] || `chat_${args.correctionType}`;
+    await ctx.scheduler.runAfter(0, internal.functions.dspyMetrics.recordOverride, {
+      businessId: membership.businessId,
+      tool: dashboardTool,
     });
 
     return { correctionId };

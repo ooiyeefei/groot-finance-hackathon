@@ -46,7 +46,13 @@ export default function DspyDashboard() {
     );
   }
 
-  if (!overview || overview.length === 0) {
+  // Filter funnels to only show businesses with at least one correction
+  const funnelsWithData = (funnels || []).filter(
+    (funnel) => funnel.tools.some((tool) => tool.correctionCount > 0)
+  );
+
+  // Show empty state only if BOTH overview and funnels are empty
+  if ((!overview || overview.length === 0) && funnelsWithData.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
         <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
@@ -54,8 +60,8 @@ export default function DspyDashboard() {
         </div>
         <h3 className="text-lg font-semibold text-foreground mb-2">No DSPy Metrics Yet</h3>
         <p className="text-sm text-muted-foreground max-w-md">
-          Metrics will appear here once DSPy classification tools are invoked.
-          This includes fee classification, bank reconciliation, AR/PO matching, and vendor item matching.
+          Metrics will appear here once DSPy tools are used. This includes chat corrections, fee classification,
+          bank reconciliation, AR/PO matching, and vendor item matching.
         </p>
       </div>
     );
@@ -103,7 +109,7 @@ export default function DspyDashboard() {
       {selectedBusinessId ? (
         <BusinessDetail
           businessId={selectedBusinessId}
-          businessName={overview.find((b) => b.businessId === selectedBusinessId)?.businessName || ''}
+          businessName={overview?.find((b) => b.businessId === selectedBusinessId)?.businessName || funnelsWithData.find((f) => f.businessId === selectedBusinessId)?.businessName || ''}
           detail={businessDetail}
           loading={detailLoading}
           funnels={funnels?.find((f) => f.businessId === selectedBusinessId)?.tools || []}
@@ -112,20 +118,26 @@ export default function DspyDashboard() {
         />
       ) : (
         <>
-          {/* Health Overview — cross-business summary */}
-          <HealthOverview
-            businesses={overview}
-            onSelectBusiness={setSelectedBusinessId}
-          />
+          {/* Health Overview — cross-business summary (only if classification data exists) */}
+          {overview && overview.length > 0 && (
+            <HealthOverview
+              businesses={overview}
+              onSelectBusiness={setSelectedBusinessId}
+            />
+          )}
 
-          {/* Self-Improvement Panel — correction funnels */}
-          <SelfImprovementPanel
-            businesses={overview}
-            funnels={funnels || []}
-          />
+          {/* Self-Improvement Panel — correction funnels (always show if data exists) */}
+          {funnelsWithData.length > 0 && (
+            <SelfImprovementPanel
+              businesses={overview || []}
+              funnels={funnelsWithData}
+            />
+          )}
 
-          {/* Cost Panel */}
-          <CostPanel businesses={overview} />
+          {/* Cost Panel (only if classification data exists) */}
+          {overview && overview.length > 0 && (
+            <CostPanel businesses={overview} />
+          )}
         </>
       )}
     </div>

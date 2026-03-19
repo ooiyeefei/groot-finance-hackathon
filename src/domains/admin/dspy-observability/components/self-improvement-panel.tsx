@@ -8,6 +8,9 @@ const TOOL_LABELS: Record<string, string> = {
   match_orders: 'AR',
   match_po_invoice: 'PO',
   match_vendor_items: 'Vendor',
+  chat_intent: 'Chat Intent',
+  chat_tool_selector: 'Chat Tool',
+  chat_param_extractor: 'Chat Params',
 };
 
 function CorrectionBar({ count, threshold }: { count: number; threshold: number }) {
@@ -49,7 +52,7 @@ export function SelfImprovementPanel({ businesses, funnels }: SelfImprovementPan
         {funnels.map((biz) => (
           <div key={biz.businessId} className="bg-card border rounded-lg p-4">
             <h4 className="font-medium text-foreground mb-3">{biz.businessName}</h4>
-            <div className="grid grid-cols-5 gap-4">
+            <div className="grid grid-cols-4 lg:grid-cols-8 gap-4">
               {biz.tools.map((tool) => (
                 <div key={tool.tool}>
                   <div className="text-xs font-medium text-foreground mb-1">
@@ -68,7 +71,7 @@ export function SelfImprovementPanel({ businesses, funnels }: SelfImprovementPan
                 <div className="text-xs font-medium text-muted-foreground mb-2">
                   Confidence: Base vs BootstrapFewShot
                 </div>
-                <div className="grid grid-cols-5 gap-4">
+                <div className="grid grid-cols-4 lg:grid-cols-8 gap-4">
                   {businesses
                     .find((b) => b.businessId === biz.businessId)
                     ?.tools.map((tool) => {

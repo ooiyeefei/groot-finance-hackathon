@@ -9,6 +9,9 @@ const TOOL_LABELS: Record<string, string> = {
   match_orders: 'AR Matching',
   match_po_invoice: 'PO Matching',
   match_vendor_items: 'Vendor Items',
+  chat_intent: 'Chat Intent',
+  chat_tool_selector: 'Chat Tool Select',
+  chat_param_extractor: 'Chat Params',
 };
 
 function ToolHealthBadge({ tool }: { tool: ToolSummary }) {
@@ -79,7 +82,7 @@ export function HealthOverview({ businesses, onSelectBusiness }: HealthOverviewP
             </div>
 
             {/* Tool grid */}
-            <div className="grid grid-cols-5 gap-3">
+            <div className="grid grid-cols-4 lg:grid-cols-8 gap-3">
               {biz.tools.map((tool) => (
                 <div key={tool.tool} className="text-xs space-y-1">
                   <div className="flex items-center justify-between">

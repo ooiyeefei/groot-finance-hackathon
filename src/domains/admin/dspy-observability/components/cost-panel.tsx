@@ -8,6 +8,9 @@ const TOOL_LABELS: Record<string, string> = {
   match_orders: 'AR',
   match_po_invoice: 'PO',
   match_vendor_items: 'Vendor',
+  chat_intent: 'Chat Intent',
+  chat_tool_selector: 'Chat Tool',
+  chat_param_extractor: 'Chat Params',
 };
 
 function formatCost(usd: number): string {

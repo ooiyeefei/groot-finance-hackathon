@@ -467,6 +467,18 @@ export const _getCorrectionFunnels = internalQuery({
         .take(CORRECTION_CAP);
       toolCounts.push({ tool: "match_vendor_items", correctionCount: vendorCorrCount.length, threshold: 20 });
 
+      // Chat agent corrections — grouped by correctionType
+      const chatCorr = await ctx.db
+        .query("chat_agent_corrections")
+        .withIndex("by_businessId", (q) => q.eq("businessId", biz._id))
+        .take(CORRECTION_CAP);
+      const chatIntentCount = chatCorr.filter((c) => c.correctionType === "intent").length;
+      const chatToolCount = chatCorr.filter((c) => c.correctionType === "tool_selection").length;
+      const chatParamCount = chatCorr.filter((c) => c.correctionType === "parameter_extraction").length;
+      toolCounts.push({ tool: "chat_intent", correctionCount: chatIntentCount, threshold: 20 });
+      toolCounts.push({ tool: "chat_tool_selector", correctionCount: chatToolCount, threshold: 20 });
+      toolCounts.push({ tool: "chat_param_extractor", correctionCount: chatParamCount, threshold: 20 });
+
       result.push({
         businessId: biz._id as string,
         businessName: biz.name || "(unknown)",
