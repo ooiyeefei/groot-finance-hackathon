@@ -32,7 +32,7 @@ export function PaymentHistory({ invoiceId, currency, invoiceStatus }: PaymentHi
   const { businessId } = useActiveBusiness()
   const { payments, isLoading } = usePaymentsByInvoice(invoiceId)
   const recordReversal = useMutation(api.functions.payments.recordReversal)
-  const [isExpanded, setIsExpanded] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(true)
   const [reversingId, setReversingId] = useState<string | null>(null)
   const [isReversing, setIsReversing] = useState(false)
   const [error, setError] = useState<string | null>(null)
