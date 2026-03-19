@@ -21,6 +21,7 @@ import './cash-flow-dashboard'
 import './compliance-alert-card'
 import './budget-alert-card'
 import './spending-time-series'
+import './revenue-summary-card'
 
 // --- Fallback Card ---
 

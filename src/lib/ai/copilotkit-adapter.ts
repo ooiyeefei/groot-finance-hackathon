@@ -250,12 +250,12 @@ export async function* streamLangGraphAgent(
 
     // Always strip residual action card JSON from text (safety net for edge cases
     // where the regex extraction partially matched or the LLM used unusual formatting).
-    const ACTION_TYPES_PATTERN = 'invoice_posting|cash_flow_dashboard|compliance_alert|budget_alert|spending_time_series|anomaly_card|vendor_comparison|expense_approval'
+    const ACTION_TYPES_PATTERN = 'invoice_posting|cash_flow_dashboard|compliance_alert|budget_alert|spending_time_series|anomaly_card|vendor_comparison|expense_approval|revenue_summary'
     finalContent = finalContent
       // Strip ```actions ... ``` fenced blocks
       .replace(/(?:\\*`){3,}actions[\s\S]*?(?:\\*`){3,}/g, '')
       // Strip ```json blocks containing action card types
-      .replace(/(?:\\*`){3,}(?:json)?\s*\n\s*\[\s*\{[\s\S]*?"type"\s*:\s*"(?:invoice_posting|cash_flow_dashboard|compliance_alert|budget_alert|spending_time_series|anomaly_card|vendor_comparison|expense_approval)"[\s\S]*?(?:\\*`){3,}/g, '')
+      .replace(/(?:\\*`){3,}(?:json)?\s*\n\s*\[\s*\{[\s\S]*?"type"\s*:\s*"(?:invoice_posting|cash_flow_dashboard|compliance_alert|budget_alert|spending_time_series|anomaly_card|vendor_comparison|expense_approval|revenue_summary)"[\s\S]*?(?:\\*`){3,}/g, '')
       // Strip unfenced raw JSON arrays containing action card types (LLM sometimes
       // dumps [{"type": "invoice_posting", ...}] directly in the text without fencing)
       .replace(new RegExp(`\\[\\s*\\{[\\s\\S]*?"type"\\s*:\\s*"(?:${ACTION_TYPES_PATTERN})"[\\s\\S]*?\\}\\s*\\]`, 'g'), '')
@@ -490,6 +490,8 @@ function autoGenerateActionsFromToolResults(messages: BaseMessage[]): ActionCard
         if (budgetCard) actions.push(budgetCard)
         const timeSeriesCard = buildSpendingTimeSeriesFromTransactions(txns, content)
         if (timeSeriesCard) actions.push(timeSeriesCard)
+        const revenueCard = buildRevenueSummaryFromTransactions(txns, content)
+        if (revenueCard) actions.push(revenueCard)
       }
     }
   }
@@ -813,4 +815,61 @@ function formatMonthLabel(yyyyMm: string): string {
   const [year, month] = yyyyMm.split('-')
   const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   return `${names[parseInt(month, 10) - 1] || month} ${year}`
+}
+
+/** Build a revenue_summary card from parsed income transactions */
+function buildRevenueSummaryFromTransactions(txns: ParsedTransaction[], content: string): ActionCard | null {
+  // Only include income/revenue transactions
+  const incomeTxns = txns.filter(t =>
+    t.transactionType === 'Income' || t.transactionType === 'Sales Revenue'
+  )
+  if (incomeTxns.length === 0) return null
+
+  // Use dominant currency
+  const currencyCounts = new Map<string, number>()
+  for (const t of incomeTxns) {
+    currencyCounts.set(t.currency, (currencyCounts.get(t.currency) || 0) + 1)
+  }
+  const currency = [...currencyCounts.entries()].sort((a, b) => b[1] - a[1])[0][0]
+  const sameCurrencyTxns = incomeTxns.filter(t => t.currency === currency)
+
+  // Group by category (revenue source)
+  const sourceMap = new Map<string, { amount: number; count: number }>()
+  for (const t of sameCurrencyTxns) {
+    const key = t.category || 'Other Revenue'
+    const existing = sourceMap.get(key) || { amount: 0, count: 0 }
+    existing.amount += t.amount
+    existing.count += 1
+    sourceMap.set(key, existing)
+  }
+  if (sourceMap.size < 1) return null
+
+  const totalRevenue = sameCurrencyTxns.reduce((s, t) => s + t.amount, 0)
+
+  const sources = Array.from(sourceMap.entries())
+    .sort((a, b) => b[1].amount - a[1].amount)
+    .map(([name, data]) => ({
+      name,
+      amount: Math.round(data.amount * 100) / 100,
+      count: data.count,
+      percentOfTotal: totalRevenue > 0 ? Math.round((data.amount / totalRevenue) * 100) : 0,
+    }))
+
+  // Detect period from transaction dates
+  const months = new Set(sameCurrencyTxns.map(t => t.month))
+  const period = months.size === 1
+    ? formatMonthLabel([...months][0])
+    : `${formatMonthLabel([...months].sort()[0])} – ${formatMonthLabel([...months].sort().pop()!)}`
+
+  return {
+    type: 'revenue_summary',
+    id: `revenue-auto-${hashCode(content.slice(0, 200))}`,
+    data: {
+      period,
+      currency,
+      sources,
+      totalRevenue: Math.round(totalRevenue * 100) / 100,
+      transactionCount: sameCurrencyTxns.length,
+    },
+  }
 }
