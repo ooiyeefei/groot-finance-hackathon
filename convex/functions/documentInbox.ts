@@ -41,89 +41,25 @@ export const createInboxEntry = internalMutation({
     }),
   },
   handler: async (ctx, args) => {
-    // Check for duplicate by file hash (90-day window)
+    // Check for duplicate by file hash in document_inbox_entries (90-day window).
+    // Only checks inbox table (has fileHash). Does NOT scan expense_claims or invoices
+    // by filename — filename matching is too aggressive (same name ≠ same file).
     const ninetyDaysAgo = getNinetyDaysAgo();
 
-    // Check expense_claims table
-    const existingClaim = await ctx.db
-      .query("expense_claims")
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("businessId"), args.businessId),
-          q.gte(q.field("_creationTime"), ninetyDaysAgo)
-        )
+    const existingInboxEntry = await ctx.db
+      .query("document_inbox_entries")
+      .withIndex("by_business_fileHash", (q) =>
+        q.eq("businessId", args.businessId).eq("fileHash", args.fileHash)
       )
-      .collect();
+      .filter((q) => q.gte(q.field("_creationTime"), ninetyDaysAgo))
+      .first();
 
-    // Note: We don't have fileHash on expense_claims yet, so this is metadata check only
-    // For now, we'll just check if a similar file exists by name (simple check)
-    const claimDuplicate = existingClaim.find(
-      (claim) => claim.fileName === args.originalFilename
-    );
-
-    if (claimDuplicate) {
-      // Create inbox entry marked as duplicate
-      const inboxEntryId = await ctx.db.insert("document_inbox_entries", {
-        businessId: args.businessId,
-        userId: args.userId,
-        fileStorageId: args.fileStorageId,
-        originalFilename: args.originalFilename,
-        fileHash: args.fileHash,
-        fileSizeBytes: args.fileSizeBytes,
-        mimeType: args.mimeType,
-        sourceType: args.sourceType,
-        emailMetadata: args.emailMetadata,
-        status: "quarantined",
-        isDuplicate: true,
-        duplicateOriginalId: claimDuplicate._id,
-        updatedAt: Date.now(),
-      });
-
+    if (existingInboxEntry) {
       return {
-        inboxEntryId,
+        inboxEntryId: existingInboxEntry._id,
         triggerClassification: false,
         isDuplicate: true,
-        duplicateOriginalId: claimDuplicate._id,
-      };
-    }
-
-    // Check invoices table
-    const existingInvoice = await ctx.db
-      .query("invoices")
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("businessId"), args.businessId),
-          q.gte(q.field("_creationTime"), ninetyDaysAgo)
-        )
-      )
-      .collect();
-
-    const invoiceDuplicate = existingInvoice.find(
-      (invoice) => invoice.fileName === args.originalFilename
-    );
-
-    if (invoiceDuplicate) {
-      const inboxEntryId = await ctx.db.insert("document_inbox_entries", {
-        businessId: args.businessId,
-        userId: args.userId,
-        fileStorageId: args.fileStorageId,
-        originalFilename: args.originalFilename,
-        fileHash: args.fileHash,
-        fileSizeBytes: args.fileSizeBytes,
-        mimeType: args.mimeType,
-        sourceType: args.sourceType,
-        emailMetadata: args.emailMetadata,
-        status: "quarantined",
-        isDuplicate: true,
-        duplicateOriginalId: invoiceDuplicate._id,
-        updatedAt: Date.now(),
-      });
-
-      return {
-        inboxEntryId,
-        triggerClassification: false,
-        isDuplicate: true,
-        duplicateOriginalId: invoiceDuplicate._id,
+        duplicateOriginalId: existingInboxEntry._id,
       };
     }
 
