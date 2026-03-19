@@ -575,7 +575,7 @@ function ExpenseClaimCard({ claim, index, context, categories, setEditingClaimId
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1">
           <p className="text-foreground font-medium text-sm">
-            {claim.transaction?.description || claim.description || 'Expense Claim'}
+            {claim.vendor_name || claim.description || 'Expense Claim'}
           </p>
           <p className="text-muted-foreground text-xs">
             {getCategoryName(claim.expense_category, categories)} •
@@ -667,7 +667,15 @@ function ExpenseClaimCard({ claim, index, context, categories, setEditingClaimId
           {claim.status_display?.description ||
             (claim.status === 'draft'
               ? 'Ready for editing - click Edit to modify or Submit to proceed'
-              : 'Status pending update')
+              : claim.status === 'reimbursed'
+              ? 'Payment completed'
+              : claim.status === 'approved'
+              ? 'Approved — awaiting reimbursement'
+              : claim.status === 'submitted'
+              ? 'Pending manager approval'
+              : claim.status === 'rejected'
+              ? 'Rejected by manager'
+              : '')
           }
         </p>
       </div>

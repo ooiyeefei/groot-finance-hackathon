@@ -917,7 +917,7 @@ export default function UnifiedExpenseDetailsModal({
                           <div className="space-y-2">
                             <label className="text-muted-foreground text-sm">Description</label>
                             <div className="bg-record-layer-2 border-record-border text-foreground p-2 rounded text-sm">
-                              {claimDetails.transaction?.description || 'N/A'}
+                              {claimDetails.transaction?.description || claimDetails.vendor_name || claimDetails.transaction?.vendor_name || 'N/A'}
                             </div>
                           </div>
 
