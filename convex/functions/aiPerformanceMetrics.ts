@@ -62,7 +62,7 @@ function getPeriodBounds(period: Period): { current: PeriodBounds; previous: Per
 
 interface FeatureMetrics {
   total: number;
-  confidence: number;
+  confidence: number; // average confidence (0-1)
   corrections: number;
 }
 
@@ -91,6 +91,7 @@ interface PeriodMetrics {
 async function computeMetricsForPeriod(ctx: any, businessId: string, bounds: PeriodBounds): Promise<PeriodMetrics> {
   const { start, end } = bounds;
 
+  // ── AR Matching ──
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let periodOrders: any[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -123,6 +124,7 @@ async function computeMetricsForPeriod(ctx: any, businessId: string, bounds: Per
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     arPending = periodOrders.filter((o: any) => o.aiMatchStatus === "pending_review").length;
 
+    // AR confidence: average of top suggestion confidence
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const o of arWithAi as any[]) {
       const conf = o.aiMatchSuggestions?.[0]?.confidence ?? o.matchConfidence;
@@ -132,9 +134,11 @@ async function computeMetricsForPeriod(ctx: any, businessId: string, bounds: Per
       }
     }
   } catch {
-    // sales_orders query failed
+    // sales_orders query failed — zero AR metrics
   }
 
+  // ── Bank Recon ──
+  let bankTotal = 0;
   let bankClassified = 0;
   let bankPending = 0;
   let bankConfidenceSum = 0;
@@ -152,6 +156,7 @@ async function computeMetricsForPeriod(ctx: any, businessId: string, bounds: Per
       return ts >= start && ts <= end;
     });
 
+    bankTotal = periodBank.length;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     bankClassified = periodBank.filter((t: any) => t.classificationTier && t.suggestedDebitAccountCode).length;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -165,9 +170,10 @@ async function computeMetricsForPeriod(ctx: any, businessId: string, bounds: Per
       }
     }
   } catch {
-    // Bank tables might not exist
+    // Bank tables might not exist on all branches
   }
 
+  // ── Fee Classification ──
   let feeTotal = 0;
   let feeClassified = 0;
   let feeMissing = 0;
@@ -192,6 +198,7 @@ async function computeMetricsForPeriod(ctx: any, businessId: string, bounds: Per
     }
   }
 
+  // ── Corrections ──
   let arCorrections = 0;
   try {
     const allArCorrections = await ctx.db
@@ -234,11 +241,13 @@ async function computeMetricsForPeriod(ctx: any, businessId: string, bounds: Per
     // Table might not exist
   }
 
+  // ── Aggregate ──
   const totalAiDecisions = arWithAi.length + bankClassified + feeClassified;
   const totalCorrections = arCorrections + bankCorrections + feeCorrections;
   const totalAccepted = totalAiDecisions - totalCorrections;
   const decisionsRequiringReview = arPending + bankPending + totalCorrections;
 
+  // Volume-weighted confidence
   const totalConfidenceWeight = arConfidenceCount + bankConfidenceCount + feeConfidenceCount;
   const overallConfidence = totalConfidenceWeight > 0
     ? ((arConfidenceSum + bankConfidenceSum + feeConfidenceSum) / totalConfidenceWeight) * 100
@@ -246,10 +255,15 @@ async function computeMetricsForPeriod(ctx: any, businessId: string, bounds: Per
 
   const editRate = totalAiDecisions > 0 ? (totalCorrections / totalAiDecisions) * 100 : 0;
   const noEditRate = totalAiDecisions > 0 ? 100 - editRate : 0;
-  const totalEligible = arWithAi.length;
+
+  // Automation rate: auto-approved / total eligible (AR only for now — Triple-Lock)
+  const totalEligible = arWithAi.length; // Only AR has auto-approval currently
   const automationRate = totalEligible > 0 ? (arAutoApproved / totalEligible) * 100 : 0;
+
+  // Missing fields rate (OCR/fee only)
   const missingFieldsRate = feeTotal > 0 ? (feeMissing / feeTotal) * 100 : 0;
 
+  // Hours saved calculation
   const arSuccessful = arApproved + arAutoApproved + arWithAi.filter(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (o: any) => o.aiMatchTier === 1
@@ -313,8 +327,10 @@ export const _computeMetrics = internalQuery({
 });
 
 /**
- * Get AI performance metrics — public action (NOT reactive query).
- * Runs once on demand. Client calls via useAction on mount + optional refresh.
+ * Get AI performance metrics for the dashboard widget.
+ *
+ * Public action (NOT a query) — runs once on demand, not reactively.
+ * Client calls via useAction on mount + optional refresh button.
  */
 export const getAIPerformanceMetrics = action({
   args: {
@@ -347,6 +363,7 @@ export const getAIPerformanceMetrics = action({
         }
       );
 
+      // Compute trend deltas if previous period exists
       let trends: {
         confidenceDelta: number | null;
         editRateDelta: number | null;

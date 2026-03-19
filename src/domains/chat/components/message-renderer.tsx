@@ -102,24 +102,67 @@ export function MessageRenderer({
     setActiveCitation(null)
   }, [])
 
-  // Process content: strip residual ```actions blocks and replace citation markers
-  const processedContent = useMemo(() => {
+  // Process content: strip residual ```actions blocks, suggestions, and replace citation markers
+  const { processedContent, inlineSuggestions } = useMemo(() => {
     // Strip ```actions and ```suggestions JSON blocks — handles raw, single-escaped, and multi-escaped backticks.
     // Also catches ```json blocks containing action card type objects.
     let processed = content
       .replace(/(?:\\*`){3,}actions[\s\S]*?(?:\\*`){3,}/g, '')
       .replace(/(?:\\*`){3,}suggestions[\s\S]*?(?:\\*`){3,}/g, '')
       .replace(/(?:\\*`){3,}(?:json)?\s*\n\s*\[\s*\{[\s\S]*?"type"\s*:\s*"(?:invoice_posting|cash_flow_dashboard|compliance_alert|budget_alert|spending_time_series|anomaly_card|vendor_comparison|expense_approval)"[\s\S]*?(?:\\*`){3,}/g, '')
-      .trim()
 
-    if (!citations.length) return processed
+    // Extract and strip inline suggestions that appear as plain text:
+    // e.g. "suggestions: ["Show my expenses", "Check transactions"]"
+    // or "suggestions: ["a", "b"]" at end of content
+    const suggestions: string[] = []
+
+    // Pattern 1: inline `suggestions: [...]` (plain text, not in a fenced block)
+    const inlineMatch = processed.match(/\n?\s*suggestions:\s*(\[[\s\S]*?\])\s*$/i)
+    if (inlineMatch?.[1]) {
+      try {
+        const parsed = JSON.parse(inlineMatch[1])
+        if (Array.isArray(parsed) && parsed.every((s: unknown) => typeof s === 'string')) {
+          suggestions.push(...parsed.slice(0, 3))
+        }
+      } catch {
+        // Fallback: extract quoted strings
+        const strings = inlineMatch[1].match(/"([^"]+)"/g)
+        if (strings) {
+          suggestions.push(...strings.slice(0, 3).map((s) => s.replace(/^"|"$/g, '')))
+        }
+      }
+      processed = processed.replace(inlineMatch[0], '')
+    }
+
+    // Pattern 2: fenced ```suggestions block that wasn't caught by the escaped-backtick regex
+    // (e.g. actual triple backticks from the LLM)
+    const fencedMatch = processed.match(/\n?\s*```suggestions\s*\n?([\s\S]*?)```/i)
+    if (fencedMatch?.[1] && suggestions.length === 0) {
+      try {
+        const parsed = JSON.parse(fencedMatch[1].trim())
+        if (Array.isArray(parsed) && parsed.every((s: unknown) => typeof s === 'string')) {
+          suggestions.push(...parsed.slice(0, 3))
+        }
+      } catch {
+        const strings = fencedMatch[1].match(/"([^"]+)"/g)
+        if (strings) {
+          suggestions.push(...strings.slice(0, 3).map((s) => s.replace(/^"|"$/g, '')))
+        }
+      }
+      processed = processed.replace(fencedMatch[0], '')
+    }
+
+    processed = processed.trim()
+
+    if (!citations.length) return { processedContent: processed, inlineSuggestions: suggestions }
 
     // Replace [^N] markers with HTML superscript elements
-    return processed.replace(
+    const withCitations = processed.replace(
       /\[\^(\d+)\]/g,
       (_match, num) =>
         `<sup class="citation-marker" data-citation-index="${num}">[${num}]</sup>`
     )
+    return { processedContent: withCitations, inlineSuggestions: suggestions }
   }, [content, citations])
 
   const isUser = role === 'user'
@@ -205,6 +248,29 @@ export function MessageRenderer({
     )
   }, [actions, isHistorical, onViewDetails, handleCardCitationClick])
 
+  // Render inline suggestion pills extracted from message content
+  const suggestionPills = useMemo(() => {
+    if (inlineSuggestions.length === 0) return null
+    return (
+      <div className="flex flex-wrap items-center gap-2 mt-2">
+        {inlineSuggestions.map((text) => (
+          <button
+            key={text}
+            type="button"
+            onClick={() => {
+              // Dispatch a custom event so chat-window can pick it up and send
+              window.dispatchEvent(new CustomEvent('chat:send-message', { detail: { message: text } }))
+            }}
+            className="text-xs px-3 py-1.5 rounded-full border border-primary/25 text-foreground
+              hover:bg-primary/10 hover:border-primary/40 transition-colors"
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+    )
+  }, [inlineSuggestions])
+
   // Inline mode: render content directly without the bubble wrapper
   if (isInline && !isUser) {
     return (
@@ -219,6 +285,7 @@ export function MessageRenderer({
           </ReactMarkdown>
         </div>
         {actionCards}
+        {suggestionPills}
         {isHistorical && originalQuery && (
           <CorrectionFeedback
             messageId={messageId}
@@ -267,6 +334,7 @@ export function MessageRenderer({
                 </ReactMarkdown>
               </div>
               {actionCards}
+              {suggestionPills}
               {isHistorical && originalQuery && (
                 <CorrectionFeedback
                   messageId={messageId}

@@ -372,8 +372,8 @@ crons.weekly(
 /**
  * Daily AI Intelligence Digest
  *
- * DISABLED: Was running hourly scanning multiple tables for every business,
- * consuming excessive Database Bandwidth (1.96 GB / 2 GB with no real users).
+ * DISABLED: Was running hourly and scanning multiple tables for every business.
+ * At ~1.96 GB / 2 GB bandwidth with no real users, this is too expensive.
  * Re-enable when we have paying customers on a Pro Convex plan.
  */
 // crons.hourly(
@@ -381,103 +381,5 @@ crons.weekly(
 //   { minuteUTC: 0 },
 //   (internal.functions as any).aiDigest.dailyDigest
 // );
-
-/**
- * Daily Automation Milestone Check (001-surface-automation-rate)
- *
- * Runs daily at 10:00 UTC (6 PM SGT) to check all businesses
- * for milestone achievements (90%, 95%, 99%).
- * Updates businesses.automationMilestones if threshold newly crossed.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-crons.daily(
-  "check-automation-milestones",
-  { hourUTC: 10, minuteUTC: 0 },
-  (internal.functions as any).automationRate.checkAllBusinessMilestones
-);
-
-// ============================================
-// Document Inbox Data Retention (001-doc-email-forward)
-// ============================================
-
-/**
- * Auto-archive documents after 30 days of no user action
- * Runs daily at 5:30 AM UTC (1:30 PM MYT)
- *
- * Archives documents in "needs_review" status that have been
- * sitting in the inbox for 30+ days without classification.
- */
-crons.daily(
-  "archive-inbox-documents",
-  { hourUTC: 5, minuteUTC: 30 },
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (internal.functions as any).documentInboxCrons.archiveOldDocuments
-);
-
-/**
- * Delete documents after 7-year retention period (PDPA compliance)
- * Runs monthly on the 1st at 6:00 AM UTC (2 PM MYT)
- *
- * Permanently deletes archived documents older than 7 years
- * (Malaysian tax retention requirement).
- */
-crons.monthly(
-  "delete-expired-inbox-documents",
-  { day: 1, hourUTC: 6, minuteUTC: 0 },
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (internal.functions as any).documentInboxCrons.deleteExpiredDocuments
-);
-
-// ============================================
-// CHAT AGENT DSPY OPTIMIZATION (Self-Improving)
-// ============================================
-
-/**
- * Chat Intent + Clarification Optimization
- * Runs Sunday 6 AM UTC — trains intent classifier and clarification judge
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-crons.weekly(
-  "chat-intent-optimization",
-  { dayOfWeek: "sunday", hourUTC: 6, minuteUTC: 0 },
-  (internal.functions as any).chatOptimization.weeklyOptimization,
-  { moduleTypes: ["intent", "clarification"] }
-);
-
-/**
- * Chat Tool Selector + Parameter Extractor Optimization
- * Runs Sunday 7 AM UTC — trains tool selection and parameter extraction
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-crons.weekly(
-  "chat-tool-param-optimization",
-  { dayOfWeek: "sunday", hourUTC: 7, minuteUTC: 0 },
-  (internal.functions as any).chatOptimization.weeklyOptimization,
-  { moduleTypes: ["tool_selector", "param_extractor"] }
-);
-
-/**
- * Chat Response Quality Optimization
- * Runs Sunday 8 AM UTC — trains response quality evaluator
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-crons.weekly(
-  "chat-quality-optimization",
-  { dayOfWeek: "sunday", hourUTC: 8, minuteUTC: 0 },
-  (internal.functions as any).chatOptimization.weeklyOptimization,
-  { moduleTypes: ["response_quality"] }
-);
-
-/**
- * DSPy Metrics Cleanup (027-dspy-dash)
- *
- * Runs daily at 3:30 AM UTC to purge dspy_metrics_daily rows older than 90 days.
- * Deletes up to 100 rows per run — if more accumulate, catches up next day.
- */
-crons.daily(
-  "cleanup-dspy-metrics",
-  { hourUTC: 3, minuteUTC: 30 },
-  internal.functions.dspyMetrics.cleanupOldMetrics
-);
 
 export default crons;

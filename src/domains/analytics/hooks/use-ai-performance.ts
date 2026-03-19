@@ -77,6 +77,7 @@ export function useAIPerformance(businessId: string): UseAIPerformanceReturn {
     }
   }, [fetchAction, businessId]);
 
+  // Fetch on mount and when period changes
   useEffect(() => {
     isMounted.current = true;
     fetchMetrics(period);

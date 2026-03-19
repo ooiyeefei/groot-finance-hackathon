@@ -16,6 +16,7 @@ import { RichContentPanel, type RichContentData } from './rich-content-panel'
 import { AiDataConsent, hasAiConsent } from './ai-data-consent'
 import { useCopilotBridge } from '../hooks/use-copilot-chat'
 import { useAuth } from '@clerk/nextjs'
+import { useActiveBusiness } from '@/contexts/business-context'
 import type { CitationData } from '@/lib/ai/tools/base-tool'
 import type { ChatAction } from '../lib/sse-parser'
 
@@ -449,8 +450,9 @@ User question: ${trimmed}`
   )
 }
 
-// Suggestion prompts shown in empty state
-const SUGGESTIONS = [
+// Suggestion prompts by role tier
+// Finance/Owner: full access to all financial queries
+const FINANCE_SUGGESTIONS = [
   'Analyze my cash flow runway',
   'Show my recent invoices',
   'GST requirements for Singapore',
@@ -459,8 +461,41 @@ const SUGGESTIONS = [
   'Summarize my expenses this month',
 ]
 
+// Manager: team oversight + general queries
+const MANAGER_SUGGESTIONS = [
+  'GST requirements for Singapore',
+  'Summarize my expenses this month',
+  'Show team spending',
+  'Check pending approvals',
+]
+
+// Employee: personal expenses + general queries
+const EMPLOYEE_SUGGESTIONS = [
+  'GST requirements for Singapore',
+  'Summarize my expenses this month',
+  'Show my expense claims',
+]
+
+function getSuggestionsForRole(role: string | null): string[] {
+  switch (role) {
+    case 'owner':
+    case 'finance_admin':
+      return FINANCE_SUGGESTIONS
+    case 'manager':
+      return MANAGER_SUGGESTIONS
+    case 'employee':
+      return EMPLOYEE_SUGGESTIONS
+    default:
+      // Fallback: show only general suggestions until role loads
+      return EMPLOYEE_SUGGESTIONS
+  }
+}
+
 // Empty state shown when no messages exist
 function EmptyState({ onSuggestionClick }: { onSuggestionClick: (text: string) => void }) {
+  const { role } = useActiveBusiness()
+  const suggestions = getSuggestionsForRole(role)
+
   return (
     <div className="flex flex-col justify-between h-full py-6 px-1">
       {/* Welcome text */}
@@ -475,7 +510,7 @@ function EmptyState({ onSuggestionClick }: { onSuggestionClick: (text: string) =
 
       {/* Suggestion pills — right-aligned */}
       <div className="flex flex-col items-end gap-2">
-        {SUGGESTIONS.map((text) => (
+        {suggestions.map((text) => (
           <button
             key={text}
             onClick={() => onSuggestionClick(text)}

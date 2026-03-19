@@ -91,7 +91,7 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
           fixed z-40 bg-background border-l border-border
           transition-transform duration-250 ease-out
           top-0 right-0 h-full
-          w-full md:w-[380px]
+          w-full md:w-[500px]
           ${isOpen ? 'translate-x-0' : 'translate-x-full'}
         `}
         role="dialog"
