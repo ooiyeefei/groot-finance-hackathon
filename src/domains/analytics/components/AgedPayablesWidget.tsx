@@ -83,18 +83,19 @@ export default function AgedPayablesWidget({
   const maxValue = Math.max(...chartData.map(d => d.value));
 
   const formatCurrency = (amount: number) => {
+    if (amount == null || isNaN(amount)) return '--';
     const symbol = CURRENCY_SYMBOLS[homeCurrency] || homeCurrency;
-    
+
     if (Math.abs(amount) >= 1000000) {
       return `${symbol}${(amount / 1000000).toFixed(1)}M`;
     }
     if (Math.abs(amount) >= 1000) {
       return `${symbol}${(amount / 1000).toFixed(1)}K`;
     }
-    
-    return `${symbol}${amount.toLocaleString('en-US', { 
-      minimumFractionDigits: 0, 
-      maximumFractionDigits: 0 
+
+    return `${symbol}${amount.toLocaleString('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
     })}`;
   };
 

@@ -72,7 +72,7 @@ export default function CurrencyBreakdown({
       <div className="bg-popover border border-border rounded-lg p-3 shadow-lg">
         <p className="text-popover-foreground font-medium">{data.currency}</p>
         <p className="text-popover-foreground text-sm">
-          Amount: {symbol}{Math.abs(data.displayValue).toLocaleString()}
+          Amount: {symbol}{Math.abs(data.displayValue ?? 0).toLocaleString()}
         </p>
         <p className="text-popover-foreground text-sm">
           Share: {data.percentage.toFixed(1)}%
@@ -161,7 +161,7 @@ export default function CurrencyBreakdown({
           <div>
             <p className="text-xs text-muted-foreground mb-1">Total Volume</p>
             <p className="text-sm font-medium text-foreground">
-              {chartData.reduce((sum, entry) => sum + entry.value, 0).toLocaleString()}
+              {(chartData.reduce((sum, entry) => sum + (entry.value ?? 0), 0)).toLocaleString()}
             </p>
           </div>
         </div>

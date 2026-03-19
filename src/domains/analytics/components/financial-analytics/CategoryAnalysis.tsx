@@ -91,7 +91,7 @@ export default function CategoryAnalysis({
       <div className="bg-card border border-border rounded-md px-2 py-1.5 shadow-xl">
         <p className="text-foreground font-medium text-sm">{data.name}</p>
         <p className="text-foreground font-semibold text-base">
-          Amount: {symbol}{data.value.toLocaleString()}
+          Amount: {symbol}{(data.value ?? 0).toLocaleString()}
         </p>
         <p className="text-muted-foreground text-xs">
           Share: {data.percentage.toFixed(1)}%
@@ -202,7 +202,7 @@ export default function CategoryAnalysis({
           <div>
             <p className="text-muted-foreground mb-1">Total Amount</p>
             <p className="font-medium text-foreground">
-              {CURRENCY_SYMBOLS[homeCurrency]}{chartData.reduce((sum, entry) => sum + entry.value, 0).toLocaleString()}
+              {CURRENCY_SYMBOLS[homeCurrency]}{(chartData.reduce((sum, entry) => sum + (entry.value ?? 0), 0)).toLocaleString()}
             </p>
           </div>
         </div>
@@ -221,7 +221,7 @@ export default function CategoryAnalysis({
                   <span className="text-foreground">{item.name}</span>
                 </div>
                 <span className="text-foreground">
-                  {CURRENCY_SYMBOLS[homeCurrency]}{item.value.toLocaleString()}
+                  {CURRENCY_SYMBOLS[homeCurrency]}{(item.value ?? 0).toLocaleString()}
                 </span>
               </div>
             ))}

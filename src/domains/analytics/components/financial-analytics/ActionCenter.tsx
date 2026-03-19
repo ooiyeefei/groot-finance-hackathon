@@ -178,7 +178,7 @@ export default function ActionCenter({
     }
 
     // Negative profit alert
-    if (analytics.net_profit < 0) {
+    if ((analytics.net_profit ?? 0) < 0) {
       items.push({
         id: 'negative-profit',
         type: 'error',
