@@ -35,6 +35,18 @@ export async function topicGuardrail(state: AgentState): Promise<Partial<AgentSt
     };
   }
 
+  // FAST-PATH: Skip LLM guardrail for queries that are obviously financial/business-related.
+  // This saves 1-2s of Gemini API latency per query, critical for staying under Vercel's
+  // function timeout. The intent-node has its own deterministic fast-path with the same pattern.
+  const FINANCIAL_FAST_PATH = /\b(revenue|cash\s*flow|runway|burn\s*rate|invoices?|aging|owe|suppliers?|vendors?|outstanding|receivable|payable|AP\b|AR\b|overdue|expenses?|spending|transactions?|income|budget|profit|loss|balance|how\s+much|show\s+me|what('s|\s+is)\s+(our|my|the|total)|gst|sst|tax|accounting|bookkeeping|compliance|myinvois|e-?invoice|receipt|payment|salary|payroll)\b/i;
+  if (FINANCIAL_FAST_PATH.test(userQuery)) {
+    console.log('[TopicGuardrail] FAST-PATH: Financial/business query detected, skipping LLM guardrail');
+    return {
+      isTopicAllowed: true,
+      isClarificationResponse: false
+    };
+  }
+
   try {
     // Build context-aware topic classification prompt
     const topicClassificationPrompt = `You are a topic classification system for a financial co-pilot chatbot designed for Southeast Asian SMEs.

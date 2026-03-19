@@ -8,6 +8,9 @@
  * Rate limit: 30 messages/hour/user
  */
 
+// Extend function timeout for multi-step AI agent (guardrail → intent → model → tool → response)
+export const maxDuration = 60;
+
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getUserDataConvex, getAuthenticatedConvex } from '@/lib/convex'
