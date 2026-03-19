@@ -3034,12 +3034,18 @@ def handler(event: dict, context=None) -> dict:
                 print(f"[Form Fill] ⚡ Tier 1 done in {dur}ms")
                 print(f"[Cost] {cost_tracker.summary()}")
                 browser.close()
+                report_url = event.get("merchantFormUrl", url)
                 convex_mutation("functions/system:reportEinvoiceFormFillResult", {
                     "expenseClaimId": claim_id, "emailRef": event["emailRef"],
                     "status": "success", "durationMs": dur,
+                    "merchantFormUrl": report_url,
                     **_debug_fields(),
                 })
-                convex_mutation("functions/system:saveMerchantFormConfig", {"merchantName": merchant, "formConfig": fc})
+                # Pass corrected URL to merchant config if HTTPS→HTTP fallback occurred
+                save_config = {"merchantName": merchant, "formConfig": fc}
+                if report_url != url:
+                    save_config["einvoiceUrl"] = report_url
+                convex_mutation("functions/system:saveMerchantFormConfig", save_config)
                 return {"success": True, "durationMs": dur}
             print("[Form Fill] Tier 1 failed — falling back to Tier 2")
             try:
@@ -3224,21 +3230,80 @@ def handler(event: dict, context=None) -> dict:
             except Exception:
                 pass
 
+        # ── #330: Detect direct-link merchants (redirect to e-invoice page) ──
+        direct_link_url = None
+        einvoice_s3_path = None
+        is_direct_link = False
+        if verified_success:
+            try:
+                current_url = page.url
+                original_domain = url.split("/")[2] if "/" in url else ""
+                # Detect redirect: URL changed significantly (different path or domain)
+                if current_url and current_url != url:
+                    # Check if redirected to an invoice/einvoice page
+                    invoice_indicators = ["invoice", "einvoice", "e-invoice", "myinvois", "receipt"]
+                    url_lower = current_url.lower()
+                    if any(ind in url_lower for ind in invoice_indicators) or current_url.split("/")[2] != original_domain:
+                        direct_link_url = current_url
+                        print(f"[Direct-Link] Detected redirect to e-invoice: {current_url[:120]}")
+
+                        # Capture e-invoice page as PDF
+                        try:
+                            time.sleep(3)  # let redirect page fully render
+                            pdf_bytes = page.pdf(format="A4", print_background=True)
+                            if pdf_bytes and len(pdf_bytes) > 1000:
+                                # Upload to S3 with same path pattern as email-received e-invoices
+                                biz_id = event.get("businessId", "unknown")
+                                user_id = event.get("userId", "unknown")
+                                s3_key = f"expense_claims/{biz_id}/{user_id}/{claim_id}/einvoice/einvoice-direct.pdf"
+                                import boto3 as _boto3
+                                _boto3.client("s3").put_object(
+                                    Bucket="finanseal-bucket", Key=s3_key,
+                                    Body=pdf_bytes, ContentType="application/pdf"
+                                )
+                                einvoice_s3_path = f"{biz_id}/{user_id}/{claim_id}/einvoice/einvoice-direct.pdf"
+                                is_direct_link = True
+                                print(f"[Direct-Link] Captured PDF ({len(pdf_bytes)} bytes) → s3://{s3_key}")
+                            else:
+                                print(f"[Direct-Link] PDF too small ({len(pdf_bytes) if pdf_bytes else 0} bytes), skipping capture")
+                        except Exception as pdf_err:
+                            print(f"[Direct-Link] PDF capture failed: {pdf_err}")
+            except Exception as dl_err:
+                print(f"[Direct-Link] Detection failed: {dl_err}")
+
         browser.close()
         dur = int((time.time() - start) * 1000)
-        status_str = "success" if verified_success else "failed"
+
+        # Determine status: "submitted" for direct-link (no email expected), "success" for email-callback merchants
+        if verified_success and is_direct_link:
+            status_str = "submitted"
+        elif verified_success:
+            status_str = "success"
+        else:
+            status_str = "failed"
+
         print(f"[Form Fill] Done in {dur}ms, {actions} CUA actions, verified={status_str}, evidence={evidence[:80]}")
+        if is_direct_link:
+            print(f"[Form Fill] Direct-link merchant: e-invoice captured, no email expected")
         print(f"[Cost] {cost_tracker.summary()}")
 
         error_msg = None if verified_success else f"Verification: {evidence[:200]}"
         _run_state["evidence"] = evidence
         _run_state["cua_actions"] = actions
-        convex_mutation("functions/system:reportEinvoiceFormFillResult", {
+
+        # #329: Include corrected URL (e.g., HTTPS→HTTP fallback) in report
+        report_url = event.get("merchantFormUrl", url)
+
+        report_payload = {
             "expenseClaimId": claim_id, "emailRef": event["emailRef"],
             "status": status_str, "durationMs": dur,
+            "merchantFormUrl": report_url,
             **({"errorMessage": error_msg} if error_msg else {}),
+            **({"einvoiceDirectUrl": direct_link_url} if direct_link_url else {}),
+            **({"einvoiceStoragePath": einvoice_s3_path} if einvoice_s3_path else {}),
             **_debug_fields(),
-        })
+        }
+        convex_mutation("functions/system:reportEinvoiceFormFillResult", report_payload)
         return {"success": verified_success, "verified": True, "evidence": evidence, "durationMs": dur, "cost": cost_tracker.to_dict()}
 
     except Exception as e:
