@@ -50,18 +50,20 @@ The word "expense" has DIFFERENT meanings depending on context. You MUST route c
 | User says | They mean | Route to |
 |-----------|-----------|----------|
 | "expense claims", "claims", "reimbursements", "expenses needing approval", "submit expense", "my claims" | **Employee expense claims** (meal receipts, travel, office supplies submitted for reimbursement) | \`get_employee_expenses\` or expense submission queries |
-| "expenses" (in P&L context: "total expenses", "expense breakdown", "spending this month") | **All business expenses** from journal entries (AP invoices + claims + COGS) | \`get_transactions\` with transactionType "Expense" |
+| "business expenses", "total expenses", "company expenses", "expense breakdown", "operating expenses" (P&L context — NO "my"/"our" possessive) | **All business expenses** from journal entries (AP invoices + claims + COGS) | \`get_transactions\` with transactionType "Expense" |
 | "AP invoices", "vendor bills", "supplier invoices", "invoices ready to post", "purchase invoices" | **Accounts Payable** — invoices from vendors/suppliers | \`get_invoices\` |
 | "COGS", "cost of goods", "cost of sales" | **Cost of Goods Sold** — vendor purchases for resale (subset of AP, account codes 5xxx) | \`get_transactions\` with category filter |
 | "revenue", "income", "sales" | **Income/Revenue** from sales invoices | \`get_transactions\` with transactionType "Income" (finance roles only) |
 
-**KEY RULE**: "What expenses need my approval?" → means **expense claims** pending approval, NOT AP invoices. Route to pending expense submissions.
-**KEY RULE**: "Show my expenses" for an employee/manager → means their **personal expense claims**, NOT company-wide AP/COGS.
+**KEY RULE**: "What expenses need my approval?" → means **expense claims** pending approval, NOT AP invoices.
+**KEY RULE**: "**my** expenses" / "**my** spending" / "summarize **my** expenses" → means the user's **personal expense claims** for ALL roles (including owner/finance_admin). The word "my" signals personal, not business-wide.
+**KEY RULE**: "**business** expenses" / "**total** expenses" / "**company** spending" / "P&L expenses" → means business-wide P&L view.
+**KEY RULE**: "expenses this month" (no possessive) → ASK for clarification.
 
-**WHEN IN DOUBT — ASK THE USER**: If the query is ambiguous (e.g., just "expenses" or "show expenses"), clarify before querying:
-- "Are you looking for **employee expense claims** (reimbursements & receipts) or **business expenses** (AP invoices & operating costs)?"
-- Do NOT guess — wrong routing gives confusing results. A quick clarification is better than wrong data.
-- Clear signals that do NOT need clarification: "my claims", "expense report", "reimbursement" → always expense claims. "vendor bill", "AP", "invoice from supplier" → always AP invoices. "total expenses this month", "P&L" → always business expenses.
+**WHEN IN DOUBT — ASK THE USER**: If the query is ambiguous (e.g., just "expenses" or "show expenses" without "my" or "business"), clarify:
+- "Are you looking for **your personal expense claims** (reimbursements & receipts) or **business-wide expenses** (all operating costs including vendor invoices)?"
+- Do NOT guess — wrong routing gives confusing results.
+- Clear signals: "my claims/my expenses/my spending" → always personal claims. "vendor bill/AP/supplier invoice" → always AP. "total expenses/P&L/business expenses" → always P&L view.
 `;
 
   if (role === 'employee') {

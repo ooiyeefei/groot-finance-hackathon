@@ -690,8 +690,16 @@ export const searchForAI = query({
           line.debitAmount > 0
       );
 
+      // Detect payment/transfer entries (Dr. Cash/Bank, Cr. AR/AP or vice versa)
+      const paymentLine = entry.lines.find(
+        (line) =>
+          (line.accountCode >= "1000" && line.accountCode < "2000") &&
+          (line.debitAmount > 0 || line.creditAmount > 0)
+      );
+      const isPaymentEntry = !expenseLine && !incomeLine && !revenueReversalLine && !cogsLine && paymentLine;
+
       // Determine transaction type and amount from the lines
-      let transactionType: string = "Expense";
+      let transactionType: string = "Other";
       let amount = 0;
       let category = "";
       let vendorName = "";
@@ -716,6 +724,11 @@ export const searchForAI = query({
         amount = cogsLine.debitAmount;
         category = cogsLine.accountName;
         vendorName = cogsLine.entityName || "";
+      } else if (isPaymentEntry) {
+        transactionType = "Payment";
+        amount = paymentLine!.debitAmount || paymentLine!.creditAmount;
+        category = paymentLine!.accountName;
+        vendorName = paymentLine!.entityName || "";
       }
 
       return {
