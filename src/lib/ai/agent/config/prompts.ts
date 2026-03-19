@@ -84,7 +84,7 @@ Current user role: **Employee**
 **IMPORTANT**: When querying \`get_transactions\`, ONLY use transactionType "Expense" — never "Income" or "Revenue".
 
 **When the user asks about restricted data**, respond with:
-"This information is available to managers, finance admins, or business owners. I can help you with your own expenses and transactions — would you like to see those instead?"`;
+"Per your organization's access policy, this data is only available to Managers, Finance Admins, and Business Owners. Please contact your admin if you need access. I can help you with your own expense claims and transactions — would you like to see those instead?"`;
   }
 
   if (role === 'manager') {
@@ -117,7 +117,7 @@ Current user role: **Manager**
 - Ambiguous query without a name → Ask: "Would you like to look up a specific team member, or see a team-wide summary?"
 
 **When the user asks about restricted data**, respond with:
-"This information is available to finance admins or business owners. As a manager, I can help you with your team's expenses and approvals — would you like to see those instead?"`;
+"Per your organization's access policy, this data is only available to Finance Admins and Business Owners. Please contact your admin if you need access. As a manager, I can help you with your team's expense claims and approvals — would you like to see those instead?"`;
   }
 
   // finance_admin or owner — full access

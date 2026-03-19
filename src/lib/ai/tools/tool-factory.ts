@@ -174,7 +174,7 @@ export class ToolFactory {
       console.warn(`[ToolFactory] RBAC DENIED: ${toolName} requires finance_admin/owner, user has role=${role}`)
       return {
         success: false,
-        error: "You don't have permission to access this financial data. This information is available to finance admins and business owners.",
+        error: "Per your organization's access policy, financial reports like this are only available to Finance Admins and Business Owners. Please contact your admin if you need access to this data.",
         metadata: { rbacDenied: true, requiredTier: 'finance', userRole: role }
       }
     }
@@ -182,20 +182,19 @@ export class ToolFactory {
       console.warn(`[ToolFactory] RBAC DENIED: ${toolName} requires manager+, user has role=${role}`)
       return {
         success: false,
-        error: "You don't have permission to view team data. This information is available to managers, finance admins, and business owners.",
+        error: "Per your organization's access policy, team data is only available to Managers, Finance Admins, and Business Owners. Please contact your admin if you need access.",
         metadata: { rbacDenied: true, requiredTier: 'manager', userRole: role }
       }
     }
 
     // RBAC: Restrict get_transactions for non-finance roles
-    // Managers/employees should NOT see Income/Revenue transactions — only their own expenses
     if (tn === 'get_transactions' && !['finance_admin', 'owner'].includes(role)) {
       const txnType = (parameters as Record<string, unknown>)?.transactionType as string | undefined
       if (txnType && ['Income', 'income', 'Revenue', 'revenue'].includes(txnType)) {
         console.warn(`[ToolFactory] RBAC DENIED: get_transactions(transactionType=${txnType}) blocked for role=${role}`)
         return {
           success: false,
-          error: "You don't have permission to view revenue data. This information is available to finance admins and business owners.",
+          error: "Per your organization's access policy, revenue and income data is only available to Finance Admins and Business Owners. Please contact your admin if you need access.",
           metadata: { rbacDenied: true, requiredTier: 'finance', userRole: role }
         }
       }

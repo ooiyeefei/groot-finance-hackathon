@@ -168,7 +168,7 @@ export class TeamSummaryTool extends BaseTool {
         if (result.error === 'Employees cannot access team data') {
           return {
             success: true,
-            data: "You don't have permission to view team spending data. This tool is available for managers, finance admins, and owners.",
+            data: "Per your organization's access policy, team spending data is only available to Managers, Finance Admins, and Business Owners. Please contact your admin if you need access.",
             metadata: { authorized: false }
           }
         }
