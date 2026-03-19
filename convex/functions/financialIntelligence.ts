@@ -899,23 +899,25 @@ export const getEmployeeExpensesForManager = query({
 
     const journalEntryIds = journalEntries.map((e) => e._id);
 
-    // Find expense journal entries created BY this employee
-    // Strategy: journal entries with sourceType="expense_claim" AND createdBy=targetEmployee
-    // OR journal entry lines with entityType="employee" AND entityId=targetEmployee (legacy data)
-    const employeeJournalEntryIds = new Set(
-      journalEntries
-        .filter((e) =>
-          (e.sourceType === "expense_claim" && e.createdBy === targetEmployee._id.toString()) ||
-          (e.sourceType === "expense_claim" && e.createdBy === targetEmployee.clerkUserId)
-        )
-        .map((e) => e._id)
-    );
+    // Find expense journal entries belonging to this employee.
+    // Strategy: JEs with sourceType="expense_claim" → look up the expense_claim → check userId
+    // Also check legacy entityType="employee" on journal entry lines (old data before Mar 14 migration)
+    const expenseClaimJEs = journalEntries.filter((e) => e.sourceType === "expense_claim" && e.sourceId);
+    const employeeJournalEntryIds = new Set<string>();
+
+    for (const je of expenseClaimJEs) {
+      // Look up the expense claim to find who submitted it
+      const claim = await ctx.db.get(je.sourceId as any);
+      if (claim && (claim as any).userId?.toString() === targetEmployee._id.toString()) {
+        employeeJournalEntryIds.add(je._id.toString());
+      }
+    }
 
     const allLines = await ctx.db.query("journal_entry_lines").withIndex("by_business_account", (q) => q.eq("businessId", business._id)).collect();
     let relevantLines = allLines.filter((line) => {
       if (!journalEntryIds.includes(line.journalEntryId)) return false;
-      // Match by employee journal entry (new approach) OR legacy entityType=employee
-      const isEmployeeExpenseJE = employeeJournalEntryIds.has(line.journalEntryId);
+      // Match by: expense claim owned by employee (new) OR legacy entityType=employee
+      const isEmployeeExpenseJE = employeeJournalEntryIds.has(line.journalEntryId.toString());
       const isLegacyEmployeeEntity = line.entityType === "employee" && line.entityId === targetEmployee._id.toString();
       if (!isEmployeeExpenseJE && !isLegacyEmployeeEntity) return false;
       // Only include debit lines (expenses), not credit lines (cash/AP)
@@ -1123,26 +1125,18 @@ export const getTeamExpenseSummary = query({
 
     const journalEntryIds = journalEntries.map((e) => e._id);
 
-    // Build set of Clerk IDs for team members (for matching createdBy on JEs)
-    const targetClerkIds = new Set<string>();
-    for (const userId of targetUserIds) {
-      const user = await resolveById(ctx.db, "users", userId);
-      if (user?.clerkUserId) targetClerkIds.add(user.clerkUserId);
-    }
-
-    // Map: journalEntryId → employeeUserId for expense claim JEs created by team members
+    // Map: journalEntryId → employeeUserId for expense claim JEs owned by team members
+    // Strategy: look up expense claims via sourceId to find the submitting employee
+    // (createdBy on JE is "system" for expense claims, so we must cross-reference)
     const jeToEmployeeMap = new Map<string, string>();
-    for (const je of journalEntries) {
-      if (je.sourceType === "expense_claim" && je.createdBy) {
-        if (targetUserIds.has(je.createdBy)) {
-          jeToEmployeeMap.set(je._id.toString(), je.createdBy);
-        } else if (targetClerkIds.has(je.createdBy)) {
-          for (const uid of targetUserIds) {
-            if (userNameMap[uid] && (await resolveById(ctx.db, "users", uid))?.clerkUserId === je.createdBy) {
-              jeToEmployeeMap.set(je._id.toString(), uid);
-              break;
-            }
-          }
+    const teamExpenseClaimJEs = journalEntries.filter((e) => e.sourceType === "expense_claim" && e.sourceId);
+
+    for (const je of teamExpenseClaimJEs) {
+      const claim = await ctx.db.get(je.sourceId as any);
+      if (claim && (claim as any).userId) {
+        const claimUserId = (claim as any).userId.toString();
+        if (targetUserIds.has(claimUserId)) {
+          jeToEmployeeMap.set(je._id.toString(), claimUserId);
         }
       }
     }
