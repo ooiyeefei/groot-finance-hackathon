@@ -10,8 +10,10 @@
 import { useState, lazy, Suspense } from 'react'
 import { useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
+import type { Id } from '@/convex/_generated/dataModel'
 import { FileText, Check, Loader2, AlertTriangle, Eye } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils/format-number'
+import { useBusinessContext } from '@/contexts/business-context'
 import { registerActionCard, type ActionCardProps } from './registry'
 
 const DocumentAnalysisModal = lazy(() => import('@/domains/invoices/components/document-analysis-modal'))
@@ -48,17 +50,30 @@ function InvoicePostingCard({ action, isHistorical }: ActionCardProps) {
   const [invoiceDocument, setInvoiceDocument] = useState<any>(null)
   const [documentLoading, setDocumentLoading] = useState(false)
 
-  // Note: Invoice posting now creates journal entries automatically through invoice status update
-  // TODO: Update this to use the invoice updateStatus flow instead of direct accounting entry creation
+  const postToAP = useMutation(api.functions.invoices.postToAP)
+  const { activeContext } = useBusinessContext()
 
   const handlePost = async () => {
     setCardState('posting')
     setErrorMsg('')
 
     try {
-      // TODO: Call invoice updateStatus mutation to trigger journal entry creation
-      // For now, disable posting until this flow is updated
-      throw new Error('Invoice posting temporarily disabled during accounting migration. Please post invoices directly from the Invoices page.')
+      const businessId = activeContext?.businessId
+      if (!businessId) {
+        throw new Error('No active business context. Please refresh and try again.')
+      }
+
+      const result = await postToAP({
+        invoiceIds: [data.invoiceId as Id<"invoices">],
+        businessId: businessId as Id<"businesses">,
+      })
+
+      if (result.succeeded > 0) {
+        setCardState('posted')
+      } else if (result.failed > 0) {
+        const failedResult = result.results?.find((r: { success: boolean; error?: string }) => !r.success)
+        throw new Error(failedResult?.error || 'Failed to post invoice')
+      }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to post invoice')
       setCardState('failed')

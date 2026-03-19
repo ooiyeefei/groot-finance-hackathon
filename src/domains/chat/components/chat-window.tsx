@@ -211,16 +211,31 @@ User question: ${trimmed}`
   )
 
   // Build display messages from Convex (single source of truth)
-  const displayMessages: DisplayMessage[] = convexMessages.map((msg) => {
-    const meta = msg.metadata as Record<string, unknown> | undefined
-    return {
-      id: msg.id,
-      role: msg.role as 'user' | 'assistant',
-      content: msg.content,
-      citations: meta?.citations as CitationData[] | undefined,
-      actions: meta?.actions as ChatAction[] | undefined,
+  // When streaming is active, hide the last assistant message if it was server-persisted
+  // during the stream (prevents split-second double bubble while isLoading transitions to false).
+  const displayMessages: DisplayMessage[] = useMemo(() => {
+    const msgs = convexMessages.map((msg) => {
+      const meta = msg.metadata as Record<string, unknown> | undefined
+      return {
+        id: msg.id,
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+        citations: meta?.citations as CitationData[] | undefined,
+        actions: meta?.actions as ChatAction[] | undefined,
+      }
+    })
+
+    // While streaming, if the last message is an assistant message that was just server-persisted
+    // mid-stream, hide it — the streaming overlay already shows this content.
+    if (isLoading && streamingText && msgs.length > 0) {
+      const lastMsg = msgs[msgs.length - 1]
+      if (lastMsg.role === 'assistant') {
+        return msgs.slice(0, -1)
+      }
     }
-  })
+
+    return msgs
+  }, [convexMessages, isLoading, streamingText])
 
   // Parse follow-up suggestions from the last assistant message
   const followUpSuggestions = useMemo(() => {

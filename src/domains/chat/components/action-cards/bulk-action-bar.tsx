@@ -11,7 +11,9 @@
 import { useState, useCallback } from 'react'
 import { useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
+import type { Id } from '@/convex/_generated/dataModel'
 import { CheckSquare, Square, Loader2, AlertCircle } from 'lucide-react'
+import { useBusinessContext } from '@/contexts/business-context'
 import type { ChatAction } from '../../lib/sse-parser'
 import { getActionCardComponent } from './index'
 
@@ -40,7 +42,8 @@ function BulkActionBar({ actions, cardType, isHistorical }: BulkActionBarProps) 
   })
 
   const approveExpense = useMutation(api.functions.expenseSubmissions.approve)
-  // Note: Invoice posting now handled through invoice status update which creates journal entries automatically
+  const postToAP = useMutation(api.functions.invoices.postToAP)
+  const { activeContext } = useBusinessContext()
 
   const actionIds = actions.map((a) => a.id || `bulk-${actions.indexOf(a)}`)
 
@@ -80,9 +83,11 @@ function BulkActionBar({ actions, cardType, isHistorical }: BulkActionBarProps) 
         if (cardType === 'expense_approval') {
           await approveExpense({ id: data.submissionId })
         } else if (cardType === 'invoice_posting') {
-          // TODO: Invoice posting now creates journal entries automatically when invoice status changes
-          // This needs to be updated to use the invoice updateStatus flow
-          throw new Error('Bulk invoice posting temporarily disabled during accounting migration')
+          if (!activeContext?.businessId) throw new Error('No business context')
+          await postToAP({
+            invoiceIds: [data.invoiceId as Id<"invoices">],
+            businessId: activeContext.businessId as Id<"businesses">,
+          })
         }
         statuses.set(actionId, 'done')
         success++
