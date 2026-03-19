@@ -38,9 +38,6 @@ function validateConfig(): void {
   const baseRequired = [
     'OCR_ENDPOINT_URL',
     'OCR_MODEL_NAME',
-    'EMBEDDING_ENDPOINT_URL',
-    'EMBEDDING_MODEL_ID',
-    'EMBEDDING_API_KEY',
     'GEMINI_API_KEY',
     'QDRANT_URL',
     'QDRANT_API_KEY'
@@ -94,9 +91,9 @@ export function getAIConfig(): AIConfig {
       modelName: process.env.OCR_MODEL_NAME || ''
     },
     embedding: {
-      endpointUrl: process.env.EMBEDDING_ENDPOINT_URL || '',
-      modelId: process.env.EMBEDDING_MODEL_ID || '',
-      apiKey: process.env.EMBEDDING_API_KEY || ''
+      endpointUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+      modelId: 'gemini-embedding-001',
+      apiKey: process.env.GEMINI_API_KEY || ''
     },
     chat: {
       endpointUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
