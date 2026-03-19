@@ -84,10 +84,15 @@ function BulkActionBar({ actions, cardType, isHistorical }: BulkActionBarProps) 
           await approveExpense({ id: data.submissionId })
         } else if (cardType === 'invoice_posting') {
           if (!activeContext?.businessId) throw new Error('No business context')
-          await postToAP({
+          const result = await postToAP({
             invoiceIds: [data.invoiceId as Id<"invoices">],
             businessId: activeContext.businessId as Id<"businesses">,
           })
+          // Check if the mutation actually succeeded (it returns {succeeded, failed})
+          if (result && typeof result === 'object' && 'failed' in result && (result as { failed: number }).failed > 0) {
+            const results = (result as { results?: Array<{ error?: string }> }).results
+            throw new Error(results?.[0]?.error || 'Failed to post invoice')
+          }
         }
         statuses.set(actionId, 'done')
         success++
