@@ -30,9 +30,7 @@ export default getRequestConfig(async ({ locale }) => {
     return {
       locale: validatedLocale,
       messages,
-      // You can add other configurations here
       timeZone: 'Asia/Bangkok', // Default to SEA timezone
-      now: new Date()
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
@@ -50,7 +48,6 @@ export default getRequestConfig(async ({ locale }) => {
       locale: validatedLocale,
       messages: fallbackMessages,
       timeZone: 'Asia/Bangkok',
-      now: new Date()
     };
   }
 });
