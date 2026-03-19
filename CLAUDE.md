@@ -227,7 +227,9 @@ npx cdk deploy --profile groot-finanseal --region us-west-2
 - **Lambda execution role**: Use least-privilege — scope IAM actions to specific resource ARNs and add conditions where possible (e.g., `cloudwatch:namespace` condition for `PutMetricData`).
 
 **MCP as Single Intelligence Engine (CRITICAL)**:
-- **MCP is the single source of truth** for all financial intelligence (anomaly detection, cash flow forecasting, vendor risk analysis). Do NOT duplicate MCP tool logic in Convex queries or other services.
+- **MCP is the single source of truth** for all financial intelligence AND all chat agent tools. Do NOT build parallel tool implementations in the LangGraph tool factory.
+- **MCP-first tool development**: ALL new agent capabilities (bank recon trigger, scheduled reports, receipt OCR, PDF generation, etc.) MUST be built as MCP server endpoints first, then consumed by the chat agent via `convex/lib/mcp-client.ts`. This ensures Slack bots, API partners, and mobile apps can also use them. See issue #354 for migration plan.
+- **Existing tool factory tools** are being migrated to MCP. Do NOT add new tools to `src/lib/ai/tools/tool-factory.ts` — add them to `finanseal-mcp-server` instead.
 - **Layer 1 (hard-coded detection)** in Convex crons is for triggering — it runs fast, cheap statistical checks. But when Layer 2 (LLM enrichment/discovery) needs structured analysis, it MUST call MCP tools — not re-query the DB with separate logic.
 - **Internal service-to-service calls** (Convex → MCP Lambda): Use the internal service key (`MCP_INTERNAL_SERVICE_KEY` stored in SSM + Convex env). Pass `X-Internal-Key` header and `_businessId` in params. No per-business API key needed.
 - **App → AWS Lambda direct calls** (Next.js API routes, Vercel serverless → Lambda): Use IAM auth via the Vercel OIDC role (`FinanSEAL-Vercel-S3-Role`). Never hardcode credentials or use API keys when IAM-native access is available.
