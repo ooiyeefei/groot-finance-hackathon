@@ -175,9 +175,18 @@ Fix errors and repeat until successful.
 - **Before starting any dev session**: Run `ps aux | grep convex | grep -v grep` and kill ALL convex processes. Then run `npx convex deploy --yes` from `main` to ensure production has the latest code.
 - **After finishing a worktree branch**: Remove it with `git worktree remove <name>` to prevent accidental future `convex dev` runs.
 
+**Rule 6: EventBridge-first for scheduled jobs (CRITICAL).**
+- **For any scheduled job that reads >10 documents from Convex, use AWS EventBridge → Lambda → Convex HTTP API instead of Convex crons.**
+- Convex crons run INSIDE Convex, every table read counts toward bandwidth. EventBridge triggers Lambda OUTSIDE Convex, Lambda does one small HTTP query, processes locally, writes back one result.
+- **Pattern**: EventBridge schedule → Lambda → `fetch('https://kindhearted-lynx-129.convex.cloud/api/query', { functionPath, args })` → process in Lambda → `fetch('/api/mutation', result)`
+- **Already proven**: LHDN polling uses this pattern (line 223 of crons.ts). DSPy optimizations (fee, bank recon, PO match, AR match, chat agent) should ALL use this pattern.
+- **Convex crons are ONLY for**: lightweight cleanup (delete expired records, mark overdue invoices) that touch <10 documents per run.
+- **See issue #353** for full migration plan.
+
 **Anti-patterns that burn bandwidth:**
 - `useQuery` with `.collect()` on large tables (reactive re-runs on every change)
 - Crons running hourly/every-5-min that scan entire tables
+- **Using Convex crons for DSPy optimization or analytics scanning** (use EventBridge → Lambda instead)
 - Multiple worktrees running `convex dev` against the same deployment
 - Dashboard widgets using reactive queries for aggregations (use `action` instead)
 - Running `npm run dev` in old worktrees (auto-starts `convex dev` which overwrites production)
