@@ -428,4 +428,44 @@ crons.monthly(
   (internal.functions as any).documentInboxCrons.deleteExpiredDocuments
 );
 
+// ============================================
+// CHAT AGENT DSPY OPTIMIZATION (Self-Improving)
+// ============================================
+
+/**
+ * Chat Intent + Clarification Optimization
+ * Runs Sunday 6 AM UTC — trains intent classifier and clarification judge
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+crons.weekly(
+  "chat-intent-optimization",
+  { dayOfWeek: "sunday", hourUTC: 6, minuteUTC: 0 },
+  (internal.functions as any).chatOptimization.weeklyOptimization,
+  { moduleTypes: ["intent", "clarification"] }
+);
+
+/**
+ * Chat Tool Selector + Parameter Extractor Optimization
+ * Runs Sunday 7 AM UTC — trains tool selection and parameter extraction
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+crons.weekly(
+  "chat-tool-param-optimization",
+  { dayOfWeek: "sunday", hourUTC: 7, minuteUTC: 0 },
+  (internal.functions as any).chatOptimization.weeklyOptimization,
+  { moduleTypes: ["tool_selector", "param_extractor"] }
+);
+
+/**
+ * Chat Response Quality Optimization
+ * Runs Sunday 8 AM UTC — trains response quality evaluator
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+crons.weekly(
+  "chat-quality-optimization",
+  { dayOfWeek: "sunday", hourUTC: 8, minuteUTC: 0 },
+  (internal.functions as any).chatOptimization.weeklyOptimization,
+  { moduleTypes: ["response_quality"] }
+);
+
 export default crons;

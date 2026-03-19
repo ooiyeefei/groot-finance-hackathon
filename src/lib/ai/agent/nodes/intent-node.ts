@@ -4,6 +4,7 @@
 
 import { AgentState, UserIntent, IntentAnalysisResult } from '../types';
 import { aiConfig } from '../../config/ai-config';
+import { loadOptimizedConfig } from '../dspy/model-version-loader';
 
 /**
  * LLM-Powered Intent Analysis Node
@@ -31,7 +32,30 @@ export async function analyzeIntent(state: AgentState): Promise<Partial<AgentSta
 
   const userQuery = typeof lastMessage.content === 'string' ? lastMessage.content : '';
 
-  // All queries go through LLM intent analysis - no hardcoded patterns
+  // DETERMINISTIC FAST-PATH: Skip LLM intent analysis entirely for queries that are
+  // obviously about the user's business data. The LLM (Qwen3-8B) frequently misclassifies
+  // these as "general_knowledge" and asks unnecessary clarification questions.
+  const queryLower = userQuery.toLowerCase();
+  const BUSINESS_DATA_PATTERN = /\b(revenue|cash\s*flow|runway|burn\s*rate|invoices?|aging|owe|suppliers?|vendors?|outstanding|receivable|payable|AP\b|AR\b|overdue|expenses?|spending|transactions?|income|budget|profit|loss|balance|how\s+much|show\s+me|what('s|\s+is)\s+(our|my|the|total))\b/i;
+  const isObviousBusinessData = BUSINESS_DATA_PATTERN.test(userQuery);
+
+  if (isObviousBusinessData) {
+    console.log('[IntentAnalysis] FAST-PATH: Business data query detected, skipping LLM classification → direct execution');
+    return {
+      currentIntent: {
+        primaryIntent: 'transaction_analysis',
+        queryType: 'specific_case',
+        queryCategory: 'personal_data',
+        confidence: 0.95,
+        contextNeeded: {},
+        missingContext: [],
+        originalQuery: userQuery,
+      },
+      needsClarification: false,
+      clarificationQuestions: [],
+      currentPhase: 'execution',
+    };
+  }
 
   try {
     // Use the existing chat agent LLM for intent analysis with conversation context
@@ -45,26 +69,20 @@ export async function analyzeIntent(state: AgentState): Promise<Partial<AgentSta
       missingContext: intentAnalysisResult.intent.missingContext
     });
 
-    // SMART OVERRIDE: Only skip clarification for the user's OWN personal data queries.
-    // Cross-employee queries (manager asking about team/employee) should allow clarification.
+    // POST-LLM OVERRIDE: Even if the LLM classified as general_knowledge, skip clarification
+    // for cross-employee queries that are clearly about business data (team spending, employee expenses).
     let finalRequiresClarification = intentAnalysisResult.requiresClarification;
     let finalClarificationQuestions = intentAnalysisResult.clarificationQuestions;
 
     if (intentAnalysisResult.intent.queryCategory === 'personal_data') {
-      const query = userQuery.toLowerCase();
-      // Detect if this is genuinely about the user's own data (contains "my", "I", "me")
-      // vs. a cross-employee query (contains team/employee names/someone)
-      // Detect possessives about user's OWN financial objects, but exclude "my team/employees"
-      const isOwnData = /\b(my|i |i'|me |mine)\b/i.test(query) &&
-        !/\b(team|employee|staff|employees'|direct report|reports)\b/i.test(query);
-      const isCrossEmployee = /\b(team|employee|staff|someone|everybody|everyone|all\s+(expenses?|spending|claims?))\b/i.test(query);
+      // Only allow clarification for genuinely ambiguous cross-employee queries
+      const isCrossEmployee = /\b(team|employee|staff|someone|everybody|everyone|all\s+(expenses?|spending|claims?))\b/i.test(queryLower);
+      const hasSpecificName = /\b(how much did \w+|what did \w+ (spend|claim|buy))\b/i.test(queryLower);
 
-      if (isOwnData && !isCrossEmployee) {
-        console.log('[IntentAnalysis] OVERRIDE: User\'s own data query detected, skipping clarification');
+      if (!isCrossEmployee && !hasSpecificName) {
+        console.log('[IntentAnalysis] OVERRIDE: Personal data query, skipping clarification');
         finalRequiresClarification = false;
         finalClarificationQuestions = [];
-      } else {
-        console.log('[IntentAnalysis] Cross-employee or team query detected, allowing clarification');
       }
     }
 
@@ -149,54 +167,87 @@ ${state.clarificationQuestions.map(q => `- ${q}`).join('\n')}`;
 
   contextualPrompt += `
 
-Analyze the following user query and respond with a JSON object containing:
+Analyze the following user query and respond with a JSON object.
+
+## FEW-SHOT EXAMPLES (learn the pattern):
+
+Query: "What's my revenue this month?"
+→ {"primaryIntent":"transaction_analysis","queryType":"calculation","queryCategory":"personal_data","confidence":0.98,"contextNeeded":{},"missingContext":[],"requiresClarification":false,"clarificationQuestions":[]}
+
+Query: "Show me outstanding invoices"
+→ {"primaryIntent":"transaction_analysis","queryType":"specific_case","queryCategory":"personal_data","confidence":0.97,"contextNeeded":{},"missingContext":[],"requiresClarification":false,"clarificationQuestions":[]}
+
+Query: "How much do I owe my vendors?"
+→ {"primaryIntent":"transaction_analysis","queryType":"calculation","queryCategory":"personal_data","confidence":0.98,"contextNeeded":{},"missingContext":[],"requiresClarification":false,"clarificationQuestions":[]}
+
+Query: "Cash flow analysis"
+→ {"primaryIntent":"transaction_analysis","queryType":"calculation","queryCategory":"personal_data","confidence":0.96,"contextNeeded":{},"missingContext":[],"requiresClarification":false,"clarificationQuestions":[]}
+
+Query: "AP aging report"
+→ {"primaryIntent":"transaction_analysis","queryType":"specific_case","queryCategory":"personal_data","confidence":0.97,"contextNeeded":{},"missingContext":[],"requiresClarification":false,"clarificationQuestions":[]}
+
+Query: "What is GST?"
+→ {"primaryIntent":"regulatory_knowledge","queryType":"general_info","queryCategory":"general_knowledge","confidence":0.95,"contextNeeded":{"country":"unknown"},"missingContext":["country"],"requiresClarification":false,"clarificationQuestions":[]}
+
+Query: "How to register SST in Malaysia?"
+→ {"primaryIntent":"regulatory_knowledge","queryType":"procedural","queryCategory":"general_knowledge","confidence":0.95,"contextNeeded":{"country":"malaysia"},"missingContext":[],"requiresClarification":false,"clarificationQuestions":[]}
+
+Query: "What is accounts receivable?"
+→ {"primaryIntent":"general_inquiry","queryType":"general_info","queryCategory":"general_knowledge","confidence":0.95,"contextNeeded":{},"missingContext":[],"requiresClarification":false,"clarificationQuestions":[]}
+
+Query: "Team spending this quarter"
+→ {"primaryIntent":"transaction_analysis","queryType":"calculation","queryCategory":"personal_data","confidence":0.97,"contextNeeded":{},"missingContext":[],"requiresClarification":false,"clarificationQuestions":[]}
+
+Query: "invoices"
+→ {"primaryIntent":"transaction_analysis","queryType":"general_info","queryCategory":"personal_data","confidence":0.7,"contextNeeded":{},"missingContext":[],"requiresClarification":true,"clarificationQuestions":["Are you looking for your outstanding invoices, or do you want to understand invoice processing in general?"]}
+
+## RESPONSE FORMAT
+
+Return JSON with these fields:
 1. primaryIntent: One of [regulatory_knowledge, business_setup, transaction_analysis, document_search, compliance_check, general_inquiry]
 2. queryType: One of [general_info, procedural, comparison, calculation, specific_case]
-3. queryCategory: One of [personal_data, general_knowledge, other] - CRITICAL for routing
-4. confidence: Number between 0 and 1
-5. contextNeeded: Object with fields for country, businessType, urgency, specificity (if applicable)
-6. missingContext: Array of strings indicating what context is missing
-7. requiresClarification: Boolean indicating if clarification questions should be asked
-8. clarificationQuestions: Array of specific questions to ask the user (if requiresClarification is true)
+3. queryCategory: One of [personal_data, general_knowledge, other]
+4. confidence: Number 0-1
+5. contextNeeded: Object with country, businessType, urgency, specificity (if applicable)
+6. missingContext: Array of missing context strings
+7. requiresClarification: Boolean
+8. clarificationQuestions: Array of questions (if requiresClarification is true)
 
-Intent Detection Rules:
-- regulatory_knowledge: Questions about GST, tax, regulations, compliance requirements
-- business_setup: Questions about starting, incorporating, registering a business
-- transaction_analysis: Questions about user's own transactions, expenses, payments
-- document_search: Questions about finding or searching documents/invoices
-- compliance_check: Questions about cross-border compliance, international requirements
-- general_inquiry: General questions, greetings, or unclear intent
+## ROUTING RULES (CRITICAL — follow exactly):
 
-Query Category Rules (CRITICAL FOR ROUTING):
-- personal_data: User asking about THEIR OWN business data (transactions, documents, vendors, invoices, revenue, cash flow, aging, spending)
-  * Keywords: "my", "I", "me", "show me", "what is my", "find my", "our", "we", "total revenue", "cash flow", "invoices", "expenses", "spending", "how much", "owe", "overdue", "aging", "runway", "burn rate", "vendors", "suppliers", "team spending", "employee expenses"
-  * Examples: "What's my largest transaction?", "What's our total revenue this month?", "How much do we owe suppliers?", "Show me invoices from ABC", "Cash flow analysis", "AR aging", "Team spending this quarter"
-  * CRITICAL: Revenue, cash flow, invoices, AP/AR, spending, aging, and vendor queries are ALWAYS personal_data — they query the user's business, NOT general knowledge.
-  * ACTION: Skip clarification and go directly to tool execution
-- general_knowledge: User asking about general business/regulatory information NOT specific to their business
-  * Keywords: "what are the rules", "how does", "explain", "requirements for", "GST rules", "tax rate", "how to register", "regulation", "compliance"
-  * Examples: "What are GST registration requirements?", "How does OVR work?", "What's the tax rate in Singapore?"
-  * IMPORTANT: "What's our revenue?" is personal_data, NOT general_knowledge. Only classify as general_knowledge when the user asks about rules/regulations/how-things-work in general.
-  * ACTION: May require clarification for country/business context
-- other: Greetings, unclear requests, or non-business queries
-  * Examples: "Hello", "Thanks", unclear or ambiguous requests
+**personal_data** (user's OWN business data — ALWAYS skip clarification):
+Revenue, cash flow, invoices, AP/AR, spending, aging, vendors, expenses, transactions, budget, profit/loss, balance, overdue, outstanding, team spending, employee expenses.
+DEFAULT: If the query mentions ANY financial term AND could plausibly refer to the user's data, classify as personal_data.
 
-Context Extraction:
-- country: singapore, malaysia, thailand, indonesia (from query content)
-- businessType: sme, individual, corporate, startup (from query content)
-- urgency: high (urgent/asap), medium (soon), low (default)
-- specificity: technical (technical details), general (overview), specific (specific case)
+**general_knowledge** (rules, regulations, how-things-work — ONLY when NOT about user's data):
+GST rules, tax rates, registration requirements, IFRS standards, accounting definitions, compliance requirements.
+ONLY classify as general_knowledge when the user explicitly asks about rules/concepts in general, NOT their own numbers.
 
-Enhanced Clarification Rules (Context-Aware):
-- ONLY ask for clarification if genuinely critical information is missing AND has not been established previously
-- Check established facts and previous questions before generating new clarification questions
-- If this is a clarification response, be more permissive and focus on processing provided information
-- Avoid asking redundant questions that overlap with previously answered topics
-- Consider the conversation history when determining if additional context is truly needed
+**other**: Greetings, thanks, unclear/non-business queries.
+
+## CLARIFICATION RULES:
+- ONLY ask for clarification if the query is genuinely ambiguous (single word like "invoices" or "taxes")
+- NEVER ask for clarification on personal_data queries — go directly to tool execution
+- Check conversation context before asking — don't repeat questions already answered
 
 User Query: "${query}"
 
-Respond with valid JSON only, no explanations:`;
+Respond with valid JSON only:`;
+
+  // Load DSPy-optimized few-shot examples if available (from weekly training pipeline)
+  try {
+    const optimizedConfig = await loadOptimizedConfig('chat_intent');
+    if (optimizedConfig && optimizedConfig.fewShotExamples.length > 0) {
+      const optimizedExamples = optimizedConfig.fewShotExamples
+        .map(ex => `Query: "${ex.query}"\n→ ${JSON.stringify(ex.expectedOutput)}`)
+        .join('\n\n');
+      contextualPrompt += `\n\n## OPTIMIZED EXAMPLES (from training pipeline v${optimizedConfig.version}):\n${optimizedExamples}`;
+      console.log(`[IntentAnalysis] Loaded ${optimizedConfig.fewShotExamples.length} optimized examples from DSPy v${optimizedConfig.version}`);
+    }
+  } catch (err) {
+    // Non-fatal: fall back to default prompt if loader fails
+    console.warn('[IntentAnalysis] Failed to load optimized config, using defaults:', err);
+  }
 
   // Build headers conditionally
   const headers: Record<string, string> = {
@@ -232,7 +283,13 @@ Respond with valid JSON only, no explanations:`;
   }
 
   try {
-    const analysis = JSON.parse(analysisText);
+    // Gemini sometimes wraps JSON in markdown code blocks — strip them
+    let cleanedText = analysisText;
+    const jsonBlockMatch = analysisText.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonBlockMatch) {
+      cleanedText = jsonBlockMatch[1].trim();
+    }
+    const analysis = JSON.parse(cleanedText);
 
     // Construct the intent analysis result
     const intent: UserIntent = {

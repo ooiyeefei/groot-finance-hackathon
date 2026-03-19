@@ -2830,7 +2830,8 @@ export default defineSchema({
     optimizerType: v.string(),    // "bootstrap_fewshot" | "miprov2"
     trainedAt: v.number(),
     lastCorrectionId: v.optional(v.string()),  // _id of last correction consumed — prevents re-optimizing same data
-    domain: v.optional(v.string()),            // "fee_classification" | "bank_recon" — distinguishes model types
+    domain: v.optional(v.string()),            // "fee_classification" | "bank_recon" | "chat_intent" | "chat_tool_selector" | "chat_param_extractor" | "chat_response_quality" | "chat_clarification"
+    optimizedPrompt: v.optional(v.string()),   // JSON-serialized optimized prompt + few-shot examples (for chat modules, loaded by TypeScript nodes)
   })
     .index("by_platform_status", ["platform", "status"])
     .index("by_platform_version", ["platform", "version"]),
@@ -3326,5 +3327,31 @@ export default defineSchema({
   })
     .index("by_businessId_createdAt", ["businessId", "createdAt"])
     .index("by_businessId_pairKey", ["businessId", "normalizedPairKey"]),
+
+  // ============================================
+  // CHAT AGENT CORRECTIONS (DSPy Self-Improving Chat)
+  // ============================================
+
+  chat_agent_corrections: defineTable({
+    businessId: v.id("businesses"),
+    messageId: v.optional(v.string()),
+    conversationId: v.optional(v.string()),
+    correctionType: v.string(),               // "intent" | "tool_selection" | "parameter_extraction"
+    originalQuery: v.string(),
+    originalIntent: v.optional(v.string()),
+    originalToolName: v.optional(v.string()),
+    originalParameters: v.optional(v.string()),
+    correctedIntent: v.optional(v.string()),
+    correctedToolName: v.optional(v.string()),
+    correctedParameters: v.optional(v.string()),
+    createdBy: v.string(),
+    createdAt: v.number(),
+    consumed: v.optional(v.boolean()),
+    consumedAt: v.optional(v.number()),
+  })
+    .index("by_correctionType", ["correctionType"])
+    .index("by_createdAt", ["createdAt"])
+    .index("by_consumed", ["consumed"])
+    .index("by_businessId", ["businessId"]),
 
 });

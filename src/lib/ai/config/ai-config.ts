@@ -41,16 +41,12 @@ function validateConfig(): void {
     'EMBEDDING_ENDPOINT_URL',
     'EMBEDDING_MODEL_ID',
     'EMBEDDING_API_KEY',
-    'CHAT_MODEL_ENDPOINT_URL',
-    'CHAT_MODEL_MODEL_ID',
+    'GEMINI_API_KEY',
     'QDRANT_URL',
     'QDRANT_API_KEY'
   ]
 
-  // Only require Gemini API key if USE_GEMINI is true
-  const required = process.env.USE_GEMINI === 'true'
-    ? [...baseRequired, 'GEMINI_API_KEY']
-    : baseRequired
+  const required = baseRequired
 
   const missing = required.filter(key => !process.env[key])
 
@@ -103,9 +99,9 @@ export function getAIConfig(): AIConfig {
       apiKey: process.env.EMBEDDING_API_KEY || ''
     },
     chat: {
-      endpointUrl: process.env.CHAT_MODEL_ENDPOINT_URL || '',
-      modelId: process.env.CHAT_MODEL_MODEL_ID || '',
-      apiKey: process.env.CHAT_MODEL_API_KEY
+      endpointUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+      modelId: 'gemini-3.1-flash-lite-preview',
+      apiKey: process.env.GEMINI_API_KEY
     },
     gemini: {
       apiKey: process.env.GEMINI_API_KEY || '',

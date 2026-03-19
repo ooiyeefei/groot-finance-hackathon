@@ -542,6 +542,8 @@ def lambda_handler(event: dict, context: Any) -> dict:
             result = _match_vendor_items(arguments)
         elif tool_name == "optimize_vendor_item_model":
             result = _optimize_vendor_item_model(arguments)
+        elif tool_name == "optimize_chat_module":
+            result = _optimize_chat_module(arguments)
         else:
             return _error_response(request_id, -32601, f"Unknown tool: {tool_name}")
 
@@ -876,3 +878,9 @@ def _optimize_vendor_item_model(arguments: dict) -> dict:
     """Run MIPROv2 optimization for vendor item matching model."""
     from vendor_item_optimizer import run_optimization
     return run_optimization(arguments)
+
+
+def _optimize_chat_module(arguments: dict) -> dict:
+    """Run DSPy optimization for chat agent modules (intent, tool selector, etc.)."""
+    from chat_optimizer import run_chat_module_optimization
+    return run_chat_module_optimization(arguments)

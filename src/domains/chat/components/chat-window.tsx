@@ -214,14 +214,26 @@ User question: ${trimmed}`
   // When streaming is active, hide the last assistant message if it was server-persisted
   // during the stream (prevents split-second double bubble while isLoading transitions to false).
   const displayMessages: DisplayMessage[] = useMemo(() => {
-    const msgs = convexMessages.map((msg) => {
+    const msgs = convexMessages.map((msg, idx) => {
       const meta = msg.metadata as Record<string, unknown> | undefined
+      // For assistant messages, find the preceding user message as originalQuery
+      let originalQuery: string | undefined
+      if (msg.role === 'assistant' && idx > 0) {
+        const prevMsg = convexMessages[idx - 1]
+        if (prevMsg.role === 'user') {
+          originalQuery = prevMsg.content
+        }
+      }
       return {
         id: msg.id,
         role: msg.role as 'user' | 'assistant',
         content: msg.content,
         citations: meta?.citations as CitationData[] | undefined,
         actions: meta?.actions as ChatAction[] | undefined,
+        originalQuery,
+        originalIntent: meta?.intent as string | undefined,
+        originalToolName: meta?.toolName as string | undefined,
+        conversationId: msg.conversationId as string | undefined,
       }
     })
 
@@ -309,6 +321,11 @@ User question: ${trimmed}`
               actions={msg.actions}
               isHistorical={!sessionStreamedIds.current.has(msg.id)}
               onViewDetails={handleViewDetails}
+              messageId={msg.id}
+              conversationId={msg.conversationId}
+              originalQuery={msg.originalQuery}
+              originalIntent={msg.originalIntent}
+              originalToolName={msg.originalToolName}
             />
           ))
         )}
@@ -476,6 +493,11 @@ interface DisplayMessage {
   content: string
   citations?: CitationData[]
   actions?: ChatAction[]
+  // Correction feedback metadata (for assistant messages)
+  originalQuery?: string
+  originalIntent?: string
+  originalToolName?: string
+  conversationId?: string
 }
 
 /**

@@ -18,6 +18,7 @@ import { getActionCardComponent } from './action-cards'
 import { BulkActionBar } from './action-cards/bulk-action-bar'
 import type { CitationData } from '@/lib/ai/tools/base-tool'
 import type { ChatAction } from '../lib/sse-parser'
+import { CorrectionFeedback } from './correction-feedback'
 
 interface MessageRendererProps {
   content: string
@@ -29,6 +30,12 @@ interface MessageRendererProps {
   isInline?: boolean
   className?: string
   onViewDetails?: (payload: { type: 'chart' | 'table' | 'dashboard'; title: string; data: unknown }) => void
+  /** Metadata for correction feedback on assistant messages */
+  messageId?: string
+  conversationId?: string
+  originalQuery?: string
+  originalIntent?: string
+  originalToolName?: string
 }
 
 /**
@@ -43,6 +50,11 @@ export function MessageRenderer({
   isInline = false,
   className = '',
   onViewDetails,
+  messageId,
+  conversationId,
+  originalQuery,
+  originalIntent,
+  originalToolName,
 }: MessageRendererProps) {
   const [activeCitation, setActiveCitation] = useState<CitationData | null>(null)
   const [isCitationOpen, setIsCitationOpen] = useState(false)
@@ -179,6 +191,15 @@ export function MessageRenderer({
           </ReactMarkdown>
         </div>
         {actionCards}
+        {isHistorical && originalQuery && (
+          <CorrectionFeedback
+            messageId={messageId}
+            conversationId={conversationId}
+            originalQuery={originalQuery}
+            originalIntent={originalIntent}
+            originalToolName={originalToolName}
+          />
+        )}
         <CitationOverlay
           citation={activeCitation}
           isOpen={isCitationOpen}
@@ -216,6 +237,15 @@ export function MessageRenderer({
                 </ReactMarkdown>
               </div>
               {actionCards}
+              {isHistorical && originalQuery && (
+                <CorrectionFeedback
+                  messageId={messageId}
+                  conversationId={conversationId}
+                  originalQuery={originalQuery}
+                  originalIntent={originalIntent}
+                  originalToolName={originalToolName}
+                />
+              )}
             </>
           )}
         </div>

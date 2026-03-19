@@ -1,6 +1,6 @@
 /**
  * Consolidated System Prompts for Financial Agent
- * Single source of truth for the Qwen3 (Modal) OpenAI-compatible endpoint
+ * Single source of truth for the Gemini 3.1 Flash-Lite OpenAI-compatible endpoint
  */
 
 import { ModelType } from '../../tools/base-tool';

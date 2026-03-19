@@ -298,11 +298,15 @@ formatBusinessDate('2025-10-31')  // "Oct 31, 2025" (no timezone shift)
 ```
 
 ### AI Model
-**Qwen3-8B on Modal** (OpenAI-compatible endpoint):
-- Endpoint: `CHAT_MODEL_ENDPOINT_URL` (Modal serverless)
-- Model ID: `CHAT_MODEL_MODEL_ID` (e.g. `qwen3-8b`)
-- Temperature: 0.3, Timeout: 60s+
+**Gemini 3.1 Flash-Lite** (OpenAI-compatible endpoint):
+- Endpoint: `https://generativelanguage.googleapis.com/v1beta/openai` (hardcoded in ai-config.ts)
+- Model ID: `gemini-3.1-flash-lite-preview`
+- API Key: `GEMINI_API_KEY` (shared with DSPy features)
+- Temperature: 0.3, Max tokens: 1000
 - Tool calling: OpenAI-compatible function calling format
+- Zero cold start (replaced Modal/Qwen which had 10-65s cold starts)
+- Self-improving: DSPy modules train weekly, optimized prompts loaded at inference time
+- Correction collection: `chat_agent_corrections` Convex table, corrections pooled globally
 
 ### Gemini Model Selection (MANDATORY)
 - **CUA (Computer Use Agent)**: `gemini-2.5-computer-use-preview-10-2025` — only model available for browser automation
@@ -412,12 +416,14 @@ const arBalance = arLines.reduce((sum, line) =>
 
 ## Active Technologies
 - **Core**: TypeScript 5.9.3, Next.js 15.5.7, Convex 1.31.3, React 19.1.2, Clerk 6.30.0, Zod 3.23.8
-- **AI**: Qwen3-8B on Modal (chat), DSPy 2.6+ / Gemini 3.1 Flash-Lite (all other AI), LangGraph 0.4.5
+- **AI**: Gemini 3.1 Flash-Lite (chat + all AI), DSPy 2.6+ (self-improving modules), LangGraph 0.4.5
 - **Infrastructure**: AWS Lambda (Node.js 20 / Python 3.11), CDK v2, S3, CloudFront, SES, SSM
 - **Frontend**: Radix UI, Tailwind CSS, Recharts, lucide-react, @react-pdf/renderer, sonner
 - **Other**: Stripe SDK 20.1.0, papaparse, xlsx/SheetJS, Capacitor (iOS), Qdrant Cloud (RAG), Mem0
 - TypeScript 5.9.3, Next.js 15.5.7 + LangGraph 0.4.5, Convex 1.31.3, Qwen3-8B (Modal), Zod 3.23.8 (026-agent-rbac-hardening)
 - Convex (tables: invoices, sales_invoices, journal_entry_lines, business_memberships, users) (026-agent-rbac-hardening)
+- TypeScript 5.9.3 (Next.js 15.5.7 + LangGraph 0.4.5) + Python 3.11 (Lambda DSPy) + @langchain/langgraph, @langchain/core, dspy>=2.6.0 (Python), Convex 1.31.3 (027-gemini-dspy-chat-agent)
+- Convex (corrections, model versions), S3 finanseal-bucket (model artifacts) (027-gemini-dspy-chat-agent)
 
 
 ## Recent Changes

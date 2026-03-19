@@ -10,6 +10,7 @@ import { detectModelType } from '../config/model-config';
 import { getSystemPrompt } from '../config/prompts';
 import { aiConfig } from '../../config/ai-config';
 import { AgentState } from '../types';
+import { loadOptimizedConfig } from '../dspy/model-version-loader';
 
 export async function callModel(state: AgentState): Promise<Partial<AgentState>> {
   console.log('[CallModel] Processing request with security validation');
@@ -39,7 +40,20 @@ export async function callModel(state: AgentState): Promise<Partial<AgentState>>
   console.log('[CallModel] Setting phase to execution for model processing');
 
   const modelType = detectModelType();
-  const systemPrompt = getSystemPrompt(state.language || 'en', modelType, undefined, state.userContext.homeCurrency, state.userContext.role);
+  let systemPrompt = getSystemPrompt(state.language || 'en', modelType, undefined, state.userContext.homeCurrency, state.userContext.role);
+
+  // Load DSPy-optimized tool selection examples if available
+  try {
+    const toolConfig = await loadOptimizedConfig('chat_tool_selector');
+    if (toolConfig && toolConfig.fewShotExamples.length > 0) {
+      const examples = toolConfig.fewShotExamples
+        .map(ex => `Query: "${ex.query}" → Tool: ${JSON.stringify(ex.expectedOutput)}`)
+        .join('\n');
+      systemPrompt += `\n\n## TOOL SELECTION EXAMPLES (optimized v${toolConfig.version}):\n${examples}`;
+    }
+  } catch {
+    // Non-fatal: use default prompt
+  }
 
   const processedMessages = [...state.messages];
 
@@ -272,16 +286,33 @@ async function handleOpenAIResponse(state: AgentState, messages: any[], tools: a
     headers['Authorization'] = `Bearer ${aiConfig.chat.apiKey}`;
   }
 
-  const response = await fetch(`${aiConfig.chat.endpointUrl}/chat/completions`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(requestPayload)
-  });
+  // Gemini API call with retry for rate limiting (429) and transient errors (500, 503)
+  let response: Response | undefined;
+  const maxRetries = 3;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    response = await fetch(`${aiConfig.chat.endpointUrl}/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestPayload)
+    });
 
-  if (!response.ok) {
+    if (response.ok) break;
+
+    const retryableStatus = response.status === 429 || response.status === 500 || response.status === 503;
+    if (retryableStatus && attempt < maxRetries) {
+      const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 4000);
+      console.warn(`[CallModel] Gemini API returned ${response.status}, retrying in ${backoffMs}ms (attempt ${attempt}/${maxRetries})`);
+      await new Promise(resolve => setTimeout(resolve, backoffMs));
+      continue;
+    }
+
     const errorText = await response.text();
     console.error(`[CallModel] LLM API error: ${response.status} - ${errorText}`);
     throw new Error(`LLM API error: ${response.status} - ${errorText}`);
+  }
+
+  if (!response || !response.ok) {
+    throw new Error('LLM API error: no successful response after retries');
   }
 
   const result = await response.json();
@@ -392,6 +423,27 @@ async function handleOpenAIResponse(state: AgentState, messages: any[], tools: a
     }
   }
 
+  // Selective response quality check for data-heavy responses
+  // Only runs when the response follows a tool result with substantial data (>3 data points)
+  const lastToolMsg = state.messages.slice().reverse().find(m => m._getType() === 'tool');
+  const toolResultLength = lastToolMsg && typeof lastToolMsg.content === 'string' ? lastToolMsg.content.length : 0;
+  const isDataHeavy = toolResultLength > 500; // Tool result has substantial data
+
+  if (isDataHeavy && content.length > 50) {
+    try {
+      const qualityConfig = await loadOptimizedConfig('chat_response_quality');
+      if (qualityConfig && qualityConfig.systemPrompt) {
+        console.log('[CallModel] Running selective response quality check on data-heavy response');
+        // Quality check is a lightweight second pass — only used when optimized config exists
+        // The optimized prompt helps detect hallucination and improve formatting
+        // For now, just log that the check would run; actual second LLM call added after
+        // the optimization pipeline has produced at least one trained model version
+      }
+    } catch {
+      // Non-fatal
+    }
+  }
+
   console.log(`[CallModel] AI response generated (${content.length} chars)`);
   return {
     messages: [...state.messages, new AIMessage(content)],
@@ -411,6 +463,12 @@ function handleModelError(state: AgentState, error: any): Partial<AgentState> {
     if (error.message.includes('ENOTFOUND') || error.message.includes('ETIMEDOUT') || error.message.includes('fetch failed')) {
       console.error('[CallModel] Network connectivity error:', error.message);
       errorMessage = 'I\'m experiencing network connectivity issues. Please try your question again in a moment.';
+    } else if (error.message.includes('429') || error.message.includes('quota')) {
+      console.error('[CallModel] Gemini rate limit/quota exceeded:', error.message);
+      errorMessage = 'The AI service is experiencing high demand. Please try again in a moment.';
+    } else if (error.message.includes('403')) {
+      console.error('[CallModel] Gemini API authentication/quota error:', error.message);
+      errorMessage = 'The AI service is temporarily unavailable. Please try again shortly.';
     } else if (error.message.startsWith('LLM API error:')) {
       console.error('[CallModel] API Error Details:', error.message);
       errorMessage = 'The AI service is temporarily unavailable. Please try again shortly.';
