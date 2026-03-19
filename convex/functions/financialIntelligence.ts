@@ -900,15 +900,43 @@ export const getEmployeeExpensesForManager = query({
     const journalEntryIds = journalEntries.map((e) => e._id);
 
     // Find expense journal entries belonging to this employee.
-    // Strategy: JEs with sourceType="expense_claim" → look up the expense_claim → check userId
-    // Also check legacy entityType="employee" on journal entry lines (old data before Mar 14 migration)
-    const expenseClaimJEs = journalEntries.filter((e) => e.sourceType === "expense_claim" && e.sourceId);
+    // Primary strategy: query expense_claims by userId, then find matching journal entries.
+    // This is more robust than relying on JE createdBy (which may be "system" for injected data)
+    // or sourceType/sourceId on JE (which may be missing for manually injected entries).
+    //
+    // Two paths to match JE ↔ claim:
+    //   (a) expense_claim.journalEntryId → JE._id (claim stores its JE reference)
+    //   (b) JE.sourceId → expense_claim._id (JE stores its source claim reference)
+    // Also: legacy entityType="employee" on journal entry lines (old data before Mar 14 migration)
     const employeeJournalEntryIds = new Set<string>();
 
+    // Path A: Start from expense_claims owned by this employee
+    const employeeClaims = await ctx.db
+      .query("expense_claims")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+    const targetClaims = employeeClaims.filter(
+      (c) => c.userId.toString() === targetEmployee._id.toString() && !c.deletedAt
+    );
+
+    // Build a set of claim IDs for reverse lookup
+    const targetClaimIds = new Set(targetClaims.map((c) => c._id.toString()));
+
+    for (const claim of targetClaims) {
+      // Path A: claim has journalEntryId pointing to JE
+      if (claim.journalEntryId) {
+        employeeJournalEntryIds.add(claim.journalEntryId.toString());
+      }
+      // Path A2: claim has legacy accountingEntryId
+      if (claim.accountingEntryId) {
+        employeeJournalEntryIds.add(claim.accountingEntryId);
+      }
+    }
+
+    // Path B: JEs with sourceType="expense_claim" whose sourceId matches an employee claim
+    const expenseClaimJEs = journalEntries.filter((e) => e.sourceType === "expense_claim" && e.sourceId);
     for (const je of expenseClaimJEs) {
-      // Look up the expense claim to find who submitted it
-      const claim = await ctx.db.get(je.sourceId as any);
-      if (claim && (claim as any).userId?.toString() === targetEmployee._id.toString()) {
+      if (targetClaimIds.has(je.sourceId!)) {
         employeeJournalEntryIds.add(je._id.toString());
       }
     }
@@ -1340,13 +1368,49 @@ export const getMcpTeamExpenses = query({
 
     const journalEntryIds = journalEntries.map((e) => e._id);
 
+    // Map JE → employee via expense_claims (same strategy as getEmployeeExpensesForManager)
+    // This resolves ownership through claim.userId instead of relying on JE createdBy or line entityType
+    const jeToEmployeeMap = new Map<string, string>();
+
+    // Path A: Query expense_claims for all target employees
+    const allClaims = await ctx.db
+      .query("expense_claims")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+    const teamClaims = allClaims.filter(
+      (c) => targetUserIds.has(c.userId.toString()) && !c.deletedAt
+    );
+
+    // Build claim ID → userId map for reverse lookup
+    const claimToUserMap = new Map<string, string>();
+    for (const claim of teamClaims) {
+      claimToUserMap.set(claim._id.toString(), claim.userId.toString());
+      // Path A: claim has journalEntryId pointing to JE
+      if (claim.journalEntryId) {
+        jeToEmployeeMap.set(claim.journalEntryId.toString(), claim.userId.toString());
+      }
+      if (claim.accountingEntryId) {
+        jeToEmployeeMap.set(claim.accountingEntryId, claim.userId.toString());
+      }
+    }
+
+    // Path B: JEs with sourceType="expense_claim" whose sourceId matches a team claim
+    const teamExpenseJEs = journalEntries.filter((e) => e.sourceType === "expense_claim" && e.sourceId);
+    for (const je of teamExpenseJEs) {
+      const claimUserId = claimToUserMap.get(je.sourceId!);
+      if (claimUserId) {
+        jeToEmployeeMap.set(je._id.toString(), claimUserId);
+      }
+    }
+
     // Get all lines for these entries
     const allLines = await ctx.db.query("journal_entry_lines").withIndex("by_business_account", (q) => q.eq("businessId", business._id)).collect();
     let relevantLines = allLines.filter((line) => {
       if (!journalEntryIds.includes(line.journalEntryId)) return false;
-      // Filter to target employee IDs
-      if (line.entityType !== "employee") return false;
-      if (!line.entityId || !targetUserIds.has(line.entityId)) return false;
+      // Match: JE mapped to team employee (via claim lookup) OR legacy entityType=employee
+      const isTeamExpenseJE = jeToEmployeeMap.has(line.journalEntryId.toString());
+      const isLegacyEntity = line.entityType === "employee" && line.entityId && targetUserIds.has(line.entityId);
+      if (!isTeamExpenseJE && !isLegacyEntity) return false;
       return true;
     });
 
@@ -1363,10 +1427,13 @@ export const getMcpTeamExpenses = query({
       const isIncome = code >= "4000" && code < "5000";
       const transactionType = isExpense ? "Expense" : isIncome ? "Income" : "Other";
 
+      // Resolve employee userId from JE map or legacy entityId
+      const employeeUserId = jeToEmployeeMap.get(line.journalEntryId.toString()) || line.entityId || "";
+
       return {
         _id: line.journalEntryId,
-        userId: line.entityId || "",
-        userName: userNameMap[line.entityId || ""] || line.entityName || "",
+        userId: employeeUserId,
+        userName: userNameMap[employeeUserId] || line.entityName || "",
         transactionDate: entry?.transactionDate || "",
         vendorName: line.entityName || "",
         category: line.accountName || "",
