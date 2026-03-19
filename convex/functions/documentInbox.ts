@@ -32,6 +32,8 @@ export const createInboxEntry = internalMutation({
       v.literal("image/png")
     ),
     sourceType: v.literal("email_forward"),
+    s3StagingKey: v.optional(v.string()),
+    s3ExpenseClaimsKey: v.optional(v.string()),
     emailMetadata: v.object({
       from: v.string(),
       subject: v.string(),
@@ -76,6 +78,8 @@ export const createInboxEntry = internalMutation({
       fileSizeBytes: args.fileSizeBytes,
       mimeType: args.mimeType,
       sourceType: args.sourceType,
+      s3StagingKey: args.s3StagingKey,
+      s3ExpenseClaimsKey: args.s3ExpenseClaimsKey,
       emailMetadata: args.emailMetadata,
       status: "pending_classification",
       isDuplicate: false,
@@ -325,18 +329,18 @@ export const manuallyClassifyDocument = mutation({
 
     // Route receipt → find/create draft submission → create expense claim
     if (args.classifiedType === "receipt") {
-      // Find existing draft submission for this user, or create one
-      let submission = await ctx.db
+      // Find existing draft submission for this user (uses index for performance)
+      // This ensures multiple classifies batch into the same submission
+      const allUserSubmissions = await ctx.db
         .query("expense_submissions")
-        .filter((q) =>
-          q.and(
-            q.eq(q.field("businessId"), inboxEntry.businessId),
-            q.eq(q.field("userId"), inboxEntry.userId),
-            q.eq(q.field("status"), "draft")
-          )
+        .withIndex("by_businessId_userId", (q) =>
+          q.eq("businessId", inboxEntry.businessId).eq("userId", inboxEntry.userId)
         )
-        .order("desc")
-        .first();
+        .collect();
+
+      let submission = allUserSubmissions
+        .filter((s) => s.status === "draft" && !s.deletedAt)
+        .sort((a, b) => b._creationTime - a._creationTime)[0] as typeof allUserSubmissions[0] | undefined;
 
       if (!submission) {
         // Create new draft submission
@@ -349,11 +353,12 @@ export const manuallyClassifyDocument = mutation({
           status: "draft",
           updatedAt: Date.now(),
         });
-        submission = await ctx.db.get(submissionId);
+        submission = (await ctx.db.get(submissionId))!;
       }
 
-      // Get file URL for the expense claim
-      const fileUrl = await ctx.storage.getUrl(inboxEntry.fileStorageId);
+      // Use the pre-uploaded S3 expense_claims key as storagePath (for CloudFront signed URLs)
+      // Falls back to Convex storage ID if S3 key not available (legacy entries)
+      const storagePath = inboxEntry.s3ExpenseClaimsKey || String(inboxEntry.fileStorageId);
 
       // Create expense claim linked to submission
       const claimId = await ctx.db.insert("expense_claims", {
@@ -361,11 +366,18 @@ export const manuallyClassifyDocument = mutation({
         userId: inboxEntry.userId,
         submissionId: submission!._id,
         businessPurpose: `Forwarded: ${inboxEntry.emailMetadata.subject || inboxEntry.originalFilename}`,
-        storagePath: inboxEntry.fileStorageId,
+        storagePath,
         fileName: inboxEntry.originalFilename,
         fileType: inboxEntry.mimeType,
+        fileSize: inboxEntry.fileSizeBytes,
         status: "draft",
         sourceType: "email_forward",
+        sourceEmailMetadata: {
+          from: inboxEntry.emailMetadata.from,
+          subject: inboxEntry.emailMetadata.subject,
+          receivedAt: inboxEntry.emailMetadata.receivedAt,
+          messageId: inboxEntry.emailMetadata.messageId,
+        },
         updatedAt: Date.now(),
       });
 

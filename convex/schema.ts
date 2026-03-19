@@ -745,6 +745,7 @@ export default defineSchema({
     emailRefToken: v.string(),                         // The + suffix token
     status: v.union(
       v.literal("pending"),
+      v.literal("submitted"),
       v.literal("in_progress"),
       v.literal("success"),
       v.literal("submitted"),    // Direct-link merchant: e-invoice captured, no email expected
@@ -1053,6 +1054,10 @@ export default defineSchema({
       v.id("expense_claims"),
       v.id("invoices")
     )),
+
+    // S3 Keys (set by Lambda for downstream processing)
+    s3StagingKey: v.optional(v.string()),          // document-inbox-staging/{bizId}/...
+    s3ExpenseClaimsKey: v.optional(v.string()),    // {bizId}/{userId}/email-fwd/{hash}.{ext} (relative to expense_claims/ prefix)
 
     // Data Retention (PDPA 7-year compliance)
     archiveEligibleAt: v.optional(v.number()),  // 30 days after entry

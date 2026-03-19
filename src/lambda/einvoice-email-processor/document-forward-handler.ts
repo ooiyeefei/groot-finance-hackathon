@@ -194,10 +194,12 @@ async function uploadToS3Staging(
 
 /**
  * Classify document using Gemini Flash-Lite
+ * Takes the raw file buffer directly — no URL fetch needed.
  */
 async function classifyDocument(
-  fileUrl: string,
-  filename: string
+  fileBuffer: Buffer,
+  filename: string,
+  contentType: string
 ): Promise<{
   type: "receipt" | "invoice" | "unknown";
   confidence: number;
@@ -221,6 +223,11 @@ Consider:
 Respond in JSON only:
 {"type":"receipt|invoice|unknown","confidence":0.0-1.0,"reasoning":"brief explanation"}`;
 
+    // Determine MIME type for Gemini
+    let mimeType = "image/jpeg";
+    if (contentType.includes("pdf")) mimeType = "application/pdf";
+    else if (contentType.includes("png")) mimeType = "image/png";
+
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${GEMINI_API_KEY}`,
       {
@@ -234,8 +241,8 @@ Respond in JSON only:
                 { text: prompt },
                 {
                   inline_data: {
-                    mime_type: filename.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg",
-                    data: await fetchFileAsBase64(fileUrl),
+                    mime_type: mimeType,
+                    data: fileBuffer.toString("base64"),
                   },
                 },
               ],
@@ -247,7 +254,8 @@ Respond in JSON only:
     );
 
     if (!response.ok) {
-      console.log(`[DocForward] Gemini API error: ${response.status}`);
+      const errBody = await response.text();
+      console.log(`[DocForward] Gemini API error: ${response.status} — ${errBody}`);
       return { type: "unknown", confidence: 0, reasoning: `API error: ${response.status}` };
     }
 
@@ -270,15 +278,6 @@ Respond in JSON only:
     console.log(`[DocForward] Classification error: ${error}`);
     return { type: "unknown", confidence: 0, reasoning: `Error: ${error}` };
   }
-}
-
-/**
- * Fetch file from Convex storage and convert to base64
- */
-async function fetchFileAsBase64(url: string): Promise<string> {
-  const response = await fetch(url);
-  const buffer = await response.arrayBuffer();
-  return Buffer.from(buffer).toString("base64");
 }
 
 /**
@@ -371,6 +370,8 @@ async function createInboxEntry(params: {
   mimeType: "application/pdf" | "image/jpeg" | "image/png";
   businessId: string;
   userId: string;
+  s3StagingKey: string;
+  s3ExpenseClaimsKey: string;
   emailMetadata: {
     from: string;
     subject: string;
@@ -610,19 +611,36 @@ export async function handleDocumentForwarding(
       console.log(`[DocForward] Processing: ${attachment.filename} (${attachment.size} bytes, hash=${attachment.checksum})`);
 
       // Upload to S3 staging
-      const s3Key = await uploadToS3Staging(
+      const s3StagingKey = await uploadToS3Staging(
         businessConfig.businessId,
         attachment.filename,
         attachment.buffer,
         attachment.contentType
       );
 
-      console.log(`[DocForward] Uploaded to S3: ${s3Key}`);
+      console.log(`[DocForward] Uploaded to S3 staging: ${s3StagingKey}`);
+
+      // Also upload to expense_claims/ prefix so CloudFront signed URLs work
+      // when this document is classified as a receipt later.
+      // Path: expense_claims/{bizId}/{userId}/email-fwd/{hash}.{ext}
+      const ext = attachment.filename.split(".").pop() || "jpg";
+      const expenseClaimsRelativeKey = `${businessConfig.businessId}/${senderUserId}/email-fwd/${attachment.checksum}.${ext}`;
+      const expenseClaimsS3Key = `expense_claims/${expenseClaimsRelativeKey}`;
+
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: S3_BUCKET,
+          Key: expenseClaimsS3Key,
+          Body: attachment.buffer,
+          ContentType: attachment.contentType,
+        })
+      );
+      console.log(`[DocForward] Uploaded to S3 expense_claims: ${expenseClaimsS3Key}`);
 
       // Generate pre-signed URL for Convex to download (Convex can't use AWS SDK)
       const presignedUrl = await getSignedUrl(
         s3,
-        new GetObjectCommand({ Bucket: S3_BUCKET, Key: s3Key }),
+        new GetObjectCommand({ Bucket: S3_BUCKET, Key: s3StagingKey }),
         { expiresIn: 300 } // 5 minutes
       );
       console.log(`[DocForward] Generated pre-signed URL for Convex download`);
@@ -637,6 +655,18 @@ export async function handleDocumentForwarding(
         mimeType = "image/jpeg";
       }
 
+      // Classify document with Gemini BEFORE creating inbox entry
+      // (uses raw buffer — no need to fetch from Convex storage URL)
+      console.log(`[DocForward] Classifying document...`);
+      const classification = await classifyDocument(
+        attachment.buffer,
+        attachment.filename,
+        attachment.contentType
+      );
+      console.log(
+        `[DocForward] Classification: ${classification.type} (${classification.confidence}) - ${classification.reasoning}`
+      );
+
       // Create inbox entry via Convex (pass pre-signed URL instead of bucket/key)
       const result = await createInboxEntry({
         presignedUrl,
@@ -644,6 +674,8 @@ export async function handleDocumentForwarding(
         mimeType,
         businessId: businessConfig.businessId,
         userId: senderUserId,
+        s3StagingKey,
+        s3ExpenseClaimsKey: expenseClaimsRelativeKey,
         emailMetadata,
       });
 
@@ -658,37 +690,6 @@ export async function handleDocumentForwarding(
       }
 
       console.log(`[DocForward] Inbox entry created: ${result.inboxEntryId} (hash=${result.fileHash}, size=${result.fileSizeBytes})`);
-
-      // Get file URL from Convex storage for classification
-      const fileUrlResponse = await fetch(`${CONVEX_URL}/api/query`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          path: "functions/documentInbox:getInboxDocument",
-          args: { inboxEntryId: result.inboxEntryId },
-          format: "json",
-        }),
-      });
-
-      if (!fileUrlResponse.ok) {
-        console.log(`[DocForward] Failed to get file URL: ${fileUrlResponse.status}`);
-        continue;
-      }
-
-      const fileUrlResult = await fileUrlResponse.json();
-      const fileUrl = fileUrlResult.value?.document?.fileUrl;
-
-      if (!fileUrl) {
-        console.log(`[DocForward] No file URL available for classification`);
-        continue;
-      }
-
-      // Classify document with Gemini
-      console.log(`[DocForward] Classifying document...`);
-      const classification = await classifyDocument(fileUrl, attachment.filename);
-      console.log(
-        `[DocForward] Classification: ${classification.type} (${classification.confidence}) - ${classification.reasoning}`
-      );
 
       // Update inbox status with classification result
       // Update inbox entry with classification result — all documents stay in inbox

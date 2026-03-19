@@ -96,7 +96,7 @@ export default function DocumentsInboxClient() {
     if (!selectedDocument || !selectedType) return;
 
     try {
-      await manuallyClassifyDocument({
+      const result = await manuallyClassifyDocument({
         inboxEntryId: selectedDocument,
         classifiedType: selectedType,
         classifiedBy: undefined,
@@ -105,6 +105,22 @@ export default function DocumentsInboxClient() {
       toast.success("Document classified", {
         description: `Routed as ${selectedType === "receipt" ? "Expense Receipt" : selectedType === "invoice" ? "AP Invoice" : "E-Invoice"}`,
       });
+
+      // Trigger OCR extraction for receipts (fire-and-forget)
+      if (selectedType === "receipt" && result?.destinationRecordId) {
+        fetch(`/api/v1/document-inbox/${selectedDocument}/process-receipt`, {
+          method: "POST",
+        }).then((res) => {
+          if (res.ok) {
+            toast.success("OCR extraction started", {
+              description: "Receipt data will be extracted automatically",
+            });
+          }
+        }).catch(() => {
+          // Non-blocking — OCR failure doesn't affect classification
+          console.log("[DocInbox] OCR trigger failed (non-fatal)");
+        });
+      }
 
       setClassifyModalOpen(false);
       setSelectedDocument(null);

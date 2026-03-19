@@ -27,6 +27,8 @@ export const uploadAndCreateInboxEntry = action({
     ),
     businessId: v.id("businesses"),
     userId: v.id("users"),
+    s3StagingKey: v.optional(v.string()),
+    s3ExpenseClaimsKey: v.optional(v.string()),
     emailMetadata: v.object({
       from: v.string(),
       subject: v.string(),
@@ -67,6 +69,8 @@ export const uploadAndCreateInboxEntry = action({
       fileSizeBytes: fileBuffer.length,
       mimeType: args.mimeType,
       sourceType: "email_forward",
+      s3StagingKey: args.s3StagingKey,
+      s3ExpenseClaimsKey: args.s3ExpenseClaimsKey,
       emailMetadata: args.emailMetadata,
     });
 
