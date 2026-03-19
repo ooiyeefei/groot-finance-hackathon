@@ -893,7 +893,7 @@ Please clarify which type you'd like me to search, or say "both" to see all tran
       )
 
       // Map Convex results to match expected format
-      const allTransactions = result.entries.map((entry: any) => ({
+      let allTransactions = result.entries.map((entry: any) => ({
         id: entry._id,
         description: entry.description,
         original_amount: entry.originalAmount,
@@ -904,8 +904,27 @@ Please clarify which type you'd like me to search, or say "both" to see all tran
         vendor_name: entry.vendorName,
         transaction_type: entry.transactionType,
         source_document_type: entry.sourceDocumentType,
+        created_by: entry.createdBy,
         created_at: entry._creationTime,
       }))
+
+      // RBAC: Scope transactions by role
+      // Employees should only see their own expense claims, not business-wide AP/AR
+      const role = (userContext.role || '').toLowerCase()
+      if (role === 'employee') {
+        allTransactions = allTransactions.filter((t: any) =>
+          t.source_document_type === 'expense_claim' && t.created_by === userContext.userId
+        )
+        console.log(`[TransactionLookupTool] RBAC: Employee filter applied — ${allTransactions.length} personal expense claims (from ${result.entries.length} total)`)
+      } else if (role === 'manager') {
+        // Managers see their own expense claims only (team data via get_team_summary/get_employee_expenses)
+        allTransactions = allTransactions.filter((t: any) =>
+          t.source_document_type === 'expense_claim' && t.created_by === userContext.userId
+        )
+        console.log(`[TransactionLookupTool] RBAC: Manager filter applied — ${allTransactions.length} personal expense claims (from ${result.entries.length} total)`)
+      }
+      // finance_admin/owner: no filter, see everything
+
       const error = null
 
       // CRITICAL DEBUG: Log actual query results

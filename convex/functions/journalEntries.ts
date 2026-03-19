@@ -719,6 +719,8 @@ export const searchForAI = query({
             : entry.sourceType === "expense_claim"
             ? "expense_claim"
             : entry.sourceType,
+        sourceId: entry.sourceId,
+        createdBy: entry.createdBy,
         status: entry.status,
         _creationTime: entry.createdAt,
       };
