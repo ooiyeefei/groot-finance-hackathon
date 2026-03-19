@@ -13,9 +13,29 @@ Instructions for AI coding agents working on Groot Finance.
 
 ## Project Context
 
-**Groot Finance**: Financial co-pilot for Southeast Asian SMEs
-**Stack**: Next.js 15.4.6 + Convex + AWS Lambda + Qwen3 (Modal)
+**Groot Finance**: AI financial co-pilot that works, learns, and improves — for Southeast Asian SMEs.
+**Vision**: See `docs/product_vision.md` for full product vision, positioning, USP, and persona definitions.
+**Stack**: Next.js 15.4.6 + Convex + AWS Lambda + Gemini 3.1 Flash-Lite + DSPy + Mem0
 **Docs**: See `docs/README.md` for full documentation
+
+### What Groot IS and IS NOT (CRITICAL — read before any design decision)
+
+**Groot is an AGENTIC AI company, not a SaaS accounting app.**
+- The AI agent IS the product. Accounting, invoicing, and expense features EXIST TO SERVE the agent.
+- Every feature should ask: "Can the user do this through the chat agent?" If not, build the agent capability first.
+- The chat agent is the PRIMARY interface — dashboards and pages are SECONDARY.
+- We compete with Xero/QuickBooks the way Tesla competes with Toyota — fundamentally different architecture.
+
+**Three personas the agent serves:**
+1. **Personal Assistant** (Employee) — snap receipt → auto-claim → track reimbursement
+2. **Manager's Right-Arm** (Manager) — team spending alerts, late approval flags, budget visibility
+3. **CFO Copilot** (Owner/Finance Admin) — cash flow forecasting, board reports, vendor optimization, proactive risk alerts
+
+**The moat: Self-improving AI**
+- Every user correction trains the AI (DSPy weekly retraining)
+- Corrections → training → accuracy → fewer corrections → smarter system (the flywheel)
+- Per-business learning via Mem0 persistent memory
+- This compounding value is impossible to replicate with static LLM prompts
 
 ### Domain Structure
 ```
@@ -66,7 +86,7 @@ src/lib/csv-parser/                 # Shared capability (no page, no route)
 
 ### Product & Engineering Principles (CRITICAL)
 
-**Groot is an Agentic AI startup, not a standard SaaS.** Every feature decision must be evaluated through this lens:
+**Groot is an Agentic AI startup, not a standard SaaS.** Every feature decision must be evaluated through this lens. See `docs/product_vision.md` for the full vision and competitive positioning.
 
 **1. Self-Improving AI Over Static Rules**
 - Standard SaaS advice says "don't use expensive AI for things a simple `if/else` can solve." That advice works for a 2022 accounting app — not for Groot.
