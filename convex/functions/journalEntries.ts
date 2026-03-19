@@ -114,9 +114,11 @@ async function createJournalEntryHelper(
       .order("desc")
       .first();
 
-    const lastSequence = lastEntry
-      ? parseInt(lastEntry.entryNumber.split("-")[2])
-      : 0;
+    let lastSequence = 0;
+    if (lastEntry) {
+      const parsed = parseInt(lastEntry.entryNumber.split("-")[2]);
+      lastSequence = Number.isNaN(parsed) ? 0 : parsed;
+    }
     const entryNumber = generateEntryNumber(fiscalYear, lastSequence + 1);
 
     const now = Date.now();
