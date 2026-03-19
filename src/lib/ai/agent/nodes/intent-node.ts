@@ -168,13 +168,15 @@ Intent Detection Rules:
 - general_inquiry: General questions, greetings, or unclear intent
 
 Query Category Rules (CRITICAL FOR ROUTING):
-- personal_data: User asking about THEIR OWN data (transactions, documents, vendors)
-  * Keywords: "my", "I", "me", "show me", "what is my", "find my", "my transactions", "my largest", "my documents"
-  * Examples: "What's my largest transaction?", "Show me my transactions in June", "Find my invoices from ABC Corp"
+- personal_data: User asking about THEIR OWN business data (transactions, documents, vendors, invoices, revenue, cash flow, aging, spending)
+  * Keywords: "my", "I", "me", "show me", "what is my", "find my", "our", "we", "total revenue", "cash flow", "invoices", "expenses", "spending", "how much", "owe", "overdue", "aging", "runway", "burn rate", "vendors", "suppliers", "team spending", "employee expenses"
+  * Examples: "What's my largest transaction?", "What's our total revenue this month?", "How much do we owe suppliers?", "Show me invoices from ABC", "Cash flow analysis", "AR aging", "Team spending this quarter"
+  * CRITICAL: Revenue, cash flow, invoices, AP/AR, spending, aging, and vendor queries are ALWAYS personal_data — they query the user's business, NOT general knowledge.
   * ACTION: Skip clarification and go directly to tool execution
-- general_knowledge: User asking about general business/regulatory information
-  * Keywords: "what are", "how does", "explain", "requirements for", "GST rules", "tax rate", "how to register"
+- general_knowledge: User asking about general business/regulatory information NOT specific to their business
+  * Keywords: "what are the rules", "how does", "explain", "requirements for", "GST rules", "tax rate", "how to register", "regulation", "compliance"
   * Examples: "What are GST registration requirements?", "How does OVR work?", "What's the tax rate in Singapore?"
+  * IMPORTANT: "What's our revenue?" is personal_data, NOT general_knowledge. Only classify as general_knowledge when the user asks about rules/regulations/how-things-work in general.
   * ACTION: May require clarification for country/business context
 - other: Greetings, unclear requests, or non-business queries
   * Examples: "Hello", "Thanks", unclear or ambiguous requests
