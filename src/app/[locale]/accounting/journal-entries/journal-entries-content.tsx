@@ -411,7 +411,7 @@ export default function JournalEntriesContent() {
                       if (sourceType === 'sales_invoice' || sourceType === 'payment') {
                         router.push(`/${locale}/sales-invoices/${sourceId}`)
                       } else if (sourceType === 'vendor_invoice') {
-                        router.push(`/${locale}/documents-inbox`)
+                        router.push(`/${locale}/invoices?tab=ap&sub=incoming`)
                       } else if (sourceType === 'expense_claim' && sourceId) {
                         setExpenseClaimId(sourceId)
                       }
