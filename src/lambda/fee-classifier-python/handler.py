@@ -558,7 +558,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
 
         # Emit observability metrics for classification tools (027-dspy-dash)
         if tool_name in INSTRUMENTED_TOOLS:
-            _emit_classification_metrics(tool_name, arguments, result, start_time)
+            _emit_classification_metrics(tool_name, arguments, result, start_time, params)
 
         return _success_response(request_id, result)
 
@@ -568,14 +568,19 @@ def lambda_handler(event: dict, context: Any) -> dict:
 
 
 def _emit_classification_metrics(
-    tool_name: str, arguments: dict, result: dict, start_time: float
+    tool_name: str, arguments: dict, result: dict, start_time: float, params: dict | None = None
 ) -> None:
     """Fire-and-forget metrics emission to Convex (027-dspy-dash)."""
     try:
         from metrics_emitter import emit_metric
 
         latency_ms = int((time.time() - start_time) * 1000)
-        business_id = arguments.get("businessId", arguments.get("_businessId", ""))
+        # businessId may be in arguments (direct call) or params._businessId (MCP protocol)
+        business_id = (
+            arguments.get("businessId", "")
+            or arguments.get("_businessId", "")
+            or (params or {}).get("_businessId", "")
+        )
 
         # Extract confidence — tools return it at different paths
         confidence = 0.0

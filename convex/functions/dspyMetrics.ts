@@ -428,39 +428,43 @@ export const _getCorrectionFunnels = internalQuery({
     for (const biz of businesses) {
       const toolCounts: Array<{ tool: string; correctionCount: number; threshold: number }> = [];
 
+      // Cap at 200 per table — we only need the count, and BootstrapFewShot threshold is 20.
+      // Beyond 200 corrections the exact count doesn't matter for the funnel visualization.
+      const CORRECTION_CAP = 200;
+
       // Fee corrections
       const feeCorrCount = await ctx.db
         .query("fee_classification_corrections")
         .withIndex("by_businessId", (q) => q.eq("businessId", biz._id))
-        .collect();
+        .take(CORRECTION_CAP);
       toolCounts.push({ tool: "classify_fees", correctionCount: feeCorrCount.length, threshold: 20 });
 
       // Bank recon corrections
       const bankCorrCount = await ctx.db
         .query("bank_recon_corrections")
         .withIndex("by_businessId", (q) => q.eq("businessId", biz._id))
-        .collect();
+        .take(CORRECTION_CAP);
       toolCounts.push({ tool: "classify_bank_transaction", correctionCount: bankCorrCount.length, threshold: 20 });
 
       // AR matching corrections
       const arCorrCount = await ctx.db
         .query("order_matching_corrections")
         .withIndex("by_businessId_createdAt", (q) => q.eq("businessId", biz._id))
-        .collect();
+        .take(CORRECTION_CAP);
       toolCounts.push({ tool: "match_orders", correctionCount: arCorrCount.length, threshold: 20 });
 
       // PO matching corrections
       const poCorrCount = await ctx.db
         .query("po_match_corrections")
         .withIndex("by_businessId", (q) => q.eq("businessId", biz._id))
-        .collect();
+        .take(CORRECTION_CAP);
       toolCounts.push({ tool: "match_po_invoice", correctionCount: poCorrCount.length, threshold: 20 });
 
       // Vendor item corrections
       const vendorCorrCount = await ctx.db
         .query("vendor_item_matching_corrections")
         .withIndex("by_businessId_createdAt", (q) => q.eq("businessId", biz._id))
-        .collect();
+        .take(CORRECTION_CAP);
       toolCounts.push({ tool: "match_vendor_items", correctionCount: vendorCorrCount.length, threshold: 20 });
 
       result.push({

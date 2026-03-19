@@ -952,6 +952,12 @@ export const review = mutation({
             createdBy: identity.subject,
             createdAt: Date.now(),
           });
+
+          // Record override for DSPy metrics (027-dspy-dash) — once per pairing
+          await ctx.scheduler.runAfter(0, internal.functions.dspyMetrics.recordOverride, {
+            businessId: match.businessId,
+            tool: "match_po_invoice",
+          });
         }
       }
     }

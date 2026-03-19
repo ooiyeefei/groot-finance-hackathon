@@ -820,6 +820,12 @@ export const rejectClassification = mutation({
           createdBy: userId as unknown as string,
           createdAt: Date.now(),
         });
+
+        // Record override for DSPy metrics (027-dspy-dash)
+        await ctx.scheduler.runAfter(0, internal.functions.dspyMetrics.recordOverride, {
+          businessId: tx.businessId,
+          tool: "classify_bank_transaction",
+        });
       }
     }
 
@@ -878,6 +884,12 @@ export const overrideClassification = mutation({
         correctionType: "override",
         createdBy: userId as unknown as string,
         createdAt: Date.now(),
+      });
+
+      // Record override for DSPy metrics (027-dspy-dash)
+      await ctx.scheduler.runAfter(0, internal.functions.dspyMetrics.recordOverride, {
+        businessId: tx.businessId,
+        tool: "classify_bank_transaction",
       });
     }
 
