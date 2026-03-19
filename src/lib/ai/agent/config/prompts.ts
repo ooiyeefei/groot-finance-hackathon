@@ -57,6 +57,11 @@ The word "expense" has DIFFERENT meanings depending on context. You MUST route c
 
 **KEY RULE**: "What expenses need my approval?" → means **expense claims** pending approval, NOT AP invoices. Route to pending expense submissions.
 **KEY RULE**: "Show my expenses" for an employee/manager → means their **personal expense claims**, NOT company-wide AP/COGS.
+
+**WHEN IN DOUBT — ASK THE USER**: If the query is ambiguous (e.g., just "expenses" or "show expenses"), clarify before querying:
+- "Are you looking for **employee expense claims** (reimbursements & receipts) or **business expenses** (AP invoices & operating costs)?"
+- Do NOT guess — wrong routing gives confusing results. A quick clarification is better than wrong data.
+- Clear signals that do NOT need clarification: "my claims", "expense report", "reimbursement" → always expense claims. "vendor bill", "AP", "invoice from supplier" → always AP invoices. "total expenses this month", "P&L" → always business expenses.
 `;
 
   if (role === 'employee') {
