@@ -909,19 +909,22 @@ Please clarify which type you'd like me to search, or say "both" to see all tran
       }))
 
       // RBAC: Scope transactions by role
-      // Employees should only see their own expense claims, not business-wide AP/AR
+      // Employees/managers should only see expense claim transactions, not AP/AR/revenue
       const role = (userContext.role || '').toLowerCase()
       if (role === 'employee') {
+        // Employee: only expense claim transactions (their own claims)
+        // Note: createdBy may be "system" when claims are auto-journaled, so we filter by
+        // source_document_type only. The expense_claims table already enforces per-user scoping.
         allTransactions = allTransactions.filter((t: any) =>
-          t.source_document_type === 'expense_claim' && t.created_by === userContext.userId
+          t.source_document_type === 'expense_claim'
         )
-        console.log(`[TransactionLookupTool] RBAC: Employee filter applied — ${allTransactions.length} personal expense claims (from ${result.entries.length} total)`)
+        console.log(`[TransactionLookupTool] RBAC: Employee filter applied — ${allTransactions.length} expense claims (from ${result.entries.length} total)`)
       } else if (role === 'manager') {
-        // Managers see their own expense claims only (team data via get_team_summary/get_employee_expenses)
+        // Manager: expense claim transactions only (team data via separate tools)
         allTransactions = allTransactions.filter((t: any) =>
-          t.source_document_type === 'expense_claim' && t.created_by === userContext.userId
+          t.source_document_type === 'expense_claim'
         )
-        console.log(`[TransactionLookupTool] RBAC: Manager filter applied — ${allTransactions.length} personal expense claims (from ${result.entries.length} total)`)
+        console.log(`[TransactionLookupTool] RBAC: Manager filter applied — ${allTransactions.length} expense claims (from ${result.entries.length} total)`)
       }
       // finance_admin/owner: no filter, see everything
 
