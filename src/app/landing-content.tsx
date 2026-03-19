@@ -36,7 +36,7 @@ const FEATURES = [
   {
     icon: Zap,
     title: 'eInvoice Autopilot',
-    description: 'Stop filling buyer details on every merchant\u2019s e-invoice portal. Our AI agent handles it \u2014 automatically, on any merchant site, in seconds. It remembers every merchant and gets faster each time. One click, every e-invoice, done.',
+    description: 'Stop filling buyer details on every merchant\u2019s e-invoice portal. Our AI agent opens the portal, fills every form, requests the e-invoice, and attaches it straight to your expense claim \u2014 automatically, on any merchant site, in seconds. It remembers every merchant and gets faster each time. One click, every e-invoice, done.',
     earlyAccess: true,
   },
   {
@@ -48,7 +48,7 @@ const FEATURES = [
   {
     icon: Brain,
     title: 'AI That Learns Your Business',
-    description: 'Every finance app claims AI. Most just match keywords \u2014 same as five years ago. Groot is different. Our AI studies your team\u2019s corrections and gets measurably smarter every week. Payments matched to invoices. Bank transactions classified. Purchase orders verified against deliveries. Every match shows you exactly why it was made \u2014 so your auditors love it as much as your accountants do.',
+    description: 'Every finance app claims AI. Most just match keywords \u2014 same as five years ago. Groot is different. Every time your team corrects a match, the AI learns \u2014 not just for that transaction, but for every future one like it. Corrections become training. Training becomes accuracy. Accuracy means fewer corrections. That\u2019s the flywheel: your whole company gets smarter together, every single week. Payments matched to invoices. Bank transactions classified. Every match shows you exactly why \u2014 so your auditors love it as much as your accountants do.',
     earlyAccess: false,
   },
   {
@@ -85,11 +85,11 @@ const PRICING_TIERS = [
     cta: 'Start free trial',
     ctaStyle: 'beam' as const,
     features: [
-      'AI receipt scanning',
-      'AI auto categorization',
-      'AI chat assistant',
+      'AI co-pilot chat (EN/BM/TH)',
+      'Smart receipt scanning & categorization',
+      'Expense claims with auto-approval routing',
       'LHDN e-Invoice',
-      'RAG regulatory compliance',
+      'Regulatory compliance (RAG-powered)',
     ],
   },
   {
@@ -101,11 +101,11 @@ const PRICING_TIERS = [
     ctaStyle: 'primary' as const,
     features: [
       'Everything in Starter, plus:',
-      'AI proactive insights',
-      'Duplicate expense detection',
-      'Full AR & AP management',
-      'Advanced analytics',
-      'Audit trail',
+      'Proactive alerts (spending spikes, cash flow)',
+      'AI bank & AR reconciliation',
+      'Duplicate & anomaly detection',
+      'Full AP & AR management',
+      'Audit trail with AI-explained matches',
     ],
   },
   {
@@ -116,9 +116,9 @@ const PRICING_TIERS = [
     ctaStyle: 'beam' as const,
     features: [
       'Everything in Pro, plus:',
-      'Unlimited everything',
-      'Cash flow forecasting',
-      'Financial intelligence',
+      'Unlimited users & documents',
+      'AI cash flow forecasting',
+      'eInvoice Autopilot (AI agent)',
       'MCP Server / API access',
       'Custom integrations',
       'Dedicated account manager',
@@ -478,12 +478,12 @@ export default function LandingContent({ country }: { country: string }) {
 
           <div className="hero-fade hero-fade-4 grid grid-cols-3 gap-8 max-w-lg mx-auto">
             <div className="text-center">
-              <div className="text-3xl md:text-4xl font-semibold text-[#111111]">3K+</div>
-              <div className="text-sm text-[#6B7280] font-medium uppercase tracking-wide">Documents Processed</div>
+              <div className="text-3xl md:text-4xl font-semibold text-[#111111]">Weekly</div>
+              <div className="text-sm text-[#6B7280] font-medium uppercase tracking-wide">AI Self-Improvement</div>
             </div>
             <div className="text-center">
               <div className="text-3xl md:text-4xl font-semibold text-[#111111]">95%+</div>
-              <div className="text-sm text-[#6B7280] font-medium uppercase tracking-wide">OCR Accuracy</div>
+              <div className="text-sm text-[#6B7280] font-medium uppercase tracking-wide">Match Accuracy</div>
             </div>
             <div className="text-center">
               <div className="text-3xl md:text-4xl font-semibold text-[#111111]">4</div>
@@ -500,7 +500,7 @@ export default function LandingContent({ country }: { country: string }) {
             <h2 className="text-2xl md:text-3xl font-semibold text-[#111111] mb-2 tracking-tight">
               One platform, every <span className="text-[#4285F4]">advantage</span>
             </h2>
-            <p className="text-sm text-[#6B7280] font-medium">AI that doesn&apos;t just automate — it learns, adapts, and gets better the more you use it</p>
+            <p className="text-sm text-[#6B7280] font-medium">AI that works for you, learns from you, and gets better because of you</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -540,7 +540,7 @@ export default function LandingContent({ country }: { country: string }) {
             <h2 className="text-2xl md:text-3xl font-semibold text-[#111111] mb-2 tracking-tight">
               Simple, transparent <span className="text-[#4285F4]">pricing</span>
             </h2>
-            <p className="text-sm text-[#6B7280] font-medium">Choose the plan that works for your business</p>
+            <p className="text-sm text-[#6B7280] font-medium">AI that learns your business, at a price that works for it</p>
 
             {/* Monthly / Annual toggle */}
             <div className="flex items-center justify-center gap-3 mt-5">
@@ -676,9 +676,9 @@ export default function LandingContent({ country }: { country: string }) {
           {/* CTA */}
           <div className="mt-8 pt-8 border-t border-[#E5E7EB] text-center">
             <h2 className="text-xl md:text-2xl font-semibold text-[#111111] mb-1 tracking-tight">
-              Ready to <span className="text-[#4285F4]">transform</span> your finances?
+              Ready for AI that actually <span className="text-[#4285F4]">learns</span>?
             </h2>
-            <p className="text-sm text-[#6B7280] font-medium mb-4">Join businesses automating their financial operations with confidence</p>
+            <p className="text-sm text-[#6B7280] font-medium mb-4">Join businesses whose finance AI gets smarter every single week</p>
             <a href="/en/sign-up" className="btn-primary inline-flex items-center gap-2 px-5 py-2 rounded-lg text-sm">
               <span className="btn-primary-text flex items-center gap-2">Get started <Sparkles className="w-4 h-4" /></span>
             </a>
@@ -686,7 +686,7 @@ export default function LandingContent({ country }: { country: string }) {
         </div>
 
         <footer className="border-t border-[#E5E7EB] py-4 mt-8">
-          <p className="text-xs text-[#6B7280] font-medium text-center">&copy; {currentYear} Groot. Simplifying financial management for businesses.</p>
+          <p className="text-xs text-[#6B7280] font-medium text-center">&copy; {currentYear} Groot. AI-powered financial intelligence for Southeast Asian businesses.</p>
         </footer>
       </section>
       )}
