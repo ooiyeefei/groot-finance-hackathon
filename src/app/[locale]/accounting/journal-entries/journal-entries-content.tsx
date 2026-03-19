@@ -21,17 +21,21 @@ import AccountingTabs from '../accounting-tabs'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { formatBusinessDate } from '@/lib/utils'
 import { toast } from 'sonner'
+import UnifiedExpenseDetailsModal from '@/domains/expense-claims/components/unified-expense-details-modal'
+import { useActiveBusiness } from '@/contexts/business-context'
 import type { Id } from '../../../../../convex/_generated/dataModel'
 
 export default function JournalEntriesContent() {
   const router = useRouter()
   const locale = useLocale()
+  const { businessId } = useActiveBusiness()
   const { entries: entriesRaw, isLoading, postEntry, reverseEntry } = useJournalEntries()
   const { periods } = useAccountingPeriods()
   const entries = (entriesRaw || []) as any[]
 
   const [selectedEntryId, setSelectedEntryId] = useState<Id<'journal_entries'> | null>(null)
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
+  const [expenseClaimId, setExpenseClaimId] = useState<string | null>(null)
 
   const { entry: selectedEntry } = useJournalEntry(selectedEntryId)
 
@@ -405,12 +409,11 @@ export default function JournalEntriesContent() {
                       const sourceId = selectedEntry.sourceId
                       setIsDetailDialogOpen(false)
                       if (sourceType === 'sales_invoice' || sourceType === 'payment') {
-                        // Both sales_invoice and payment JEs store the invoice ID as sourceId
                         router.push(`/${locale}/sales-invoices/${sourceId}`)
                       } else if (sourceType === 'vendor_invoice') {
                         router.push(`/${locale}/documents-inbox`)
-                      } else if (sourceType === 'expense_claim') {
-                        router.push(`/${locale}/expense-claims`)
+                      } else if (sourceType === 'expense_claim' && sourceId) {
+                        setExpenseClaimId(sourceId)
                       }
                     }}
                   >
@@ -458,6 +461,17 @@ export default function JournalEntriesContent() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Expense Claim popup — opens right here without navigation */}
+      {expenseClaimId && businessId && (
+        <UnifiedExpenseDetailsModal
+          claimId={expenseClaimId}
+          businessId={businessId}
+          isOpen={true}
+          onClose={() => setExpenseClaimId(null)}
+          viewMode="personal"
+        />
+      )}
     </div>
   )
 }
