@@ -747,6 +747,7 @@ export default defineSchema({
       v.literal("pending"),
       v.literal("in_progress"),
       v.literal("success"),
+      v.literal("submitted"),    // Direct-link merchant: e-invoice captured, no email expected
       v.literal("failed"),
     ),
     errorMessage: v.optional(v.string()),
