@@ -176,11 +176,23 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
     }
   }, [insightContext]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Message queue: if user sends while streaming, queue it for after completion
+  const queuedMessageRef = useRef<string | null>(null)
+
+  // Process queued message when streaming finishes
+  useEffect(() => {
+    if (!isLoading && queuedMessageRef.current) {
+      const queued = queuedMessageRef.current
+      queuedMessageRef.current = null
+      sendMessage(queued)
+    }
+  }, [isLoading, sendMessage])
+
   const handleSubmit = useCallback(
     async (e: FormEvent) => {
       e.preventDefault()
       const trimmed = input.trim()
-      if (!trimmed || isLoading) return
+      if (!trimmed) return
 
       // If there's insight context from Action Center, prepend it as hidden context
       let messageToSend = trimmed
@@ -198,6 +210,13 @@ User question: ${trimmed}`
       setInput('')
       setActiveChips([]) // Clear chips after sending
       setUserScrolledUp(false) // Reset scroll lock on new message
+
+      // If currently streaming, queue the message instead of dropping it
+      if (isLoading) {
+        queuedMessageRef.current = messageToSend
+        return
+      }
+
       await sendMessage(messageToSend)
     },
     [input, isLoading, sendMessage, activeInsightContext]
@@ -417,7 +436,7 @@ User question: ${trimmed}`
             placeholder="Ask about expenses, compliance, vendors..."
             className="flex-1 resize-none bg-input border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring min-h-[44px] max-h-[120px]"
             rows={1}
-            disabled={isLoading}
+            disabled={false}
           />
           {isLoading ? (
             <button

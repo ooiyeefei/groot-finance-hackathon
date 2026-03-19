@@ -179,6 +179,13 @@ function InvoicePostingCard({ action, isHistorical }: ActionCardProps) {
           </div>
         )}
 
+        {/* Historical card hint — tell user to re-ask for fresh actionable cards */}
+        {isHistorical && !isResolved && data.status !== 'posted' && (
+          <p className="text-[10px] text-muted-foreground italic mb-1.5">
+            This is from a previous session. Ask &quot;show invoices to post&quot; for up-to-date actions.
+          </p>
+        )}
+
         {/* Action buttons */}
         {!isHistorical && !isResolved && (
           <>

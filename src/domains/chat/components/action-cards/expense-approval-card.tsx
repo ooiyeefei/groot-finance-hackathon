@@ -122,6 +122,13 @@ function ExpenseApprovalCard({ action, isHistorical }: ActionCardProps) {
           </div>
         )}
 
+        {/* Historical card hint */}
+        {isHistorical && !isResolved && (
+          <p className="text-[10px] text-muted-foreground italic mb-1.5">
+            This is from a previous session. Ask &quot;what needs my approval?&quot; for up-to-date actions.
+          </p>
+        )}
+
         {/* Action buttons */}
         {!isHistorical && !isResolved && (
           <>
