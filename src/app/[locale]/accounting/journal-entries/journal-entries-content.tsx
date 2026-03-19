@@ -13,7 +13,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { useJournalEntries, useJournalEntry } from '@/domains/accounting/hooks/use-journal-entries'
 import { useAccountingPeriods } from '@/domains/accounting/hooks/use-accounting-periods'
-import { Plus, Eye, CheckCircle, XCircle, Lock, ExternalLink } from 'lucide-react'
+import { Plus, Eye, CheckCircle, XCircle, Lock, ExternalLink, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
@@ -22,6 +22,8 @@ import { formatCurrency } from '@/lib/utils/format-number'
 import { formatBusinessDate } from '@/lib/utils'
 import { toast } from 'sonner'
 import UnifiedExpenseDetailsModal from '@/domains/expense-claims/components/unified-expense-details-modal'
+import DocumentAnalysisModal from '@/domains/invoices/components/document-analysis-modal'
+import { useInvoiceRealtime } from '@/domains/invoices/hooks/use-invoices-realtime'
 import { useActiveBusiness } from '@/contexts/business-context'
 import type { Id } from '../../../../../convex/_generated/dataModel'
 
@@ -36,6 +38,8 @@ export default function JournalEntriesContent() {
   const [selectedEntryId, setSelectedEntryId] = useState<Id<'journal_entries'> | null>(null)
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
   const [expenseClaimId, setExpenseClaimId] = useState<string | null>(null)
+  const [vendorInvoiceId, setVendorInvoiceId] = useState<string | null>(null)
+  const { invoice: vendorInvoiceDoc, isLoading: isLoadingVendorInvoice } = useInvoiceRealtime(vendorInvoiceId)
 
   const { entry: selectedEntry } = useJournalEntry(selectedEntryId)
 
@@ -410,8 +414,8 @@ export default function JournalEntriesContent() {
                       setIsDetailDialogOpen(false)
                       if (sourceType === 'sales_invoice' || sourceType === 'payment') {
                         router.push(`/${locale}/sales-invoices/${sourceId}`)
-                      } else if (sourceType === 'vendor_invoice') {
-                        router.push(`/${locale}/invoices?tab=ap&sub=incoming`)
+                      } else if (sourceType === 'vendor_invoice' && sourceId) {
+                        setVendorInvoiceId(sourceId)
                       } else if (sourceType === 'expense_claim' && sourceId) {
                         setExpenseClaimId(sourceId)
                       }
@@ -470,6 +474,14 @@ export default function JournalEntriesContent() {
           isOpen={true}
           onClose={() => setExpenseClaimId(null)}
           viewMode="personal"
+        />
+      )}
+
+      {/* Vendor Invoice popup — Document Analysis modal */}
+      {vendorInvoiceId && vendorInvoiceDoc && (
+        <DocumentAnalysisModal
+          document={vendorInvoiceDoc as any}
+          onClose={() => setVendorInvoiceId(null)}
         />
       )}
     </div>
