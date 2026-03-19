@@ -37,6 +37,9 @@ import type { CitationData } from '@/lib/ai/tools/base-tool'
 import type { ChatAction } from '../lib/sse-parser'
 import { CorrectionFeedback } from './correction-feedback'
 
+/** Module-level counter for assistant messages to trigger periodic "Was this helpful?" prompt */
+let assistantMessageCounter = 0
+
 interface MessageRendererProps {
   content: string
   role: 'user' | 'assistant'
@@ -75,6 +78,13 @@ export function MessageRenderer({
 }: MessageRendererProps) {
   const [activeCitation, setActiveCitation] = useState<CitationData | null>(null)
   const [isCitationOpen, setIsCitationOpen] = useState(false)
+
+  // Track assistant message index for periodic "Was this helpful?" prompt
+  const showPromptLabel = useMemo(() => {
+    if (role !== 'assistant' || !originalQuery) return false
+    assistantMessageCounter += 1
+    return assistantMessageCounter % 3 === 0
+  }, [role, originalQuery])
 
   const handleCitationClick = useCallback(
     (index: number) => {
@@ -216,6 +226,7 @@ export function MessageRenderer({
             originalQuery={originalQuery}
             originalIntent={originalIntent}
             originalToolName={originalToolName}
+            showPromptLabel={showPromptLabel}
           />
         )}
         <CitationOverlay
@@ -263,6 +274,7 @@ export function MessageRenderer({
                   originalQuery={originalQuery}
                   originalIntent={originalIntent}
                   originalToolName={originalToolName}
+                  showPromptLabel={showPromptLabel}
                 />
               )}
             </>

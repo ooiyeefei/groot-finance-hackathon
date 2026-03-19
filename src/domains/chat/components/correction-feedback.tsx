@@ -12,12 +12,15 @@ interface CorrectionFeedbackProps {
   originalQuery: string;
   originalIntent?: string;
   originalToolName?: string;
+  /** Show "Was this helpful?" label next to thumbs */
+  showPromptLabel?: boolean;
 }
 
 const CORRECTION_TYPES = [
-  { value: 'intent', label: 'Wrong classification', description: 'Should have shown my data / was general knowledge' },
-  { value: 'tool_selection', label: 'Wrong tool used', description: 'Used the wrong data source' },
-  { value: 'parameter_extraction', label: 'Wrong parameters', description: 'Wrong date range, name, or filter' },
+  { value: 'intent', label: 'Wrong type of data', description: 'Should have shown my data / was general knowledge' },
+  { value: 'tool_selection', label: 'Wrong data source', description: 'Used the wrong data source' },
+  { value: 'parameter_extraction', label: 'Wrong date, name, or filters', description: 'Wrong date range, name, or filter' },
+  { value: 'other', label: 'Other', description: 'Something else was wrong' },
 ] as const;
 
 const INTENT_OPTIONS = [
@@ -46,29 +49,35 @@ export function CorrectionFeedback({
   originalQuery,
   originalIntent,
   originalToolName,
+  showPromptLabel = false,
 }: CorrectionFeedbackProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [correctionType, setCorrectionType] = useState<string | null>(null);
   const [correctedValue, setCorrectedValue] = useState<string>('');
+  const [otherText, setOtherText] = useState<string>('');
   const [submitted, setSubmitted] = useState(false);
   const [feedback, setFeedback] = useState<'positive' | 'negative' | null>(null);
 
   const submitCorrection = useMutation(_api.functions.chatCorrections.submit);
 
   const handleSubmit = async () => {
-    if (!correctionType || !correctedValue) return;
+    if (!correctionType) return;
+    if (correctionType === 'other' && !otherText) return;
+    if (correctionType !== 'other' && !correctedValue) return;
 
     try {
       await submitCorrection({
         messageId,
         conversationId,
-        correctionType: correctionType as 'intent' | 'tool_selection' | 'parameter_extraction',
+        correctionType: correctionType === 'other'
+          ? 'parameter_extraction' as const
+          : correctionType as 'intent' | 'tool_selection' | 'parameter_extraction',
         originalQuery,
         originalIntent: correctionType === 'intent' ? originalIntent : undefined,
         originalToolName: correctionType === 'tool_selection' ? originalToolName : undefined,
         correctedIntent: correctionType === 'intent' ? correctedValue : undefined,
         correctedToolName: correctionType === 'tool_selection' ? correctedValue : undefined,
-        correctedParameters: correctionType === 'parameter_extraction' ? correctedValue : undefined,
+        correctedParameters: correctionType === 'other' ? otherText : (correctionType === 'parameter_extraction' ? correctedValue : undefined),
       });
       setSubmitted(true);
       setTimeout(() => {
@@ -76,7 +85,8 @@ export function CorrectionFeedback({
         setSubmitted(false);
         setCorrectionType(null);
         setCorrectedValue('');
-      }, 1500);
+        setOtherText('');
+      }, 2000);
     } catch (error) {
       console.error('Failed to submit correction:', error);
     }
@@ -84,70 +94,86 @@ export function CorrectionFeedback({
 
   if (submitted) {
     return (
-      <span className="inline-flex items-center gap-1 ml-2">
+      <span className="inline-flex items-center gap-1.5 mt-1.5">
         {feedback === 'positive' ? (
-          <ThumbsUp className="h-3.5 w-3.5 text-green-500" />
+          <>
+            <ThumbsUp className="h-4 w-4 text-primary" />
+            <span className="text-xs text-muted-foreground">Thanks! Groot is learning</span>
+          </>
         ) : (
-          <ThumbsDown className="h-3.5 w-3.5 text-destructive" />
+          <>
+            <ThumbsDown className="h-4 w-4 text-destructive" />
+            <span className="text-xs text-muted-foreground">Got it — Groot will do better next time</span>
+          </>
         )}
-        <span className="text-xs text-muted-foreground">Thanks!</span>
       </span>
     );
   }
 
   return (
-    <span className="inline-flex items-center ml-2">
-      {/* Thumbs up = positive signal (confirms correct intent/tool/params) */}
-      <button
-        onClick={() => {
-          setFeedback('positive');
-          submitCorrection({
-            messageId,
-            conversationId,
-            correctionType: 'intent',
-            originalQuery,
-            originalIntent,
-            correctedIntent: originalIntent || 'personal_data',
-          }).then(() => {
-            setSubmitted(true);
-          }).catch(() => {
-            // Still show feedback even if save fails
-            setSubmitted(true);
-          });
-        }}
-        className={`p-1 rounded hover:bg-muted transition-colors ${
-          feedback === 'positive' ? 'text-green-500' : 'text-muted-foreground hover:text-foreground'
-        }`}
-        title="Good response"
-        aria-label="Good response"
-      >
-        <ThumbsUp className="h-3.5 w-3.5" />
-      </button>
+    <div className="mt-1.5">
+      <span className="group inline-flex items-center gap-0.5 relative">
+        {/* Prompt label for every 3rd message */}
+        {showPromptLabel && !feedback && (
+          <span className="text-xs text-muted-foreground mr-1">Was this helpful?</span>
+        )}
 
-      {/* Thumbs down = negative signal → opens correction dropdown */}
-      <button
-        onClick={() => {
-          setFeedback('negative');
-          setIsOpen(!isOpen);
-        }}
-        className={`p-1 rounded hover:bg-muted transition-colors ${
-          feedback === 'negative' ? 'text-destructive' : 'text-muted-foreground hover:text-foreground'
-        }`}
-        title="Report incorrect response"
-        aria-label="Report incorrect response"
-      >
-        <ThumbsDown className="h-3.5 w-3.5" />
-      </button>
+        {/* Thumbs up = positive signal (confirms correct intent/tool/params) */}
+        <button
+          onClick={() => {
+            setFeedback('positive');
+            submitCorrection({
+              messageId,
+              conversationId,
+              correctionType: 'intent',
+              originalQuery,
+              originalIntent,
+              correctedIntent: originalIntent || 'personal_data',
+            }).then(() => {
+              setSubmitted(true);
+            }).catch(() => {
+              setSubmitted(true);
+            });
+          }}
+          className={`p-1.5 rounded-md hover:bg-muted transition-colors ${
+            feedback === 'positive' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+          }`}
+          title="Good response"
+          aria-label="Good response"
+        >
+          <ThumbsUp className="h-4 w-4" />
+        </button>
+
+        {/* Thumbs down = negative signal -> opens correction dropdown */}
+        <button
+          onClick={() => {
+            setFeedback('negative');
+            setIsOpen(!isOpen);
+          }}
+          className={`p-1.5 rounded-md hover:bg-muted transition-colors ${
+            feedback === 'negative' ? 'text-destructive' : 'text-muted-foreground hover:text-foreground'
+          }`}
+          title="Report incorrect response"
+          aria-label="Report incorrect response"
+        >
+          <ThumbsDown className="h-4 w-4" />
+        </button>
+
+        {/* Hover tooltip — privacy-conscious messaging */}
+        <span className="absolute left-0 top-full mt-1 hidden group-hover:block z-10 w-64 px-3 py-2 rounded-md bg-card border border-border text-xs text-muted-foreground shadow-md pointer-events-none">
+          Your feedback helps Groot understand your business better. Improvements stay within your company — never shared with others.
+        </span>
+      </span>
 
       {isOpen && (
-        <span className="ml-2 inline-flex items-center gap-2 text-xs">
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
           {!correctionType ? (
             <>
               {CORRECTION_TYPES.map((ct) => (
                 <button
                   key={ct.value}
                   onClick={() => setCorrectionType(ct.value)}
-                  className="px-2 py-1 rounded bg-muted hover:bg-muted/80 text-foreground"
+                  className="px-2.5 py-1.5 rounded-md bg-muted hover:bg-muted/80 text-foreground transition-colors"
                   title={ct.description}
                 >
                   {ct.label}
@@ -176,10 +202,10 @@ export function CorrectionFeedback({
                         setCorrectionType(null);
                         setCorrectedValue('');
                         setFeedback(null);
-                      }, 1500);
+                      }, 2000);
                     });
                   }}
-                  className="px-2 py-1 rounded bg-muted hover:bg-muted/80 text-foreground"
+                  className="px-2.5 py-1.5 rounded-md bg-muted hover:bg-muted/80 text-foreground transition-colors"
                 >
                   {opt.label}
                 </button>
@@ -187,33 +213,43 @@ export function CorrectionFeedback({
             </>
           ) : correctionType === 'tool_selection' ? (
             <select
-              className="px-2 py-1 rounded bg-muted text-foreground text-xs"
+              className="px-2.5 py-1.5 rounded-md bg-muted text-foreground text-xs"
               onChange={(e) => {
                 setCorrectedValue(e.target.value);
               }}
               defaultValue=""
             >
-              <option value="" disabled>Select correct tool...</option>
+              <option value="" disabled>Select correct source...</option>
               {TOOL_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
+          ) : correctionType === 'other' ? (
+            <input
+              type="text"
+              placeholder="Tell us what went wrong..."
+              className="px-2.5 py-1.5 rounded-md bg-muted text-foreground text-xs w-52"
+              value={otherText}
+              onChange={(e) => setOtherText(e.target.value)}
+            />
           ) : (
             <input
               type="text"
-              placeholder="Correct parameters..."
-              className="px-2 py-1 rounded bg-muted text-foreground text-xs w-48"
+              placeholder="What should the correct value be?"
+              className="px-2.5 py-1.5 rounded-md bg-muted text-foreground text-xs w-52"
               onChange={(e) => setCorrectedValue(e.target.value)}
             />
           )}
 
-          {correctionType && correctionType !== 'intent' && correctedValue && (
-            <button
-              onClick={handleSubmit}
-              className="px-2 py-1 rounded bg-primary text-primary-foreground text-xs"
-            >
-              Submit
-            </button>
+          {correctionType && correctionType !== 'intent' && (
+            (correctionType === 'other' ? otherText : correctedValue) ? (
+              <button
+                onClick={handleSubmit}
+                className="px-2.5 py-1.5 rounded-md bg-primary text-primary-foreground text-xs transition-colors hover:bg-primary/90"
+              >
+                Submit
+              </button>
+            ) : null
           )}
 
           <button
@@ -221,14 +257,15 @@ export function CorrectionFeedback({
               setIsOpen(false);
               setCorrectionType(null);
               setCorrectedValue('');
+              setOtherText('');
               setFeedback(null);
             }}
-            className="px-1 py-1 text-muted-foreground hover:text-foreground"
+            className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
           >
             ×
           </button>
-        </span>
+        </div>
       )}
-    </span>
+    </div>
   );
 }
