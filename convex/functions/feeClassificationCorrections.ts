@@ -7,6 +7,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "../_generated/server";
+import { internal } from "../_generated/api";
 
 /**
  * Record a user correction to a fee classification.
@@ -36,6 +37,12 @@ export const recordCorrection = mutation({
       platform: args.platform,
       salesOrderId: args.salesOrderId,
       correctedBy: identity.subject,
+    });
+
+    // 1b. Record override for DSPy metrics (027-dspy-dash)
+    await ctx.scheduler.runAfter(0, internal.functions.dspyMetrics.recordOverride, {
+      businessId: args.businessId,
+      tool: "classify_fees",
     });
 
     // 2. Update the classifiedFees on the sales order

@@ -4,6 +4,7 @@
 
 import { v } from "convex/values";
 import { mutation, internalQuery } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { resolveUserByClerkId } from "../lib/resolvers";
 
 /**
@@ -60,6 +61,12 @@ export const create = mutation({
         createdBy: identity.subject,
         createdAt: Date.now(),
       });
+      // Record override for DSPy metrics (027-dspy-dash)
+      await ctx.scheduler.runAfter(0, internal.functions.dspyMetrics.recordOverride, {
+        businessId: args.businessId,
+        tool: "match_orders",
+      });
+
       return { updated: true, correctionId: existing._id };
     }
 
@@ -80,6 +87,12 @@ export const create = mutation({
       correctionType: args.correctionType,
       createdBy: identity.subject,
       createdAt: Date.now(),
+    });
+
+    // Record override for DSPy metrics (027-dspy-dash)
+    await ctx.scheduler.runAfter(0, internal.functions.dspyMetrics.recordOverride, {
+      businessId: args.businessId,
+      tool: "match_orders",
     });
 
     return { updated: false, correctionId };

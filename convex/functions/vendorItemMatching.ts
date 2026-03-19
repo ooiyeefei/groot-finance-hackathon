@@ -506,6 +506,12 @@ export const recordCorrection = mutation({
       createdAt: Date.now(),
     });
 
+    // Record override for DSPy metrics (027-dspy-dash)
+    await ctx.scheduler.runAfter(0, internal.functions.dspyMetrics.recordOverride, {
+      businessId,
+      tool: "match_vendor_items",
+    });
+
     // If confirmed match → update cross_vendor_item_groups matchSource
     if (args.isMatch) {
       const groups = await ctx.db

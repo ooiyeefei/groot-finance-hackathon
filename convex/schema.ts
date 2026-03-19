@@ -3354,4 +3354,46 @@ export default defineSchema({
     .index("by_consumed", ["consumed"])
     .index("by_businessId", ["businessId"]),
 
+  // ============================================
+  // DSPY METRICS — Daily Aggregates (027-dspy-dash)
+  // ============================================
+  // One row per business × tool × date. Counters are upserted atomically.
+  // Dashboard reads these aggregates via action (not reactive query) to minimize bandwidth.
+
+  dspy_metrics_daily: defineTable({
+    businessId: v.id("businesses"),
+    tool: v.string(),       // classify_fees | classify_bank_transaction | match_orders | match_po_invoice | match_vendor_items
+    date: v.string(),       // ISO date YYYY-MM-DD (aggregation key)
+
+    // Volume counters
+    tier1Hits: v.number(),           // Classifications handled by Tier 1 rules (no Lambda)
+    tier2Invocations: v.number(),    // Lambda invocations (Tier 2 AI)
+    successCount: v.number(),        // Successful Tier 2 classifications
+    failureCount: v.number(),        // Failed Tier 2 (errors, timeouts)
+    fallbackCount: v.number(),       // confidence=0.0 (model gave up)
+
+    // DSPy model usage
+    dspyUsedCount: v.number(),       // usedDspy=true (BootstrapFewShot/MIPROv2)
+    dspyNotUsedCount: v.number(),    // usedDspy=false (base/fallback)
+
+    // Confidence sums (divide by count for avg)
+    sumConfidence: v.number(),
+    sumConfidenceDspy: v.number(),    // When usedDspy=true
+    sumConfidenceBase: v.number(),    // When usedDspy=false
+
+    // Performance
+    sumLatencyMs: v.number(),
+    totalRefineRetries: v.number(),
+
+    // Cost estimation
+    sumInputTokens: v.number(),
+    sumOutputTokens: v.number(),
+
+    // Accuracy
+    overrideCount: v.number(),       // User corrections recorded this day
+  })
+    .index("by_business_tool_date", ["businessId", "tool", "date"])
+    .index("by_date", ["date"])
+    .index("by_business", ["businessId"]),
+
 });

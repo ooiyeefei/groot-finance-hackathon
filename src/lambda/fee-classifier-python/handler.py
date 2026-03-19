@@ -15,6 +15,7 @@ Invoked from Convex via MCP client pattern.
 import json
 import os
 import logging
+import time
 import boto3
 from typing import Any
 
@@ -519,6 +520,14 @@ def lambda_handler(event: dict, context: Any) -> dict:
         if expected_key and provided_key != expected_key:
             return _error_response(request_id, -32001, "Unauthorized")
 
+        # Tools that emit observability metrics (027-dspy-dash)
+        INSTRUMENTED_TOOLS = {
+            "classify_fees", "classify_bank_transaction",
+            "match_orders", "match_po_invoice", "match_vendor_items",
+        }
+
+        start_time = time.time()
+
         # Route to handler
         if tool_name == "classify_fees":
             result = _classify_fees(arguments)
@@ -547,11 +556,54 @@ def lambda_handler(event: dict, context: Any) -> dict:
         else:
             return _error_response(request_id, -32601, f"Unknown tool: {tool_name}")
 
+        # Emit observability metrics for classification tools (027-dspy-dash)
+        if tool_name in INSTRUMENTED_TOOLS:
+            _emit_classification_metrics(tool_name, arguments, result, start_time)
+
         return _success_response(request_id, result)
 
     except Exception as e:
         logger.exception("Handler error")
         return _error_response(body.get("id", 1) if isinstance(body, dict) else 1, -32000, str(e))
+
+
+def _emit_classification_metrics(
+    tool_name: str, arguments: dict, result: dict, start_time: float
+) -> None:
+    """Fire-and-forget metrics emission to Convex (027-dspy-dash)."""
+    try:
+        from metrics_emitter import emit_metric
+
+        latency_ms = int((time.time() - start_time) * 1000)
+        business_id = arguments.get("businessId", arguments.get("_businessId", ""))
+
+        # Extract confidence — tools return it at different paths
+        confidence = 0.0
+        if isinstance(result.get("confidence"), (int, float)):
+            confidence = float(result["confidence"])
+        elif isinstance(result.get("avgConfidence"), (int, float)):
+            confidence = float(result["avgConfidence"])
+        # For batch tools (classify_fees), average the confidences
+        elif isinstance(result.get("classifications"), list):
+            confs = [c.get("confidence", 0) for c in result["classifications"] if isinstance(c.get("confidence"), (int, float))]
+            confidence = sum(confs) / len(confs) if confs else 0.0
+
+        used_dspy = bool(result.get("usedDspy", False))
+        refine_retries = int(result.get("refineRetries", 0))
+
+        emit_metric(
+            tool=tool_name,
+            business_id=business_id,
+            used_dspy=used_dspy,
+            confidence=confidence,
+            refine_retries=refine_retries,
+            latency_ms=latency_ms,
+            input_tokens=int(result.get("inputTokens", 0)),
+            output_tokens=int(result.get("outputTokens", 0)),
+            success=True,
+        )
+    except Exception as e:
+        logger.warning("Metrics emission error (non-blocking): %s", e)
 
 
 def _success_response(request_id: int, result: dict) -> dict:

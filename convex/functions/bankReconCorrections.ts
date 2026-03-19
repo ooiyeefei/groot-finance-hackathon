@@ -8,6 +8,7 @@
 
 import { v } from "convex/values";
 import { query, internalMutation, internalQuery } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { getAuthenticatedUser } from "../lib/resolvers";
 import { Id } from "../_generated/dataModel";
 
@@ -30,7 +31,7 @@ export const create = internalMutation({
     createdBy: v.string(),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.insert("bank_recon_corrections", {
+    const correctionId = await ctx.db.insert("bank_recon_corrections", {
       businessId: args.businessId,
       bankTransactionDescription: args.bankTransactionDescription,
       bankName: args.bankName,
@@ -42,6 +43,14 @@ export const create = internalMutation({
       createdBy: args.createdBy,
       createdAt: Date.now(),
     });
+
+    // Record override for DSPy metrics (027-dspy-dash)
+    await ctx.scheduler.runAfter(0, internal.functions.dspyMetrics.recordOverride, {
+      businessId: args.businessId,
+      tool: "classify_bank_transaction",
+    });
+
+    return correctionId;
   },
 });
 

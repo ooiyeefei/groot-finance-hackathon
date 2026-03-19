@@ -424,6 +424,8 @@ const arBalance = arLines.reduce((sum, line) =>
 - Convex (tables: invoices, sales_invoices, journal_entry_lines, business_memberships, users) (026-agent-rbac-hardening)
 - TypeScript 5.9.3 (Next.js 15.5.7 + LangGraph 0.4.5) + Python 3.11 (Lambda DSPy) + @langchain/langgraph, @langchain/core, dspy>=2.6.0 (Python), Convex 1.31.3 (027-gemini-dspy-chat-agent)
 - Convex (corrections, model versions), S3 finanseal-bucket (model artifacts) (027-gemini-dspy-chat-agent)
+- TypeScript 5.9.3 (frontend + Convex), Python 3.11 (Lambda instrumentation) + Next.js 15.5.7, Convex 1.31.3, Recharts (existing), Radix UI (existing) (027-dspy-dash)
+- Convex (`dspy_metrics_daily` aggregate table + existing correction tables) (027-dspy-dash)
 
 
 ## Recent Changes

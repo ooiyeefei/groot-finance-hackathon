@@ -41,6 +41,7 @@ import type * as functions_customers from "../functions/customers.js";
 import type * as functions_documentInbox from "../functions/documentInbox.js";
 import type * as functions_documentInboxCrons from "../functions/documentInboxCrons.js";
 import type * as functions_documentInboxInternal from "../functions/documentInboxInternal.js";
+import type * as functions_dspyMetrics from "../functions/dspyMetrics.js";
 import type * as functions_dspyModelVersions from "../functions/dspyModelVersions.js";
 import type * as functions_dspyOptimization from "../functions/dspyOptimization.js";
 import type * as functions_duplicateMatches from "../functions/duplicateMatches.js";
@@ -121,6 +122,7 @@ import type * as functions_vendorScorecards from "../functions/vendorScorecards.
 import type * as functions_vendors from "../functions/vendors.js";
 import type * as functions_webhooks from "../functions/webhooks.js";
 import type * as functions_workSchedules from "../functions/workSchedules.js";
+import type * as http from "../http.js";
 import type * as lib_bankReconClassifier from "../lib/bankReconClassifier.js";
 import type * as lib_bankReconGLPoster from "../lib/bankReconGLPoster.js";
 import type * as lib_buyerNotificationHelper from "../lib/buyerNotificationHelper.js";
@@ -177,6 +179,7 @@ declare const fullApi: ApiFromModules<{
   "functions/documentInbox": typeof functions_documentInbox;
   "functions/documentInboxCrons": typeof functions_documentInboxCrons;
   "functions/documentInboxInternal": typeof functions_documentInboxInternal;
+  "functions/dspyMetrics": typeof functions_dspyMetrics;
   "functions/dspyModelVersions": typeof functions_dspyModelVersions;
   "functions/dspyOptimization": typeof functions_dspyOptimization;
   "functions/duplicateMatches": typeof functions_duplicateMatches;
@@ -257,6 +260,7 @@ declare const fullApi: ApiFromModules<{
   "functions/vendors": typeof functions_vendors;
   "functions/webhooks": typeof functions_webhooks;
   "functions/workSchedules": typeof functions_workSchedules;
+  http: typeof http;
   "lib/bankReconClassifier": typeof lib_bankReconClassifier;
   "lib/bankReconGLPoster": typeof lib_bankReconGLPoster;
   "lib/buyerNotificationHelper": typeof lib_buyerNotificationHelper;

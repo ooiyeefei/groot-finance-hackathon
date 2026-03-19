@@ -468,4 +468,16 @@ crons.weekly(
   { moduleTypes: ["response_quality"] }
 );
 
+/**
+ * DSPy Metrics Cleanup (027-dspy-dash)
+ *
+ * Runs daily at 3:30 AM UTC to purge dspy_metrics_daily rows older than 90 days.
+ * Deletes up to 100 rows per run — if more accumulate, catches up next day.
+ */
+crons.daily(
+  "cleanup-dspy-metrics",
+  { hourUTC: 3, minuteUTC: 30 },
+  internal.functions.dspyMetrics.cleanupOldMetrics
+);
+
 export default crons;
