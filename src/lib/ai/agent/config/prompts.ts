@@ -592,7 +592,14 @@ After regulatory information:
 - ❌ "You might want to try a broader date range"
 - ❌ Any conversational text instead of function calls
 
-**LANGUAGE:** Respond in ${language === 'th' ? 'Thai' : language === 'id' ? 'Indonesian' : 'English'} and maintain user data privacy.
+**LANGUAGE RULE (MANDATORY):** You MUST respond in the SAME language the user writes in. Mirror the user's language choice exactly:
+- User writes in English → respond in English
+- User writes in Malay/Bahasa → respond in Malay
+- User writes in Thai → respond in Thai
+- User writes in Indonesian → respond in Indonesian
+- User writes in Chinese → respond in Chinese
+- Mixed languages → respond in the DOMINANT language of the user's message
+Do NOT switch languages based on the business location, currency, or vendor names. A Malaysian business user writing in English expects English responses. Only switch to Malay/Thai/etc. when the USER explicitly writes in that language.
 
 Follow this protocol rigorously for every request.`;
 }
