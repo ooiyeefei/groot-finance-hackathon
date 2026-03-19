@@ -150,14 +150,22 @@ function buildMessagesForLLM(trimmedMessages: any[], systemPrompt: string): any[
           content: msg.content || ''
         };
         if (msg.tool_calls && msg.tool_calls.length > 0) {
-          assistantMsg.tool_calls = msg.tool_calls.map((tc: { id: string; name: string; args: unknown }) => ({
-            id: tc.id,
-            type: 'function',
-            function: {
-              name: tc.name,
-              arguments: typeof tc.args === 'string' ? tc.args : JSON.stringify(tc.args)
+          assistantMsg.tool_calls = msg.tool_calls.map((tc: { id: string; name: string; args: unknown; extra_content?: unknown; function?: { name: string; arguments: string } }) => {
+            const mapped: Record<string, unknown> = {
+              id: tc.id,
+              type: 'function',
+              function: {
+                name: tc.function?.name || tc.name,
+                arguments: tc.function?.arguments || (typeof tc.args === 'string' ? tc.args : JSON.stringify(tc.args))
+              }
+            };
+            // GEMINI FIX: Preserve extra_content (contains thought_signature required by Gemini
+            // when replaying tool_calls in conversation history — without it, Gemini returns 500)
+            if (tc.extra_content) {
+              mapped.extra_content = tc.extra_content;
             }
-          }));
+            return mapped;
+          });
         }
         return assistantMsg;
       }
