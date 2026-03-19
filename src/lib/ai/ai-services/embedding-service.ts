@@ -1,24 +1,27 @@
 /**
  * Embedding Service Implementation
- * Handles text embedding generation using LiteLLM endpoint
+ * Uses Gemini embedding-001 with task_type for optimized embeddings.
+ *
+ * Task types improve retrieval quality:
+ * - RETRIEVAL_QUERY: for search queries (user questions)
+ * - RETRIEVAL_DOCUMENT: for document indexing (KB ingestion)
+ * - SEMANTIC_SIMILARITY: for text comparison
  */
 
-import { IEmbeddingService } from './interfaces'
+import { IEmbeddingService, EmbeddingTaskType } from './interfaces'
 import { ProcessingError, ServiceHealth } from './types'
 import { aiConfig } from '../config/ai-config'
 
 export class EmbeddingService implements IEmbeddingService {
-  private readonly endpoint: string
-  private readonly modelId: string
   private readonly apiKey: string
-  
+  private readonly modelId: string
+
   constructor() {
-    this.endpoint = aiConfig.embedding.endpointUrl
-    this.modelId = aiConfig.embedding.modelId
     this.apiKey = aiConfig.embedding.apiKey
+    this.modelId = aiConfig.embedding.modelId // "gemini-embedding-001"
   }
 
-  async generateEmbedding(text: string): Promise<number[]> {
+  async generateEmbedding(text: string, taskType?: EmbeddingTaskType): Promise<number[]> {
     if (!text || text.trim().length === 0) {
       throw new ProcessingError('Empty text provided for embedding generation', {
         service: 'Embedding',
@@ -27,31 +30,28 @@ export class EmbeddingService implements IEmbeddingService {
     }
 
     try {
-      const requestBody = {
-        model: this.modelId,
-        input: text.trim(),
-        encoding_format: "float"
-      }
+      const effectiveTaskType = taskType || 'RETRIEVAL_QUERY' // Default to query for backward compat
+      console.log(`[Embedding] Generating ${effectiveTaskType} embedding for text (${text.length} chars)`)
 
-      console.log(`[Embedding] Generating embedding for text (${text.length} chars)`)
-
-      const response = await fetch(`${this.endpoint}/embeddings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      })
+      // Use Gemini native API for task_type support
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${this.modelId}:embedContent?key=${this.apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: { parts: [{ text: text.trim() }] },
+            taskType: effectiveTaskType,
+          })
+        }
+      )
 
       if (!response.ok) {
         const errorText = await response.text()
         throw new ProcessingError(
-          `Embedding API request failed: ${response.status} ${response.statusText}`,
+          `Gemini Embedding API error: ${response.status} ${response.statusText} — ${errorText.slice(0, 200)}`,
           {
             service: 'Embedding',
-            endpoint: this.endpoint,
             statusCode: response.status,
             retryable: response.status >= 500 || response.status === 429
           }
@@ -59,161 +59,104 @@ export class EmbeddingService implements IEmbeddingService {
       }
 
       const result = await response.json()
-      
-      // Extract embedding from API response format
-      const embedding = result.data?.[0]?.embedding
-      
+      const embedding = result.embedding?.values
+
       if (!embedding || !Array.isArray(embedding)) {
-        throw new ProcessingError('Invalid embedding response format', {
+        throw new ProcessingError('Invalid Gemini embedding response format', {
           service: 'Embedding',
           retryable: true
         })
       }
 
-      console.log(`[Embedding] Generated embedding vector of length ${embedding.length}`)
+      console.log(`[Embedding] Generated ${effectiveTaskType} vector of length ${embedding.length}`)
       return embedding
 
     } catch (error) {
       console.error('[Embedding] Generation failed:', error)
-      
-      if (error instanceof ProcessingError) {
-        throw error
-      }
-      
+      if (error instanceof ProcessingError) throw error
       throw new ProcessingError(
         `Embedding generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        {
-          service: 'Embedding',
-          retryable: false
-        }
+        { service: 'Embedding', retryable: false }
       )
     }
   }
 
-  async generateEmbeddings(texts: string[]): Promise<number[][]> {
-    if (!texts || texts.length === 0) {
-      return []
-    }
+  async generateEmbeddings(texts: string[], taskType?: EmbeddingTaskType): Promise<number[][]> {
+    if (!texts || texts.length === 0) return []
 
-    // Filter out empty texts
     const validTexts = texts.filter(text => text && text.trim().length > 0)
-    
-    if (validTexts.length === 0) {
-      return []
-    }
+    if (validTexts.length === 0) return []
+
+    const effectiveTaskType = taskType || 'RETRIEVAL_DOCUMENT'
 
     try {
-      // For batch processing, we can send multiple texts at once
-      const requestBody = {
-        model: this.modelId,
-        input: validTexts.map(text => text.trim()),
-        encoding_format: "float"
-      }
+      // Gemini batch embedding via batchEmbedContents
+      console.log(`[Embedding] Batch generating ${effectiveTaskType} embeddings for ${validTexts.length} texts`)
 
-      console.log(`[Embedding] Generating embeddings for ${validTexts.length} texts`)
+      const requests = validTexts.map(text => ({
+        model: `models/${this.modelId}`,
+        content: { parts: [{ text: text.trim() }] },
+        taskType: effectiveTaskType,
+      }))
 
-      const response = await fetch(`${this.endpoint}/embeddings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      })
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${this.modelId}:batchEmbedContents?key=${this.apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requests })
+        }
+      )
 
       if (!response.ok) {
         const errorText = await response.text()
         throw new ProcessingError(
-          `Batch embedding API request failed: ${response.status} ${response.statusText}`,
-          {
-            service: 'Embedding',
-            endpoint: this.endpoint,
-            statusCode: response.status,
-            retryable: response.status >= 500 || response.status === 429
-          }
+          `Gemini batch embedding error: ${response.status} — ${errorText.slice(0, 200)}`,
+          { service: 'Embedding', retryable: response.status >= 500 }
         )
       }
 
       const result = await response.json()
-      
-      // Extract embeddings from API response format
-      if (!result.data || !Array.isArray(result.data)) {
-        throw new ProcessingError('Invalid batch embedding response format', {
-          service: 'Embedding',
-          retryable: true
+      const embeddings = result.embeddings?.map(
+        (e: { values: number[] }) => e.values
+      )
+
+      if (!embeddings || !Array.isArray(embeddings)) {
+        throw new ProcessingError('Invalid batch embedding response', {
+          service: 'Embedding', retryable: true
         })
       }
 
-      const embeddings = result.data.map((item: { embedding: number[] }) => item.embedding)
-      
-      // Validate all embeddings
-      for (const embedding of embeddings) {
-        if (!embedding || !Array.isArray(embedding)) {
-          throw new ProcessingError('Invalid embedding in batch response', {
-            service: 'Embedding',
-            retryable: true
-          })
-        }
-      }
-
-      console.log(`[Embedding] Generated ${embeddings.length} embedding vectors`)
+      console.log(`[Embedding] Generated ${embeddings.length} ${effectiveTaskType} vectors`)
       return embeddings
 
     } catch (error) {
       console.error('[Embedding] Batch generation failed:', error)
-      
-      if (error instanceof ProcessingError) {
-        throw error
-      }
-      
+      if (error instanceof ProcessingError) throw error
+
       // Fallback to individual processing
       console.log('[Embedding] Falling back to individual embedding generation')
-      return this.generateEmbeddingsIndividually(validTexts)
+      const embeddings: number[][] = []
+      for (const text of validTexts) {
+        const embedding = await this.generateEmbedding(text, effectiveTaskType)
+        embeddings.push(embedding)
+      }
+      return embeddings
     }
   }
 
   async checkHealth(): Promise<ServiceHealth> {
     const startTime = Date.now()
-    
+
     try {
-      // Test with a small embedding request
-      const testText = "Health check test"
-      
-      const response = await fetch(`${this.endpoint}/embeddings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-          model: this.modelId,
-          input: testText,
-          encoding_format: "float"
-        }),
-        signal: AbortSignal.timeout(10000) // 10 second timeout
-      })
-      
+      const embedding = await this.generateEmbedding('Health check test', 'RETRIEVAL_QUERY')
       const latency = Date.now() - startTime
-      
-      if (response.ok) {
-        const result = await response.json()
-        const hasValidEmbedding = result.data?.[0]?.embedding && Array.isArray(result.data[0].embedding)
-        
-        return {
-          healthy: hasValidEmbedding,
-          latency,
-          lastCheck: new Date(),
-          error: hasValidEmbedding ? undefined : 'Invalid response format'
-        }
-      } else {
-        return {
-          healthy: false,
-          latency,
-          lastCheck: new Date(),
-          error: `HTTP ${response.status}: ${response.statusText}`
-        }
+
+      return {
+        healthy: embedding.length > 0,
+        latency,
+        lastCheck: new Date(),
+        error: embedding.length > 0 ? undefined : 'Empty embedding returned'
       }
     } catch (error) {
       return {
@@ -223,22 +166,5 @@ export class EmbeddingService implements IEmbeddingService {
         error: error instanceof Error ? error.message : 'Unknown error'
       }
     }
-  }
-
-  private async generateEmbeddingsIndividually(texts: string[]): Promise<number[][]> {
-    const embeddings: number[][] = []
-    
-    for (const text of texts) {
-      try {
-        const embedding = await this.generateEmbedding(text)
-        embeddings.push(embedding)
-      } catch (error) {
-        console.error(`[Embedding] Failed to generate embedding for text: ${text.substring(0, 100)}...`, error)
-        // Continue with other texts, but this will result in fewer embeddings than texts
-        throw error // Re-throw to maintain error handling consistency
-      }
-    }
-    
-    return embeddings
   }
 }

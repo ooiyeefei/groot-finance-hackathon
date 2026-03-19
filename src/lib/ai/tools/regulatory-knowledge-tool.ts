@@ -64,7 +64,7 @@ export class RegulatoryKnowledgeTool extends BaseTool {
       console.log(`[RegulatoryKnowledgeTool] Answering question for user ${userContext.userId}: "${query}"`);
 
       // 1. Generate an embedding for the user's query
-      const queryEmbedding = await this.embeddingService.generateEmbedding(query);
+      const queryEmbedding = await this.embeddingService.generateEmbedding(query, 'RETRIEVAL_QUERY');
 
       // 2. Search the regulatory KB using the new service method
       const searchResults = await this.vectorService.searchRegulatoryKb(queryEmbedding, limit);

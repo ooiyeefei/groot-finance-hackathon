@@ -135,7 +135,7 @@ export class DocumentSearchTool extends BaseTool {
       let queryEmbedding: number[]
       try {
         console.log(`[DocumentSearchTool] Generating embedding for query: "${query}"`)
-        queryEmbedding = await this.embeddingService.generateEmbedding(query)
+        queryEmbedding = await this.embeddingService.generateEmbedding(query, 'RETRIEVAL_QUERY')
       } catch (embeddingError) {
         console.error('[DocumentSearchTool] Embedding generation failed:', embeddingError)
         

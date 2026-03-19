@@ -5,18 +5,28 @@
 
 import { AnalysisResult, ServiceHealth } from './types'
 
-// Embedding Service Interface  
+// Gemini embedding task types — optimizes embeddings for specific use cases
+export type EmbeddingTaskType =
+  | 'RETRIEVAL_QUERY'      // Search queries (user questions)
+  | 'RETRIEVAL_DOCUMENT'   // Document indexing (KB ingestion)
+  | 'SEMANTIC_SIMILARITY'  // Text similarity comparison
+  | 'CLASSIFICATION'       // Text categorization
+  | 'CLUSTERING'           // Document grouping
+
+// Embedding Service Interface
 export interface IEmbeddingService {
   /**
    * Generate vector embedding for text
+   * @param taskType - Gemini task type to optimize embedding for the use case
    */
-  generateEmbedding(text: string): Promise<number[]>
-  
+  generateEmbedding(text: string, taskType?: EmbeddingTaskType): Promise<number[]>
+
   /**
    * Generate embeddings for multiple texts (batch processing)
+   * @param taskType - Gemini task type to optimize embedding for the use case
    */
-  generateEmbeddings(texts: string[]): Promise<number[][]>
-  
+  generateEmbeddings(texts: string[], taskType?: EmbeddingTaskType): Promise<number[][]>
+
   /**
    * Check service health and availability
    */

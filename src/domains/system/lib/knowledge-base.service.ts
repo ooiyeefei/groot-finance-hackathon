@@ -115,7 +115,7 @@ export async function embedRegulatoryChunk(
   const vectorStorage = new VectorStorageService()
 
   // Generate embedding for the text
-  const embedding = await embeddingService.generateEmbedding(request.text)
+  const embedding = await embeddingService.generateEmbedding(request.text, 'RETRIEVAL_DOCUMENT')
 
   // Prepare vector payload with comprehensive metadata
   const vectorPayload = {
