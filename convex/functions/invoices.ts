@@ -2009,18 +2009,20 @@ export const searchForAI = query({
       });
     }
 
-    // Date range filter
+    // Date range filter — fall back to creation time if extractedData has no invoice_date
     if (args.startDate) {
       filtered = filtered.filter((inv) => {
         const extracted = inv.extractedData as Record<string, unknown> | undefined;
-        const date = (extracted?.invoice_date as string) ?? (extracted?.invoiceDate as string) ?? "";
+        const date = (extracted?.invoice_date as string) ?? (extracted?.invoiceDate as string)
+          ?? new Date(inv._creationTime).toISOString().split("T")[0];
         return date >= args.startDate!;
       });
     }
     if (args.endDate) {
       filtered = filtered.filter((inv) => {
         const extracted = inv.extractedData as Record<string, unknown> | undefined;
-        const date = (extracted?.invoice_date as string) ?? (extracted?.invoiceDate as string) ?? "";
+        const date = (extracted?.invoice_date as string) ?? (extracted?.invoiceDate as string)
+          ?? new Date(inv._creationTime).toISOString().split("T")[0];
         return date <= args.endDate!;
       });
     }
