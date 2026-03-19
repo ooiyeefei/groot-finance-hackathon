@@ -58,20 +58,21 @@ class BankTransactionClassifier(dspy.Module):
 
         # Validate: account codes must exist in COA
         if valid_account_codes:
-            dspy.Assert(
-                result.debit_account_code in valid_account_codes,
-                f"Debit account '{result.debit_account_code}' not in Chart of Accounts. Choose from: {sorted(valid_account_codes)[:20]}",
-            )
-            dspy.Assert(
-                result.credit_account_code in valid_account_codes,
-                f"Credit account '{result.credit_account_code}' not in Chart of Accounts. Choose from: {sorted(valid_account_codes)[:20]}",
-            )
+            if result.debit_account_code not in valid_account_codes:
+                raise ValueError(
+                    f"Debit account '{result.debit_account_code}' not in Chart of Accounts. Choose from: {sorted(valid_account_codes)[:20]}"
+                )
+            if result.credit_account_code not in valid_account_codes:
+                raise ValueError(
+                    f"Credit account '{result.credit_account_code}' not in Chart of Accounts. Choose from: {sorted(valid_account_codes)[:20]}"
+                )
 
-        # Suggest: debit and credit should be different accounts
-        dspy.Suggest(
-            result.debit_account_code != result.credit_account_code,
-            "Debit and credit accounts should be different for a valid journal entry.",
-        )
+        # Soft constraint: debit and credit should be different accounts
+        if result.debit_account_code == result.credit_account_code:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Debit and credit accounts should be different for a valid journal entry."
+            )
 
         # Validate confidence range
         try:

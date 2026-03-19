@@ -58,11 +58,11 @@ class FeeClassifier(dspy.Module):
     ):
         result = self.classify(fee_name=fee_name, platform_name=platform_name)
 
-        # Hard constraint: account code MUST be valid (triggers backtracking retry if not)
-        dspy.Assert(
-            result.account_code in VALID_ACCOUNT_CODES,
-            f"Account code '{result.account_code}' is not valid. Must be one of: {list(VALID_ACCOUNT_CODES.keys())}",
-        )
+        # Hard constraint: account code MUST be valid
+        if result.account_code not in VALID_ACCOUNT_CODES:
+            raise ValueError(
+                f"Account code '{result.account_code}' is not valid. Must be one of: {list(VALID_ACCOUNT_CODES.keys())}"
+            )
 
         # Validate confidence is in range
         try:
@@ -76,10 +76,9 @@ class FeeClassifier(dspy.Module):
 
 
 class BatchFeeClassifier(dspy.Module):
-    """Classifies a batch of fees and asserts the total balances.
+    """Classifies a batch of fees and validates the total balances.
 
-    Uses dspy.Assert for balance validation — if gross != net + fees,
-    the LLM is asked to re-examine and retry (backtracking).
+    Raises ValueError if gross != net + fees (balance check).
     """
 
     def __init__(self):
@@ -107,12 +106,12 @@ class BatchFeeClassifier(dspy.Module):
             expected_fees = gross_amount - net_amount
             discrepancy = abs(expected_fees - total_fees)
 
-            dspy.Assert(
-                discrepancy < 0.01,
-                f"Fee breakdown doesn't balance: gross ({gross_amount}) - net ({net_amount}) = "
-                f"{expected_fees}, but fee total = {total_fees}. Discrepancy: {discrepancy}. "
-                "Re-examine the fee classifications to ensure all fees are correctly identified.",
-            )
+            if discrepancy >= 0.01:
+                raise ValueError(
+                    f"Fee breakdown doesn't balance: gross ({gross_amount}) - net ({net_amount}) = "
+                    f"{expected_fees}, but fee total = {total_fees}. Discrepancy: {discrepancy}. "
+                    "Re-examine the fee classifications to ensure all fees are correctly identified."
+                )
 
         return results
 

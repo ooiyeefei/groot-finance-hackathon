@@ -10,7 +10,10 @@ Mirrors the architecture of bank_recon_module.py and fee_module.py.
 """
 
 import json
+import logging
 import dspy
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================
@@ -90,19 +93,19 @@ class POMatchingModule(dspy.Module):
         for p in pairings:
             inv_idx = p.get("invoice_line_index")
             if inv_idx is not None:
-                dspy.Assert(
-                    inv_idx not in seen_invoice_indices,
-                    f"Invoice line {inv_idx} matched to multiple PO lines. Each invoice line must match at most one PO line.",
-                )
+                if inv_idx in seen_invoice_indices:
+                    raise ValueError(
+                        f"Invoice line {inv_idx} matched to multiple PO lines. Each invoice line must match at most one PO line."
+                    )
                 seen_invoice_indices.add(inv_idx)
 
         # Hard constraint: pairings JSON must be valid
-        dspy.Assert(
-            len(pairings) > 0,
-            "At least one pairing must be produced. If no matches found, output a pairing with confidence 0.0.",
-        )
+        if len(pairings) == 0:
+            raise ValueError(
+                "At least one pairing must be produced. If no matches found, output a pairing with confidence 0.0."
+            )
 
-        # Soft constraint: explain UOM conversions if present
+        # Soft constraint: warn about UOM conversions if present
         po_data = json.loads(po_lines) if isinstance(po_lines, str) else po_lines
         inv_data = json.loads(invoice_lines) if isinstance(invoice_lines, str) else invoice_lines
         for p in pairings:
@@ -112,10 +115,11 @@ class POMatchingModule(dspy.Module):
                 po_uom = po_data[po_idx].get("unit_of_measure", "") if po_idx < len(po_data) else ""
                 inv_uom = inv_data[inv_idx].get("unit_of_measure", "") if inv_idx < len(inv_data) else ""
                 if po_uom and inv_uom and po_uom.lower() != inv_uom.lower():
-                    dspy.Suggest(
-                        "convert" in p.get("reasoning", "").lower() or "unit" in p.get("reasoning", "").lower(),
-                        f"PO uses '{po_uom}' but invoice uses '{inv_uom}'. Explain the UOM conversion in reasoning.",
-                    )
+                    reasoning = p.get("reasoning", "").lower()
+                    if "convert" not in reasoning and "unit" not in reasoning:
+                        logger.warning(
+                            f"PO uses '{po_uom}' but invoice uses '{inv_uom}'. UOM conversion not explained in reasoning."
+                        )
 
         return result
 
@@ -138,10 +142,10 @@ class VarianceDiagnoser(dspy.Module):
 
         # Validate suggested_action is one of the allowed values
         valid_actions = {"approve", "investigate", "reject"}
-        dspy.Assert(
-            result.suggested_action in valid_actions,
-            f"suggested_action must be one of {valid_actions}, got '{result.suggested_action}'",
-        )
+        if result.suggested_action not in valid_actions:
+            raise ValueError(
+                f"suggested_action must be one of {valid_actions}, got '{result.suggested_action}'"
+            )
 
         return result
 

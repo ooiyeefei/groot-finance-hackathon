@@ -140,8 +140,8 @@ def _classify_fees(params: dict) -> dict:
     # Track known fee names from corrections for "NEW" detection
     known_fee_names = {c.get("feeName", "").lower() for c in corrections}
 
-    # Classify fees using BatchFeeClassifier (includes dspy.Assert for balance)
-    # BatchFeeClassifier wraps FeeClassifier with balance assertion backtracking
+    # Classify fees using BatchFeeClassifier (includes balance validation)
+    # BatchFeeClassifier wraps FeeClassifier with balance check
     batch_classifier = BatchFeeClassifier()
     batch_classifier.classifier = classifier  # Use the optimized/compiled classifier
 

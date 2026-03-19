@@ -2,14 +2,16 @@
 AR Order-to-Invoice Matcher — DSPy module for Tier 2 AI matching.
 
 Uses ChainOfThought reasoning to match sales orders to invoices,
-with Assert/Suggest constraints for reconciliation integrity.
+with Python validation constraints for reconciliation integrity.
 
-Pattern: Same as bank_recon_module.py (ChainOfThought + Assert + BootstrapFewShot)
+Pattern: Same as bank_recon_module.py (ChainOfThought + validation + BootstrapFewShot)
 """
 
 import json
+import logging
 import dspy
-from dspy.primitives.assertions import assert_transform_module, backtrack_handler
+
+logger = logging.getLogger(__name__)
 
 
 class MatchOrderToInvoice(dspy.Signature):
@@ -73,7 +75,7 @@ class OrderInvoiceMatcher(dspy.Module):
         except (ValueError, TypeError):
             confidence = 0.5
 
-        # ASSERT: Each matched invoice must exist in the candidate list
+        # Hard constraint: Each matched invoice must exist in the candidate list
         if matched_invoices:
             candidate_ids = set()
             try:
@@ -83,34 +85,31 @@ class OrderInvoiceMatcher(dspy.Module):
                 pass
 
             for m in matched_invoices:
-                dspy.Assert(
-                    m.get("invoiceId", "") in candidate_ids,
-                    f"Matched invoice {m.get('invoiceId', 'unknown')} not found in candidate list. Only match invoices from the provided candidates."
-                )
+                if m.get("invoiceId", "") not in candidate_ids:
+                    raise ValueError(
+                        f"Matched invoice {m.get('invoiceId', 'unknown')} not found in candidate list. Only match invoices from the provided candidates."
+                    )
 
-        # ASSERT: Amount balance — total allocated must not EXCEED order amount (prevents over-allocation)
-        # Allows partial payments: allocated can be LESS than order amount (residual is fine)
+        # Hard constraint: Amount balance — total allocated must not EXCEED order amount
         if matched_invoices and total_allocated > 0:
             tolerance = max(
                 order_amount * (amount_tolerance_percent / 100.0),
                 amount_tolerance_absolute
             )
-            # Only fail if allocated EXCEEDS order (over-allocation is invalid)
-            # Under-allocation is valid (partial payment — residual applied to another invoice)
             over_allocation = total_allocated - order_amount
-            dspy.Assert(
-                over_allocation <= tolerance,
-                f"Total allocated ({total_allocated:.2f}) exceeds order amount ({order_amount:.2f}) by {over_allocation:.2f}. Reduce allocation or remove an invoice from the split."
-            )
+            if over_allocation > tolerance:
+                raise ValueError(
+                    f"Total allocated ({total_allocated:.2f}) exceeds order amount ({order_amount:.2f}) by {over_allocation:.2f}. Reduce allocation or remove an invoice from the split."
+                )
 
-        # ASSERT: Max split invoices
+        # Hard constraint: Max split invoices
         if matched_invoices:
-            dspy.Assert(
-                len(matched_invoices) <= max_split_invoices,
-                f"Too many invoices in split match ({len(matched_invoices)}). Maximum allowed is {max_split_invoices}."
-            )
+            if len(matched_invoices) > max_split_invoices:
+                raise ValueError(
+                    f"Too many invoices in split match ({len(matched_invoices)}). Maximum allowed is {max_split_invoices}."
+                )
 
-        # SUGGEST: Customer name alignment
+        # Soft constraint: Customer name alignment (log warning, don't fail)
         if matched_invoices and customer_name:
             try:
                 candidates = json.loads(candidate_invoices_json)
@@ -119,26 +118,23 @@ class OrderInvoiceMatcher(dspy.Module):
                     inv = candidate_map.get(m.get("invoiceId", ""), {})
                     inv_customer = inv.get("customerName", "")
                     if inv_customer and customer_name.lower() not in inv_customer.lower() and inv_customer.lower() not in customer_name.lower():
-                        dspy.Suggest(
-                            False,
-                            f"Customer name mismatch: order has '{customer_name}' but invoice has '{inv_customer}'. If this is a known alias, proceed with reduced confidence."
+                        logger.warning(
+                            f"Customer name mismatch: order has '{customer_name}' but invoice has '{inv_customer}'. May be a known alias."
                         )
             except (json.JSONDecodeError, TypeError):
                 pass
 
-        # SUGGEST: Partial payment residual — nudge AI to explain the residual
+        # Soft constraint: Partial payment residual
         if matched_invoices and total_allocated > 0 and total_allocated < order_amount * 0.95:
             residual = order_amount - total_allocated
-            dspy.Suggest(
-                False,
-                f"Partial payment detected: allocated {total_allocated:.2f} of {order_amount:.2f} (residual {residual:.2f}). Explain in reasoning which invoices are fully paid and where the remaining RM{residual:.2f} applies."
+            logger.info(
+                f"Partial payment detected: allocated {total_allocated:.2f} of {order_amount:.2f} (residual {residual:.2f})."
             )
 
-        # SUGGEST: Overpayment check
+        # Soft constraint: Overpayment check
         if matched_invoices and total_allocated > 0 and order_amount > total_allocated * 1.1:
-            dspy.Suggest(
-                False,
-                f"Order amount ({order_amount:.2f}) significantly exceeds matched invoices ({total_allocated:.2f}). Consider looking for additional related orders or treating excess as advance payment."
+            logger.warning(
+                f"Order amount ({order_amount:.2f}) significantly exceeds matched invoices ({total_allocated:.2f}). Possible advance payment."
             )
 
         return dspy.Prediction(

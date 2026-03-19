@@ -90,36 +90,33 @@ class VendorItemMatcher(dspy.Module):
             item_b_vendor=item_b_vendor,
         )
 
-        # Component 4a: ASSERT — items must be from different vendors
-        dspy.Assert(
-            item_a_vendor.strip().lower() != item_b_vendor.strip().lower(),
-            f"Cannot match items from the same vendor: '{item_a_vendor}' and '{item_b_vendor}'",
-        )
+        # Hard constraint: items must be from different vendors
+        if item_a_vendor.strip().lower() == item_b_vendor.strip().lower():
+            raise ValueError(
+                f"Cannot match items from the same vendor: '{item_a_vendor}' and '{item_b_vendor}'"
+            )
 
         # Parse is_match to boolean
         is_match_str = str(result.is_match).strip().lower()
         is_match = is_match_str in ("true", "yes", "1")
 
-        # Component 4b: ASSERT — if match claimed, specs must be compatible
-        # Extract numeric specs (e.g., M8, M10, A4, 80gsm) and check compatibility
+        # Hard constraint: if match claimed, specs must be compatible
         if is_match:
             specs_a = _extract_specifications(item_a_description)
             specs_b = _extract_specifications(item_b_description)
             if specs_a and specs_b:
-                # Check for conflicting size/grade specifications
                 conflicting = _check_spec_conflict(specs_a, specs_b)
-                dspy.Assert(
-                    not conflicting,
-                    f"Items have conflicting specifications: {specs_a} vs {specs_b}. "
-                    f"Items with different sizes/grades should NOT match.",
-                )
+                if conflicting:
+                    raise ValueError(
+                        f"Items have conflicting specifications: {specs_a} vs {specs_b}. "
+                        f"Items with different sizes/grades should NOT match."
+                    )
 
-        # Component 4c: SUGGEST — price ratio guidance (soft constraint)
-        # This is a soft suggestion — doesn't cause backtracking
-        if is_match:
-            dspy.Suggest(
-                result.suggested_group_name != "N/A",
-                "When items match, provide a meaningful group name instead of 'N/A'.",
+        # Soft constraint: matched items should have a meaningful group name
+        if is_match and result.suggested_group_name == "N/A":
+            import logging
+            logging.getLogger(__name__).warning(
+                "When items match, provide a meaningful group name instead of 'N/A'."
             )
 
         # Validate and clamp confidence
