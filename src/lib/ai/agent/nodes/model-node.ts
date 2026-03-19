@@ -97,23 +97,29 @@ function buildMessagesForLLM(trimmedMessages: any[], systemPrompt: string): any[
       // Process message without logging sensitive content
       console.log(`[CallModel] Processing message ${index}: type=${msgType}`);
 
-      // ULTRA-ROBUST: Check multiple conditions for human message
-      const isHumanMsg = msgType === 'human' ||
-                        msg instanceof HumanMessage ||
-                        (msg as any).role === 'user' ||
-                        (index === trimmedMessages.length - 1 && typeof msg.content === 'string'); // Last message with string content
-
-      if (isHumanMsg || msgType === 'human') {
-        const userMessage = { role: 'user', content: msg.content };
-        console.log(`[CallModel] Created user message (type: ${msgType})`);
-        return userMessage;
-      } else if (msgType === 'tool') {
-        // CRITICAL FIX: Proper OpenAI tool message format
+      // CRITICAL: Check tool messages FIRST — before the human catch-all.
+      // The Qwen-era catch-all (last message with string content → human) incorrectly
+      // matched tool result messages, causing Gemini to receive role:"user" where
+      // role:"tool" was expected, triggering 500 Internal Error.
+      if (msgType === 'tool' || (msg as any).role === 'tool' || msg instanceof ToolMessage) {
+        // Proper OpenAI tool message format (role:"tool" + tool_call_id required by Gemini)
         return {
           role: 'tool',
           content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
           tool_call_id: msg.tool_call_id
         };
+      }
+
+      // Check for human messages (with Qwen-era catch-all for untyped messages)
+      const isHumanMsg = msgType === 'human' ||
+                        msg instanceof HumanMessage ||
+                        (msg as any).role === 'user' ||
+                        (index === trimmedMessages.length - 1 && typeof msg.content === 'string');
+
+      if (isHumanMsg) {
+        const userMessage = { role: 'user', content: msg.content };
+        console.log(`[CallModel] Created user message (type: ${msgType})`);
+        return userMessage;
       } else {
         // CRITICAL FIX: Include tool_calls for assistant messages that made tool calls
         // OpenAI API requires tool_calls in assistant message before tool result
