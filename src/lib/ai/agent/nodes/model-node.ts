@@ -59,10 +59,32 @@ export async function callModel(state: AgentState): Promise<Partial<AgentState>>
 
   // CRITICAL FIX: Trim conversation history to prevent context pollution
   // Keep only the last 6 messages (3 user/assistant pairs) to prevent LLM confusion
+  //
+  // GEMINI FIX: After trimming, strip tool_calls from orphaned assistant messages.
+  // Gemini requires that every assistant message with tool_calls MUST be followed by
+  // a matching role:"tool" message. If trimming cuts off the tool result but keeps
+  // the assistant's tool_calls, Gemini returns HTTP 500 "Internal error encountered."
   let trimmedMessages = processedMessages;
   if (processedMessages.length > 6) {
     trimmedMessages = processedMessages.slice(-6);
     console.log(`[CallModel] TRIMMED conversation history from ${processedMessages.length} to ${trimmedMessages.length} messages to prevent context pollution`);
+
+    // Strip tool_calls from assistant messages that don't have their matching tool result
+    // in the trimmed window (orphaned tool_calls cause Gemini 500 errors)
+    // We rebuild the array, replacing orphaned AI messages with clean copies
+    trimmedMessages = trimmedMessages.map((msg, i) => {
+      const msgType = msg._getType ? msg._getType() : (msg as any).type;
+      if (msgType === 'ai' && (msg as any).tool_calls && (msg as any).tool_calls.length > 0) {
+        const nextMsg = trimmedMessages[i + 1];
+        const nextMsgType = nextMsg ? (nextMsg._getType ? nextMsg._getType() : (nextMsg as any).type) : null;
+        if (nextMsgType !== 'tool') {
+          // Orphaned tool_calls — create a clean AI message without them
+          console.log(`[CallModel] Stripping orphaned tool_calls from trimmed message ${i} (no matching tool result follows)`);
+          return new AIMessage(typeof msg.content === 'string' ? msg.content : '');
+        }
+      }
+      return msg;
+    });
   }
 
   // Prepare messages for LLM using trimmed messages
