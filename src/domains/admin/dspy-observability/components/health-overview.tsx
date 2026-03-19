@@ -1,6 +1,12 @@
 'use client';
 
-import { AlertTriangle, CheckCircle, XCircle, ChevronRight } from 'lucide-react';
+import { AlertTriangle, CheckCircle, XCircle, ChevronRight, HelpCircle } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import type { BusinessOverview, ToolSummary } from '../hooks/use-dspy-metrics';
 
 const TOOL_LABELS: Record<string, string> = {
@@ -52,8 +58,27 @@ interface HealthOverviewProps {
 
 export function HealthOverview({ businesses, onSelectBusiness }: HealthOverviewProps) {
   return (
-    <div className="space-y-3">
-      <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Health Overview</h3>
+    <TooltipProvider>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Health Overview</h3>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <HelpCircle className="w-4 h-4 text-muted-foreground cursor-help" />
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              <p className="text-xs mb-2">
+                Shows performance metrics for classification tools (fee classification, bank recon, AR/PO matching, vendor items).
+              </p>
+              <p className="text-xs mb-2">
+                <strong>Chat tools show "No data"</strong> here because they don't run classifications - they only collect corrections via thumbs-down feedback.
+              </p>
+              <p className="text-xs">
+                <strong>Classifications</strong> = number of times the AI tool ran (e.g., classifying a fee, matching an invoice)
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
 
       {businesses.map((biz) => {
         const totalInvocations = biz.tools.reduce((s, t) => s + t.totalClassifications, 0);
@@ -91,9 +116,30 @@ export function HealthOverview({ businesses, onSelectBusiness }: HealthOverviewP
                   <ToolHealthBadge tool={tool} />
                   {tool.tier2Invocations > 0 && (
                     <div className="space-y-0.5 text-muted-foreground">
-                      <div>Conf: {formatPercent(tool.avgConfidence)}</div>
-                      <div>Latency: {formatMs(tool.avgLatencyMs)}</div>
-                      <div>Retry: {formatPercent(tool.refineRetryRate)}</div>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="cursor-help">Conf: {formatPercent(tool.avgConfidence)}</div>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p className="text-xs">Average confidence score (0-100%). Higher = AI is more certain about its classifications.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="cursor-help">Latency: {formatMs(tool.avgLatencyMs)}</div>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p className="text-xs">Average time for AI to complete classification. Lower is better.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="cursor-help">Retry: {formatPercent(tool.refineRetryRate)}</div>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p className="text-xs">How often the AI had to retry due to constraint violations (e.g., invalid format, missing required fields). Lower is better.</p>
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
                   )}
                 </div>
@@ -103,5 +149,6 @@ export function HealthOverview({ businesses, onSelectBusiness }: HealthOverviewP
         );
       })}
     </div>
+    </TooltipProvider>
   );
 }

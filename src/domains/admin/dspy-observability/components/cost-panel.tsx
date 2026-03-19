@@ -1,5 +1,12 @@
 'use client';
 
+import { HelpCircle } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import type { BusinessOverview } from '../hooks/use-dspy-metrics';
 
 const TOOL_LABELS: Record<string, string> = {
@@ -34,24 +41,96 @@ export function CostPanel({ businesses }: CostPanelProps) {
   );
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Cost & Efficiency</h3>
-        <span className="text-sm font-medium text-foreground">
-          Total: {formatCost(totalCost)}
-        </span>
-      </div>
+    <TooltipProvider>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Cost & Efficiency</h3>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <HelpCircle className="w-4 h-4 text-muted-foreground cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                <p className="text-xs mb-2">
+                  Tracks AI costs and efficiency metrics for classification tools.
+                </p>
+                <p className="text-xs">
+                  <strong>Tier 1</strong> = free rule-based matching (no AI cost).
+                  <strong> Tier 2</strong> = AI/LLM classification (costs money but handles edge cases).
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+          <span className="text-sm font-medium text-foreground">
+            Total: {formatCost(totalCost)}
+          </span>
+        </div>
 
       <div className="bg-card border rounded-lg overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/50">
               <th className="text-left p-3 font-medium text-muted-foreground">Business</th>
-              <th className="text-right p-3 font-medium text-muted-foreground">Tier 1 Rate</th>
-              <th className="text-right p-3 font-medium text-muted-foreground">Tier 2 Calls</th>
-              <th className="text-right p-3 font-medium text-muted-foreground">Est. Cost</th>
-              <th className="text-right p-3 font-medium text-muted-foreground">Accuracy</th>
-              <th className="text-right p-3 font-medium text-muted-foreground">Cost/Correct</th>
+              <th className="text-right p-3 font-medium text-muted-foreground">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help flex items-center justify-end gap-1">
+                      Tier 1 Rate <HelpCircle className="w-3 h-3" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p className="text-xs">% of cases handled by free rule-based logic (no AI cost). Higher = more cost-efficient.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </th>
+              <th className="text-right p-3 font-medium text-muted-foreground">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help flex items-center justify-end gap-1">
+                      Tier 2 Calls <HelpCircle className="w-3 h-3" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p className="text-xs">Number of AI/LLM calls (these cost money). Tier 2 handles edge cases that rules can't.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </th>
+              <th className="text-right p-3 font-medium text-muted-foreground">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help flex items-center justify-end gap-1">
+                      Est. Cost <HelpCircle className="w-3 h-3" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p className="text-xs">Estimated Gemini API cost based on token usage (input: $0.25/M, output: $1.50/M)</p>
+                  </TooltipContent>
+                </Tooltip>
+              </th>
+              <th className="text-right p-3 font-medium text-muted-foreground">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help flex items-center justify-end gap-1">
+                      Accuracy <HelpCircle className="w-3 h-3" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p className="text-xs">% of classifications that didn't need manual override. Higher = AI is doing better.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </th>
+              <th className="text-right p-3 font-medium text-muted-foreground">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help flex items-center justify-end gap-1">
+                      Cost/Correct <HelpCircle className="w-3 h-3" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p className="text-xs">Cost per correct classification (lower = more efficient). As accuracy improves, this should decrease.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -84,5 +163,6 @@ export function CostPanel({ businesses }: CostPanelProps) {
         </table>
       </div>
     </div>
+    </TooltipProvider>
   );
 }
