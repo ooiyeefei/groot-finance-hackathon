@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { X, Languages, Eye, FileText, DollarSign, List, Copy, Loader2, ImageIcon, BookOpen, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import DocumentPreviewWithAnnotations from './document-preview-with-annotations'
+import LhdnInvoiceSection from './lhdn-invoice-section'
 import { formatNumber } from '@/lib/utils/format-number'
 import { useInvoiceRealtime } from '../hooks/use-invoices-realtime'
 import { useJournalEntry } from '@/domains/accounting/hooks/use-journal-entries'
@@ -1570,6 +1571,33 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
                     </div>
                   </div>
                 )}
+
+                {/* 024-einv-buyer-reject-pivot: LHDN E-Invoice Section */}
+                {(() => {
+                  const doc = document as any
+                  if (!doc.lhdnVerificationStatus || doc.lhdnVerificationStatus === 'not_einvoice') return null
+                  return (
+                    <div className="mb-6">
+                      <LhdnInvoiceSection
+                        invoice={{
+                          _id: document.id,
+                          lhdnVerificationStatus: doc.lhdnVerificationStatus,
+                          lhdnDocumentUuid: doc.lhdnDocumentUuid,
+                          lhdnLongId: doc.lhdnLongId,
+                          lhdnValidatedAt: doc.lhdnValidatedAt,
+                          lhdnStatus: doc.lhdnStatus,
+                          lhdnRejectedAt: doc.lhdnRejectedAt,
+                          lhdnRejectionReason: doc.lhdnRejectionReason,
+                          lhdnValidationUrl: doc.lhdnValidationUrl,
+                        }}
+                        onReject={() => {
+                          // TODO: Open rejection dialog — for now, placeholder
+                          // Will be wired to einvoice-reject-dialog in future
+                        }}
+                      />
+                    </div>
+                  )
+                })()}
 
                 {/* Financial Entities */}
                 {document.extracted_data?.financial_entities && document.extracted_data.financial_entities.length > 0 && (
