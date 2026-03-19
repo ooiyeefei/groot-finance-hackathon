@@ -13,6 +13,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "../_generated/server";
+import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import {
   paymentTypeValidator,
@@ -202,7 +203,7 @@ export const recordPayment = mutation({
           const entry = await ctx.db.get(entryId);
           if (entry) {
             await ctx.db.patch(entryId, {
-              status: newStatus === "paid" ? "posted" : "posted",
+              status: "posted",
               updatedAt: now,
             } as any);
           }
@@ -210,6 +211,55 @@ export const recordPayment = mutation({
           // Journal entry may not exist
         }
       }
+    }
+
+    // Create payment journal entry: Debit Cash (1000), Credit AR (1200)
+    // This records the cash receipt and reduces the AR balance in the GL
+    try {
+      // Get first invoice for customer name (all allocations are same customer)
+      const firstInvoice = await ctx.db.get(args.allocations[0].invoiceId);
+      const customerName = firstInvoice?.customerSnapshot?.businessName ?? "Customer";
+
+      // Build description with invoice numbers
+      const invoiceNumbers: string[] = [];
+      for (const allocation of args.allocations) {
+        const inv = await ctx.db.get(allocation.invoiceId);
+        if (inv) invoiceNumbers.push(inv.invoiceNumber);
+      }
+      const invoiceRef = invoiceNumbers.length === 1
+        ? `Invoice #${invoiceNumbers[0]}`
+        : `Invoices #${invoiceNumbers.join(", #")}`;
+
+      await ctx.runMutation(
+        internal.functions.journalEntries.createInternal,
+        {
+          businessId: args.businessId,
+          transactionDate: args.paymentDate,
+          description: `Payment received: ${invoiceRef} - ${customerName}`,
+          sourceType: "payment" as const,
+          sourceId: paymentId,
+          lines: [
+            {
+              accountCode: "1000",
+              debitAmount: roundedAmount,
+              creditAmount: 0,
+              lineDescription: `Cash received - ${args.paymentMethod.replace(/_/g, " ")}${args.paymentReference ? ` (Ref: ${args.paymentReference})` : ""}`,
+            },
+            {
+              accountCode: "1200",
+              debitAmount: 0,
+              creditAmount: roundedAmount,
+              lineDescription: `Clear AR - ${invoiceRef}`,
+              entityType: "customer" as const,
+              entityId: args.customerId,
+              entityName: customerName,
+            },
+          ],
+        }
+      );
+    } catch (error: any) {
+      console.error(`[Payments] Failed to create payment journal entry:`, error);
+      // Continue even if journal entry creation fails — payment is already recorded
     }
 
     return paymentId;
@@ -312,6 +362,52 @@ export const recordReversal = mutation({
           // Journal entry may not exist
         }
       }
+    }
+
+    // Create reversal journal entry: Debit AR (1200), Credit Cash (1000)
+    // This reverses the original payment's GL impact
+    try {
+      const firstInvoice = await ctx.db.get(originalPayment.allocations[0].invoiceId);
+      const customerName = firstInvoice?.customerSnapshot?.businessName ?? "Customer";
+
+      const invoiceNumbers: string[] = [];
+      for (const allocation of originalPayment.allocations) {
+        const inv = await ctx.db.get(allocation.invoiceId);
+        if (inv) invoiceNumbers.push(inv.invoiceNumber);
+      }
+      const invoiceRef = invoiceNumbers.length === 1
+        ? `Invoice #${invoiceNumbers[0]}`
+        : `Invoices #${invoiceNumbers.join(", #")}`;
+
+      await ctx.runMutation(
+        internal.functions.journalEntries.createInternal,
+        {
+          businessId: args.businessId,
+          transactionDate: getTodayISO(),
+          description: `Payment reversal: ${invoiceRef} - ${customerName}`,
+          sourceType: "payment" as const,
+          sourceId: reversalId,
+          lines: [
+            {
+              accountCode: "1200",
+              debitAmount: originalPayment.amount,
+              creditAmount: 0,
+              lineDescription: `Restore AR - ${invoiceRef}`,
+              entityType: "customer" as const,
+              entityId: originalPayment.customerId,
+              entityName: customerName,
+            },
+            {
+              accountCode: "1000",
+              debitAmount: 0,
+              creditAmount: originalPayment.amount,
+              lineDescription: `Reverse cash receipt - ${args.reason ?? "Payment reversal"}`,
+            },
+          ],
+        }
+      );
+    } catch (error: any) {
+      console.error(`[Payments] Failed to create reversal journal entry:`, error);
     }
 
     return reversalId;

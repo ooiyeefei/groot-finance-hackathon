@@ -294,47 +294,34 @@ export default function JournalEntriesContent() {
         </CardContent>
       </Card>
 
-      {/* Entry Detail Dialog — Clean card layout */}
+      {/* Entry Detail Dialog — Compact journal entry view (Xero/Zoho style) */}
       <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-        <DialogContent className="max-w-xl p-0 gap-0">
+        <DialogContent className="max-w-lg p-0 gap-0">
           {selectedEntry && (
             <>
-              {/* Header with amount */}
-              <div className="px-6 pt-6 pb-4 border-b border-border">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <DialogTitle className="text-lg font-semibold text-foreground">
-                      {selectedEntry.description}
-                    </DialogTitle>
-                    <p className="text-sm text-muted-foreground">
-                      {formatBusinessDate(selectedEntry.transactionDate)}
-                      {selectedEntry.sourceType && selectedEntry.sourceType !== 'manual' && (
-                        <> &middot; <span className="capitalize">{selectedEntry.sourceType.replace(/_/g, ' ')}</span></>
-                      )}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xl font-bold text-foreground">
-                      {formatCurrency(
-                        selectedEntry.lines?.reduce(
-                          (sum: number, line: any) => sum + (line.debitAmount || 0),
-                          0
-                        ) || 0,
-                        'MYR'
-                      )}
-                    </p>
-                    <div className="flex items-center gap-1.5 justify-end mt-1">
-                      <Badge className={getStatusBadge(selectedEntry.status)}>
-                        {selectedEntry.status}
-                      </Badge>
-                      {getPeriodBadge(selectedEntry)}
-                    </div>
-                  </div>
+              {/* Header */}
+              <div className="px-5 pt-5 pb-3 border-b border-border">
+                <DialogTitle className="text-base font-semibold text-foreground leading-snug">
+                  {selectedEntry.description}
+                </DialogTitle>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  <span className="text-sm text-muted-foreground">
+                    {formatBusinessDate(selectedEntry.transactionDate)}
+                  </span>
+                  {selectedEntry.sourceType && selectedEntry.sourceType !== 'manual' && (
+                    <span className="text-xs text-muted-foreground capitalize">
+                      &middot; {selectedEntry.sourceType.replace(/_/g, ' ')}
+                    </span>
+                  )}
+                  <Badge className={getStatusBadge(selectedEntry.status)}>
+                    {selectedEntry.status}
+                  </Badge>
+                  {getPeriodBadge(selectedEntry)}
                 </div>
 
                 {/* Period lock warning */}
                 {!isEntryEditable(selectedEntry) && selectedEntry.status !== 'reversed' && (
-                  <div className={`rounded-md p-2.5 mt-3 flex items-center gap-2 text-xs ${
+                  <div className={`rounded-md p-2 mt-2.5 flex items-center gap-2 text-xs ${
                     selectedEntry.isPeriodLocked
                       ? 'bg-red-500/10 text-red-600 dark:text-red-400'
                       : 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400'
@@ -347,44 +334,63 @@ export default function JournalEntriesContent() {
                 )}
               </div>
 
-              {/* Journal Lines */}
-              <div className="px-6 py-4">
-                <div className="space-y-2">
-                  {selectedEntry.lines?.map((line: any, index: number) => (
-                    <div key={index} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
-                            {line.accountCode}
-                          </span>
-                          <span className="text-sm text-foreground truncate">
-                            {line.accountName}
-                          </span>
-                        </div>
-                        {line.lineDescription && (
-                          <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                            {line.lineDescription}
-                          </p>
+              {/* Journal Lines — table format like Xero */}
+              <div className="px-5 py-3">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-xs text-muted-foreground">
+                      <th className="text-left py-1.5 font-medium">Account</th>
+                      <th className="text-right py-1.5 font-medium w-28">Debit</th>
+                      <th className="text-right py-1.5 font-medium w-28">Credit</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedEntry.lines?.map((line: any, index: number) => (
+                      <tr key={index} className="border-b border-border last:border-0">
+                        <td className="py-2.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded text-muted-foreground shrink-0">
+                              {line.accountCode}
+                            </span>
+                            <span className="text-foreground">{line.accountName}</span>
+                          </div>
+                          {line.lineDescription && (
+                            <p className="text-xs text-muted-foreground mt-0.5 pl-0.5">
+                              {line.lineDescription}
+                            </p>
+                          )}
+                        </td>
+                        <td className="text-right py-2.5 font-medium text-foreground align-top">
+                          {line.debitAmount > 0 ? formatCurrency(line.debitAmount, 'MYR') : ''}
+                        </td>
+                        <td className="text-right py-2.5 font-medium text-foreground align-top">
+                          {line.creditAmount > 0 ? formatCurrency(line.creditAmount, 'MYR') : ''}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-foreground/20">
+                      <td className="py-2 text-xs font-medium text-muted-foreground">Total</td>
+                      <td className="text-right py-2 font-semibold text-foreground">
+                        {formatCurrency(
+                          selectedEntry.lines?.reduce((sum: number, l: any) => sum + (l.debitAmount || 0), 0) || 0,
+                          'MYR'
                         )}
-                      </div>
-                      <div className="text-right ml-4 shrink-0">
-                        {line.debitAmount > 0 ? (
-                          <span className="text-sm font-medium text-foreground">
-                            {formatCurrency(line.debitAmount, 'MYR')} <span className="text-xs text-muted-foreground">DR</span>
-                          </span>
-                        ) : (
-                          <span className="text-sm font-medium text-foreground">
-                            {formatCurrency(line.creditAmount, 'MYR')} <span className="text-xs text-muted-foreground">CR</span>
-                          </span>
+                      </td>
+                      <td className="text-right py-2 font-semibold text-foreground">
+                        {formatCurrency(
+                          selectedEntry.lines?.reduce((sum: number, l: any) => sum + (l.creditAmount || 0), 0) || 0,
+                          'MYR'
                         )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
 
               {/* Footer */}
-              <div className="px-6 py-3 border-t border-border bg-muted/30 flex items-center justify-between">
+              <div className="px-5 py-2.5 border-t border-border bg-muted/30 flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">
                   {selectedEntry.createdBy
                     ? `Created by ${selectedEntry.createdBy} on ${new Date(selectedEntry.createdAt).toLocaleDateString()}`
