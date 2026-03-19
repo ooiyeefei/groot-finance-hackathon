@@ -803,16 +803,16 @@ async function approveOneClaim(
     )
     .first();
 
-  const cashAccount = await ctx.db
+  const apAccount = await ctx.db
     .query("chart_of_accounts")
     .withIndex("by_business_code", (q) =>
-      q.eq("businessId", claim.businessId).eq("accountCode", "1000")
+      q.eq("businessId", claim.businessId).eq("accountCode", "2100")
     )
     .first();
 
-  if (!expenseAccount || !cashAccount) {
+  if (!expenseAccount || !apAccount) {
     console.log(
-      `[Submission Approve] Skipping journal entry for claim ${claim._id}: missing expense (5200) or cash (1000) accounts`
+      `[Submission Approve] Skipping journal entry for claim ${claim._id}: missing expense (5200) or AP (2100) accounts`
     );
     await ctx.db.patch(claim._id, {
       status: "approved",
@@ -823,7 +823,8 @@ async function approveOneClaim(
     return null;
   }
 
-  // Create journal entry using helper
+  // Create journal entry: Dr. Expense 5200, Cr. AP 2100
+  // IFRS: Approval creates expense + AP liability; reimbursement clears AP with cash
   const description = claim.businessPurpose || claim.description || "Expense claim";
   const lines = createExpenseJournalEntry({
     amount: claim.homeCurrencyAmount || claim.totalAmount,
@@ -831,9 +832,9 @@ async function approveOneClaim(
     expenseAccountCode: expenseAccount.accountCode,
     expenseAccountName: expenseAccount.accountName,
     description,
-    cashAccountId: cashAccount._id,
-    cashAccountCode: cashAccount.accountCode,
-    cashAccountName: cashAccount.accountName,
+    cashAccountId: apAccount._id,
+    cashAccountCode: apAccount.accountCode,
+    cashAccountName: apAccount.accountName,
   });
 
   // Call internal journal entry creation

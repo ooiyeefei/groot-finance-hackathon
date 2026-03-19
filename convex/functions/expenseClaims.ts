@@ -3545,7 +3545,16 @@ export const batchMarkAsPaid = mutation({
         updatedAt: now,
       });
 
-      // accounting_entries update removed — table dropped
+      // Create reimbursement journal entry: Dr. AP 2100, Cr. Cash 1000
+      try {
+        await ctx.runMutation(
+          internal.functions.integrations.expenseClaimIntegration.createJournalEntryOnReimbursement,
+          { claimId }
+        );
+      } catch (error: any) {
+        console.error(`[batchMarkAsPaid] Failed to create payment journal entry for claim ${claimId}:`, error);
+        // Continue even if journal entry fails — claim is still marked paid
+      }
 
       // Track totals per currency
       const currency = claim.currency || claim.homeCurrency || "MYR";

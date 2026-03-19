@@ -250,12 +250,12 @@ export async function* streamLangGraphAgent(
 
     // Always strip residual action card JSON from text (safety net for edge cases
     // where the regex extraction partially matched or the LLM used unusual formatting).
-    const ACTION_TYPES_PATTERN = 'invoice_posting|cash_flow_dashboard|compliance_alert|budget_alert|spending_time_series|anomaly_card|vendor_comparison|expense_approval|revenue_summary'
+    const ACTION_TYPES_PATTERN = 'invoice_posting|cash_flow_dashboard|compliance_alert|budget_alert|spending_time_series|anomaly_card|vendor_comparison|expense_approval|expense_reimbursement|revenue_summary'
     finalContent = finalContent
       // Strip ```actions ... ``` fenced blocks
       .replace(/(?:\\*`){3,}actions[\s\S]*?(?:\\*`){3,}/g, '')
       // Strip ```json blocks containing action card types
-      .replace(/(?:\\*`){3,}(?:json)?\s*\n\s*\[\s*\{[\s\S]*?"type"\s*:\s*"(?:invoice_posting|cash_flow_dashboard|compliance_alert|budget_alert|spending_time_series|anomaly_card|vendor_comparison|expense_approval|revenue_summary)"[\s\S]*?(?:\\*`){3,}/g, '')
+      .replace(/(?:\\*`){3,}(?:json)?\s*\n\s*\[\s*\{[\s\S]*?"type"\s*:\s*"(?:invoice_posting|cash_flow_dashboard|compliance_alert|budget_alert|spending_time_series|anomaly_card|vendor_comparison|expense_approval|expense_reimbursement|revenue_summary)"[\s\S]*?(?:\\*`){3,}/g, '')
       // Strip unfenced raw JSON arrays containing action card types (LLM sometimes
       // dumps [{"type": "invoice_posting", ...}] directly in the text without fencing)
       .replace(new RegExp(`\\[\\s*\\{[\\s\\S]*?"type"\\s*:\\s*"(?:${ACTION_TYPES_PATTERN})"[\\s\\S]*?\\}\\s*\\]`, 'g'), '')
@@ -265,7 +265,7 @@ export async function* streamLangGraphAgent(
     // Bulk-capable types (invoice_posting, expense_approval) allow multiple cards
     // but deduplicate by content key (invoiceId / expenseId).
     // Other types keep only one card per type.
-    const BULK_CARD_TYPES = new Set(['invoice_posting', 'expense_approval'])
+    const BULK_CARD_TYPES = new Set(['invoice_posting', 'expense_approval', 'expense_reimbursement'])
     const allActions = [...llmActions, ...autoActions]
     const seenIds = new Set<string>()
     const seenContentKeys = new Set<string>()
