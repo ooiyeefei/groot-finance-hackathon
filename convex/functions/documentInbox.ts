@@ -8,7 +8,6 @@
 import { v } from "convex/values";
 import { mutation, query, internalMutation } from "../_generated/server";
 import { Id } from "../_generated/dataModel";
-import { getNinetyDaysAgo } from "../lib/duplicate_detector";
 
 // ============================================================================
 // Mutations (called by Lambda email processor)
@@ -43,29 +42,9 @@ export const createInboxEntry = internalMutation({
     }),
   },
   handler: async (ctx, args) => {
-    // Check for duplicate by file hash in document_inbox_entries (90-day window).
-    // Only checks inbox table (has fileHash). Does NOT scan expense_claims or invoices
-    // by filename — filename matching is too aggressive (same name ≠ same file).
-    const ninetyDaysAgo = getNinetyDaysAgo();
-
-    const existingInboxEntry = await ctx.db
-      .query("document_inbox_entries")
-      .withIndex("by_business_fileHash", (q) =>
-        q.eq("businessId", args.businessId).eq("fileHash", args.fileHash)
-      )
-      .filter((q) => q.gte(q.field("_creationTime"), ninetyDaysAgo))
-      .first();
-
-    if (existingInboxEntry) {
-      return {
-        inboxEntryId: existingInboxEntry._id,
-        triggerClassification: false,
-        isDuplicate: true,
-        duplicateOriginalId: existingInboxEntry._id,
-      };
-    }
-
-    // Not a duplicate - create inbox entry for classification
+    // No duplicate detection at inbox level — inbox is a staging area.
+    // Duplicate detection happens downstream at expense claim / invoice processing.
+    // Users may delete drafts and re-forward the same document intentionally.
     const archiveEligibleAt = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days
     const deleteEligibleAt = Date.now() + 7 * 365 * 24 * 60 * 60 * 1000; // 7 years
 

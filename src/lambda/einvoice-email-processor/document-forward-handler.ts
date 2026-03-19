@@ -679,16 +679,6 @@ export async function handleDocumentForwarding(
         emailMetadata,
       });
 
-      if (result.isDuplicate) {
-        console.log(`[DocForward] Duplicate detected: ${result.duplicateOriginalId}`);
-        await sendDuplicateNotification(
-          fromAddress,
-          attachment.filename,
-          new Date().toISOString().split("T")[0]  // Placeholder date
-        );
-        continue;
-      }
-
       console.log(`[DocForward] Inbox entry created: ${result.inboxEntryId} (hash=${result.fileHash}, size=${result.fileSizeBytes})`);
 
       // Update inbox status with classification result
