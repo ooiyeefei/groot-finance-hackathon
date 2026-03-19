@@ -613,7 +613,8 @@ def _match_po_invoice(arguments: dict) -> dict:
     """Tier 2 AI matching for PO-Invoice line items."""
     global _po_matcher
 
-    configure_lm()
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    configure_lm(api_key)
 
     po_lines = arguments.get("po_line_items", [])
     invoice_lines = arguments.get("invoice_line_items", [])
@@ -679,10 +680,13 @@ def _match_po_invoice(arguments: dict) -> dict:
         # Cap confidence when using base model (no optimized model)
         confidence_cap = 1.0 if use_pretrained else 0.80
         for p in pairings:
-            if p.get("confidence", 0) > confidence_cap:
-                p["confidence"] = confidence_cap
+            try:
+                conf = float(p.get("confidence", 0))
+            except (ValueError, TypeError):
+                conf = 0.5
+            p["confidence"] = min(conf, confidence_cap)
 
-        overall_confidence = sum(p.get("confidence", 0) for p in pairings) / max(len(pairings), 1)
+        overall_confidence = sum(float(p.get("confidence", 0)) for p in pairings) / max(len(pairings), 1)
 
         return {
             "pairings": pairings,
@@ -702,7 +706,8 @@ def _diagnose_variance(arguments: dict) -> dict:
     """AI-powered variance diagnosis for matched line items."""
     global _variance_diagnoser
 
-    configure_lm()
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    configure_lm(api_key)
 
     if _variance_diagnoser is None:
         from po_matching_module import variance_reward_fn
