@@ -1078,7 +1078,8 @@ Groot Finance Feedback System
         .details-row {
           display: flex;
           justify-content: space-between;
-          padding: 8px 0;
+          align-items: center;
+          padding: 10px 0;
           border-bottom: 1px solid #e5e7eb;
         }
         .details-row:last-child {
@@ -1087,9 +1088,12 @@ Groot Finance Feedback System
         .details-label {
           color: #6b7280;
           font-size: 14px;
+          min-width: 110px;
+          flex-shrink: 0;
         }
         .details-value {
           font-weight: 500;
+          text-align: right;
         }
         .reason-box {
           background: ${notificationType === 'rejected' ? '#fef2f2' : '#f0fdf4'};
@@ -1132,20 +1136,20 @@ Groot Finance Feedback System
 
         <div class="details-box">
           <div class="details-row">
-            <span class="details-label">Leave Type</span>
+            <span class="details-label">Leave Type:</span>
             <span class="details-value">${leaveType}</span>
           </div>
           <div class="details-row">
-            <span class="details-label">Duration</span>
+            <span class="details-label">Duration:</span>
             <span class="details-value">${startDate} to ${endDate}</span>
           </div>
           <div class="details-row">
-            <span class="details-label">Total Days</span>
+            <span class="details-label">Total Days:</span>
             <span class="details-value">${totalDays} business day${totalDays !== 1 ? 's' : ''}</span>
           </div>
           <div class="details-row">
-            <span class="details-label">Status</span>
-            <span class="status-badge">${statusLabels[notificationType]}</span>
+            <span class="details-label">Status:</span>
+            <span class="details-value"><span class="status-badge">${statusLabels[notificationType]}</span></span>
           </div>
         </div>
 
