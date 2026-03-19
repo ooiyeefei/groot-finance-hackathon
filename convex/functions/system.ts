@@ -116,8 +116,9 @@ export const updateInvoiceExtraction = mutation({
     confidenceScore: v.optional(v.number()),
     extractionMethod: v.optional(v.string()),
     modelUsed: v.optional(v.string()),
-    // 024-einv-buyer-reject-pivot: LHDN e-invoice detection from QR code
+    // 024-einv-buyer-reject-pivot: LHDN e-invoice detection (dual: QR + DSPy)
     lhdnLongId: v.optional(v.string()),
+    lhdnDocumentUuid: v.optional(v.string()),
     lhdnValidationUrl: v.optional(v.string()),
     lhdnVerificationStatus: v.optional(v.string()),
   },
@@ -145,11 +146,18 @@ export const updateInvoiceExtraction = mutation({
       updateData.processingMethod = args.extractionMethod;
     }
 
-    // 024-einv-buyer-reject-pivot: Store LHDN long ID from QR detection
+    // 024-einv-buyer-reject-pivot: Store LHDN detection results (dual: QR + DSPy)
     if (args.lhdnLongId) {
       updateData.lhdnLongId = args.lhdnLongId;
       updateData.lhdnVerificationStatus = args.lhdnVerificationStatus || "pending";
-      console.log(`[System] LHDN e-invoice detected for ${args.id}: longId=${args.lhdnLongId}`);
+      console.log(`[System] LHDN e-invoice detected via QR for ${args.id}: longId=${args.lhdnLongId}`);
+    } else if (args.lhdnDocumentUuid) {
+      updateData.lhdnDocumentUuid = args.lhdnDocumentUuid;
+      updateData.lhdnVerificationStatus = args.lhdnVerificationStatus || "pending";
+      console.log(`[System] LHDN e-invoice detected via DSPy for ${args.id}: uuid=${args.lhdnDocumentUuid}`);
+    } else if (args.lhdnVerificationStatus) {
+      updateData.lhdnVerificationStatus = args.lhdnVerificationStatus;
+      console.log(`[System] LHDN e-invoice suspected via DSPy for ${args.id} (no UUID extracted)`);
     }
     if (args.lhdnValidationUrl) {
       updateData.lhdnValidationUrl = args.lhdnValidationUrl;

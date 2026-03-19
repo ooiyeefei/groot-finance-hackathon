@@ -617,9 +617,17 @@ def handler(event: dict, context: DurableContext):
             print(f"[{doc_id}] Passing to Convex - business_purpose: '{extraction_result.get('business_purpose')}'")
 
             if request.domain == "invoices":
-                # 024-einv-buyer-reject-pivot: Pass LHDN long ID for upload-based verification
+                # 024-einv-buyer-reject-pivot: Dual LHDN detection
+                # Primary: QR code detection (fast, reliable)
                 lhdn_long_id = qr_result.get("lhdn_long_id") if qr_result else None
                 lhdn_validation_url = (qr_result.get("lhdn_validation_urls") or [None])[0] if qr_result else None
+
+                # Fallback: DSPy extraction detected LHDN e-invoice markers in text
+                is_lhdn = extraction_result.get("is_lhdn_einvoice", False)
+                dspy_lhdn_uuid = extraction_result.get("lhdn_uuid")
+
+                if is_lhdn and not lhdn_long_id:
+                    print(f"[{doc_id}] LHDN e-invoice detected by DSPy (no QR): uuid={dspy_lhdn_uuid}")
 
                 convex.update_invoice_extraction(
                     document_id=doc_id,
@@ -628,6 +636,8 @@ def handler(event: dict, context: DurableContext):
                     extraction_method="dspy_gemini",
                     lhdn_long_id=lhdn_long_id,
                     lhdn_validation_url=lhdn_validation_url,
+                    is_lhdn_einvoice=is_lhdn if is_lhdn else None,
+                    dspy_lhdn_uuid=dspy_lhdn_uuid,
                 )
                 return {"claimId": doc_id, "emailRef": None, "requestLogId": None}
             else:

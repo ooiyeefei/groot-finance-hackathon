@@ -94,6 +94,47 @@ class CoreInvoiceData(BaseModel):
         description="Business justification, e.g., 'Office supplies for operations'"
     )
 
+    # 024-einv-buyer-reject-pivot: LHDN e-invoice detection fields
+    # These fields detect whether the document is an LHDN-validated e-invoice.
+    # LHDN e-invoices contain: validation QR code, UUID, supplier/buyer TIN,
+    # MSIC code, SST registration, and a validation timestamp.
+    is_lhdn_einvoice: Optional[bool] = Field(
+        None,
+        description="True if document is an LHDN MyInvois e-invoice (look for LHDN logo, MyInvois QR code, 'e-Invoice' header, UUID, or validation stamp)"
+    )
+    lhdn_uuid: Optional[str] = Field(
+        None,
+        description="LHDN document UUID if visible (format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx, often near QR code or header)"
+    )
+    lhdn_validation_datetime: Optional[str] = Field(
+        None,
+        description="LHDN validation date/time if printed on document (ISO 8601 format, e.g. '2026-03-18T10:30:00Z')"
+    )
+    supplier_tin: Optional[str] = Field(
+        None,
+        description="Supplier/vendor TIN (LHDN Tax Identification Number, e.g. 'C12345678' or 'IG24210777100')"
+    )
+    buyer_tin: Optional[str] = Field(
+        None,
+        description="Buyer/customer TIN (LHDN Tax Identification Number)"
+    )
+    supplier_brn: Optional[str] = Field(
+        None,
+        description="Supplier Business Registration Number (SSM registration, e.g. '202001234567')"
+    )
+    supplier_sst_registration: Optional[str] = Field(
+        None,
+        description="Supplier SST Registration Number if visible (e.g. 'B10-1234-56789012')"
+    )
+    lhdn_document_type: Optional[str] = Field(
+        None,
+        description="LHDN e-invoice type if visible (e.g. 'Invoice', 'Credit Note', 'Debit Note', 'Self-Billed Invoice')"
+    )
+    msic_code: Optional[str] = Field(
+        None,
+        description="MSIC (Malaysia Standard Industrial Classification) code if visible (5-digit code, e.g. '62021')"
+    )
+
     # Quality
     confidence_score: float = Field(..., ge=0.0, le=1.0, description="Overall confidence")
     extraction_quality: Literal['high', 'medium', 'low'] = Field(..., description="Quality assessment")
