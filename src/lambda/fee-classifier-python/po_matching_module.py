@@ -3,8 +3,8 @@ PO-Invoice Line Item Matching — DSPy Module
 
 Tier 2 AI matching for AP 3-way reconciliation. Semantically matches PO line items
 to invoice line items when Tier 1 deterministic matching (word-overlap, exact codes)
-fails. Uses ChainOfThought for reasoning traces, Assert for constraint validation,
-and Suggest for UOM conversion explanations.
+fails. Uses ChainOfThought for reasoning traces and dspy.Refine for constraint
+enforcement with automatic retry.
 
 Mirrors the architecture of bank_recon_module.py and fee_module.py.
 """
@@ -68,7 +68,11 @@ class DiagnoseVariance(dspy.Signature):
 # ============================================
 
 class POMatchingModule(dspy.Module):
-    """PO-Invoice line item matcher with chain-of-thought and assertion validation."""
+    """PO-Invoice line item matcher with chain-of-thought reasoning.
+
+    Use create_refined_po_matcher() to wrap with dspy.Refine for
+    automatic retry on constraint violations.
+    """
 
     def __init__(self):
         self.match = dspy.ChainOfThought(MatchPOInvoiceLines)
@@ -81,51 +85,15 @@ class POMatchingModule(dspy.Module):
             vendor_name=vendor_name,
             tier1_pairings=tier1_pairings,
         )
-
-        # Parse pairings to validate
-        try:
-            pairings = json.loads(result.pairings)
-        except (json.JSONDecodeError, TypeError):
-            pairings = []
-
-        # Hard constraint: each invoice line appears at most once
-        seen_invoice_indices = set()
-        for p in pairings:
-            inv_idx = p.get("invoice_line_index")
-            if inv_idx is not None:
-                if inv_idx in seen_invoice_indices:
-                    raise ValueError(
-                        f"Invoice line {inv_idx} matched to multiple PO lines. Each invoice line must match at most one PO line."
-                    )
-                seen_invoice_indices.add(inv_idx)
-
-        # Hard constraint: pairings JSON must be valid
-        if len(pairings) == 0:
-            raise ValueError(
-                "At least one pairing must be produced. If no matches found, output a pairing with confidence 0.0."
-            )
-
-        # Soft constraint: warn about UOM conversions if present
-        po_data = json.loads(po_lines) if isinstance(po_lines, str) else po_lines
-        inv_data = json.loads(invoice_lines) if isinstance(invoice_lines, str) else invoice_lines
-        for p in pairings:
-            po_idx = p.get("po_line_index")
-            inv_idx = p.get("invoice_line_index")
-            if po_idx is not None and inv_idx is not None:
-                po_uom = po_data[po_idx].get("unit_of_measure", "") if po_idx < len(po_data) else ""
-                inv_uom = inv_data[inv_idx].get("unit_of_measure", "") if inv_idx < len(inv_data) else ""
-                if po_uom and inv_uom and po_uom.lower() != inv_uom.lower():
-                    reasoning = p.get("reasoning", "").lower()
-                    if "convert" not in reasoning and "unit" not in reasoning:
-                        logger.warning(
-                            f"PO uses '{po_uom}' but invoice uses '{inv_uom}'. UOM conversion not explained in reasoning."
-                        )
-
         return result
 
 
 class VarianceDiagnoser(dspy.Module):
-    """Variance diagnoser with chain-of-thought reasoning."""
+    """Variance diagnoser with chain-of-thought reasoning.
+
+    Use create_refined_variance_diagnoser() to wrap with dspy.Refine for
+    automatic retry when suggested_action is invalid.
+    """
 
     def __init__(self):
         self.diagnose = dspy.ChainOfThought(DiagnoseVariance)
@@ -139,15 +107,80 @@ class VarianceDiagnoser(dspy.Module):
             variance_type=variance_type,
             variance_amount=variance_amount,
         )
-
-        # Validate suggested_action is one of the allowed values
-        valid_actions = {"approve", "investigate", "reject"}
-        if result.suggested_action not in valid_actions:
-            raise ValueError(
-                f"suggested_action must be one of {valid_actions}, got '{result.suggested_action}'"
-            )
-
         return result
+
+
+def po_matching_reward_fn(args: dict, pred) -> float:
+    """Reward function for dspy.Refine: scores POMatchingModule output.
+
+    Hard constraints (0.0): duplicate invoice lines, empty pairings.
+    Soft constraints (0.8): UOM mismatch without explanation.
+    """
+    try:
+        pairings = json.loads(pred.pairings) if isinstance(pred.pairings, str) else pred.pairings
+    except (json.JSONDecodeError, TypeError):
+        return 0.0  # Unparseable pairings
+
+    # Hard: at least one pairing
+    if not pairings:
+        return 0.0
+
+    # Hard: each invoice line appears at most once
+    seen = set()
+    for p in pairings:
+        inv_idx = p.get("invoice_line_index")
+        if inv_idx is not None:
+            if inv_idx in seen:
+                return 0.0  # Duplicate invoice line
+            seen.add(inv_idx)
+
+    # Soft: UOM conversion should be explained in reasoning
+    score = 1.0
+    try:
+        po_data = json.loads(args["po_lines"]) if isinstance(args["po_lines"], str) else args["po_lines"]
+        inv_data = json.loads(args["invoice_lines"]) if isinstance(args["invoice_lines"], str) else args["invoice_lines"]
+        for p in pairings:
+            po_idx = p.get("po_line_index")
+            inv_idx = p.get("invoice_line_index")
+            if po_idx is not None and inv_idx is not None and po_idx < len(po_data) and inv_idx < len(inv_data):
+                po_uom = po_data[po_idx].get("unit_of_measure", "")
+                inv_uom = inv_data[inv_idx].get("unit_of_measure", "")
+                if po_uom and inv_uom and po_uom.lower() != inv_uom.lower():
+                    reasoning = p.get("reasoning", "").lower()
+                    if "convert" not in reasoning and "unit" not in reasoning:
+                        score = min(score, 0.8)
+    except (json.JSONDecodeError, TypeError, KeyError):
+        pass
+
+    return score
+
+
+def variance_reward_fn(args: dict, pred) -> float:
+    """Reward function for dspy.Refine: scores VarianceDiagnoser output."""
+    valid_actions = {"approve", "investigate", "reject"}
+    if pred.suggested_action not in valid_actions:
+        return 0.0
+    return 1.0
+
+
+def create_refined_po_matcher(N: int = 3) -> dspy.Refine:
+    """Create a POMatchingModule wrapped with dspy.Refine."""
+    return dspy.Refine(
+        module=POMatchingModule(),
+        N=N,
+        reward_fn=po_matching_reward_fn,
+        threshold=1.0,
+    )
+
+
+def create_refined_variance_diagnoser(N: int = 3) -> dspy.Refine:
+    """Create a VarianceDiagnoser wrapped with dspy.Refine."""
+    return dspy.Refine(
+        module=VarianceDiagnoser(),
+        N=N,
+        reward_fn=variance_reward_fn,
+        threshold=1.0,
+    )
 
 
 # ============================================

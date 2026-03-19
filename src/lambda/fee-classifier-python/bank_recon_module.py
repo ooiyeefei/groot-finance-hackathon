@@ -2,7 +2,7 @@
 DSPy Bank Transaction Classification Module
 
 Classifies bank transactions into GL accounts for journal entry posting.
-Uses ChainOfThought for reasoning traces and Assert for double-entry validation.
+Uses ChainOfThought for reasoning traces and dspy.Refine for constraint enforcement.
 """
 
 import dspy
@@ -32,7 +32,11 @@ class ClassifyBankTransaction(dspy.Signature):
 
 
 class BankTransactionClassifier(dspy.Module):
-    """Bank transaction classifier with chain-of-thought and assertion validation."""
+    """Bank transaction classifier with chain-of-thought reasoning.
+
+    Use create_refined_bank_classifier() to wrap with dspy.Refine for
+    automatic retry when account codes are invalid.
+    """
 
     def __init__(self):
         self.classify = dspy.ChainOfThought(ClassifyBankTransaction)
@@ -56,25 +60,10 @@ class BankTransactionClassifier(dspy.Module):
             bank_gl_account_code=bank_gl_account_code,
         )
 
-        # Validate: account codes must exist in COA
-        if valid_account_codes:
-            if result.debit_account_code not in valid_account_codes:
-                raise ValueError(
-                    f"Debit account '{result.debit_account_code}' not in Chart of Accounts. Choose from: {sorted(valid_account_codes)[:20]}"
-                )
-            if result.credit_account_code not in valid_account_codes:
-                raise ValueError(
-                    f"Credit account '{result.credit_account_code}' not in Chart of Accounts. Choose from: {sorted(valid_account_codes)[:20]}"
-                )
+        # Stash valid_account_codes on the result for reward_fn access
+        result._valid_account_codes = valid_account_codes
 
-        # Soft constraint: debit and credit should be different accounts
-        if result.debit_account_code == result.credit_account_code:
-            import logging
-            logging.getLogger(__name__).warning(
-                "Debit and credit accounts should be different for a valid journal entry."
-            )
-
-        # Validate confidence range
+        # Clean confidence to valid range
         try:
             conf = float(result.confidence)
             if conf < 0.0 or conf > 1.0:
@@ -83,6 +72,37 @@ class BankTransactionClassifier(dspy.Module):
             result.confidence = 0.5
 
         return result
+
+
+def bank_recon_reward_fn(args: dict, pred) -> float:
+    """Reward function for dspy.Refine: scores BankTransactionClassifier output.
+
+    Hard constraints (score 0.0): account codes must exist in COA.
+    Soft constraint (score 0.8): debit and credit should be different.
+    """
+    valid_codes = args.get("valid_account_codes") or getattr(pred, "_valid_account_codes", None)
+
+    if valid_codes:
+        if pred.debit_account_code not in valid_codes:
+            return 0.0
+        if pred.credit_account_code not in valid_codes:
+            return 0.0
+
+    # Soft: same debit/credit is suspicious but not fatal
+    if pred.debit_account_code == pred.credit_account_code:
+        return 0.8
+
+    return 1.0
+
+
+def create_refined_bank_classifier(N: int = 3) -> dspy.Refine:
+    """Create a BankTransactionClassifier wrapped with dspy.Refine."""
+    return dspy.Refine(
+        module=BankTransactionClassifier(),
+        N=N,
+        reward_fn=bank_recon_reward_fn,
+        threshold=1.0,
+    )
 
 
 def create_bank_recon_training_examples(corrections: list[dict]) -> list[dspy.Example]:

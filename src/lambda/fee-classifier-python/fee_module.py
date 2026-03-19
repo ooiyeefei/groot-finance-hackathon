@@ -44,7 +44,11 @@ class ClassifyFee(dspy.Signature):
 
 
 class FeeClassifier(dspy.Module):
-    """Fee classifier with chain-of-thought reasoning and balance assertion."""
+    """Fee classifier with chain-of-thought reasoning.
+
+    Use create_refined_fee_classifier() to wrap with dspy.Refine for
+    automatic retry when account_code is invalid.
+    """
 
     def __init__(self):
         self.classify = dspy.ChainOfThought(ClassifyFee)
@@ -58,13 +62,7 @@ class FeeClassifier(dspy.Module):
     ):
         result = self.classify(fee_name=fee_name, platform_name=platform_name)
 
-        # Hard constraint: account code MUST be valid
-        if result.account_code not in VALID_ACCOUNT_CODES:
-            raise ValueError(
-                f"Account code '{result.account_code}' is not valid. Must be one of: {list(VALID_ACCOUNT_CODES.keys())}"
-            )
-
-        # Validate confidence is in range
+        # Clean confidence to valid range (non-critical, always fixable)
         try:
             conf = float(result.confidence)
             if conf < 0.0 or conf > 1.0:
@@ -73,6 +71,31 @@ class FeeClassifier(dspy.Module):
             result.confidence = 0.5
 
         return result
+
+
+def fee_reward_fn(args: dict, pred) -> float:
+    """Reward function for dspy.Refine: scores FeeClassifier output quality.
+
+    Returns 1.0 if account_code is valid, 0.0 otherwise.
+    Refine uses this to retry with feedback when the LLM picks an invalid code.
+    """
+    account_code = str(pred.account_code).strip()
+    if account_code not in VALID_ACCOUNT_CODES:
+        return 0.0
+    return 1.0
+
+
+def create_refined_fee_classifier(N: int = 3) -> dspy.Refine:
+    """Create a FeeClassifier wrapped with dspy.Refine for constraint enforcement.
+
+    On invalid account_code, Refine retries up to N times with LLM feedback.
+    """
+    return dspy.Refine(
+        module=FeeClassifier(),
+        N=N,
+        reward_fn=fee_reward_fn,
+        threshold=1.0,
+    )
 
 
 class BatchFeeClassifier(dspy.Module):

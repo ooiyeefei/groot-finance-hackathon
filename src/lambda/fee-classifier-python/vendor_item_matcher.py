@@ -2,14 +2,14 @@
 DSPy Vendor Item Matcher Module
 
 Matches equivalent items across different vendors for cross-vendor price comparison.
-Uses ChainOfThought for semantic reasoning and Assert for constraint enforcement.
+Uses ChainOfThought for semantic reasoning and dspy.Refine for constraint enforcement.
 
-5 DSPy Components:
+DSPy Components:
 1. Signature: MatchVendorItems — input/output contract
-2. Module: VendorItemMatcher — orchestrates reasoning + assertions
+2. Module: VendorItemMatcher — orchestrates reasoning
 3. ChainOfThought: Generates reasoning traces for WHY items match/don't
-4. Assert: Items must be from different vendors; specs must be compatible
-5. Suggest: Matched items should have similar price ranges (0.5x-2x)
+4. Refine: Retries with feedback when specs conflict or constraints fail
+5. BootstrapFewShot: Training from user corrections
 
 Feature: 001-dspy-vendor-item-matcher (#320)
 """
@@ -65,15 +65,18 @@ class MatchVendorItems(dspy.Signature):
 
 
 # ============================================
-# Component 2+3+4: MODULE (ChainOfThought + Assert + Suggest)
+# Component 2+3: MODULE (ChainOfThought reasoning)
 # ============================================
 
 class VendorItemMatcher(dspy.Module):
-    """Vendor item matcher with chain-of-thought reasoning and constraint validation."""
+    """Vendor item matcher with chain-of-thought reasoning.
+
+    Use create_refined_vendor_matcher() to wrap with dspy.Refine for
+    automatic retry when spec conflicts are detected.
+    """
 
     def __init__(self):
         super().__init__()
-        # Component 3: ChainOfThought — generates reasoning traces
         self.match = dspy.ChainOfThought(MatchVendorItems)
 
     def forward(
@@ -83,6 +86,12 @@ class VendorItemMatcher(dspy.Module):
         item_a_vendor: str,
         item_b_vendor: str,
     ):
+        # Input validation (programmer error, not LLM quality) — keep as ValueError
+        if item_a_vendor.strip().lower() == item_b_vendor.strip().lower():
+            raise ValueError(
+                f"Cannot match items from the same vendor: '{item_a_vendor}' and '{item_b_vendor}'"
+            )
+
         result = self.match(
             item_a_description=item_a_description,
             item_b_description=item_b_description,
@@ -90,41 +99,16 @@ class VendorItemMatcher(dspy.Module):
             item_b_vendor=item_b_vendor,
         )
 
-        # Hard constraint: items must be from different vendors
-        if item_a_vendor.strip().lower() == item_b_vendor.strip().lower():
-            raise ValueError(
-                f"Cannot match items from the same vendor: '{item_a_vendor}' and '{item_b_vendor}'"
-            )
-
         # Parse is_match to boolean
         is_match_str = str(result.is_match).strip().lower()
         is_match = is_match_str in ("true", "yes", "1")
-
-        # Hard constraint: if match claimed, specs must be compatible
-        if is_match:
-            specs_a = _extract_specifications(item_a_description)
-            specs_b = _extract_specifications(item_b_description)
-            if specs_a and specs_b:
-                conflicting = _check_spec_conflict(specs_a, specs_b)
-                if conflicting:
-                    raise ValueError(
-                        f"Items have conflicting specifications: {specs_a} vs {specs_b}. "
-                        f"Items with different sizes/grades should NOT match."
-                    )
-
-        # Soft constraint: matched items should have a meaningful group name
-        if is_match and result.suggested_group_name == "N/A":
-            import logging
-            logging.getLogger(__name__).warning(
-                "When items match, provide a meaningful group name instead of 'N/A'."
-            )
 
         # Validate and clamp confidence
         try:
             conf = float(result.confidence)
             conf = max(0.0, min(1.0, conf))
         except (ValueError, TypeError):
-            conf = 0.5  # Default if parsing fails
+            conf = 0.5
 
         return dspy.Prediction(
             is_match=is_match,
@@ -206,3 +190,36 @@ def matching_metric(gold, pred, trace=None) -> float:
     gold_match = str(gold.is_match).strip().lower() in ("true", "yes", "1")
     pred_match = str(pred.is_match).strip().lower() in ("true", "yes", "1")
     return float(gold_match == pred_match)
+
+
+def vendor_item_reward_fn(args: dict, pred) -> float:
+    """Reward function for dspy.Refine: scores VendorItemMatcher output.
+
+    Hard constraint (0.0): spec conflict when match is claimed.
+    Soft constraint (0.8): missing group name on match.
+    """
+    is_match = str(pred.is_match).strip().lower() in ("true", "yes", "1") if hasattr(pred, "is_match") else pred.is_match
+
+    if is_match:
+        # Hard: specs must not conflict
+        specs_a = _extract_specifications(args["item_a_description"])
+        specs_b = _extract_specifications(args["item_b_description"])
+        if specs_a and specs_b and _check_spec_conflict(specs_a, specs_b):
+            return 0.0  # Conflicting specs — retry
+
+        # Soft: group name should be meaningful
+        group_name = str(getattr(pred, "suggested_group_name", "N/A"))
+        if group_name == "N/A":
+            return 0.8
+
+    return 1.0
+
+
+def create_refined_vendor_matcher(N: int = 3) -> dspy.Refine:
+    """Create a VendorItemMatcher wrapped with dspy.Refine."""
+    return dspy.Refine(
+        module=VendorItemMatcher(),
+        N=N,
+        reward_fn=vendor_item_reward_fn,
+        threshold=1.0,
+    )

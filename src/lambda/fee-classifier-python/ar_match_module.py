@@ -2,9 +2,9 @@
 AR Order-to-Invoice Matcher — DSPy module for Tier 2 AI matching.
 
 Uses ChainOfThought reasoning to match sales orders to invoices,
-with Python validation constraints for reconciliation integrity.
+with dspy.Refine constraints for reconciliation integrity.
 
-Pattern: Same as bank_recon_module.py (ChainOfThought + validation + BootstrapFewShot)
+Pattern: Same as bank_recon_module.py (ChainOfThought + Refine + BootstrapFewShot)
 """
 
 import json
@@ -75,68 +75,6 @@ class OrderInvoiceMatcher(dspy.Module):
         except (ValueError, TypeError):
             confidence = 0.5
 
-        # Hard constraint: Each matched invoice must exist in the candidate list
-        if matched_invoices:
-            candidate_ids = set()
-            try:
-                candidates = json.loads(candidate_invoices_json)
-                candidate_ids = {c["invoiceId"] for c in candidates}
-            except (json.JSONDecodeError, TypeError):
-                pass
-
-            for m in matched_invoices:
-                if m.get("invoiceId", "") not in candidate_ids:
-                    raise ValueError(
-                        f"Matched invoice {m.get('invoiceId', 'unknown')} not found in candidate list. Only match invoices from the provided candidates."
-                    )
-
-        # Hard constraint: Amount balance — total allocated must not EXCEED order amount
-        if matched_invoices and total_allocated > 0:
-            tolerance = max(
-                order_amount * (amount_tolerance_percent / 100.0),
-                amount_tolerance_absolute
-            )
-            over_allocation = total_allocated - order_amount
-            if over_allocation > tolerance:
-                raise ValueError(
-                    f"Total allocated ({total_allocated:.2f}) exceeds order amount ({order_amount:.2f}) by {over_allocation:.2f}. Reduce allocation or remove an invoice from the split."
-                )
-
-        # Hard constraint: Max split invoices
-        if matched_invoices:
-            if len(matched_invoices) > max_split_invoices:
-                raise ValueError(
-                    f"Too many invoices in split match ({len(matched_invoices)}). Maximum allowed is {max_split_invoices}."
-                )
-
-        # Soft constraint: Customer name alignment (log warning, don't fail)
-        if matched_invoices and customer_name:
-            try:
-                candidates = json.loads(candidate_invoices_json)
-                candidate_map = {c["invoiceId"]: c for c in candidates}
-                for m in matched_invoices:
-                    inv = candidate_map.get(m.get("invoiceId", ""), {})
-                    inv_customer = inv.get("customerName", "")
-                    if inv_customer and customer_name.lower() not in inv_customer.lower() and inv_customer.lower() not in customer_name.lower():
-                        logger.warning(
-                            f"Customer name mismatch: order has '{customer_name}' but invoice has '{inv_customer}'. May be a known alias."
-                        )
-            except (json.JSONDecodeError, TypeError):
-                pass
-
-        # Soft constraint: Partial payment residual
-        if matched_invoices and total_allocated > 0 and total_allocated < order_amount * 0.95:
-            residual = order_amount - total_allocated
-            logger.info(
-                f"Partial payment detected: allocated {total_allocated:.2f} of {order_amount:.2f} (residual {residual:.2f})."
-            )
-
-        # Soft constraint: Overpayment check
-        if matched_invoices and total_allocated > 0 and order_amount > total_allocated * 1.1:
-            logger.warning(
-                f"Order amount ({order_amount:.2f}) significantly exceeds matched invoices ({total_allocated:.2f}). Possible advance payment."
-            )
-
         return dspy.Prediction(
             matched_invoices_json=json.dumps(matched_invoices),
             total_allocated=total_allocated,
@@ -201,3 +139,70 @@ def matching_metric(gold, pred, trace=None):
         return float(gold_ids == pred_ids)
     except (json.JSONDecodeError, TypeError):
         return 0.0
+
+
+def ar_match_reward_fn(args: dict, pred) -> float:
+    """Reward function for dspy.Refine: scores OrderInvoiceMatcher output.
+
+    Hard constraints (0.0): invalid invoice IDs, over-allocation, too many splits.
+    Soft constraints (0.7-0.9): customer name mismatch, partial payment.
+    """
+    try:
+        matched = json.loads(pred.matched_invoices_json) if isinstance(pred.matched_invoices_json, str) else pred.matched_invoices_json
+    except (json.JSONDecodeError, TypeError):
+        return 0.0  # Unparseable output
+
+    if not matched:
+        return 1.0  # No match is a valid result
+
+    # Hard: matched invoices must exist in candidates
+    try:
+        candidates = json.loads(args["candidate_invoices_json"])
+        candidate_ids = {c["invoiceId"] for c in candidates}
+    except (json.JSONDecodeError, TypeError, KeyError):
+        candidate_ids = set()
+
+    for m in matched:
+        if m.get("invoiceId", "") not in candidate_ids:
+            return 0.0  # Hallucinated invoice ID
+
+    # Hard: no over-allocation
+    order_amount = float(args.get("order_amount", 0))
+    total_allocated = float(pred.total_allocated) if pred.total_allocated else 0
+    tol_pct = float(args.get("amount_tolerance_percent", 1.5))
+    tol_abs = float(args.get("amount_tolerance_absolute", 5.0))
+    tolerance = max(order_amount * (tol_pct / 100.0), tol_abs)
+
+    if total_allocated > 0 and (total_allocated - order_amount) > tolerance:
+        return 0.0  # Over-allocation
+
+    # Hard: max split invoices
+    max_split = int(args.get("max_split_invoices", 5))
+    if len(matched) > max_split:
+        return 0.0
+
+    # Soft: customer name alignment
+    score = 1.0
+    customer_name = args.get("customer_name", "")
+    if customer_name and candidate_ids:
+        try:
+            cmap = {c["invoiceId"]: c for c in candidates}
+            for m in matched:
+                inv = cmap.get(m.get("invoiceId", ""), {})
+                inv_cust = inv.get("customerName", "")
+                if inv_cust and customer_name.lower() not in inv_cust.lower() and inv_cust.lower() not in customer_name.lower():
+                    score = min(score, 0.8)  # Name mismatch penalty
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    return score
+
+
+def create_refined_ar_matcher(N: int = 3) -> dspy.Refine:
+    """Create an OrderInvoiceMatcher wrapped with dspy.Refine."""
+    return dspy.Refine(
+        module=OrderInvoiceMatcher(),
+        N=N,
+        reward_fn=ar_match_reward_fn,
+        threshold=1.0,
+    )

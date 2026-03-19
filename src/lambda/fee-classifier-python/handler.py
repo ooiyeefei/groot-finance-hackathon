@@ -29,22 +29,30 @@ from fee_module import (
     create_training_examples,
     classification_metric,
     configure_lm,
+    create_refined_fee_classifier,
+    fee_reward_fn,
 )
 from bank_recon_module import (
     BankTransactionClassifier,
     create_bank_recon_training_examples,
     bank_recon_classification_metric,
+    create_refined_bank_classifier,
+    bank_recon_reward_fn,
 )
 from po_matching_module import (
     POMatchingModule,
     VarianceDiagnoser,
     create_po_matching_training_examples,
     po_matching_metric,
+    create_refined_po_matcher,
+    create_refined_variance_diagnoser,
 )
 from ar_match_module import (
     OrderInvoiceMatcher,
     create_training_examples as create_ar_match_training_examples,
     matching_metric as ar_matching_metric,
+    create_refined_ar_matcher,
+    ar_match_reward_fn,
 )
 
 logger = logging.getLogger()
@@ -71,7 +79,11 @@ def _get_s3_client():
 
 
 def _load_classifier(s3_key: str | None = None) -> FeeClassifier:
-    """Load classifier, optionally restoring optimized state from S3."""
+    """Load classifier, optionally restoring optimized state from S3.
+
+    Returns the raw FeeClassifier (not Refine-wrapped) so handler can
+    wrap it with dspy.Refine after BootstrapFewShot compilation.
+    """
     global _classifier
 
     classifier = FeeClassifier()
@@ -136,6 +148,9 @@ def _classify_fees(params: dict) -> dict:
         # Below threshold — use raw classifier with corrections as context
         classifier = FeeClassifier()
         confidence_cap = FALLBACK_CONFIDENCE_CAP
+
+    # Wrap with dspy.Refine for constraint enforcement (retries on invalid account codes)
+    classifier = dspy.Refine(module=classifier, N=3, reward_fn=fee_reward_fn, threshold=1.0)
 
     # Track known fee names from corrections for "NEW" detection
     known_fee_names = {c.get("feeName", "").lower() for c in corrections}
@@ -291,6 +306,9 @@ def _classify_bank_transactions(params: dict) -> dict:
         classifier = BankTransactionClassifier()
         confidence_cap = FALLBACK_CONFIDENCE_CAP
 
+    # Wrap with dspy.Refine for COA validation (retries on invalid account codes)
+    classifier = dspy.Refine(module=classifier, N=3, reward_fn=bank_recon_reward_fn, threshold=1.0)
+
     classifications = []
     for txn in transactions:
         desc = txn.get("description", "")
@@ -417,6 +435,9 @@ def _match_orders(params: dict) -> dict:
     else:
         matcher = OrderInvoiceMatcher()
         confidence_cap = FALLBACK_CONFIDENCE_CAP
+
+    # Wrap with dspy.Refine for AR constraint enforcement
+    matcher = dspy.Refine(module=matcher, N=3, reward_fn=ar_match_reward_fn, threshold=1.0)
 
     # Build candidate invoices JSON
     candidate_invoices_json = json.dumps(candidate_invoices)
@@ -630,6 +651,10 @@ def _match_po_invoice(arguments: dict) -> dict:
     else:
         _po_matcher = POMatchingModule()
 
+    # Wrap with dspy.Refine for PO constraint enforcement
+    from po_matching_module import po_matching_reward_fn
+    _po_matcher = dspy.Refine(module=_po_matcher, N=3, reward_fn=po_matching_reward_fn, threshold=1.0)
+
     try:
         result = _po_matcher(
             po_lines=json.dumps(po_lines) if isinstance(po_lines, list) else po_lines,
@@ -680,7 +705,10 @@ def _diagnose_variance(arguments: dict) -> dict:
     configure_lm()
 
     if _variance_diagnoser is None:
-        _variance_diagnoser = VarianceDiagnoser()
+        from po_matching_module import variance_reward_fn
+        _variance_diagnoser = dspy.Refine(
+            module=VarianceDiagnoser(), N=3, reward_fn=variance_reward_fn, threshold=1.0
+        )
 
     try:
         result = _variance_diagnoser(
@@ -726,6 +754,7 @@ def _match_vendor_items(arguments: dict) -> dict:
         VendorItemMatcher,
         create_training_examples,
         matching_metric,
+        vendor_item_reward_fn,
     )
 
     items = arguments.get("items", [])
@@ -777,6 +806,9 @@ def _match_vendor_items(arguments: dict) -> dict:
             confidence_cap = VENDOR_ITEM_FALLBACK_CONFIDENCE_CAP
     else:
         confidence_cap = VENDOR_ITEM_FALLBACK_CONFIDENCE_CAP
+
+    # Wrap with dspy.Refine for spec conflict detection
+    matcher = dspy.Refine(module=matcher, N=3, reward_fn=vendor_item_reward_fn, threshold=1.0)
 
     # Generate pairwise comparisons (different vendors only)
     suggestions = []
