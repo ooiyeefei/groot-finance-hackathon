@@ -85,7 +85,10 @@ Use for: "total revenue this month", "which customers are overdue", "AR aging re
       dataText += `Total Revenue: ${result.totalRevenue.toFixed(2)} ${result.currency}\n`
       dataText += `Outstanding: ${result.totalOutstanding.toFixed(2)} ${result.currency}\n`
       dataText += `Overdue: ${result.totalOverdue.toFixed(2)} ${result.currency}\n`
-      dataText += `Invoices: ${result.invoiceCount}\n`
+      dataText += `Outstanding Invoices: ${result.invoiceCount}\n`
+      if (result.totalInvoiceCount) {
+        dataText += `Total Invoices (all statuses): ${result.totalInvoiceCount}\n`
+      }
 
       if (result.statusBreakdown.length > 0) {
         dataText += `\nBy Status:\n`

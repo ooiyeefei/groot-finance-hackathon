@@ -32,6 +32,8 @@ import type * as functions_bankTransactions from "../functions/bankTransactions.
 import type * as functions_businesses from "../functions/businesses.js";
 import type * as functions_catalogItems from "../functions/catalogItems.js";
 import type * as functions_chartOfAccounts from "../functions/chartOfAccounts.js";
+import type * as functions_chatCorrections from "../functions/chatCorrections.js";
+import type * as functions_chatOptimization from "../functions/chatOptimization.js";
 import type * as functions_consent from "../functions/consent.js";
 import type * as functions_conversations from "../functions/conversations.js";
 import type * as functions_creditPacks from "../functions/creditPacks.js";
@@ -170,6 +172,8 @@ declare const fullApi: ApiFromModules<{
   "functions/businesses": typeof functions_businesses;
   "functions/catalogItems": typeof functions_catalogItems;
   "functions/chartOfAccounts": typeof functions_chartOfAccounts;
+  "functions/chatCorrections": typeof functions_chatCorrections;
+  "functions/chatOptimization": typeof functions_chatOptimization;
   "functions/consent": typeof functions_consent;
   "functions/conversations": typeof functions_conversations;
   "functions/creditPacks": typeof functions_creditPacks;

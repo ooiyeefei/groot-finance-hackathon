@@ -672,6 +672,14 @@ export const searchForAI = query({
           line.creditAmount > 0
       );
 
+      // For revenue reversals, find a debit line in revenue accounts (4000-4999)
+      const revenueReversalLine = entry.lines.find(
+        (line) =>
+          line.accountCode >= "4000" &&
+          line.accountCode < "5000" &&
+          line.debitAmount > 0
+      );
+
       // For COGS entries, find the debit line in COGS accounts (6000-6999)
       const cogsLine = entry.lines.find(
         (line) =>
@@ -696,6 +704,11 @@ export const searchForAI = query({
         amount = incomeLine.creditAmount;
         category = incomeLine.accountName;
         vendorName = incomeLine.entityName || "";
+      } else if (revenueReversalLine) {
+        transactionType = "Reversal";
+        amount = revenueReversalLine.debitAmount;
+        category = revenueReversalLine.accountName;
+        vendorName = revenueReversalLine.entityName || "";
       } else if (cogsLine) {
         transactionType = "Cost of Goods Sold";
         amount = cogsLine.debitAmount;

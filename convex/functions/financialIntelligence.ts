@@ -1565,7 +1565,7 @@ export const getARSummary = query({
     endDate: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const emptyResult = { error: "", totalRevenue: 0, totalOutstanding: 0, totalOverdue: 0, currency: "MYR", invoiceCount: 0, statusBreakdown: [], agingBuckets: [], topCustomers: [] };
+    const emptyResult = { error: "", totalRevenue: 0, totalOutstanding: 0, totalOverdue: 0, currency: "MYR", invoiceCount: 0, totalInvoiceCount: 0, statusBreakdown: [], agingBuckets: [], topCustomers: [] };
 
     // Auth: verify caller identity and business membership
     const identity = await ctx.auth.getUserIdentity();
@@ -1604,6 +1604,7 @@ export const getARSummary = query({
     let totalRevenue = 0;
     let totalOutstanding = 0;
     let totalOverdue = 0;
+    let outstandingInvoiceCount = 0;
 
     // Aging buckets
     const aging: Record<string, { amount: number; count: number }> = {
@@ -1631,6 +1632,7 @@ export const getARSummary = query({
 
       // Outstanding and overdue
       if (["sent", "overdue", "partially_paid"].includes(status)) {
+        outstandingInvoiceCount++;
         totalOutstanding += outstanding;
 
         const dueDate = inv.dueDate ? new Date(inv.dueDate) : null;
@@ -1665,7 +1667,8 @@ export const getARSummary = query({
       totalOutstanding: parseFloat(totalOutstanding.toFixed(2)),
       totalOverdue: parseFloat(totalOverdue.toFixed(2)),
       currency,
-      invoiceCount: invoices.length,
+      invoiceCount: outstandingInvoiceCount,
+      totalInvoiceCount: invoices.length,
       statusBreakdown: Object.entries(statusMap).map(([status, data]) => ({
         status,
         count: data.count,
