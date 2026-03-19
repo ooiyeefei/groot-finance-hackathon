@@ -187,6 +187,20 @@ export class ToolFactory {
       }
     }
 
+    // RBAC: Restrict get_transactions for non-finance roles
+    // Managers/employees should NOT see Income/Revenue transactions — only their own expenses
+    if (tn === 'get_transactions' && !['finance_admin', 'owner'].includes(role)) {
+      const txnType = (parameters as Record<string, unknown>)?.transactionType as string | undefined
+      if (txnType && ['Income', 'income', 'Revenue', 'revenue'].includes(txnType)) {
+        console.warn(`[ToolFactory] RBAC DENIED: get_transactions(transactionType=${txnType}) blocked for role=${role}`)
+        return {
+          success: false,
+          error: "You don't have permission to view revenue data. This information is available to finance admins and business owners.",
+          metadata: { rbacDenied: true, requiredTier: 'finance', userRole: role }
+        }
+      }
+    }
+
     try {
       // Create tool instance with dependency injection
       const toolFactory = this.tools.get(toolName as ToolName)!
