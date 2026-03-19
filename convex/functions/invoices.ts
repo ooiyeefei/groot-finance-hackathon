@@ -1935,6 +1935,165 @@ export const getCompletedForAI = query({
 });
 
 // ============================================
+// AP INVOICE SEARCH (Finance Admin/Owner — AI Agent)
+// ============================================
+
+/**
+ * Search AP invoices with filters for vendor, date, amount, invoice number.
+ * Used by the AI agent for finance admin queries like:
+ * - "Show me invoices from ABC Supplier this quarter"
+ * - "How much did we spend on supplies in February?"
+ * - "Show line items for invoice INV-2026-001"
+ */
+export const searchForAI = query({
+  args: {
+    businessId: v.string(),
+    vendorName: v.optional(v.string()),
+    invoiceNumber: v.optional(v.string()),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+    minAmount: v.optional(v.number()),
+    maxAmount: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const emptyResult = { invoices: [], totalCount: 0, summary: { totalAmount: 0, currency: "MYR" } };
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return emptyResult;
+    }
+
+    // Verify user has active membership for this business
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) { return emptyResult; }
+
+    const businessId = args.businessId as Id<"businesses">;
+    const membership = await ctx.db.query("business_memberships")
+      .withIndex("by_userId_businessId", (q) => q.eq("userId", user._id).eq("businessId", businessId))
+      .first();
+    if (!membership || membership.status !== "active") { return emptyResult; }
+
+    const allInvoices = await ctx.db
+      .query("invoices")
+      .withIndex("by_businessId", (q) => q.eq("businessId", businessId))
+      .collect();
+
+    // Filter out deleted and non-AP invoices
+    const EXCLUDED_STATUSES = new Set(["uploading", "classifying", "processing", "analyzing", "classification_failed", "failed"]);
+    let filtered = allInvoices.filter(
+      (inv) =>
+        !inv.deletedAt &&
+        inv.extractedData &&
+        !EXCLUDED_STATUSES.has(inv.status) &&
+        inv.documentDomain !== "expense_claims" &&
+        !(inv.storagePath && inv.storagePath.startsWith("expense_claims/"))
+    );
+
+    // Vendor name filter (case-insensitive partial match)
+    if (args.vendorName) {
+      const vendorLower = args.vendorName.toLowerCase();
+      filtered = filtered.filter((inv) => {
+        const extracted = inv.extractedData as Record<string, unknown> | undefined;
+        const name = ((extracted?.vendor_name as string) ?? (extracted?.vendorName as string) ?? "").toLowerCase();
+        return name.includes(vendorLower);
+      });
+    }
+
+    // Invoice number filter (exact or partial match)
+    if (args.invoiceNumber) {
+      const numLower = args.invoiceNumber.toLowerCase();
+      filtered = filtered.filter((inv) => {
+        const extracted = inv.extractedData as Record<string, unknown> | undefined;
+        const num = ((extracted?.invoice_number as string) ?? (extracted?.invoiceNumber as string) ?? "").toLowerCase();
+        return num.includes(numLower);
+      });
+    }
+
+    // Date range filter
+    if (args.startDate) {
+      filtered = filtered.filter((inv) => {
+        const extracted = inv.extractedData as Record<string, unknown> | undefined;
+        const date = (extracted?.invoice_date as string) ?? (extracted?.invoiceDate as string) ?? "";
+        return date >= args.startDate!;
+      });
+    }
+    if (args.endDate) {
+      filtered = filtered.filter((inv) => {
+        const extracted = inv.extractedData as Record<string, unknown> | undefined;
+        const date = (extracted?.invoice_date as string) ?? (extracted?.invoiceDate as string) ?? "";
+        return date <= args.endDate!;
+      });
+    }
+
+    // Amount range filter
+    if (args.minAmount !== undefined) {
+      filtered = filtered.filter((inv) => {
+        const extracted = inv.extractedData as Record<string, unknown> | undefined;
+        const amount = (extracted?.total_amount as number) ?? (extracted?.totalAmount as number) ?? 0;
+        return amount >= args.minAmount!;
+      });
+    }
+    if (args.maxAmount !== undefined) {
+      filtered = filtered.filter((inv) => {
+        const extracted = inv.extractedData as Record<string, unknown> | undefined;
+        const amount = (extracted?.total_amount as number) ?? (extracted?.totalAmount as number) ?? 0;
+        return amount <= args.maxAmount!;
+      });
+    }
+
+    const totalCount = filtered.length;
+
+    // Sort by date descending and limit
+    const limited = filtered
+      .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0))
+      .slice(0, Math.min(args.limit ?? 20, 50));
+
+    // Compute summary
+    const totalAmount = filtered.reduce((sum, inv) => {
+      const extracted = inv.extractedData as Record<string, unknown> | undefined;
+      return sum + ((extracted?.total_amount as number) ?? (extracted?.totalAmount as number) ?? 0);
+    }, 0);
+
+    // Map to AI-friendly shape
+    const invoices = limited.map((inv) => {
+      const extracted = inv.extractedData as Record<string, unknown> | undefined;
+      const isPosted = !!(inv.journalEntryId || inv.accountingStatus === "posted");
+
+      type RawLineItem = { item_description?: string; description?: string; quantity?: number; unit_price?: number; total_amount?: number };
+      const rawLineItems = ((extracted?.line_items ?? extracted?.lineItems) as RawLineItem[] | undefined) ?? [];
+      const lineItems = rawLineItems.map((item) => ({
+        description: item.item_description ?? item.description ?? "",
+        quantity: item.quantity ?? 1,
+        unitPrice: item.unit_price ?? 0,
+        totalAmount: item.total_amount ?? Math.round((item.unit_price ?? 0) * (item.quantity ?? 1) * 100) / 100,
+      }));
+
+      return {
+        _id: inv._id,
+        vendorName: (extracted?.vendor_name as string) ?? (extracted?.vendorName as string) ?? "Unknown",
+        amount: (extracted?.total_amount as number) ?? (extracted?.totalAmount as number) ?? 0,
+        currency: (extracted?.currency as string) ?? "MYR",
+        invoiceDate: (extracted?.invoice_date as string) ?? (extracted?.invoiceDate as string) ?? "",
+        invoiceNumber: (extracted?.invoice_number as string) ?? (extracted?.invoiceNumber as string) ?? null,
+        isPosted,
+        paymentStatus: inv.paymentStatus || "unpaid",
+        confidenceScore: inv.confidenceScore ?? 0.5,
+        lineItems,
+      };
+    });
+
+    return {
+      invoices,
+      totalCount,
+      summary: {
+        totalAmount: parseFloat(totalAmount.toFixed(2)),
+        currency: (invoices[0]?.currency) || "MYR",
+      },
+    };
+  },
+});
+
+// ============================================
 // LHDN SELF-BILLED E-INVOICE
 // ============================================
 

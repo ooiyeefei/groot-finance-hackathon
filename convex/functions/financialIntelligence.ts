@@ -1012,6 +1012,7 @@ export const getTeamExpenseSummary = query({
       startDate: v.optional(v.string()),
       endDate: v.optional(v.string()),
       category: v.optional(v.string()),
+      vendorName: v.optional(v.string()), // NEW: filter by vendor/merchant name
       groupBy: v.optional(v.string()), // "employee" | "category" | "vendor"
     })),
   },
@@ -1120,6 +1121,15 @@ export const getTeamExpenseSummary = query({
     // Apply category filter if provided
     if (filters?.category) {
       relevantLines = relevantLines.filter((line) => line.accountName === filters.category);
+    }
+
+    // Apply vendor filter if provided (case-insensitive partial match)
+    if (filters?.vendorName) {
+      const vendorLower = filters.vendorName.toLowerCase();
+      relevantLines = relevantLines.filter((line) =>
+        (line.entityName || "").toLowerCase().includes(vendorLower) ||
+        (line.lineDescription || "").toLowerCase().includes(vendorLower)
+      );
     }
 
     // Compute summary
@@ -1495,5 +1505,438 @@ export const mcpUpdateExpenseClaimStatus = mutation({
 
     await ctx.db.patch(claim._id, updateData);
     return { success: true, claimId: args.claimId };
+  },
+});
+
+// ============================================
+// AR SUMMARY & AGING (Finance Admin/Owner only)
+// ============================================
+
+/**
+ * AR Summary — aggregates sales invoice data by status, customer, and aging bucket.
+ * Used by the AI agent for revenue and receivables analysis.
+ */
+export const getARSummary = query({
+  args: {
+    businessId: v.string(),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const emptyResult = { error: "", totalRevenue: 0, totalOutstanding: 0, totalOverdue: 0, currency: "MYR", invoiceCount: 0, statusBreakdown: [], agingBuckets: [], topCustomers: [] };
+
+    // Auth: verify caller identity and business membership
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) { return { ...emptyResult, error: "Unauthorized" }; }
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) { return { ...emptyResult, error: "User not found" }; }
+
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) { return { ...emptyResult, error: "Business not found" }; }
+
+    const membership = await ctx.db.query("business_memberships")
+      .withIndex("by_userId_businessId", (q) => q.eq("userId", user._id).eq("businessId", business._id))
+      .first();
+    if (!membership || membership.status !== "active") { return { ...emptyResult, error: "No active membership" }; }
+    if (!["finance_admin", "owner"].includes(membership.role)) { return { ...emptyResult, error: "Insufficient permissions — finance admin or owner required" }; }
+
+    const allInvoices = await ctx.db
+      .query("sales_invoices")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    // Filter by date range if provided
+    let invoices = allInvoices;
+    if (args.startDate) {
+      invoices = invoices.filter((inv) => (inv.invoiceDate || "") >= args.startDate!);
+    }
+    if (args.endDate) {
+      invoices = invoices.filter((inv) => (inv.invoiceDate || "") <= args.endDate!);
+    }
+
+    const currency = business.homeCurrency || "MYR";
+    const now = new Date();
+
+    // Status breakdown
+    const statusMap: Record<string, { count: number; totalAmount: number }> = {};
+    let totalRevenue = 0;
+    let totalOutstanding = 0;
+    let totalOverdue = 0;
+
+    // Aging buckets
+    const aging: Record<string, { amount: number; count: number }> = {
+      current: { amount: 0, count: 0 },
+      "1-30": { amount: 0, count: 0 },
+      "31-60": { amount: 0, count: 0 },
+      "61-90": { amount: 0, count: 0 },
+      "90+": { amount: 0, count: 0 },
+    };
+
+    // Customer breakdown
+    const customerMap: Record<string, { outstanding: number; overdueDays: number }> = {};
+
+    for (const inv of invoices) {
+      const amount = inv.totalAmount || 0;
+      const outstanding = amount - (inv.amountPaid || 0);
+      const status = inv.status || "draft";
+
+      totalRevenue += amount;
+
+      // Status breakdown
+      if (!statusMap[status]) statusMap[status] = { count: 0, totalAmount: 0 };
+      statusMap[status].count++;
+      statusMap[status].totalAmount += amount;
+
+      // Outstanding and overdue
+      if (["sent", "overdue", "partially_paid"].includes(status)) {
+        totalOutstanding += outstanding;
+
+        const dueDate = inv.dueDate ? new Date(inv.dueDate) : null;
+        const daysOverdue = dueDate ? Math.max(0, Math.floor((now.getTime() - dueDate.getTime()) / 86400000)) : 0;
+
+        if (status === "overdue" || (dueDate && dueDate < now)) {
+          totalOverdue += outstanding;
+        }
+
+        // Aging bucket
+        let bucket: string;
+        if (daysOverdue <= 0) bucket = "current";
+        else if (daysOverdue <= 30) bucket = "1-30";
+        else if (daysOverdue <= 60) bucket = "31-60";
+        else if (daysOverdue <= 90) bucket = "61-90";
+        else bucket = "90+";
+
+        aging[bucket].amount += outstanding;
+        aging[bucket].count++;
+
+        // Customer breakdown
+        const snapshot = inv.customerSnapshot as { businessName?: string; name?: string } | undefined;
+        const clientName = snapshot?.businessName || snapshot?.name || "Unknown Customer";
+        if (!customerMap[clientName]) customerMap[clientName] = { outstanding: 0, overdueDays: 0 };
+        customerMap[clientName].outstanding += outstanding;
+        customerMap[clientName].overdueDays = Math.max(customerMap[clientName].overdueDays, daysOverdue);
+      }
+    }
+
+    return {
+      totalRevenue: parseFloat(totalRevenue.toFixed(2)),
+      totalOutstanding: parseFloat(totalOutstanding.toFixed(2)),
+      totalOverdue: parseFloat(totalOverdue.toFixed(2)),
+      currency,
+      invoiceCount: invoices.length,
+      statusBreakdown: Object.entries(statusMap).map(([status, data]) => ({
+        status,
+        count: data.count,
+        totalAmount: parseFloat(data.totalAmount.toFixed(2)),
+      })),
+      agingBuckets: Object.entries(aging).map(([bucket, data]) => ({
+        bucket,
+        amount: parseFloat(data.amount.toFixed(2)),
+        count: data.count,
+      })),
+      topCustomers: Object.entries(customerMap)
+        .map(([clientName, data]) => ({
+          clientName,
+          outstanding: parseFloat(data.outstanding.toFixed(2)),
+          overdueDays: data.overdueDays,
+        }))
+        .sort((a, b) => b.outstanding - a.outstanding)
+        .slice(0, 10),
+    };
+  },
+});
+
+// ============================================
+// AP AGING & VENDOR BALANCES (Finance Admin/Owner only)
+// ============================================
+
+/**
+ * AP Aging — aggregates purchase invoice data by vendor and aging bucket.
+ * Used by the AI agent for payables and vendor balance analysis.
+ */
+export const getAPAging = query({
+  args: {
+    businessId: v.string(),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const emptyResult = { error: "", totalOutstanding: 0, totalOverdue: 0, currency: "MYR", agingBuckets: [], vendorBreakdown: [], upcomingDues: [] };
+
+    // Auth: verify caller identity and business membership
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) { return { ...emptyResult, error: "Unauthorized" }; }
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) { return { ...emptyResult, error: "User not found" }; }
+
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) { return { ...emptyResult, error: "Business not found" }; }
+
+    const membership = await ctx.db.query("business_memberships")
+      .withIndex("by_userId_businessId", (q) => q.eq("userId", user._id).eq("businessId", business._id))
+      .first();
+    if (!membership || membership.status !== "active") { return { ...emptyResult, error: "No active membership" }; }
+    if (!["finance_admin", "owner"].includes(membership.role)) { return { ...emptyResult, error: "Insufficient permissions — finance admin or owner required" }; }
+
+    const allInvoices = await ctx.db
+      .query("invoices")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    // Filter to posted invoices (or at least completed) with payment data
+    let invoices = allInvoices.filter((inv) => inv.accountingStatus === "posted" || inv.status === "completed");
+
+    // Date filter using extractedData.invoice_date or creation time
+    if (args.startDate) {
+      invoices = invoices.filter((inv) => {
+        const extracted = inv.extractedData as Record<string, unknown> | undefined;
+        const invDate = (extracted?.invoice_date as string) ?? (extracted?.invoiceDate as string) ?? new Date(inv._creationTime).toISOString().split("T")[0];
+        return invDate >= args.startDate!;
+      });
+    }
+    if (args.endDate) {
+      invoices = invoices.filter((inv) => {
+        const extracted = inv.extractedData as Record<string, unknown> | undefined;
+        const invDate = (extracted?.invoice_date as string) ?? (extracted?.invoiceDate as string) ?? new Date(inv._creationTime).toISOString().split("T")[0];
+        return invDate <= args.endDate!;
+      });
+    }
+
+    const currency = business.homeCurrency || "MYR";
+    const now = new Date();
+
+    let totalOutstanding = 0;
+    let totalOverdue = 0;
+
+    const aging: Record<string, { amount: number; count: number }> = {
+      current: { amount: 0, count: 0 },
+      "1-30": { amount: 0, count: 0 },
+      "31-60": { amount: 0, count: 0 },
+      "61-90": { amount: 0, count: 0 },
+      "90+": { amount: 0, count: 0 },
+    };
+
+    const vendorMap: Record<string, { outstanding: number; oldestDueDate: string }> = {};
+    const upcomingDues: Array<{ vendorName: string; invoiceNumber: string; amount: number; dueDate: string }> = [];
+
+    for (const inv of invoices) {
+      const extracted = inv.extractedData as Record<string, unknown> | undefined;
+      const amount = (extracted?.total_amount as number) ?? (extracted?.totalAmount as number) ?? 0;
+      const paidAmount = inv.paidAmount || 0;
+      const outstanding = amount - paidAmount;
+
+      if (outstanding <= 0) continue; // Fully paid
+
+      totalOutstanding += outstanding;
+
+      const dueDate = inv.dueDate ? new Date(inv.dueDate) : null;
+      const daysOverdue = dueDate ? Math.max(0, Math.floor((now.getTime() - dueDate.getTime()) / 86400000)) : 0;
+
+      if (dueDate && dueDate < now) {
+        totalOverdue += outstanding;
+      }
+
+      // Aging bucket
+      let bucket: string;
+      if (!dueDate || dueDate >= now) bucket = "current";
+      else if (daysOverdue <= 30) bucket = "1-30";
+      else if (daysOverdue <= 60) bucket = "31-60";
+      else if (daysOverdue <= 90) bucket = "61-90";
+      else bucket = "90+";
+
+      aging[bucket].amount += outstanding;
+      aging[bucket].count++;
+
+      // Vendor breakdown
+      const vendorName = (extracted?.vendor_name as string) || (extracted?.vendorName as string) || "Unknown Vendor";
+      if (!vendorMap[vendorName]) {
+        vendorMap[vendorName] = { outstanding: 0, oldestDueDate: inv.dueDate || "" };
+      }
+      vendorMap[vendorName].outstanding += outstanding;
+      if (inv.dueDate && inv.dueDate < vendorMap[vendorName].oldestDueDate) {
+        vendorMap[vendorName].oldestDueDate = inv.dueDate;
+      }
+
+      // Upcoming dues (within next 14 days)
+      const invoiceNumber = (extracted?.invoice_number as string) ?? (extracted?.invoiceNumber as string) ?? "—";
+      if (dueDate && dueDate >= now) {
+        const daysUntilDue = Math.floor((dueDate.getTime() - now.getTime()) / 86400000);
+        if (daysUntilDue <= 14) {
+          upcomingDues.push({
+            vendorName,
+            invoiceNumber,
+            amount: parseFloat(outstanding.toFixed(2)),
+            dueDate: inv.dueDate || "",
+          });
+        }
+      }
+    }
+
+    return {
+      totalOutstanding: parseFloat(totalOutstanding.toFixed(2)),
+      totalOverdue: parseFloat(totalOverdue.toFixed(2)),
+      currency,
+      agingBuckets: Object.entries(aging).map(([bucket, data]) => ({
+        bucket,
+        amount: parseFloat(data.amount.toFixed(2)),
+        count: data.count,
+      })),
+      vendorBreakdown: Object.entries(vendorMap)
+        .map(([vendorName, data]) => ({
+          vendorName,
+          outstanding: parseFloat(data.outstanding.toFixed(2)),
+          oldestDueDate: data.oldestDueDate,
+        }))
+        .sort((a, b) => b.outstanding - a.outstanding)
+        .slice(0, 10),
+      upcomingDues: upcomingDues.sort((a, b) => a.dueDate.localeCompare(b.dueDate)).slice(0, 10),
+    };
+  },
+});
+
+// ============================================
+// BUSINESS-WIDE TRANSACTIONS (Finance Admin/Owner only)
+// ============================================
+
+/**
+ * Business-wide transaction query — returns transactions across ALL employees.
+ * Unlike getTransactionsSafe (personal-scoped), this returns the entire business's
+ * journal entry lines with employee attribution.
+ */
+export const getBusinessTransactions = query({
+  args: {
+    businessId: v.string(),
+    query: v.optional(v.string()),
+    category: v.optional(v.string()),
+    transactionType: v.optional(v.string()),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const emptyResult = { error: "", transactions: [] as unknown[], totalAmount: 0, totalCount: 0, currency: "MYR" };
+
+    // Auth: verify caller identity and business membership
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) { return { ...emptyResult, error: "Unauthorized" }; }
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) { return { ...emptyResult, error: "User not found" }; }
+
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) { return { ...emptyResult, error: "Business not found" }; }
+
+    const membership = await ctx.db.query("business_memberships")
+      .withIndex("by_userId_businessId", (q) => q.eq("userId", user._id).eq("businessId", business._id))
+      .first();
+    if (!membership || membership.status !== "active") { return { ...emptyResult, error: "No active membership" }; }
+    if (!["finance_admin", "owner"].includes(membership.role)) { return { ...emptyResult, error: "Insufficient permissions — finance admin or owner required" }; }
+
+    const limit = Math.min(args.limit || 50, 100);
+    const currency = business.homeCurrency || "MYR";
+
+    // Query journal entries for business
+    let journalEntries = await ctx.db
+      .query("journal_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .filter((q) => q.eq(q.field("status"), "posted"))
+      .collect();
+
+    // Date filter
+    if (args.startDate) {
+      journalEntries = journalEntries.filter((e) => e.transactionDate >= args.startDate!);
+    }
+    if (args.endDate) {
+      journalEntries = journalEntries.filter((e) => e.transactionDate <= args.endDate!);
+    }
+
+    const journalEntryIds = new Set(journalEntries.map((e) => e._id));
+    const journalEntryMap = new Map(journalEntries.map((e) => [e._id.toString(), e]));
+
+    // Get all lines
+    const allLines = await ctx.db
+      .query("journal_entry_lines")
+      .withIndex("by_business_account", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    let lines = allLines.filter((line) => journalEntryIds.has(line.journalEntryId));
+
+    // Filter to expense/income lines (debit side for expenses, credit side for income)
+    lines = lines.filter((line) => (line.debitAmount || 0) > 0 || (line.creditAmount || 0) > 0);
+
+    // Category filter
+    if (args.category) {
+      const catLower = args.category.toLowerCase();
+      lines = lines.filter((line) =>
+        (line.accountName || "").toLowerCase().includes(catLower) ||
+        (line.lineDescription || "").toLowerCase().includes(catLower)
+      );
+    }
+
+    // Transaction type filter
+    if (args.transactionType) {
+      const typeMap: Record<string, string[]> = {
+        "Income": ["4"],       // Revenue accounts 4xxx
+        "Expense": ["5", "6"], // COGS 5xxx, Expenses 6xxx
+        "Cost of Goods Sold": ["5"],
+      };
+      const prefixes = typeMap[args.transactionType] || [];
+      if (prefixes.length > 0) {
+        lines = lines.filter((line) =>
+          prefixes.some((p) => (line.accountCode || "").startsWith(p))
+        );
+      }
+    }
+
+    // Query filter (vendor/description search)
+    if (args.query) {
+      const queryLower = args.query.toLowerCase();
+      lines = lines.filter((line) =>
+        (line.entityName || "").toLowerCase().includes(queryLower) ||
+        (line.lineDescription || "").toLowerCase().includes(queryLower)
+      );
+    }
+
+    const totalAmount = lines.reduce((sum, line) => sum + (line.debitAmount || line.creditAmount || 0), 0);
+    const totalCount = lines.length;
+
+    // Build user name map for attribution
+    const userIds = new Set<string>();
+    for (const line of lines) {
+      if (line.entityType === "employee" && line.entityId) userIds.add(line.entityId);
+    }
+    const userNameMap: Record<string, string> = {};
+    for (const uid of userIds) {
+      const user = await resolveById(ctx.db, "users", uid);
+      if (user) userNameMap[uid] = user.fullName || user.email || uid;
+    }
+
+    // Sort by date descending and limit
+    const sortedLines = lines
+      .map((line) => {
+        const je = journalEntryMap.get(line.journalEntryId.toString());
+        return {
+          transactionDate: je?.transactionDate || "",
+          vendorName: line.entityName || "Unknown",
+          amount: line.debitAmount || line.creditAmount || 0,
+          currency,
+          category: line.accountName || "Uncategorized",
+          description: line.lineDescription || je?.description || "",
+          transactionType: (line.accountCode || "").startsWith("4") ? "Income"
+            : (line.accountCode || "").startsWith("5") ? "Cost of Goods Sold"
+            : "Expense",
+          employeeName: (line.entityType === "employee" && line.entityId)
+            ? (userNameMap[line.entityId] || line.entityId)
+            : undefined,
+        };
+      })
+      .sort((a, b) => b.transactionDate.localeCompare(a.transactionDate))
+      .slice(0, limit);
+
+    return {
+      transactions: sortedLines,
+      totalAmount: parseFloat(totalAmount.toFixed(2)),
+      totalCount,
+      currency,
+    };
   },
 });

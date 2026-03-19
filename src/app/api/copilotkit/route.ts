@@ -13,6 +13,7 @@ import { auth } from '@clerk/nextjs/server'
 import { getUserDataConvex, getAuthenticatedConvex } from '@/lib/convex'
 import { rateLimit } from '@/domains/security/lib/rate-limit'
 import { streamLangGraphAgent } from '@/lib/ai/copilotkit-adapter'
+import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { api } from '@/convex/_generated/api'
 import { Id } from '@/convex/_generated/dataModel'
 
@@ -81,6 +82,31 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // 5.1 SECURITY: Always validate user has active membership for the resolved businessId.
+  // Prevents businessId injection AND stale default business (user removed after profile cached).
+  try {
+    const { client: validationClient } = await getAuthenticatedConvex()
+    if (validationClient) {
+      const membership = await validationClient.query(
+        api.functions.memberships.verifyMembership,
+        { businessId: resolvedBusinessId }
+      )
+      if (!membership) {
+        console.warn(`[Chat API] RBAC: User ${userId} has no active membership for business ${resolvedBusinessId}`)
+        return NextResponse.json(
+          { error: 'You do not have access to this business. Please switch to a valid business.' },
+          { status: 403 }
+        )
+      }
+    }
+  } catch (membershipError) {
+    console.error('[Chat API] Business membership validation error:', membershipError)
+    return NextResponse.json(
+      { error: 'Failed to validate business access' },
+      { status: 403 }
+    )
+  }
+
   // 5.5 AI chat usage pre-flight check (fail-open per FR-016)
   try {
     const { client: convexClient } = await getAuthenticatedConvex()
@@ -115,8 +141,18 @@ export async function POST(req: NextRequest) {
     console.warn('[Chat API] Could not get Convex client for server persistence')
   }
 
+  // 6.5 Resolve user role for RBAC-based tool filtering
+  let userRole: string | undefined
+  try {
+    const profile = await ensureUserProfile(userId)
+    userRole = profile?.role
+    console.log(`[Chat API] Resolved role: ${userRole} for user ${userId}`)
+  } catch (roleError) {
+    console.warn('[Chat API] Could not resolve user role, will fall back to restricted access:', roleError)
+  }
+
   // 7. Create SSE stream from the LangGraph agent
-  console.log(`[Chat API] Streaming agent for user ${userId}, business ${resolvedBusinessId}, conversation ${conversationId}`)
+  console.log(`[Chat API] Streaming agent for user ${userId}, business ${resolvedBusinessId}, role ${userRole}, conversation ${conversationId}`)
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -146,6 +182,7 @@ export async function POST(req: NextRequest) {
             businessId: resolvedBusinessId,
             conversationId: conversationId || 'new',
             homeCurrency: userData.home_currency || undefined,
+            role: userRole,
           },
           language,
         })

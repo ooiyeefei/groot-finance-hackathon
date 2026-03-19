@@ -9,7 +9,7 @@ import { ModelType } from '../../tools/base-tool';
  * Get system prompt — language-aware wrapper around the core financial agent prompt.
  * Injects the current server-side date so the LLM never hallucinates temporal expressions.
  */
-export function getSystemPrompt(language: string, modelType: ModelType, currentDate?: Date, homeCurrency?: string): string {
+export function getSystemPrompt(language: string, modelType: ModelType, currentDate?: Date, homeCurrency?: string, userRole?: string): string {
   const basePrompt = getFinancialAgentPrompt(language, currentDate ?? new Date());
 
   // Inject the user's home currency so the LLM knows when NOT to show conversions
@@ -17,7 +17,10 @@ export function getSystemPrompt(language: string, modelType: ModelType, currentD
     ? `\n\n## USER HOME CURRENCY\nThis user's home/preferred currency is **${homeCurrency}**. When displaying amounts in ${homeCurrency}, do NOT show a converted amount in parentheses — it is already in their home currency. Only show conversions when an amount is in a DIFFERENT currency from ${homeCurrency}.`
     : '';
 
-  const fullPrompt = basePrompt + currencyContext;
+  // Inject role-based permissions so the LLM knows what the user can and cannot access
+  const roleContext = getRolePermissionPrompt(userRole);
+
+  const fullPrompt = basePrompt + currencyContext + roleContext;
 
   const translations = {
     en: fullPrompt,
@@ -26,6 +29,99 @@ export function getSystemPrompt(language: string, modelType: ModelType, currentD
   };
 
   return translations[language as keyof typeof translations] || translations.en;
+}
+
+/**
+ * Generate role-specific permission context for the system prompt.
+ * This tells the LLM what the current user can and cannot do, enabling
+ * proactive refusal of unauthorized queries before tool calls.
+ */
+function getRolePermissionPrompt(userRole?: string): string {
+  if (!userRole) return '';
+
+  const role = userRole.toLowerCase();
+
+  if (role === 'employee') {
+    return `
+
+## YOUR ROLE & PERMISSIONS
+Current user role: **Employee**
+
+**You CAN help with:**
+- Their own expenses, transactions, and spending ("my expenses", "my transactions")
+- Searching their own uploaded documents
+- Looking up vendor/merchant names
+- Answering regulatory and tax knowledge questions (GST, compliance, etc.)
+
+**You CANNOT access (do NOT attempt these tool calls):**
+- Company-wide financial data (cash flow, runway, burn rate)
+- Other employees' expenses or spending
+- Team spending summaries or comparisons
+- AP invoices (purchase invoices from suppliers)
+- AR invoices (sales invoices to customers)
+- Anomaly detection or vendor risk analysis
+- Action center insights (approvals, duplicates, overdue)
+
+**When the user asks about restricted data**, respond with:
+"This information is available to managers, finance admins, or business owners. I can help you with your own expenses and transactions — would you like to see those instead?"`;
+  }
+
+  if (role === 'manager') {
+    return `
+
+## YOUR ROLE & PERMISSIONS
+Current user role: **Manager**
+
+**You CAN help with:**
+- Their own expenses, transactions, and spending
+- Their direct reports' expenses (use \`get_employee_expenses\` with employee name)
+- Team spending summaries and comparisons (use \`get_team_summary\`)
+- Action center insights for their team (approvals, duplicates, overdue — scoped to direct reports)
+- Searching documents, vendor lookups, regulatory knowledge
+
+**You CANNOT access (do NOT attempt these tool calls):**
+- Company-wide financial data (cash flow, runway, burn rate)
+- AP invoices (purchase invoices from suppliers)
+- AR invoices (sales invoices to customers)
+- Anomaly detection or vendor risk analysis
+- Expenses of employees NOT in their direct reports
+
+**Smart routing for team queries:**
+- "How much did [name] spend?" → Use \`get_employee_expenses\`
+- "Team spending on [category]?" → Use \`get_team_summary\` (no name needed)
+- "How much did the team spend at [vendor]?" → Use \`get_team_summary\` with vendor filter
+- Ambiguous query without a name → Ask: "Would you like to look up a specific team member, or see a team-wide summary?"
+
+**When the user asks about restricted data**, respond with:
+"This information is available to finance admins or business owners. As a manager, I can help you with your team's expenses and approvals — would you like to see those instead?"`;
+  }
+
+  // finance_admin or owner — full access
+  return `
+
+## YOUR ROLE & PERMISSIONS
+Current user role: **${role === 'owner' ? 'Business Owner' : 'Finance Admin'}**
+
+**You have FULL access to all financial data:**
+- Personal expenses and transactions
+- All employees' expenses (via \`get_employee_expenses\` or \`get_team_summary\`)
+- Company-wide cash flow analysis, anomaly detection, vendor risk
+- AP invoices (purchase invoices from suppliers) — search, filter, line item details
+- AR invoices (sales invoices to customers) — revenue summaries, aging, overdue
+- Business-wide transactions across all employees
+- Action center insights (duplicates, approvals, overdue — business-wide scope)
+- AP aging reports and vendor balances
+- AR aging reports and customer balances
+
+**Use the right tool for each query:**
+- Personal data → \`get_transactions\`
+- Specific employee → \`get_employee_expenses\`
+- Team aggregate → \`get_team_summary\`
+- AP invoices → \`get_invoices\` (with vendor/date/amount filters)
+- AR invoices → \`get_sales_invoices\`
+- Cash flow → \`analyze_cash_flow\`
+- Anomalies → \`detect_anomalies\`
+- Vendor risk → \`analyze_vendor_risk\``;
 }
 
 /**

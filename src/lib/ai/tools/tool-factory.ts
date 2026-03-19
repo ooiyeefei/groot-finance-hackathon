@@ -20,6 +20,10 @@ import { GetSalesInvoicesTool } from './get-sales-invoices-tool'
 // Manager cross-employee query tools
 import { EmployeeExpenseTool } from './employee-expense-tool'
 import { TeamSummaryTool } from './team-summary-tool'
+// Finance admin/owner tools
+import { ARSummaryTool } from './ar-summary-tool'
+import { APAgingTool } from './ap-aging-tool'
+import { BusinessTransactionsTool } from './business-transactions-tool'
 
 export type ToolName =
   // Category 1-2: Data retrieval tools
@@ -38,6 +42,10 @@ export type ToolName =
   // Manager cross-employee query tools
   | 'get_employee_expenses'
   | 'get_team_summary'
+  // Finance admin/owner tools
+  | 'get_ar_summary'
+  | 'get_ap_aging'
+  | 'get_business_transactions'
 
 /**
  * Tool Factory implementing dependency injection pattern
@@ -70,6 +78,11 @@ export class ToolFactory {
     // Manager cross-employee query tools (require manager/finance_admin/owner role)
     this.registerTool('get_employee_expenses', () => new EmployeeExpenseTool())
     this.registerTool('get_team_summary', () => new TeamSummaryTool())
+
+    // Finance admin/owner tools (business-wide financial data)
+    this.registerTool('get_ar_summary', () => new ARSummaryTool())
+    this.registerTool('get_ap_aging', () => new APAgingTool())
+    this.registerTool('get_business_transactions', () => new BusinessTransactionsTool())
   }
 
   /**
@@ -79,6 +92,22 @@ export class ToolFactory {
   private static readonly MANAGER_TOOLS: Set<ToolName> = new Set([
     'get_employee_expenses',
     'get_team_summary',
+    'get_action_center_insight',
+  ])
+
+  /**
+   * Tools that require finance_admin/owner role.
+   * These expose business-wide financial data (cash flow, invoices, anomalies, vendor risk).
+   */
+  private static readonly FINANCE_TOOLS: Set<ToolName> = new Set([
+    'get_invoices',
+    'get_sales_invoices',
+    'analyze_cash_flow',
+    'detect_anomalies',
+    'analyze_vendor_risk',
+    'get_ar_summary',
+    'get_ap_aging',
+    'get_business_transactions',
   ])
 
   /**
@@ -138,12 +167,32 @@ export class ToolFactory {
       }
     }
 
+    // DEFENSE-IN-DEPTH: Reject tool execution if user's role doesn't match the tool's tier
+    const role = (userContext.role || '').toLowerCase()
+    const tn = toolName as ToolName
+    if (this.FINANCE_TOOLS.has(tn) && !['finance_admin', 'owner'].includes(role)) {
+      console.warn(`[ToolFactory] RBAC DENIED: ${toolName} requires finance_admin/owner, user has role=${role}`)
+      return {
+        success: false,
+        error: "You don't have permission to access this financial data. This information is available to finance admins and business owners.",
+        metadata: { rbacDenied: true, requiredTier: 'finance', userRole: role }
+      }
+    }
+    if (this.MANAGER_TOOLS.has(tn) && !['manager', 'finance_admin', 'owner'].includes(role)) {
+      console.warn(`[ToolFactory] RBAC DENIED: ${toolName} requires manager+, user has role=${role}`)
+      return {
+        success: false,
+        error: "You don't have permission to view team data. This information is available to managers, finance admins, and business owners.",
+        metadata: { rbacDenied: true, requiredTier: 'manager', userRole: role }
+      }
+    }
+
     try {
       // Create tool instance with dependency injection
       const toolFactory = this.tools.get(toolName as ToolName)!
       const tool = toolFactory()
 
-      console.log(`[ToolFactory] Executing ${toolName} for user ${userContext.userId}`)
+      console.log(`[ToolFactory] Executing ${toolName} for user ${userContext.userId} (role: ${role})`)
       
       // Execute with security enforcement
       const result = await tool.execute(parameters, userContext)
@@ -292,21 +341,35 @@ export class ToolFactory {
     const allSchemas = this.getToolSchemas(modelType)
 
     if (!userRole) {
-      // Role unknown — return all tools (backward compatible)
-      return allSchemas
+      // SECURITY: Role unknown — return personal tools only (fail-closed)
+      console.warn('[ToolFactory] No user role provided — restricting to personal tools only')
+      return allSchemas.filter((schema) => {
+        const toolName = schema.function?.name as ToolName
+        return !this.MANAGER_TOOLS.has(toolName) && !this.FINANCE_TOOLS.has(toolName)
+      })
     }
 
     const role = userRole.toLowerCase()
 
-    if (['manager', 'finance_admin', 'owner'].includes(role)) {
-      // Manager+ roles: get all tools including manager-specific ones
+    if (['finance_admin', 'owner'].includes(role)) {
+      // Finance admin / Owner: all tools (personal + manager + finance)
       return allSchemas
     }
 
-    // Employee role: exclude manager-specific tools
+    if (role === 'manager') {
+      // Manager: personal + MANAGER_TOOLS (intentionally included), exclude FINANCE_TOOLS only.
+      // MANAGER_TOOLS (get_employee_expenses, get_team_summary, get_action_center_insight)
+      // are explicitly allowed for managers — do NOT add them to the exclusion filter here.
+      return allSchemas.filter((schema) => {
+        const toolName = schema.function?.name as ToolName
+        return !this.FINANCE_TOOLS.has(toolName)
+      })
+    }
+
+    // Employee role: personal tools only (exclude manager + finance tools)
     return allSchemas.filter((schema) => {
-      const toolName = schema.function?.name
-      return !this.MANAGER_TOOLS.has(toolName as ToolName)
+      const toolName = schema.function?.name as ToolName
+      return !this.MANAGER_TOOLS.has(toolName) && !this.FINANCE_TOOLS.has(toolName)
     })
   }
 

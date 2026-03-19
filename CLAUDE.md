@@ -391,11 +391,8 @@ const arBalance = arLines.reduce((sum, line) =>
 ```
 
 ### Deprecated System (DO NOT USE)
-- **Table**: `accounting_entries` — read-only historical data, zero write paths remain
-- **Status**: All write mutations deleted. All AP/AR aging queries migrated. REST API routes deleted.
-- **Remaining readers**: `vendors.ts`, `payments.ts`, `poMatches.ts`, `exportCodeMappings.ts` (read-only joins for historical data)
-- **Types module**: `src/domains/accounting-entries/types/` still exported (`SupportedCurrency`, `CURRENCY_SYMBOLS`) — used by 30+ files
-- **Next step**: Migrate remaining read-only consumers, then drop table and move types to `src/lib/types/`
+- `accounting_entries` table was dropped — use `journal_entries` + `journal_entry_lines` only
+- Currency types moved to `src/lib/types/currency.ts`
 
 ### AP Subledger (Payment Tracking)
 - **Invoices table** = AP subledger with `paidAmount`, `paymentStatus`, `dueDate`, `paymentHistory[]`
@@ -414,175 +411,14 @@ const arBalance = arLines.reduce((sum, line) =>
 ---
 
 ## Active Technologies
-- TypeScript 5.9.3, Next.js 15.5.7 + Convex 1.31.3, React 19.1.2, Clerk 6.30.0, Zod 3.23.8
-- Convex (document database with real-time sync)
-- TypeScript 5.9.3 + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, Recharts 2.15.4, papaparse 5.5.3, lucide-react (001-smart-vendor-intelligence)
-- Convex (6 tables: vendor_price_history extended, vendor_price_anomalies, vendor_scorecards, vendor_risk_profiles, cross_vendor_item_groups, vendor_recommended_actions) (001-smart-vendor-intelligence)
-- TypeScript 5.3+ / Node.js 20.x (Lambda runtime for MCP Server)
-- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, React 19.1.2, Convex 1.31.3, Clerk 6.30.0, React Query 5.90.7, Zod 3.23.8 (001-leave-management)
-- Convex (real-time document database with subscriptions) (001-leave-management)
-- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, React Query 5.90.7, Zod 3.23.8, Clerk 6.30.0 (002-csv-template-builder)
-- Convex (document database with real-time subscriptions), Convex File Storage for CSV files (002-csv-template-builder)
-- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, LangGraph/LangChain, Zod 3.23.8, AWS CDK (008-manager-agent-queries)
-- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, Clerk 6.30.0, TanStack Query 5.90.7, Zod 3.23.8 (009-batch-receipt-submission)
-- Convex (document database with real-time sync), AWS S3 (file storage), CloudFront (signed URL delivery) (009-batch-receipt-submission)
-- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, Clerk 6.30.0, Zod 3.23.8, React Query 5.90.7 (009-sales-invoice-generation)
-- Convex (document database with real-time subscriptions), Convex File Storage (logo uploads) (009-sales-invoice-generation)
-- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, Radix UI Tabs, html2pdf.js, lucide-reac (010-ar-debtor-management)
-- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, React 19.1.2, Convex 1.31.3, @react-pdf/renderer, Clerk 6.30.0, Zod 3.23.8, Tailwind CSS, Radix UI (012-stripe-invoice-ux)
-- Convex (document database with real-time subscriptions), Convex File Storage (PDF uploads) (012-stripe-invoice-ux)
-- TypeScript 5.9.3 / Node.js 20.x + Next.js 15.5.7, @langchain/langgraph 0.4.5, Convex 1.31.3, Clerk 6.30.0, SSE streaming (010-copilotkit-migration)
-- Convex (conversations, messages), Qdrant Cloud (RAG embeddings), Mem0 (conversation memory) (010-copilotkit-migration)
-- TypeScript 5.9.3 / Node.js 20.x + Next.js 15.5.7, @langchain/langgraph 0.4.5, Convex 1.31.3, React 19.1.2, Clerk 6.30.0 (011-chat-streaming-actions)
-- Convex (conversations, messages with metadata), Qdrant Cloud (RAG), Mem0 (memory) (011-chat-streaming-actions)
-- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, Stripe SDK 20.1.0 (already installed), React 19.1.2, Clerk 6.30.0 (014-stripe-catalog-sync)
-- TypeScript 5.9.3 / Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, Clerk 6.30.0, Zod 3.23.8, TanStack Query 5.90.7 (013-ap-vendor-management)
-- TypeScript 5.9.3 + Next.js 15.5.7, React 19.1.2, Convex 1.31.3 (013-chat-action-cards)
-- Convex (existing tables: invoices, accounting_entries, conversations, messages) (013-chat-action-cards)
-- TypeScript 5.9.3 / Node.js 20.x + Next.js 15.5.7, React 19.1.2, Convex 1.31.3, Radix UI Tabs, Clerk 6.30.0, lucide-react (015-ar-ap-tab-restructure)
-- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, Stripe SDK 20.1.0, Clerk 6.30.0 (001-usage-tracking)
-- TypeScript 5.9.3 + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, Zod 3.23.8 (016-e-invoice-schema-change)
-- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, React 19.1.2, Convex 1.31.3, lucide-react (icons) (001-peppol-submission-ui)
-- Convex (document database with real-time subscriptions) — schema already deployed (001-peppol-submission-ui)
-- TypeScript 5.9.3 + Next.js 15.5.7, React 19.1.2, Convex 1.31.3, Radix UI, Zod 3.23.8 (e-inv-ui-forms)
-- TypeScript 5.9.3, Node.js 20.x (Lambda runtime) + `node:crypto` (built-in), `@aws-sdk/client-ssm`, `aws-cdk-lib` (CDK v2.175.0) (001-digital-signature-infra)
-- AWS SSM Parameter Store SecureString (free standard tier) for private key and certificate (001-digital-signature-infra)
-- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, Clerk 6.30.0, AWS SES, lucide-react (icons), Radix UI (Sheet, Badge) (018-app-email-notif)
-- Convex (new `notifications` + `notification_digests` tables), AWS SES (email delivery) (018-app-email-notif)
-- TypeScript 5.9.3 + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, Clerk 6.30.0, Zod 3.23.8 (018-timesheet-attendance)
-- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, Clerk 6.30.0, Zod 3.23.8, lucide-react (001-accounting-records-export)
-- Convex (document database with real-time sync), Convex File Storage (export file storage) (001-accounting-records-export)
-- TypeScript 5.9.3 (web app), Swift (Capacitor iOS shell — auto-generated) + @capacitor/core, @capacitor/ios, @capacitor/camera, @capacitor/push-notifications, @capacitor/app, @capacitor/browser, @capacitor/status-bar, @capacitor/splash-screen, @sentry/capacitor@^2.4.1 (001-capacitor-mobile-app)
-- Convex (existing, no new tables except `push_subscriptions` and `app_versions`), AWS SSM Parameter Store (APNs key) (001-capacitor-mobile-app)
-- TypeScript 5.9.3 + Next.js 15.5.7, Convex 1.31.3, Stripe SDK, Clerk 6.30.0, React 19.1.2 (019-country-pricing-lock)
-- Convex (document database with real-time sync), Stripe (billing source of truth) (019-country-pricing-lock)
-- TypeScript 5.9.3 / Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, AWS SDK (Lambda invocation), Clerk 6.30.0, Zod 3.23.8, qrcode (npm) (001-lhdn-einvoice-submission)
-- Convex (document database), AWS SSM Parameter Store (credentials) (001-lhdn-einvoice-submission)
-- TypeScript 5.9.3 (Next.js + Convex), Python 3.11 (Lambda) + Next.js 15.5.7, Convex 1.31.3, @browserbasehq/stagehand, pyzbar (Python), AWS SES (019-lhdn-einv-flow-2)
-- Convex (document database), AWS S3 (file storage), SES S3 (email storage) (019-lhdn-einv-flow-2)
-- Convex (new `export_code_mappings` table), Convex File Storage (export files) (001-master-accounting-export)
-- TypeScript 5.9.3, Node.js 20.x + Convex 1.31.3 (crons, internalMutation, storage API) (001-pdpa-data-retention-cleanup)
-- Convex document database (existing tables), Convex File Storage (export files) (001-pdpa-data-retention-cleanup)
-- Markdown (GitHub-flavored) — no code to compile or deploy + None — pure documentation deliverable (001-pdpa-sec-measures-doc)
-- Git repository at `docs/compliance/security-measures.md` (001-pdpa-sec-measures-doc)
-- TypeScript 5.9.3 + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, Clerk 6.30.0, Radix UI, lucide-react (001-pdpa-consent-collect)
-- Convex (new `consent_records` table, real-time subscriptions) (001-pdpa-consent-collect)
-- TypeScript 5.9.3 / Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, Clerk 6.30.0, React 19.1.2, JSZip (new — for client-side ZIP generation) (001-pdpa-data-rights)
-- Markdown (documentation deliverable) + None (documentation only; references existing infrastructure) (001-pdpa-breach-notif-sop)
-- Git repository (`grootdev-ai/groot-finance`) (001-pdpa-breach-notif-sop)
-- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, Clerk 6.30.0, Stripe SDK 20.1.0, React 19.1.2 (001-account-deletion)
-- Convex (existing `referral_codes` and `referrals` tables — no schema changes) (001-reseller-code-system)
-- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, React 19.1.2, Convex 1.31.3, papaparse (CSV), xlsx/SheetJS (Excel), Clerk 6.30.0 (001-csv-parser)
-- Convex (csv_import_templates table). No file storage — files parsed in browser memory. (001-csv-parser)
-- Convex (new `sales_orders` table, real-time subscriptions) (001-ar-reconciliation)
-- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, React 19.1.2, Convex 1.31.3, Clerk 6.30.0, lucide-react, Radix UI (021-ap-3-way)
-- TypeScript 5.9.3 / Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, Clerk 6.30.0, Radix UI Tabs, TanStack Query 5.90.7, Zod 3.23.8 (021-bank-statement-import-recon)
-- Convex (new `bank_accounts`, `bank_transactions`, `bank_import_sessions`, `reconciliation_matches` tables) (021-bank-statement-import-recon)
-- TypeScript 5.9.3 / Node.js 20.x + Next.js 15.5.7, React 19.1.2 + Convex 1.31.3 (real-time database), React Query 5.90.7, Zod 3.23.8, Clerk 6.30.0 (auth), Radix UI (components), lucide-react (icons) (001-accounting-double-entry)
-- Convex document database with real-time subscriptions. New tables: `chart_of_accounts`, `journal_entries`, `journal_entry_lines`, `accounting_periods`, `manual_exchange_rates`. Migration from existing `accounting_entries` table (001-accounting-double-entry)
-- TypeScript 5.9.3 + Convex 1.31.3, Next.js 15.5.7, React 19.1.2, Qwen3-8B (Modal) (001-improve-action-center)
-- Convex document database (actionCenterInsights table, accounting_entries, vendors, expense_claims, business_expense_categories) (001-improve-action-center)
-- TypeScript 5.9.3, Next.js 15.5.7, React 19.1.2 + Convex 1.31.3, Clerk 6.30.0, Radix UI (Dialog, Badge), lucide-react, sonner (toast) (001-acct-period-ui)
-- Convex document database (existing `accounting_periods` + `journal_entries` tables) (001-acct-period-ui)
-- TypeScript 5.9.3 (Convex + Next.js) + Python 3.11 (DSPy Lambda) + DSPy 2.6+, Convex 1.31.3, Next.js 15.5.7, litellm (DSPy → Gemini) (001-dspy-fee-breakdown)
-- Convex (document DB), S3 (DSPy model state JSON files) (001-dspy-fee-breakdown)
-- Python 3.11 (Lambda Docker), TypeScript 5.9.3 (Convex) + DSPy 2.6+, litellm, Playwright, Gemini Flash-Lite (`gemini-3.1-flash-lite-preview`), boto3 (001-dspy-cua-integration)
-- S3 (`finanseal-bucket/dspy-modules/`) for optimized module state, Convex for training data logs (001-dspy-cua-integration)
-- TypeScript 5.9.3 (Next.js + Convex), Python 3.11 (Lambda) + Convex 1.31.3, DSPy 3.1+, Gemini 3.1 Flash-Lite, AWS Lambda, boto3 (001-dspy-bank-recon)
-- Convex (corrections, model versions, bank transactions), S3 (optimized DSPy models) (001-dspy-bank-recon)
-- TypeScript 5.9.3 (Convex + Next.js 15.5.7), Python 3.11 (DSPy Lambda) + Convex 1.31.3, DSPy 2.6+, litellm, Gemini 3.1 Flash-Lite (`gemini-3.1-flash-lite-preview`), React 19.1.2, Radix UI (001-dspy-ar-smart-matcher)
-- Convex (document DB — new `order_matching_corrections` table, extended `sales_orders`), S3 (`finanseal-bucket/dspy-models/ar_match_{businessId}/`) (001-dspy-ar-smart-matcher)
-- TypeScript 5.9.3 (Convex + Next.js 15.5.7) + Convex 1.31.3, React 19.1.2, Radix UI (Sheet, Switch, Slider) (003-conditional-auto-approval)
-- Convex (new `matching_settings` table, extended `sales_orders` + `order_matching_corrections`) (003-conditional-auto-approval)
-- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, @react-pdf/renderer, AWS SDK (Lambda invocation, SES), qrcode (npm) (022-einvoice-lhdn-buyer-flows)
-- Convex (document database with real-time subscriptions), AWS S3 (via CloudFront for signed URLs) (022-einvoice-lhdn-buyer-flows)
-- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, AWS SES, lucide-react (001-einv-poll-status-change)
-- Convex (no schema changes needed — all fields exist) (001-einv-poll-status-change)
-- TypeScript 5.9.3 + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, recharts (already installed), lucide-react (001-ai-perf-widget)
-- Convex document database (existing tables — no new tables) (001-ai-perf-widget)
-- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, @react-pdf/renderer, AWS SES, React 19.1.2 (001-einv-pdf-gen)
-- AWS S3 (einvoices/ prefix) + CloudFront (signed URLs), Convex document database (extended sales_invoices schema) (001-einv-pdf-gen)
-- TypeScript 5.9.3, Node.js 20.x + Next.js 15.5.7, Convex 1.31.3, React 19.1.2, AWS SES (via existing infrastructure), Zod 3.23.8 (023-einv-buyer-notifications)
-- Convex (document database — `sales_invoices`, `businesses` extended), AWS SES (email delivery) (023-einv-buyer-notifications)
-- Python 3.11 (Lambda), TypeScript 5.9.3 (Convex + Next.js) + DSPy 2.6+, litellm, boto3 (Lambda); Convex 1.31.3 (backend); React 19.1.2 (frontend) (001-dspy-vendor-item-matcher)
-- S3 (`finanseal-bucket/dspy-models/vendor_item_match_{businessId}/`) for optimized model state; Convex for corrections + model versions (001-dspy-vendor-item-matcher)
-- TypeScript 5.9.3 (Next.js 15.5.7 + Convex 1.31.3), Node.js 20.x (AWS Lambda runtime), Python 3.11 (existing document processor Lambda) (001-doc-email-forward)
+- **Core**: TypeScript 5.9.3, Next.js 15.5.7, Convex 1.31.3, React 19.1.2, Clerk 6.30.0, Zod 3.23.8
+- **AI**: Qwen3-8B on Modal (chat), DSPy 2.6+ / Gemini 3.1 Flash-Lite (all other AI), LangGraph 0.4.5
+- **Infrastructure**: AWS Lambda (Node.js 20 / Python 3.11), CDK v2, S3, CloudFront, SES, SSM
+- **Frontend**: Radix UI, Tailwind CSS, Recharts, lucide-react, @react-pdf/renderer, sonner
+- **Other**: Stripe SDK 20.1.0, papaparse, xlsx/SheetJS, Capacitor (iOS), Qdrant Cloud (RAG), Mem0
+- TypeScript 5.9.3, Next.js 15.5.7 + LangGraph 0.4.5, Convex 1.31.3, Qwen3-8B (Modal), Zod 3.23.8 (026-agent-rbac-hardening)
+- Convex (tables: invoices, sales_invoices, journal_entry_lines, business_memberships, users) (026-agent-rbac-hardening)
+
 
 ## Recent Changes
-- 001-smart-vendor-intelligence: AI-powered vendor intelligence with automated price tracking, anomaly detection, vendor scorecards, risk analysis, and smart alerts (#320). Extended vendor_price_history table with itemIdentifier, archivedFlag, matchConfidenceScore fields. 5 new tables (vendor_price_anomalies, vendor_scorecards, vendor_risk_profiles, cross_vendor_item_groups, vendor_recommended_actions). Price tracking runs inline during invoice processing (recordPriceObservationsBatch). Tier 1 anomaly detection: >10% per-invoice (standard), >20% trailing 6-month avg (high-impact), new item detection. Fuzzy matching via Jaccard word-token similarity (≥80% auto-link, 40-79% user confirmation). On-demand scorecard/risk refresh via action pattern (no crons — bandwidth-safe). Recommended actions auto-generated for high-impact anomalies via scheduler.runAfter. 3 UI pages (alerts, price intelligence, vendor detail), 8 components (alert cards, scorecard, risk profile, charts, CSV export, fuzzy match dialog, comparison table, group editor), 6 hooks. Sidebar nav: "Vendor Intelligence" for finance admins.
-- 022-einvoice-lhdn-buyer-flows: LHDN e-invoice buyer flows — 5 features closing gaps vs Remicle competitor. (1) Status polling: Lambda polls LHDN every 5min for status changes on issued invoices within 72h window, detects buyer rejections/cancellations, updates sales_invoices (new statuses: "rejected", "cancelled_by_buyer"), sets lhdnReviewRequired flag if journal entry exists, sends in-app notifications. (2) Buyer rejection: Users can reject received e-invoices via LHDN API, new API route + dialog + Convex mutation, clears linked expense claim e-invoice attachment, sets einvoiceRejectionWarning. (3) Validated e-invoice PDF with LHDN QR code: PDF template extended with QR code + UUID + validation timestamp, "Download E-Invoice (LHDN)" button on detail page. (4) Buyer notifications: Email service for validation/cancellation/rejection events, wired into cancel route, business settings for auto-delivery + notification toggles. (5) Compliance dashboard: analytics query + recharts dashboard tab with metric cards, monthly charts, error table, activity feed, CSV export, date range filter. Extended tables: sales_invoices (+5 fields), einvoice_received_documents (+3 fields), expense_claims (+1 field), businesses (+2 fields). New files: einvoice-reject-dialog.tsx, einvoice-dashboard.tsx, buyer-notification-service.ts, einvoiceReceivedDocuments.ts, reject API route.
-- 023-einv-buyer-notifications: Buyer email notifications for e-invoice validation, cancellation, rejection. Transactional emails via SES with idempotency (audit log prevents duplicates). Business settings toggles (validation/cancellation, both default ON; rejection always sent). Three notification triggers: (1) LHDN polling detects "valid" → sendValidationNotification action → notify API route → SES email. (2) User cancels via cancel route → sendCancellationNotification action → notify API route with reason → SES email. (3) LHDN polling detects "rejected" → sendRejectionConfirmation action → notify API route → SES email. Email content: invoice number, business name, amount, currency, LHDN UUID/long ID, MyInvois link, Groot footer. Skip conditions: no buyer email, invalid email format, business settings disabled, already sent (idempotent). Extended tables: sales_invoices (+buyerNotificationLog array), businesses (+einvoiceNotifyBuyerOnValidation, +einvoiceNotifyBuyerOnCancellation). New files: buyerNotificationHelper.ts (idempotency/validation logic), einvoice-notification-settings.tsx (React UI with Switch toggles), notify API route (internal service key auth). UI: New "E-Invoice Notifications" tab in business settings (owner-only) with 3 toggles (validation ON/OFF, cancellation ON/OFF, rejection always enabled). Mutations: appendNotificationLogPublic (logs sent/skipped/failed), updateNotificationSettings (persists toggles). Actions: sendValidationNotification, sendCancellationNotification, sendRejectionConfirmation (all fire-and-forget HTTP calls to notify route).
-- 002-unified-ai-transparency: Daily AI Intelligence Digest email. Hourly cron checks timezone → sends at 6 PM local (skip weekends). Aggregates AR/bank/fee AI activity via bridge pattern (gatherAIActivity normalizes from existing tables). Email shows: hero "Hours Saved Today" metric, autonomy rate, trusted suppliers count, auto-approved count, exceptions table with deep links, learning progress. Uses existing SES infrastructure. New file: `convex/functions/aiDigest.ts`. Cron: `ai-daily-digest` (hourly).
-- 003-conditional-auto-approval: Triple-Lock auto-approval for AR matching. Per-business settings (threshold 0.98, min 5 learning cycles, toggle). Triple-Lock gate: setting ON + confidence ≥ threshold + alias matched ≥ minCycles. Auto-posts journal entry with "groot_ai_agent" preparer (LHDN/IFRS audit). Reversal with CRITICAL_FAILURE (5x weight in MIPROv2). Safety valve: auto-disables after 3 failures in 30 days. New table: `matching_settings`. Extended: `sales_orders` (+auto_agent method), `order_matching_corrections` (+weight). UI: settings drawer, "Verified by Groot" badge, reversal button.
-- 001-dspy-ar-smart-matcher: DSPy Smart Matcher for AR order-to-invoice reconciliation — Tier 2 AI matching (ChainOfThought reasoning, BootstrapFewShot learning, MIPROv2 weekly optimization, Assert/Suggest integrity). Auto-triggers after Tier 1, 1-to-N split matches (cap 5), partial payments with residual. New table: `order_matching_corrections`. Extended: `sales_orders` (+aiMatchSuggestions, aiMatchTier, aiMatchStatus). Lambda: `/match_orders` + `/optimize_ar_match_model`. UI: confidence dots, bulk approve/reject, AI detail sheet, metrics dashboard. Learning loop: corrections auto-captured → BootstrapFewShot ≥20 → MIPROv2 ≥100 with accuracy gating.
-- 001-dspy-bank-recon: DSPy-powered bank reconciliation — Tier 1 keyword rules + Tier 2 DSPy AI classification, GL posting (draft JEs), correction feedback loop (BootstrapFewShot), weekly MIPROv2 optimization, batch operations, reconciliation summary. New tables: `bank_recon_corrections`, `bank_recon_classification_rules`. Extended: `bank_accounts` (+glAccountId), `bank_transactions` (+8 classification fields), `dspy_model_versions` (+domain). Lambda extended with `/classify_bank_transaction` and `/optimize_bank_recon_model`.
-- 001-category-3-mcp: Added MCP Server with API key management
-- 001-manager-approval: Added TypeScript 5.9.3, Next.js 15.5.7 + Convex 1.31.3, React 19.1.2, Clerk 6.30.0, Zod 3.23.8
-
-## Automation Rate Metric Pattern (001-surface-automation-rate)
-
-**Pattern**: Computed metrics aggregating from multiple data sources without schema bloat
-
-### Key Principles
-
-1. **No New Tables for Computed Metrics**: Automation rate is calculated on-demand from existing correction tables. Don't create `automation_rate_history` or similar tables.
-
-2. **Deduplication Required**: Multiple corrections for the same document count as ONE review (FR-021):
-   - AR: Deduplicate by `orderReference`
-   - Bank: Deduplicate by `bankTransactionDescription + bankName`
-   - Use `Map` to track unique keys
-
-3. **Immutable Historical Rates**: Historical rates reflect "what was known at that time" (FR-022):
-   - Use `createdAt` range filters on corrections
-   - Never query corrections outside the period being calculated
-   - This prevents retroactive recalculation
-
-4. **Milestone Tracking**: Extend `businesses` table with nested object (not new table):
-   ```typescript
-   automationMilestones: v.optional(v.object({
-     "90": v.optional(v.number()),
-     "95": v.optional(v.number()),
-     "99": v.optional(v.number()),
-   }))
-   ```
-
-5. **Performance Pattern**: Parallel queries with indexed filters:
-   ```typescript
-   const [arCorrections, bankCorrections, arOrders] = await Promise.all([
-     ctx.db.query("order_matching_corrections")
-       .withIndex("by_businessId_createdAt", q =>
-         q.eq("businessId", bid).gte("createdAt", start).lte("createdAt", end))
-       .collect(),
-     // ... other queries
-   ]);
-   ```
-
-### Data Sources
-
-- **AR Recon**: `sales_orders` (AI decisions) + `order_matching_corrections` (reviews)
-- **Bank Recon**: `bank_transactions` (AI decisions) + `bank_recon_corrections` (reviews)
-- **Fee Classification**: `sales_orders.classifiedFees` (tier 2 = AI) + no corrections table yet
-- **Expense OCR**: `expense_claims` (confidenceScore exists = AI) + edits tracked via `version > 1`
-
-### Chart Annotations
-
-Use `dspy_model_versions.trainedAt` for "Model optimized" markers on trend chart:
-```typescript
-const events = await ctx.db.query("dspy_model_versions")
-  .withIndex("by_platform_status", q => q.eq("platform", "ar_matching").eq("status", "active"))
-  .filter(q => q.and(q.gte(q.field("trainedAt"), weekStart), q.lte(q.field("trainedAt"), weekEnd)))
-  .collect();
-```
-
-### Milestone Notification Flow
-
-1. **Cron** (hourly at 6 PM local): Checks rate, updates `businesses.automationMilestones` if threshold crossed
-2. **Client subscription**: React component subscribes to `businesses` table, triggers Sonner toast on milestone change
-3. **Email digest**: `aiDigest.ts` includes milestone achievements from last 24 hours
-
-### Edge Cases
-
-- `totalDecisions === 0` → return `{ message: "No AI activity in this period" }`
-- `totalDecisions < 10` → return `{ hasMinimumData: false, message: "Collecting data..." }`
-- Expense edit tracking: `version > 1` AND `confidenceScore` exists (conservative: any edit = full correction)
-
+- 026-agent-rbac-hardening: Added TypeScript 5.9.3, Next.js 15.5.7 + LangGraph 0.4.5, Convex 1.31.3, Qwen3-8B (Modal), Zod 3.23.8

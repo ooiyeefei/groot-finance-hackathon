@@ -18,6 +18,7 @@ interface TeamSummaryParameters {
   start_date?: string
   end_date?: string
   category?: string
+  vendor?: string
   group_by?: 'employee' | 'category' | 'vendor'
 }
 
@@ -79,6 +80,10 @@ export class TeamSummaryTool extends BaseTool {
             category: {
               type: "string",
               description: "Optional category filter in natural language (e.g., 'travel', 'meals')."
+            },
+            vendor: {
+              type: "string",
+              description: "Optional vendor/merchant name filter (e.g., 'Starbucks', 'Grab'). Case-insensitive partial match."
             },
             group_by: {
               type: "string",
@@ -153,6 +158,7 @@ export class TeamSummaryTool extends BaseTool {
             startDate,
             endDate,
             category: categoryId,
+            vendorName: params.vendor,
             groupBy: params.group_by || 'employee',
           },
         }

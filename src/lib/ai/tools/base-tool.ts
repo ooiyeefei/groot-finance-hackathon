@@ -109,6 +109,10 @@ export abstract class BaseTool {
         // Enrich user context with business information for proper security validation
         userContext.convexUserId = userProfile.user_id
         userContext.businessId = userProfile.business_id || undefined
+        // Only set role if not already resolved by the API route (defence-in-depth: don't overwrite route-validated role)
+        if (!userContext.role) {
+          userContext.role = userProfile.role
+        }
 
         console.log(`[${this.getToolName()}] Enhanced user context:`, {
           clerkUserId: userContext.userId,

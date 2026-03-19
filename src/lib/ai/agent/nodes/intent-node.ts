@@ -45,14 +45,27 @@ export async function analyzeIntent(state: AgentState): Promise<Partial<AgentSta
       missingContext: intentAnalysisResult.intent.missingContext
     });
 
-    // DETERMINISTIC OVERRIDE: Personal data queries always skip clarification
+    // SMART OVERRIDE: Only skip clarification for the user's OWN personal data queries.
+    // Cross-employee queries (manager asking about team/employee) should allow clarification.
     let finalRequiresClarification = intentAnalysisResult.requiresClarification;
     let finalClarificationQuestions = intentAnalysisResult.clarificationQuestions;
 
     if (intentAnalysisResult.intent.queryCategory === 'personal_data') {
-      console.log('[IntentAnalysis] OVERRIDE: Personal data query detected, skipping clarification');
-      finalRequiresClarification = false;
-      finalClarificationQuestions = [];
+      const query = userQuery.toLowerCase();
+      // Detect if this is genuinely about the user's own data (contains "my", "I", "me")
+      // vs. a cross-employee query (contains team/employee names/someone)
+      // Detect possessives about user's OWN financial objects, but exclude "my team/employees"
+      const isOwnData = /\b(my|i |i'|me |mine)\b/i.test(query) &&
+        !/\b(team|employee|staff|employees'|direct report|reports)\b/i.test(query);
+      const isCrossEmployee = /\b(team|employee|staff|someone|everybody|everyone|all\s+(expenses?|spending|claims?))\b/i.test(query);
+
+      if (isOwnData && !isCrossEmployee) {
+        console.log('[IntentAnalysis] OVERRIDE: User\'s own data query detected, skipping clarification');
+        finalRequiresClarification = false;
+        finalClarificationQuestions = [];
+      } else {
+        console.log('[IntentAnalysis] Cross-employee or team query detected, allowing clarification');
+      }
     }
 
     const nextPhase = finalRequiresClarification ? 'clarification' : 'execution';
