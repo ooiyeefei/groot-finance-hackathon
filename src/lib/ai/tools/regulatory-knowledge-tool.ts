@@ -151,14 +151,7 @@ export class RegulatoryKnowledgeTool extends BaseTool {
       
       return {
         success: true,
-        data: `Here are the most relevant regulatory snippets I found:\n\n${formattedResults}\n\nIMPORTANT: When synthesizing your response:
-1. Use [^1], [^2], [^3] etc. citation markers when referencing these sources in your answer
-2. Include proper citations using the format: "According to [Source Name] (Country) [^1], requirement details..."
-3. Reference specific sources for each key point with citation numbers
-4. If multiple countries have different rules, clearly distinguish them with proper citations
-5. Provide authoritative, regulation-based answers with proper citation attribution
-
-<!--CITATIONS_DATA:${citationsData}:END_CITATIONS-->`,
+        data: `${formattedResults}\n\n<!--CITATIONS_DATA:${citationsData}:END_CITATIONS-->`,
         citations: citations
       };
 
@@ -320,38 +313,25 @@ ${metadata.official_url ? `Link: ${metadata.official_url}` : ''}`;
   }
 
   /**
-   * Format results with citation markers [^1], [^2] for LLM to use in responses
+   * Format results with citation markers [^1], [^2] for LLM to use in responses.
+   * IMPORTANT: Do NOT include instructions or meta-text here — the LLM may echo them
+   * verbatim into the compliance_alert card's requirements array.
    */
   private formatResultDataWithCitations(data: any[]): string {
     return data.map((result, index) => {
       const payload = result.payload || {};
       const metadata = payload.metadata || {};
       let text = payload.text || 'No content available.';
-      
+
       // Clean up navigation text and irrelevant content
       text = this.cleanContentText(text);
-      
-      // Enhanced source citation format with citation marker
+
       const sourceName = metadata.source_name || 'Unknown Source';
       const country = metadata.country || 'N/A';
-      const topics = Array.isArray(metadata.topics) ? metadata.topics.join(', ') : 'General';
-      const relevanceScore = result.score ? result.score.toFixed(3) : '0.000';
       const citationMarker = `[^${index + 1}]`;
-      
-      // Format citation-style reference with marker
-      const citationRef = `${citationMarker} [${sourceName}${metadata.section ? ` - ${metadata.section}` : ''}] (${country})`;
-      
-      return `**Source ${index + 1}** (Relevance: ${relevanceScore}):
-${citationRef}
-Topics: ${topics}
-Content: ${text.substring(0, 400)}${text.length > 400 ? '...' : ''}
 
----REFERENCE---
-Document: ${sourceName}
-Country: ${country}
-Confidence: ${relevanceScore}
-Citation: Use ${citationMarker} when referencing this source
-${metadata.official_url ? `Link: ${metadata.official_url}` : ''}`;
+      return `${citationMarker} ${sourceName} (${country}):
+${text.substring(0, 400)}${text.length > 400 ? '...' : ''}`;
     }).join('\n\n');
   }
 }

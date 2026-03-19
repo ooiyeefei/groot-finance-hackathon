@@ -52,10 +52,33 @@ const COUNTRY_FLAGS: Record<string, string> = {
   VN: '🇻🇳',
 }
 
+/** Filter out leaked system prompt instructions from requirements */
+function sanitizeRequirements(requirements: string[]): string[] {
+  const LEAKED_PATTERNS = [
+    /---REFERENCE---/i,
+    /citation markers/i,
+    /referencing these sources/i,
+    /citation numbers/i,
+    /citation attribution/i,
+    /Use \[\^/,
+    /Include proper citations/i,
+    /Reference specific sources/i,
+    /clearly distinguish them/i,
+    /regulation-based answers/i,
+    /Document:\s/,
+    /Confidence:\s\d/,
+    /Citation:\sUse/,
+  ]
+  return requirements.filter(req =>
+    !LEAKED_PATTERNS.some(pattern => pattern.test(req))
+  )
+}
+
 function ComplianceAlertCard({ action }: ActionCardProps) {
   const data = action.data as unknown as ComplianceAlertData
 
-  if (!data?.topic || !data?.requirements?.length) return null
+  const cleanRequirements = data?.requirements ? sanitizeRequirements(data.requirements) : []
+  if (!data?.topic || !cleanRequirements.length) return null
 
   const severity = SEVERITY_CONFIG[data.severity] || SEVERITY_CONFIG.for_information
   const flag = COUNTRY_FLAGS[data.countryCode] || ''
@@ -81,7 +104,7 @@ function ComplianceAlertCard({ action }: ActionCardProps) {
 
         {/* Requirements list */}
         <ul className="space-y-1 mb-2">
-          {data.requirements.map((req, idx) => (
+          {cleanRequirements.map((req, idx) => (
             <li key={idx} className="flex items-start gap-1.5 text-xs text-muted-foreground">
               <span className="text-primary mt-0.5">•</span>
               <span>{req}</span>

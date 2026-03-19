@@ -21,22 +21,23 @@ export default function UnifiedFinancialDashboard({ className = '' }: UnifiedFin
   });
 
   const formatCurrency = (amount: number, currency: SupportedCurrency, isPercentage?: boolean) => {
+    if (amount == null || isNaN(amount)) return '--';
     if (isPercentage) {
       return `${amount.toFixed(1)}%`;
     }
-    
+
     const symbol = CURRENCY_SYMBOLS[currency] || currency;
-    
+
     if (Math.abs(amount) >= 1000000) {
       return `${symbol}${(amount / 1000000).toFixed(1)}M`;
     }
     if (Math.abs(amount) >= 1000) {
       return `${symbol}${(amount / 1000).toFixed(1)}K`;
     }
-    
-    return `${symbol}${amount.toLocaleString('en-US', { 
-      minimumFractionDigits: 0, 
-      maximumFractionDigits: 0 
+
+    return `${symbol}${amount.toLocaleString('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
     })}`;
   };
 

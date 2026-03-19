@@ -11,8 +11,25 @@
 
 import { useMemo, useState, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
-import rehypeSanitize from 'rehype-sanitize'
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
+
+/** Allow table elements through the sanitizer (GFM tables) */
+const sanitizeSchema = {
+  ...defaultSchema,
+  tagNames: [
+    ...(defaultSchema.tagNames || []),
+    'table', 'thead', 'tbody', 'tr', 'th', 'td',
+  ],
+  attributes: {
+    ...defaultSchema.attributes,
+    th: [...(defaultSchema.attributes?.th || []), 'align'],
+    td: [...(defaultSchema.attributes?.td || []), 'align'],
+    // Allow data-citation-index on sup elements
+    sup: [...(defaultSchema.attributes?.sup || []), 'data-citation-index', 'className'],
+  },
+}
 import CitationOverlay from './citation-overlay'
 import { getActionCardComponent } from './action-cards'
 import { BulkActionBar } from './action-cards/bulk-action-bar'
@@ -184,7 +201,8 @@ export function MessageRenderer({
       <>
         <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5">
           <ReactMarkdown
-            rehypePlugins={[rehypeRaw, rehypeSanitize]}
+            remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema]]}
             components={markdownComponents(handleCitationClick)}
           >
             {processedContent}
@@ -230,7 +248,8 @@ export function MessageRenderer({
             <>
               <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5">
                 <ReactMarkdown
-                  rehypePlugins={[rehypeRaw, rehypeSanitize]}
+                  remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema]]}
                   components={markdownComponents(handleCitationClick)}
                 >
                   {processedContent}

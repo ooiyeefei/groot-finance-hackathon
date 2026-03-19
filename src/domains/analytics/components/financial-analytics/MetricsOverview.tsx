@@ -67,20 +67,20 @@ export default function MetricsOverview({
       currency: homeCurrency,
       trend: trends?.profit_change,
       icon: DollarSign,
-      className: analytics.net_profit >= 0 
-        ? 'border-green-700/50 bg-green-900/10' 
+      className: (analytics.net_profit ?? 0) >= 0
+        ? 'border-green-700/50 bg-green-900/10'
         : 'border-red-700/50 bg-red-900/10'
     },
     {
       id: 'margin',
       title: 'Profit Margin',
-      value: analytics.total_income > 0 
-        ? (analytics.net_profit / analytics.total_income) * 100
+      value: (analytics.total_income ?? 0) > 0
+        ? ((analytics.net_profit ?? 0) / analytics.total_income) * 100
         : 0,
       currency: 'SGD' as SupportedCurrency, // Will be formatted as percentage
       trend: trends ? calculateMarginTrend(analytics, trends) : undefined,
       icon: TrendingUp,
-      className: analytics.net_profit >= 0 
+      className: (analytics.net_profit ?? 0) >= 0
         ? 'border-blue-700/50 bg-blue-900/10'
         : 'border-orange-700/50 bg-orange-900/10'
     }
@@ -104,23 +104,26 @@ function MetricCard({
   className = ''
 }: MetricCardProps) {
   const formatValue = (val: number, curr: SupportedCurrency, isPercentage?: boolean) => {
+    // Guard against undefined/null values from async data loading
+    if (val == null || isNaN(val)) return '--';
+
     // Handle percentage formatting for profit margin
     if (title === 'Profit Margin') {
       return `${val.toFixed(1)}%`;
     }
-    
+
     const symbol = CURRENCY_SYMBOLS[curr] || curr;
-    
+
     if (Math.abs(val) >= 1000000) {
       return `${symbol}${(val / 1000000).toFixed(1)}M`;
     }
     if (Math.abs(val) >= 1000) {
       return `${symbol}${(val / 1000).toFixed(1)}K`;
     }
-    
-    return `${symbol}${val.toLocaleString('en-US', { 
-      minimumFractionDigits: 0, 
-      maximumFractionDigits: 0 
+
+    return `${symbol}${val.toLocaleString('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
     })}`;
   };
 

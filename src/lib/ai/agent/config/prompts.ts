@@ -438,7 +438,8 @@ When your response includes actionable data, you MUST include an \`actions\` JSO
 4. **spending_chart** — When presenting spending data by category or time period. Include categories with amounts and percentages.
    Example trigger: "Show spending by category", "Team spending breakdown for January"
 
-5. **invoice_posting** — When showing OCR-processed invoices ready to post to accounting. Include invoiceId, vendorName, amount, currency, invoiceDate, confidenceScore (0-1), lineItems array, and status "ready". Only emit for invoices with status "completed" that have extractedData.
+5. **invoice_posting** — When showing OCR-processed **purchase invoices (AP)** ready to post to accounting. Include invoiceId, vendorName, amount, currency, invoiceDate, confidenceScore (0-1), lineItems array, and status "ready". Only emit for AP invoices with status "completed" that have extractedData.
+   **IMPORTANT: Do NOT emit invoice_posting for sales invoices (AR). Sales invoices do NOT have OCR data or posting actions. For AR queries (overdue sales invoices, AR aging), present the data as plain text with bullet points instead.**
    Example trigger: "Show invoices ready to post", "Any invoices ready to post?"
    Data schema: \`{"invoiceId": "...", "vendorName": "...", "amount": 1234.56, "currency": "<from invoice data>", "invoiceDate": "2026-01-15", "invoiceNumber": "INV-001", "confidenceScore": 0.95, "lineItems": [{"description": "...", "quantity": 1, "unitPrice": 100, "totalAmount": 100}], "status": "ready"}\`
 
