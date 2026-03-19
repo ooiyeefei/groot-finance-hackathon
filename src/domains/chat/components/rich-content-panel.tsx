@@ -153,7 +153,7 @@ function RichChart({
               <span className="text-foreground truncate">{item.label}</span>
               <span className="text-muted-foreground font-mono ml-2">
                 {typeof item.value === 'number'
-                  ? item.value.toLocaleString()
+                  ? (item.value ?? 0).toLocaleString()
                   : item.value}
               </span>
             </div>
@@ -194,7 +194,7 @@ function RichDashboard({ data }: { data: any }) {
             <p className="text-xs text-muted-foreground mb-1">{metric.label}</p>
             <p className="text-lg font-semibold text-foreground">
               {typeof metric.value === 'number'
-                ? metric.value.toLocaleString()
+                ? (metric.value ?? 0).toLocaleString()
                 : metric.value}
             </p>
             {metric.change && (

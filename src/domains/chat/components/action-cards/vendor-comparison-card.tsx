@@ -88,7 +88,7 @@ function VendorComparisonCard({ action, isHistorical }: ActionCardProps) {
                 <div>
                   <span className="text-muted-foreground">Avg Price</span>
                   <p className="text-foreground font-medium">
-                    {vendor.currency || 'MYR'} {vendor.averagePrice.toLocaleString()}
+                    {vendor.currency || 'MYR'} {(vendor.averagePrice ?? 0).toLocaleString()}
                   </p>
                 </div>
               )}
@@ -108,7 +108,7 @@ function VendorComparisonCard({ action, isHistorical }: ActionCardProps) {
                 <div>
                   <span className="text-muted-foreground">Total Spend</span>
                   <p className="text-foreground font-medium">
-                    {vendor.currency || 'MYR'} {vendor.totalSpend.toLocaleString()}
+                    {vendor.currency || 'MYR'} {(vendor.totalSpend ?? 0).toLocaleString()}
                   </p>
                 </div>
               )}

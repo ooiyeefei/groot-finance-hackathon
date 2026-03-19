@@ -95,7 +95,7 @@ function ExpenseApprovalCard({ action, isHistorical }: ActionCardProps) {
             </p>
           </div>
           <span className="text-sm font-semibold text-foreground">
-            {data.currency} {data.totalAmount.toLocaleString()}
+            {data.currency} {data.totalAmount?.toLocaleString() ?? '0'}
           </span>
         </div>
 
@@ -110,7 +110,7 @@ function ExpenseApprovalCard({ action, isHistorical }: ActionCardProps) {
               <div key={claim.id} className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground truncate mr-2">{claim.description}</span>
                 <span className="text-foreground font-medium flex-shrink-0">
-                  {data.currency} {claim.amount.toLocaleString()}
+                  {data.currency} {claim.amount?.toLocaleString() ?? '0'}
                 </span>
               </div>
             ))}
@@ -147,7 +147,7 @@ function ExpenseApprovalCard({ action, isHistorical }: ActionCardProps) {
               <div className="bg-muted/50 border border-border rounded p-2">
                 <p className="text-xs text-foreground mb-2">
                   {cardState === 'confirm_approve' ? 'Approve' : 'Reject'}{' '}
-                  {data.currency} {data.totalAmount.toLocaleString()} from{' '}
+                  {data.currency} {data.totalAmount?.toLocaleString() ?? '0'} from{' '}
                   {data.submitterName}?
                 </p>
                 <div className="flex gap-2">
