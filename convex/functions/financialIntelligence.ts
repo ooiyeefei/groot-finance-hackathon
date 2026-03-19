@@ -899,12 +899,27 @@ export const getEmployeeExpensesForManager = query({
 
     const journalEntryIds = journalEntries.map((e) => e._id);
 
-    // Get all lines for these entries
+    // Find expense journal entries created BY this employee
+    // Strategy: journal entries with sourceType="expense_claim" AND createdBy=targetEmployee
+    // OR journal entry lines with entityType="employee" AND entityId=targetEmployee (legacy data)
+    const employeeJournalEntryIds = new Set(
+      journalEntries
+        .filter((e) =>
+          (e.sourceType === "expense_claim" && e.createdBy === targetEmployee._id.toString()) ||
+          (e.sourceType === "expense_claim" && e.createdBy === targetEmployee.clerkUserId)
+        )
+        .map((e) => e._id)
+    );
+
     const allLines = await ctx.db.query("journal_entry_lines").withIndex("by_business_account", (q) => q.eq("businessId", business._id)).collect();
     let relevantLines = allLines.filter((line) => {
       if (!journalEntryIds.includes(line.journalEntryId)) return false;
-      // Filter by employee entity
-      if (line.entityType !== "employee" || line.entityId !== targetEmployee._id.toString()) return false;
+      // Match by employee journal entry (new approach) OR legacy entityType=employee
+      const isEmployeeExpenseJE = employeeJournalEntryIds.has(line.journalEntryId);
+      const isLegacyEmployeeEntity = line.entityType === "employee" && line.entityId === targetEmployee._id.toString();
+      if (!isEmployeeExpenseJE && !isLegacyEmployeeEntity) return false;
+      // Only include debit lines (expenses), not credit lines (cash/AP)
+      if (line.debitAmount <= 0) return false;
       return true;
     });
 
@@ -1108,13 +1123,40 @@ export const getTeamExpenseSummary = query({
 
     const journalEntryIds = journalEntries.map((e) => e._id);
 
+    // Build set of Clerk IDs for team members (for matching createdBy on JEs)
+    const targetClerkIds = new Set<string>();
+    for (const userId of targetUserIds) {
+      const user = await resolveById(ctx.db, "users", userId);
+      if (user?.clerkUserId) targetClerkIds.add(user.clerkUserId);
+    }
+
+    // Map: journalEntryId → employeeUserId for expense claim JEs created by team members
+    const jeToEmployeeMap = new Map<string, string>();
+    for (const je of journalEntries) {
+      if (je.sourceType === "expense_claim" && je.createdBy) {
+        if (targetUserIds.has(je.createdBy)) {
+          jeToEmployeeMap.set(je._id.toString(), je.createdBy);
+        } else if (targetClerkIds.has(je.createdBy)) {
+          for (const uid of targetUserIds) {
+            if (userNameMap[uid] && (await resolveById(ctx.db, "users", uid))?.clerkUserId === je.createdBy) {
+              jeToEmployeeMap.set(je._id.toString(), uid);
+              break;
+            }
+          }
+        }
+      }
+    }
+
     // Get all lines for these entries
     const allLines = await ctx.db.query("journal_entry_lines").withIndex("by_business_account", (q) => q.eq("businessId", business._id)).collect();
     let relevantLines = allLines.filter((line) => {
       if (!journalEntryIds.includes(line.journalEntryId)) return false;
-      // Filter to target employee IDs
-      if (line.entityType !== "employee") return false;
-      if (!line.entityId || !targetUserIds.has(line.entityId)) return false;
+      // Match: expense JE created by team member (new) OR legacy entityType=employee
+      const isTeamExpenseJE = jeToEmployeeMap.has(line.journalEntryId.toString());
+      const isLegacyEntity = line.entityType === "employee" && line.entityId && targetUserIds.has(line.entityId);
+      if (!isTeamExpenseJE && !isLegacyEntity) return false;
+      // Only debit lines (expenses), not credit lines (cash/AP)
+      if (line.debitAmount <= 0) return false;
       return true;
     });
 
@@ -1134,22 +1176,28 @@ export const getTeamExpenseSummary = query({
 
     // Compute summary
     const totalAmount = relevantLines.reduce(
-      (sum, line) => sum + (line.debitAmount || line.creditAmount),
+      (sum, line) => sum + line.debitAmount,
       0
     );
-    const uniqueEmployees = new Set(relevantLines.map((line) => line.entityId).filter((id): id is string => !!id));
+    // Count unique employees (from both old entityId and new JE map)
+    const allEmployeeIds = new Set<string>();
+    for (const line of relevantLines) {
+      const empId = line.entityId || jeToEmployeeMap.get(line.journalEntryId.toString());
+      if (empId) allEmployeeIds.add(empId);
+    }
 
     // Group by requested dimension
     const groupBy = filters?.groupBy || "employee";
     const groups: Record<string, { groupKey: string; groupId: string; totalAmount: number; recordCount: number }> = {};
 
     for (const line of relevantLines) {
-      const amount = line.debitAmount || line.creditAmount;
+      const amount = line.debitAmount;
       let key: string;
       let groupKey: string;
 
       if (groupBy === "employee") {
-        key = line.entityId || "unknown";
+        // Use resolved employee ID from JE map or legacy entityId
+        key = line.entityId || jeToEmployeeMap.get(line.journalEntryId.toString()) || "unknown";
         groupKey = userNameMap[key] || line.entityName || key;
       } else if (groupBy === "category") {
         key = line.accountName || "uncategorized";
@@ -1200,7 +1248,7 @@ export const getTeamExpenseSummary = query({
         totalAmount: parseFloat(totalAmount.toFixed(2)),
         currency: business.homeCurrency || "MYR",
         employeeCount: targetUserIds.size,       // total team members in scope
-        employeesWithData: uniqueEmployees.size, // members who have transactions in this period
+        employeesWithData: allEmployeeIds.size, // members who have transactions in this period
         recordCount: relevantLines.length,
       },
       breakdown,
