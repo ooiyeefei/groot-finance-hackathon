@@ -115,8 +115,8 @@ function BulkActionBar({ actions, cardType, isHistorical }: BulkActionBarProps) 
 
   return (
     <div className="space-y-2">
-      {/* Bulk select bar */}
-      {!isHistorical && state.phase !== 'processing' && (
+      {/* Bulk select bar — visible when not processing and not all done */}
+      {!isHistorical && state.phase !== 'processing' && !(state.phase === 'complete' && state.failCount === 0 && state.successCount === actions.length) && (
         <div className="flex items-center justify-between px-2 py-1.5 bg-muted/50 border border-border rounded-lg">
           <button
             onClick={toggleAll}
@@ -206,35 +206,32 @@ function BulkActionBar({ actions, cardType, isHistorical }: BulkActionBarProps) 
 
         return (
           <div key={actionId} className="flex items-start gap-2">
-            {/* Checkbox */}
-            {!isHistorical && state.phase !== 'processing' && state.phase !== 'complete' && (
-              <button
-                onClick={() => toggleSelect(actionId)}
-                className="mt-2 flex-shrink-0"
-              >
-                {isSelected ? (
-                  <CheckSquare className="w-4 h-4 text-primary" />
-                ) : (
-                  <Square className="w-4 h-4 text-muted-foreground" />
-                )}
-              </button>
-            )}
-
-            {/* Status indicator during processing */}
-            {(state.phase === 'processing' || state.phase === 'complete') && (
+            {/* Checkbox or status indicator */}
+            {!isHistorical && (
               <div className="mt-2 flex-shrink-0">
                 {itemStatus === 'processing' && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
                 {itemStatus === 'done' && <CheckSquare className="w-4 h-4 text-green-600 dark:text-green-400" />}
                 {itemStatus === 'failed' && <AlertCircle className="w-4 h-4 text-destructive" />}
-                {!itemStatus && <Square className="w-4 h-4 text-muted-foreground" />}
+                {!itemStatus && state.phase !== 'processing' && (
+                  <button onClick={() => toggleSelect(actionId)}>
+                    {isSelected ? (
+                      <CheckSquare className="w-4 h-4 text-primary" />
+                    ) : (
+                      <Square className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </button>
+                )}
+                {!itemStatus && state.phase === 'processing' && (
+                  <Square className="w-4 h-4 text-muted-foreground" />
+                )}
               </div>
             )}
 
-            {/* Card */}
+            {/* Card — only mark as historical if this specific card was processed successfully */}
             <div className="flex-1">
               <CardComponent
                 action={action}
-                isHistorical={isHistorical || state.phase === 'processing' || state.phase === 'complete'}
+                isHistorical={isHistorical || state.phase === 'processing' || itemStatus === 'done'}
               />
             </div>
           </div>

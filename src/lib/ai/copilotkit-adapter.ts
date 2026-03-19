@@ -542,21 +542,29 @@ function buildVendorComparisonCard(data: Record<string, unknown>): ActionCard | 
 
 function buildInvoicePostingCards(data: Record<string, unknown>): ActionCard[] {
   const invoices = Array.isArray(data.invoices) ? data.invoices : (Array.isArray(data) ? data : [])
-  return invoices.map((inv: Record<string, unknown>, idx: number) => ({
-    type: 'invoice_posting',
-    id: `invoice-auto-${hashCode(JSON.stringify(inv))}-${idx}`,
-    data: {
-      invoiceId: inv._id ?? inv.invoiceId ?? '',
-      vendorName: inv.vendorName ?? (inv.extractedData as Record<string, unknown>)?.vendorName ?? 'Unknown',
-      amount: inv.amount ?? (inv.extractedData as Record<string, unknown>)?.totalAmount ?? 0,
-      currency: inv.currency ?? (inv.extractedData as Record<string, unknown>)?.currency ?? 'MYR',
-      invoiceDate: inv.invoiceDate ?? (inv.extractedData as Record<string, unknown>)?.invoiceDate ?? '',
-      invoiceNumber: inv.invoiceNumber ?? (inv.extractedData as Record<string, unknown>)?.invoiceNumber,
-      confidenceScore: inv.confidenceScore ?? (inv.extractedData as Record<string, unknown>)?.confidence ?? 0.5,
-      lineItems: inv.lineItems ?? (inv.extractedData as Record<string, unknown>)?.lineItems ?? [],
-      status: 'ready',
-    },
-  }))
+
+  // Only create posting cards for invoices that haven't been posted yet
+  return invoices
+    .filter((inv: Record<string, unknown>) => {
+      const accountingStatus = inv.accountingStatus as string | undefined
+      // Skip already-posted invoices — they don't need a "Post to Accounting" action
+      return accountingStatus !== 'posted'
+    })
+    .map((inv: Record<string, unknown>, idx: number) => ({
+      type: 'invoice_posting',
+      id: `invoice-auto-${hashCode(JSON.stringify(inv))}-${idx}`,
+      data: {
+        invoiceId: inv._id ?? inv.invoiceId ?? '',
+        vendorName: inv.vendorName ?? (inv.extractedData as Record<string, unknown>)?.vendorName ?? 'Unknown',
+        amount: inv.amount ?? (inv.extractedData as Record<string, unknown>)?.totalAmount ?? 0,
+        currency: inv.currency ?? (inv.extractedData as Record<string, unknown>)?.currency ?? 'MYR',
+        invoiceDate: inv.invoiceDate ?? (inv.extractedData as Record<string, unknown>)?.invoiceDate ?? '',
+        invoiceNumber: inv.invoiceNumber ?? (inv.extractedData as Record<string, unknown>)?.invoiceNumber,
+        confidenceScore: inv.confidenceScore ?? (inv.extractedData as Record<string, unknown>)?.confidence ?? 0.5,
+        lineItems: inv.lineItems ?? (inv.extractedData as Record<string, unknown>)?.lineItems ?? [],
+        status: 'ready',
+      },
+    }))
 }
 
 function buildComplianceCardFromText(content: string): ActionCard | null {

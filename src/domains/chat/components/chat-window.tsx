@@ -103,15 +103,18 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
 
   // Detect streaming completion and record the message ID for this session.
   // When isLoading goes true→false, the last assistant message was just streamed.
-  useEffect(() => {
-    if (wasLoadingRef.current && !isLoading && convexMessages.length > 0) {
-      const lastMsg = convexMessages[convexMessages.length - 1]
-      if (lastMsg.role === 'assistant') {
-        sessionStreamedIds.current.add(lastMsg.id)
-      }
+  // We add the ID eagerly (synchronously via ref mutation) to prevent the flicker
+  // where cards briefly lose their interactive buttons during the streaming→Convex handoff.
+  if (wasLoadingRef.current && !isLoading && convexMessages.length > 0) {
+    const lastMsg = convexMessages[convexMessages.length - 1]
+    if (lastMsg.role === 'assistant' && !sessionStreamedIds.current.has(lastMsg.id)) {
+      sessionStreamedIds.current.add(lastMsg.id)
     }
+  }
+  // Track loading state for next render (must come after the check above)
+  useEffect(() => {
     wasLoadingRef.current = isLoading
-  }, [isLoading, convexMessages])
+  }, [isLoading])
 
   // Clear session tracking on conversation switch
   useEffect(() => {
