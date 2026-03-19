@@ -237,7 +237,8 @@ export const recordPayment = mutation({
           transactionDate: args.paymentDate,
           description: `Payment received: ${invoiceRef} - ${customerName}`,
           sourceType: "payment" as const,
-          sourceId: paymentId,
+          // Use invoiceId as sourceId for single-invoice payments (enables deep-link from JE modal)
+          sourceId: args.allocations.length === 1 ? args.allocations[0].invoiceId : paymentId,
           lines: [
             {
               accountCode: "1000",
@@ -386,7 +387,7 @@ export const recordReversal = mutation({
           transactionDate: getTodayISO(),
           description: `Payment reversal: ${invoiceRef} - ${customerName}`,
           sourceType: "payment" as const,
-          sourceId: reversalId,
+          sourceId: originalPayment.allocations.length === 1 ? originalPayment.allocations[0].invoiceId : reversalId,
           lines: [
             {
               accountCode: "1200",

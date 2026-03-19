@@ -404,23 +404,20 @@ export default function JournalEntriesContent() {
                       const sourceType = selectedEntry.sourceType
                       const sourceId = selectedEntry.sourceId
                       setIsDetailDialogOpen(false)
-                      if (sourceType === 'sales_invoice') {
+                      if (sourceType === 'sales_invoice' || sourceType === 'payment') {
+                        // Both sales_invoice and payment JEs store the invoice ID as sourceId
                         router.push(`/${locale}/sales-invoices/${sourceId}`)
                       } else if (sourceType === 'vendor_invoice') {
                         router.push(`/${locale}/documents-inbox`)
                       } else if (sourceType === 'expense_claim') {
                         router.push(`/${locale}/expense-claims`)
-                      } else if (sourceType === 'payment') {
-                        // Payment sourceId is the payment record — description has invoice number
-                        router.push(`/${locale}/invoices?tab=ar&sub=sales`)
                       }
                     }}
                   >
                     <ExternalLink className="w-3 h-3 mr-1" />
-                    {selectedEntry.sourceType === 'sales_invoice' && 'View Sales Invoice'}
+                    {(selectedEntry.sourceType === 'sales_invoice' || selectedEntry.sourceType === 'payment') && 'View Sales Invoice'}
                     {selectedEntry.sourceType === 'vendor_invoice' && 'View Supplier Invoice'}
                     {selectedEntry.sourceType === 'expense_claim' && 'View Expense Claim'}
-                    {selectedEntry.sourceType === 'payment' && 'View Payment Source'}
                     {!['sales_invoice', 'vendor_invoice', 'expense_claim', 'payment'].includes(selectedEntry.sourceType) && 'View Source'}
                   </Button>
                 </div>
