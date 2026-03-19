@@ -13,8 +13,10 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { useJournalEntries, useJournalEntry } from '@/domains/accounting/hooks/use-journal-entries'
 import { useAccountingPeriods } from '@/domains/accounting/hooks/use-accounting-periods'
-import { Plus, Eye, CheckCircle, XCircle, Lock } from 'lucide-react'
+import { Plus, Eye, CheckCircle, XCircle, Lock, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useLocale } from 'next-intl'
 import AccountingTabs from '../accounting-tabs'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { formatBusinessDate } from '@/lib/utils'
@@ -22,6 +24,8 @@ import { toast } from 'sonner'
 import type { Id } from '../../../../../convex/_generated/dataModel'
 
 export default function JournalEntriesContent() {
+  const router = useRouter()
+  const locale = useLocale()
   const { entries: entriesRaw, isLoading, postEntry, reverseEntry } = useJournalEntries()
   const { periods } = useAccountingPeriods()
   const entries = (entriesRaw || []) as any[]
@@ -388,6 +392,39 @@ export default function JournalEntriesContent() {
                   </tfoot>
                 </table>
               </div>
+
+              {/* Source link */}
+              {selectedEntry.sourceType && selectedEntry.sourceType !== 'manual' && selectedEntry.sourceId && (
+                <div className="px-5 py-2 border-t border-border">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-primary hover:text-primary/80 p-0 h-auto font-normal"
+                    onClick={() => {
+                      const sourceType = selectedEntry.sourceType
+                      const sourceId = selectedEntry.sourceId
+                      setIsDetailDialogOpen(false)
+                      if (sourceType === 'sales_invoice') {
+                        router.push(`/${locale}/sales-invoices/${sourceId}`)
+                      } else if (sourceType === 'vendor_invoice') {
+                        router.push(`/${locale}/documents-inbox`)
+                      } else if (sourceType === 'expense_claim') {
+                        router.push(`/${locale}/expense-claims`)
+                      } else if (sourceType === 'payment') {
+                        // Payment sourceId is the payment record — description has invoice number
+                        router.push(`/${locale}/invoices?tab=ar&sub=sales`)
+                      }
+                    }}
+                  >
+                    <ExternalLink className="w-3 h-3 mr-1" />
+                    {selectedEntry.sourceType === 'sales_invoice' && 'View Sales Invoice'}
+                    {selectedEntry.sourceType === 'vendor_invoice' && 'View Supplier Invoice'}
+                    {selectedEntry.sourceType === 'expense_claim' && 'View Expense Claim'}
+                    {selectedEntry.sourceType === 'payment' && 'View Payment Source'}
+                    {!['sales_invoice', 'vendor_invoice', 'expense_claim', 'payment'].includes(selectedEntry.sourceType) && 'View Source'}
+                  </Button>
+                </div>
+              )}
 
               {/* Footer */}
               <div className="px-5 py-2.5 border-t border-border bg-muted/30 flex items-center justify-between">
