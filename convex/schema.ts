@@ -521,7 +521,8 @@ export default defineSchema({
     einvoiceRequestStatus: v.optional(v.union(
       v.literal("none"),
       v.literal("requesting"),
-      v.literal("requested"),
+      v.literal("requested"),    // Form fill succeeded, waiting for merchant email callback
+      v.literal("submitted"),    // Direct-link merchant: e-invoice already generated, no email expected (PDF captured)
       v.literal("received"),
       v.literal("failed"),
     )),

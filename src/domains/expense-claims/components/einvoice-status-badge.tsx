@@ -65,6 +65,13 @@ export default function EinvoiceStatusBadge({
           className: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30',
           animate: false,
         }
+      case 'submitted':
+        return {
+          icon: FileCheck,
+          text: 'Submitted',
+          className: 'bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/30',
+          animate: false,
+        }
       case 'received':
         return {
           icon: FileCheck,

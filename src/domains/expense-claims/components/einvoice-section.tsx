@@ -604,8 +604,8 @@ export default function EinvoiceSection({
             </div>
           )}
 
-          {/* Merchant Form URL — hide when error banner already shows the button */}
-          {merchantFormUrl && !einvoiceAttached && einvoiceRequestStatus !== 'failed' && (
+          {/* Merchant Form URL — hide after successful request (#329) and when e-invoice attached */}
+          {merchantFormUrl && !einvoiceAttached && einvoiceRequestStatus !== 'failed' && einvoiceRequestStatus !== 'requested' && einvoiceRequestStatus !== 'submitted' && (
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">Merchant Form</span>
               <Button size="sm" variant="ghost" className="h-auto py-1 px-2 text-xs text-primary hover:text-primary/80" asChild>

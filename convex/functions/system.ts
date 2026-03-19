@@ -1193,11 +1193,14 @@ export const reportEinvoiceFormFillResult = mutation({
   args: {
     expenseClaimId: v.string(),
     emailRef: v.string(),
-    status: v.union(v.literal("in_progress"), v.literal("success"), v.literal("failed")),
+    status: v.union(v.literal("in_progress"), v.literal("success"), v.literal("failed"), v.literal("submitted")),
     merchantFormUrl: v.optional(v.string()),
     errorMessage: v.optional(v.string()),
     browserbaseSessionId: v.optional(v.string()),
     durationMs: v.optional(v.number()),
+    // Direct-link merchant fields (#330): e-invoice already generated, no email expected
+    einvoiceDirectUrl: v.optional(v.string()),       // Redirect URL to actual e-invoice
+    einvoiceStoragePath: v.optional(v.string()),      // S3 path of captured PDF
     // Debugging fields
     merchantName: v.optional(v.string()),
     tierReached: v.optional(v.string()),
@@ -1305,19 +1308,38 @@ export const reportEinvoiceFormFillResult = mutation({
     }
 
     // Update claim status
+    // "success" = form fill worked, waiting for merchant email → "requested"
+    // "submitted" = direct-link merchant, e-invoice already captured → "submitted"
+    const statusMap: Record<string, string> = {
+      success: "requested",
+      submitted: "submitted",
+      failed: "failed",
+    };
     const claimUpdate: Record<string, unknown> = {
-      einvoiceRequestStatus: args.status === "success" ? "requested" : "failed",
+      einvoiceRequestStatus: statusMap[args.status] || "failed",
       updatedAt: Date.now(),
     };
     if (args.status === "failed") {
-      // Prefer verifyEvidence (human-readable from Gemini) over raw errorMessage (technical)
-      // for the user-facing error. Technical errors like asyncio/network/timeout are
-      // translated by the frontend's getUserFriendlyError; merchant-side messages
-      // (e.g. "Transaction no longer eligible") should be shown as-is.
       claimUpdate.einvoiceAgentError = args.verifyEvidence || args.errorMessage || "Unknown error";
     }
-    if (args.status === "success" && args.merchantSlug) {
+    if ((args.status === "success" || args.status === "submitted") && args.merchantSlug) {
       claimUpdate.einvoiceMerchantSlug = args.merchantSlug;
+    }
+    // #329: Persist corrected URL (e.g., HTTPS→HTTP fallback) back to claim
+    if (args.merchantFormUrl && (args.status === "success" || args.status === "submitted")) {
+      claimUpdate.merchantFormUrl = args.merchantFormUrl;
+    }
+    // #330: Direct-link merchant — e-invoice already captured as PDF
+    if (args.status === "submitted") {
+      if (args.einvoiceStoragePath) {
+        claimUpdate.einvoiceStoragePath = args.einvoiceStoragePath;
+        claimUpdate.einvoiceAttached = true;
+        claimUpdate.einvoiceReceivedAt = Date.now();
+      }
+      if (args.einvoiceDirectUrl) {
+        // No field in schema yet — store in einvoiceAgentError as metadata (or add field)
+        // For now, we treat "submitted" status as sufficient signal
+      }
     }
     await ctx.db.patch(claim._id, claimUpdate);
 
@@ -1326,9 +1348,13 @@ export const reportEinvoiceFormFillResult = mutation({
       recipientUserId: claim.userId,
       businessId: claim.businessId,
       type: "compliance" as const,
-      severity: (args.status === "success" ? "info" : "warning") as "info" | "warning",
-      title: args.status === "success" ? "E-Invoice Requested" : "E-Invoice Request Failed",
-      body: args.status === "success"
+      severity: (args.status === "failed" ? "warning" : "info") as "info" | "warning",
+      title: args.status === "submitted"
+        ? "E-Invoice Received"
+        : args.status === "success" ? "E-Invoice Requested" : "E-Invoice Request Failed",
+      body: args.status === "submitted"
+        ? `E-invoice for ${claim.vendorName || "merchant"} has been captured and attached to your expense claim.`
+        : args.status === "success"
         ? `Your e-invoice request for ${claim.vendorName || "merchant"} has been submitted. You'll be notified when the e-invoice is received.`
         : `Could not complete the e-invoice request for ${claim.vendorName || "merchant"}. You can try again or fill the form manually.`,
       resourceType: "expense_claim" as const,
@@ -2077,6 +2103,7 @@ export const upsertMerchantEinvoiceUrl = mutation({
 export const saveMerchantFormConfig = mutation({
   args: {
     merchantName: v.string(),
+    einvoiceUrl: v.optional(v.string()),  // #329: Update merchant URL (e.g., HTTPS→HTTP correction)
     formConfig: v.object({
       fields: v.array(v.object({
         label: v.string(),
@@ -2106,13 +2133,18 @@ export const saveMerchantFormConfig = mutation({
 
     // Merge with existing config — increment successCount
     const existingCount = merchant.formConfig?.successCount || 0;
-    await ctx.db.patch(merchant._id, {
+    const patchData: Record<string, unknown> = {
       formConfig: {
         ...args.formConfig,
         successCount: existingCount + 1,
       },
       lastVerifiedAt: Date.now(),
-    });
+    };
+    // #329: Update merchant URL if corrected (e.g., HTTPS→HTTP fallback)
+    if (args.einvoiceUrl) {
+      patchData.einvoiceUrl = args.einvoiceUrl;
+    }
+    await ctx.db.patch(merchant._id, patchData);
 
     console.log(`[System] Saved formConfig for "${args.merchantName}" (${args.formConfig.fields.length} fields, success #${existingCount + 1})`);
     return { success: true, successCount: existingCount + 1 };
