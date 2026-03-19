@@ -90,6 +90,7 @@ export default function RecordPaymentPage() {
       {/* Payment Form */}
       <PaymentRecorder
         invoiceId={invoiceId}
+        customerId={invoice.customerId ?? ''}
         balanceDue={invoice.balanceDue}
         currency={invoice.currency}
         onSuccess={() => router.push(`/${locale}/sales-invoices/${invoiceId}`)}

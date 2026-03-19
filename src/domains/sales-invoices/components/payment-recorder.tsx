@@ -22,6 +22,7 @@ import type { Id } from '../../../../convex/_generated/dataModel'
 
 interface PaymentRecorderProps {
   invoiceId: string
+  customerId: string
   balanceDue: number
   currency: string
   onSuccess?: () => void
@@ -46,14 +47,14 @@ function getTodayDateString(): string {
 
 export function PaymentRecorder({
   invoiceId,
+  customerId,
   balanceDue,
   currency,
   onSuccess,
   onCancel,
 }: PaymentRecorderProps) {
   const { businessId } = useActiveBusiness()
-  /** Use the legacy single-invoice recordPayment for simple payment recording */
-  const recordPayment = useMutation(api.functions.salesInvoices.recordPayment)
+  const recordPayment = useMutation(api.functions.payments.recordPayment)
 
   const [amount, setAmount] = useState<string>('')
   const [date, setDate] = useState<string>(getTodayDateString())
@@ -80,12 +81,19 @@ export function PaymentRecorder({
 
     try {
       await recordPayment({
-        id: invoiceId as Id<'sales_invoices'>,
         businessId: businessId as Id<'businesses'>,
+        customerId: customerId as Id<'customers'>,
         amount: parsedAmount,
+        currency,
         paymentDate: date,
-        paymentMethod: method || undefined,
+        paymentMethod: (method || 'bank_transfer') as 'bank_transfer' | 'cash' | 'card' | 'cheque' | 'other',
         paymentReference: reference || undefined,
+        allocations: [
+          {
+            invoiceId: invoiceId as Id<'sales_invoices'>,
+            amount: parsedAmount,
+          },
+        ],
       })
 
       setShowSuccess(true)
