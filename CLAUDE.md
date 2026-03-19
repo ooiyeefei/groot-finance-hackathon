@@ -296,6 +296,16 @@ All AWS infrastructure is defined in `infra/lib/`. Any new AWS resource MUST be 
 - **Never use `variant="outline"` or `variant="ghost"` for visible action/cancel buttons** — only use ghost for small inline icon-only buttons (e.g., table row actions). All user-facing text buttons must use explicit bg classes above.
 - Never use gray/secondary styling for action buttons
 
+### Feature Info Drawer Pattern (MANDATORY)
+Every new feature page/tab MUST include a "How It Works" info drawer:
+- **Trigger**: Ghost `Info` icon button (ⓘ) in the page header or top-right area
+- **Component**: `Sheet` from `@/components/ui/sheet` (slides from right)
+- **Content structure**: Title → Description → Numbered steps (use `Step` component pattern) → Status badges/legend (if applicable) → Tips/Good to Know → Settings link
+- **Reference implementations**:
+  - Documents Inbox: `src/app/[locale]/documents-inbox/documents-inbox-client.tsx` → `HowItWorksDrawer`
+  - AP Incoming Invoices: `src/domains/invoices/components/documents-container.tsx` → `EInvoiceHowItWorksDrawer`
+- **Goal**: Every feature should be self-explanatory to a first-time user without external documentation
+
 ### Number Formatting
 ```typescript
 import { formatNumber, formatCurrency } from '@/lib/utils/format-number'
