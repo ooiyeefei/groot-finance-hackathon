@@ -139,6 +139,104 @@ export const updateInboxStatus = mutation({
 // ============================================================================
 
 /**
+ * Auto-route a document when AI classification has high confidence.
+ * Called by: Lambda email processor (no auth — system-level operation).
+ * Creates expense claim (receipt) or marks for invoice processing.
+ */
+export const autoRouteDocument = mutation({
+  args: {
+    inboxEntryId: v.id("document_inbox_entries"),
+    classifiedType: v.union(v.literal("receipt"), v.literal("invoice")),
+    aiConfidence: v.number(),
+    aiReasoning: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const inboxEntry = await ctx.db.get(args.inboxEntryId);
+    if (!inboxEntry) {
+      throw new Error("Inbox entry not found");
+    }
+
+    let destinationDomain: "expense_claims" | "invoices";
+    let destinationRecordId: string | null = null;
+
+    if (args.classifiedType === "receipt") {
+      destinationDomain = "expense_claims";
+
+      // Find existing draft submission (same batch logic as manuallyClassifyDocument)
+      const allUserSubmissions = await ctx.db
+        .query("expense_submissions")
+        .withIndex("by_businessId_userId", (q) =>
+          q.eq("businessId", inboxEntry.businessId).eq("userId", inboxEntry.userId)
+        )
+        .collect();
+
+      let submission = allUserSubmissions
+        .filter((s) => s.status === "draft" && !s.deletedAt)
+        .sort((a, b) => b._creationTime - a._creationTime)[0] as typeof allUserSubmissions[0] | undefined;
+
+      if (!submission) {
+        const now = new Date();
+        const title = `Email Forwarded - ${now.toLocaleString("en-US", { month: "short", day: "numeric" })} ${now.getFullYear()}`;
+        const submissionId = await ctx.db.insert("expense_submissions", {
+          businessId: inboxEntry.businessId,
+          userId: inboxEntry.userId,
+          title,
+          status: "draft",
+          updatedAt: Date.now(),
+        });
+        submission = (await ctx.db.get(submissionId))!;
+      }
+
+      const storagePath = inboxEntry.s3ExpenseClaimsKey || String(inboxEntry.fileStorageId);
+
+      const claimId = await ctx.db.insert("expense_claims", {
+        businessId: inboxEntry.businessId,
+        userId: inboxEntry.userId,
+        submissionId: submission._id,
+        businessPurpose: `Forwarded: ${inboxEntry.emailMetadata.subject || inboxEntry.originalFilename}`,
+        storagePath,
+        fileName: inboxEntry.originalFilename,
+        fileType: inboxEntry.mimeType,
+        fileSize: inboxEntry.fileSizeBytes,
+        status: "draft",
+        sourceType: "email_forward",
+        sourceEmailMetadata: {
+          from: inboxEntry.emailMetadata.from,
+          subject: inboxEntry.emailMetadata.subject,
+          receivedAt: inboxEntry.emailMetadata.receivedAt,
+          messageId: inboxEntry.emailMetadata.messageId,
+        },
+        updatedAt: Date.now(),
+      });
+
+      destinationRecordId = claimId;
+    } else {
+      destinationDomain = "invoices";
+      // Invoice auto-routing: just mark inbox entry, user processes from Invoices page
+    }
+
+    // Update inbox entry as auto-routed
+    await ctx.db.patch(args.inboxEntryId, {
+      status: "routed",
+      aiDetectedType: args.classifiedType,
+      aiConfidence: args.aiConfidence,
+      aiReasoning: args.aiReasoning,
+      destinationDomain,
+      destinationRecordId: destinationRecordId as any,
+      classifiedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    return {
+      success: true,
+      destinationDomain,
+      destinationRecordId,
+      autoRouted: true,
+    };
+  },
+});
+
+/**
  * Get inbox documents for "Needs Review" page
  * Called by: Frontend inbox page
  */

@@ -399,6 +399,13 @@ export class DocumentProcessingStack extends cdk.Stack {
     // Allow email processor to invoke form-fill Lambda for Playwright PDF downloads
     formFillFunction.grantInvoke(emailProcessorFunction);
 
+    // Allow email processor to invoke document processor for OCR (auto-route receipts)
+    this.documentProcessorFunction.grantInvoke(emailProcessorFunction);
+    emailProcessorFunction.addEnvironment(
+      'DOCUMENT_PROCESSOR_LAMBDA_ARN',
+      this.documentProcessorFunction.functionArn
+    );
+
     // SES send permission: forward e-invoice emails to user
     emailProcessorFunction.addToRolePolicy(new iam.PolicyStatement({
       actions: ['ses:SendRawEmail', 'ses:SendEmail'],

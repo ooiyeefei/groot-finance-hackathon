@@ -16,18 +16,20 @@
 import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
+import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { simpleParser, ParsedMail, Attachment } from "mailparser";
 import crypto from "crypto";
 
 const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
 const ses = new SESClient({ region: process.env.AWS_REGION || "us-west-2" });
+const lambdaClient = new LambdaClient({ region: process.env.AWS_REGION || "us-west-2" });
 const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL || "";
 const S3_BUCKET = process.env.S3_BUCKET_NAME || "finanseal-bucket";
 // Read lazily — handler.ts resolves from SSM at runtime and sets process.env
 const getGeminiApiKey = () => process.env.GEMINI_API_KEY || "";
 const SYSTEM_EMAIL = "noreply@notifications.hellogroot.com";
 
-const CONFIDENCE_THRESHOLD = 0.85; // Auto-route if confidence >= 85%
+const AUTO_ROUTE_THRESHOLD = 0.90; // Auto-route if confidence >= 90%
 
 interface DocumentAttachment {
   filename: string;
@@ -683,32 +685,113 @@ export async function handleDocumentForwarding(
 
       console.log(`[DocForward] Inbox entry created: ${result.inboxEntryId} (hash=${result.fileHash}, size=${result.fileSizeBytes})`);
 
-      // Update inbox status with classification result
-      // Update inbox entry with classification result — all documents stay in inbox
-      // for user review. Auto-routing to expense_claims/invoices deferred until
-      // batch submission integration is built.
-      await fetch(`${CONVEX_URL}/api/mutation`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          path: "functions/documentInbox:updateInboxStatus",
-          args: {
-            inboxEntryId: result.inboxEntryId,
-            status: "needs_review",
-            aiDetectedType: classification.type,
-            aiConfidence: classification.confidence,
-            aiReasoning: classification.reasoning,
-          },
-          format: "json",
-        }),
-      });
-
-      if (classification.confidence >= CONFIDENCE_THRESHOLD && classification.type !== "unknown") {
+      // High confidence → auto-route directly to expense claims / invoices
+      if (classification.confidence >= AUTO_ROUTE_THRESHOLD && classification.type !== "unknown") {
         console.log(
-          `[DocForward] High confidence ${classification.type} (${classification.confidence}) — in inbox for user review`
+          `[DocForward] Auto-routing: ${classification.type} (${classification.confidence}) — creating record directly`
         );
+
+        try {
+          const autoRouteResult = await fetch(`${CONVEX_URL}/api/mutation`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              path: "functions/documentInbox:autoRouteDocument",
+              args: {
+                inboxEntryId: result.inboxEntryId,
+                classifiedType: classification.type,
+                aiConfidence: classification.confidence,
+                aiReasoning: classification.reasoning,
+              },
+              format: "json",
+            }),
+          });
+
+          const autoRouteData = await autoRouteResult.json();
+
+          if (autoRouteData.value?.success && autoRouteData.value?.destinationRecordId) {
+            console.log(`[DocForward] Auto-routed to ${autoRouteData.value.destinationDomain}: ${autoRouteData.value.destinationRecordId}`);
+
+            // For receipts, trigger OCR via document processor Lambda
+            if (classification.type === "receipt") {
+              const docProcessorArn = process.env.DOCUMENT_PROCESSOR_LAMBDA_ARN;
+              if (docProcessorArn) {
+                try {
+                  await lambdaClient.send(new InvokeCommand({
+                    FunctionName: docProcessorArn,
+                    InvocationType: "Event", // Async — fire and forget
+                    Payload: JSON.stringify({
+                      documentId: String(autoRouteData.value.destinationRecordId),
+                      domain: "expense_claims",
+                      storagePath: expenseClaimsRelativeKey,
+                      fileType: mimeType === "application/pdf" ? "pdf" : "image",
+                      userId: senderUserId,
+                      businessId: businessConfig.businessId,
+                      idempotencyKey: `email-fwd-auto-${result.inboxEntryId}-${Date.now()}`,
+                      expectedDocumentType: "receipt",
+                    }),
+                  }));
+                  console.log(`[DocForward] OCR Lambda triggered for auto-routed receipt`);
+                } catch (ocrErr) {
+                  console.log(`[DocForward] OCR trigger failed (non-fatal): ${ocrErr}`);
+                }
+              }
+            }
+          } else {
+            console.log(`[DocForward] Auto-route mutation failed, falling back to needs_review`);
+            // Fall back to needs_review
+            await fetch(`${CONVEX_URL}/api/mutation`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                path: "functions/documentInbox:updateInboxStatus",
+                args: {
+                  inboxEntryId: result.inboxEntryId,
+                  status: "needs_review",
+                  aiDetectedType: classification.type,
+                  aiConfidence: classification.confidence,
+                  aiReasoning: classification.reasoning,
+                },
+                format: "json",
+              }),
+            });
+          }
+        } catch (autoRouteErr) {
+          console.log(`[DocForward] Auto-route error: ${autoRouteErr} — falling back to needs_review`);
+          await fetch(`${CONVEX_URL}/api/mutation`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              path: "functions/documentInbox:updateInboxStatus",
+              args: {
+                inboxEntryId: result.inboxEntryId,
+                status: "needs_review",
+                aiDetectedType: classification.type,
+                aiConfidence: classification.confidence,
+                aiReasoning: classification.reasoning,
+              },
+              format: "json",
+            }),
+          });
+        }
       } else {
-        console.log(`[DocForward] Low confidence or unknown — in inbox for manual classification`);
+        // Low confidence or unknown → inbox for manual classification
+        console.log(`[DocForward] Low confidence (${classification.confidence}) — in inbox for manual classification`);
+        await fetch(`${CONVEX_URL}/api/mutation`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            path: "functions/documentInbox:updateInboxStatus",
+            args: {
+              inboxEntryId: result.inboxEntryId,
+              status: "needs_review",
+              aiDetectedType: classification.type,
+              aiConfidence: classification.confidence,
+              aiReasoning: classification.reasoning,
+            },
+            format: "json",
+          }),
+        });
       }
     } catch (error) {
       console.log(`[DocForward] Failed to process ${attachment.filename}: ${error}`);
