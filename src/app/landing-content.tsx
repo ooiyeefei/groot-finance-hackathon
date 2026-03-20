@@ -515,7 +515,7 @@ export default function LandingContent({ country }: { country: string }) {
                   {feature.earlyAccess && (
                     <span className="ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-violet-100 text-violet-700 border border-violet-200 whitespace-nowrap align-text-top">Early Access</span>
                   )}
-                </div>
+                </p>
                 <p className="text-sm text-[#6B7280] leading-relaxed">{feature.description}</p>
                 {feature.earlyAccess && !waitlistSubmitted && (
                   <button
