@@ -24,7 +24,7 @@ const FEATURES = [
   {
     icon: Bot,
     title: 'AI Financial Co-Pilot',
-    description: 'Talk to your finances like you\u2019d talk to a CFO. Ask in plain English, Thai, or Bahasa \u2014 get instant dashboards, post invoices, flag compliance risks, and forecast cash flow. No menus to dig through. Just ask and it\u2019s done.',
+    description: 'Talk to your finances like you\u2019d talk to a CFO. Ask in any language \u2014 get instant dashboards, post invoices, flag compliance risks, and forecast cash flow. No menus to dig through. Just ask and it\u2019s done.',
     earlyAccess: false,
   },
   {
@@ -133,6 +133,7 @@ export default function LandingContent({ country }: { country: string }) {
   const [waitlistEmail, setWaitlistEmail] = useState('');
   const [waitlistCompany, setWaitlistCompany] = useState('');
   const [waitlistSubmitted, setWaitlistSubmitted] = useState(false);
+  const [showWaitlistForm, setShowWaitlistForm] = useState(false);
   const currency = getCurrencyInfo(country);
 
   const handleWaitlistSubmit = (e: React.FormEvent) => {
@@ -500,7 +501,7 @@ export default function LandingContent({ country }: { country: string }) {
             <h2 className="text-2xl md:text-3xl font-semibold text-[#111111] mb-2 tracking-tight">
               One platform, every <span className="text-[#4285F4]">advantage</span>
             </h2>
-            <p className="text-sm text-[#6B7280] font-medium">AI that doesn\u2019t just automate \u2014 it learns, adapts, and gets better the more you use it</p>
+            <p className="text-sm text-[#6B7280] font-medium">AI that doesn't just automate — it learns, adapts, and gets better the more you use it</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -516,7 +517,17 @@ export default function LandingContent({ country }: { country: string }) {
                   )}
                 </div>
                 <p className="text-sm text-[#6B7280] leading-relaxed">{feature.description}</p>
-                {feature.earlyAccess && !waitlistSubmitted && (
+                {feature.earlyAccess && !waitlistSubmitted && !showWaitlistForm && (
+                  <button
+                    type="button"
+                    onClick={() => setShowWaitlistForm(true)}
+                    className="mt-3 px-4 py-2 text-sm font-medium rounded-lg transition-colors border"
+                    style={{ color: '#7C3AED', background: '#F5F3FF', borderColor: '#DDD6FE' }}
+                  >
+                    Get Early Access →
+                  </button>
+                )}
+                {feature.earlyAccess && !waitlistSubmitted && showWaitlistForm && (
                   <form onSubmit={handleWaitlistSubmit} className="mt-3 pt-3 border-t border-[#E5E7EB] flex flex-col gap-2">
                     <input type="email" placeholder="Work email" value={waitlistEmail} onChange={(e) => setWaitlistEmail(e.target.value)} required className="w-full px-3 py-2 text-sm rounded-lg border border-[#E5E7EB] focus:border-[#4285F4] focus:outline-none bg-white" />
                     <input type="text" placeholder="Company name" value={waitlistCompany} onChange={(e) => setWaitlistCompany(e.target.value)} required className="w-full px-3 py-2 text-sm rounded-lg border border-[#E5E7EB] focus:border-[#4285F4] focus:outline-none bg-white" />
@@ -524,7 +535,7 @@ export default function LandingContent({ country }: { country: string }) {
                   </form>
                 )}
                 {feature.earlyAccess && waitlistSubmitted && (
-                  <p className="mt-3 pt-3 border-t border-[#E5E7EB] text-sm text-green-600 font-medium">You&apos;re on the list! We&apos;ll reach out soon.</p>
+                  <p className="mt-3 text-sm text-green-600 font-medium">✓ You&apos;re on the list! We&apos;ll reach out soon.</p>
                 )}
               </div>
             ))}
