@@ -1059,9 +1059,6 @@ export default defineSchema({
       v.id("invoices")
     )),
 
-    // S3 Keys (set by Lambda for downstream processing — s3StagingKey defined above)
-    s3ExpenseClaimsKey: v.optional(v.string()),    // {bizId}/{userId}/email-fwd/{hash}.{ext} (relative to expense_claims/ prefix)
-
     // Data Retention (PDPA 7-year compliance)
     archiveEligibleAt: v.optional(v.number()),  // 30 days after entry
     deleteEligibleAt: v.optional(v.number()),  // 7 years after entry
