@@ -1,0 +1,390 @@
+openapi: 3.0.0
+info:
+  title: Convex HTTP API
+  description: |
+    External HTTP API for invoking Convex functions from AWS Lambda.
+    Used by finanseal-scheduled-intelligence Lambda to trigger scheduled jobs.
+  version: 1.0.0
+  contact:
+    name: Convex Documentation
+    url: https://docs.convex.dev/http-api
+
+servers:
+  - url: https://kindhearted-lynx-129.convex.cloud/api
+    description: Production Convex deployment (kindhearted-lynx-129)
+
+security:
+  - DeploymentKey: []
+
+paths:
+  /query:
+    post:
+      summary: Invoke a Convex query (read-only)
+      description: |
+        Invokes a Convex query function. Queries are read-only and cannot modify data.
+        Not used in this migration (all jobs are actions).
+      operationId: invokeQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConvexRequest'
+            example:
+              functionPath: 'functions/myModule:myQuery'
+              args: {}
+      responses:
+        '200':
+          description: Query executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConvexResponse'
+        '400':
+          description: Invalid request (missing functionPath or invalid args)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConvexError'
+        '401':
+          description: Unauthorized (invalid or missing deployment key)
+        '404':
+          description: Function not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConvexError'
+              example:
+                error: 'Could not find public function "functions/myModule:myQuery"'
+
+  /mutation:
+    post:
+      summary: Invoke a Convex mutation (write)
+      description: |
+        Invokes a Convex mutation function. Mutations can modify data.
+        Not used in this migration (all jobs are actions).
+      operationId: invokeMutation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConvexRequest'
+      responses:
+        '200':
+          description: Mutation executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConvexResponse'
+        '400':
+          $ref: '#/paths/~1query/post/responses/400'
+        '401':
+          $ref: '#/paths/~1query/post/responses/401'
+        '404':
+          $ref: '#/paths/~1query/post/responses/404'
+
+  /action:
+    post:
+      summary: Invoke a Convex action (async operations, HTTP calls)
+      description: |
+        Invokes a Convex action function. Actions can perform async operations,
+        call external APIs, and modify data. Used by all 13 scheduled jobs.
+      operationId: invokeAction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConvexRequest'
+            examples:
+              proactive-analysis:
+                summary: Proactive Analysis
+                value:
+                  functionPath: 'functions/actionCenterJobs:runProactiveAnalysis'
+                  args: {}
+              ai-discovery:
+                summary: AI Discovery
+                value:
+                  functionPath: 'functions/actionCenterJobs:runAIDiscovery'
+                  args: {}
+              notification-digest:
+                summary: Notification Digest
+                value:
+                  functionPath: 'functions/notificationJobs:runDigest'
+                  args: {}
+              einvoice-monitoring:
+                summary: E-Invoice Monitoring
+                value:
+                  functionPath: 'functions/einvoiceMonitoring:runMonitoringCycle'
+                  args: {}
+              ai-daily-digest:
+                summary: AI Daily Digest
+                value:
+                  functionPath: 'functions/actionCenterJobs:runAIDailyDigest'
+                  args: {}
+              dspy-fee:
+                summary: DSPy Fee Optimization
+                value:
+                  functionPath: 'functions/dspyOptimization:weeklyOptimization'
+                  args:
+                    force: false
+              dspy-bank-recon:
+                summary: DSPy Bank Recon Optimization
+                value:
+                  functionPath: 'functions/bankReconOptimization:weeklyOptimization'
+                  args:
+                    force: false
+              dspy-po-match:
+                summary: DSPy PO Match Optimization
+                value:
+                  functionPath: 'functions/poMatchOptimization:weeklyOptimization'
+                  args:
+                    force: false
+              dspy-ar-match:
+                summary: DSPy AR Match Optimization
+                value:
+                  functionPath: 'functions/orderMatchingOptimization:weeklyOptimization'
+                  args:
+                    force: false
+              einvoice-dspy-digest:
+                summary: E-Invoice DSPy Digest
+                value:
+                  functionPath: 'functions/einvoiceDspyJobs:runWeeklyDigest'
+                  args: {}
+              weekly-email-digest:
+                summary: Weekly Email Digest
+                value:
+                  functionPath: 'functions/emailDigestJobs:runWeeklyDigest'
+                  args: {}
+              scheduled-reports:
+                summary: Scheduled Reports
+                value:
+                  functionPath: 'functions/scheduledReportJobs:runScheduledReports'
+                  args: {}
+      responses:
+        '200':
+          description: Action executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConvexResponse'
+              examples:
+                proactive-analysis:
+                  summary: Proactive Analysis Success
+                  value:
+                    value:
+                      businessesAnalyzed: 15
+                      insightsCreated: 3
+                      durationMs: 2450
+                ai-discovery:
+                  summary: AI Discovery Success
+                  value:
+                    value:
+                      businessesAnalyzed: 15
+                      insightsCreated: 5
+                      durationMs: 1800
+                notification-digest:
+                  summary: Notification Digest Success
+                  value:
+                    value:
+                      usersProcessed: 120
+                      emailsSent: 45
+                      durationMs: 3200
+                einvoice-monitoring:
+                  summary: E-Invoice Monitoring Success
+                  value:
+                    value:
+                      staleRecordsCleaned: 12
+                      failuresCategorized: 3
+                      newPatternAlerts: 1
+                      durationMs: 1500
+                dspy-fee-skipped:
+                  summary: DSPy Fee (Skipped - Insufficient Corrections)
+                  value:
+                    value:
+                      readyToOptimize: false
+                      correctionsCount: 8
+                      reason: 'Need 20 corrections minimum, got 8'
+                dspy-fee-success:
+                  summary: DSPy Fee (Training Succeeded)
+                  value:
+                    value:
+                      readyToOptimize: true
+                      correctionsCount: 45
+                      optimizationRun: true
+                      reason: 'Model optimized with 45 corrections'
+                      durationMs: 12400
+        '400':
+          $ref: '#/paths/~1query/post/responses/400'
+        '401':
+          $ref: '#/paths/~1query/post/responses/401'
+        '404':
+          $ref: '#/paths/~1query/post/responses/404'
+        '500':
+          description: Action threw an exception
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConvexError'
+              example:
+                error: 'Uncaught Error: Database query failed'
+
+components:
+  securitySchemes:
+    DeploymentKey:
+      type: http
+      scheme: bearer
+      description: |
+        Convex deployment key (starts with "prod:...").
+        Obtained from Convex dashboard → Settings → Generate deployment key.
+        Stored in SSM Parameter Store at /finanseal/convex-deployment-key.
+
+  schemas:
+    ConvexRequest:
+      type: object
+      required:
+        - functionPath
+        - args
+      properties:
+        functionPath:
+          type: string
+          description: |
+            Full path to Convex function in format "module/file:functionName".
+            For internal functions, use "functions/..." prefix.
+          example: 'functions/actionCenterJobs:runProactiveAnalysis'
+        args:
+          type: object
+          description: Arguments to pass to the function (can be empty {})
+          additionalProperties: true
+          example: {}
+
+    ConvexResponse:
+      type: object
+      required:
+        - value
+      properties:
+        value:
+          description: Return value from the Convex function (shape varies by function)
+          oneOf:
+            - $ref: '#/components/schemas/ProactiveAnalysisResult'
+            - $ref: '#/components/schemas/AiDiscoveryResult'
+            - $ref: '#/components/schemas/NotificationDigestResult'
+            - $ref: '#/components/schemas/EinvoiceMonitoringResult'
+            - $ref: '#/components/schemas/DspyOptimizationResult'
+            - $ref: '#/components/schemas/EinvoiceDspyDigestResult'
+            - $ref: '#/components/schemas/WeeklyEmailDigestResult'
+            - $ref: '#/components/schemas/ScheduledReportsResult'
+
+    ConvexError:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message from Convex
+          example: 'Could not find public function "functions/myModule:myQuery"'
+
+    # Result schemas for each job type
+    ProactiveAnalysisResult:
+      type: object
+      properties:
+        businessesAnalyzed:
+          type: integer
+          description: Number of businesses analyzed
+        insightsCreated:
+          type: integer
+          description: Number of insights created in Action Center
+        durationMs:
+          type: integer
+          description: Execution time in milliseconds
+
+    AiDiscoveryResult:
+      type: object
+      properties:
+        businessesAnalyzed:
+          type: integer
+        insightsCreated:
+          type: integer
+        durationMs:
+          type: integer
+
+    NotificationDigestResult:
+      type: object
+      properties:
+        usersProcessed:
+          type: integer
+          description: Number of users processed
+        emailsSent:
+          type: integer
+          description: Number of digest emails sent
+        durationMs:
+          type: integer
+
+    EinvoiceMonitoringResult:
+      type: object
+      properties:
+        staleRecordsCleaned:
+          type: integer
+          description: Number of stale e-invoice records cleaned up
+        failuresCategorized:
+          type: integer
+          description: Number of failures categorized
+        newPatternAlerts:
+          type: integer
+          description: Number of new failure pattern alerts created
+        durationMs:
+          type: integer
+
+    DspyOptimizationResult:
+      type: object
+      properties:
+        readyToOptimize:
+          type: boolean
+          description: Whether training ran (false if insufficient corrections)
+        correctionsCount:
+          type: integer
+          description: Number of corrections used for training
+        optimizationRun:
+          type: boolean
+          description: Whether model was updated
+        reason:
+          type: string
+          description: Human-readable status message
+        durationMs:
+          type: integer
+          description: Training duration (only if optimizationRun=true)
+
+    EinvoiceDspyDigestResult:
+      type: object
+      properties:
+        businessesAnalyzed:
+          type: integer
+        patternsFound:
+          type: integer
+          description: Number of e-invoice patterns identified
+        durationMs:
+          type: integer
+
+    WeeklyEmailDigestResult:
+      type: object
+      properties:
+        businessesProcessed:
+          type: integer
+        emailsSent:
+          type: integer
+        durationMs:
+          type: integer
+
+    ScheduledReportsResult:
+      type: object
+      properties:
+        reportsGenerated:
+          type: integer
+          description: Number of reports generated
+        reportsDelivered:
+          type: integer
+          description: Number of reports successfully delivered
+        durationMs:
+          type: integer

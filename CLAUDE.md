@@ -467,6 +467,7 @@ const arBalance = arLines.reduce((sum, line) =>
 - Convex (corrections, model versions), S3 finanseal-bucket (model artifacts) (027-gemini-dspy-chat-agent)
 - TypeScript 5.9.3 (frontend + Convex), Python 3.11 (Lambda instrumentation) + Next.js 15.5.7, Convex 1.31.3, Recharts (existing), Radix UI (existing) (027-dspy-dash)
 - Convex (`dspy_metrics_daily` aggregate table + existing correction tables) (027-dspy-dash)
+- TypeScript 5.9.3 (Node.js 20), Python 3.11 (DSPy optimizer, already exists) (030-eventbridge-migration)
 
 
 ## Recent Changes
