@@ -510,14 +510,14 @@ export default function LandingContent({ country }: { country: string }) {
                 <div className="icon-box inline-block p-2.5 mb-3">
                   <feature.icon className="w-5 h-5 text-[#4285F4]" />
                 </div>
-                <div className="flex items-center gap-2 mb-1.5">
+                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                   <h3 className="text-base font-medium text-[#111111]">{feature.title}</h3>
                   {feature.earlyAccess && (
-                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-violet-100 text-violet-700 border border-violet-200">Early Access</span>
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-violet-100 text-violet-700 border border-violet-200 whitespace-nowrap leading-none">Early Access</span>
                   )}
                 </div>
                 <p className="text-sm text-[#6B7280] leading-relaxed">{feature.description}</p>
-                {feature.earlyAccess && !waitlistSubmitted && !showWaitlistForm && (
+                {feature.earlyAccess && !waitlistSubmitted && (
                   <button
                     type="button"
                     onClick={() => setShowWaitlistForm(true)}
@@ -526,13 +526,6 @@ export default function LandingContent({ country }: { country: string }) {
                   >
                     Get Early Access →
                   </button>
-                )}
-                {feature.earlyAccess && !waitlistSubmitted && showWaitlistForm && (
-                  <form onSubmit={handleWaitlistSubmit} className="mt-3 pt-3 border-t border-[#E5E7EB] flex flex-col gap-2">
-                    <input type="email" placeholder="Work email" value={waitlistEmail} onChange={(e) => setWaitlistEmail(e.target.value)} required className="w-full px-3 py-2 text-sm rounded-lg border border-[#E5E7EB] focus:border-[#4285F4] focus:outline-none bg-white" />
-                    <input type="text" placeholder="Company name" value={waitlistCompany} onChange={(e) => setWaitlistCompany(e.target.value)} required className="w-full px-3 py-2 text-sm rounded-lg border border-[#E5E7EB] focus:border-[#4285F4] focus:outline-none bg-white" />
-                    <button type="submit" className="w-full px-3 py-2 text-sm font-medium text-white rounded-lg transition-colors" style={{ background: '#7C3AED' }}>Join Waitlist</button>
-                  </form>
                 )}
                 {feature.earlyAccess && waitlistSubmitted && (
                   <p className="mt-3 text-sm text-green-600 font-medium">✓ You&apos;re on the list! We&apos;ll reach out soon.</p>
@@ -700,6 +693,25 @@ export default function LandingContent({ country }: { country: string }) {
           <p className="text-xs text-[#6B7280] font-medium text-center">&copy; {currentYear} Groot. AI-powered financial intelligence for Southeast Asian businesses.</p>
         </footer>
       </section>
+      )}
+      {/* Early Access Modal */}
+      {showWaitlistForm && !waitlistSubmitted && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowWaitlistForm(false)}>
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-[#111111]">eInvoice Autopilot</h3>
+                <p className="text-sm text-[#6B7280]">Get early access to Malaysia&apos;s LHDN compliance agent</p>
+              </div>
+              <button onClick={() => setShowWaitlistForm(false)} className="text-[#9CA3AF] hover:text-[#111111] text-xl leading-none">&times;</button>
+            </div>
+            <form onSubmit={(e) => { handleWaitlistSubmit(e); setShowWaitlistForm(false); }} className="flex flex-col gap-3">
+              <input type="email" placeholder="Work email" value={waitlistEmail} onChange={(e) => setWaitlistEmail(e.target.value)} required className="w-full px-3 py-2.5 text-sm rounded-lg border border-[#E5E7EB] focus:border-[#4285F4] focus:outline-none" />
+              <input type="text" placeholder="Company name" value={waitlistCompany} onChange={(e) => setWaitlistCompany(e.target.value)} required className="w-full px-3 py-2.5 text-sm rounded-lg border border-[#E5E7EB] focus:border-[#4285F4] focus:outline-none" />
+              <button type="submit" className="w-full px-3 py-2.5 text-sm font-medium text-white rounded-lg transition-colors" style={{ background: '#7C3AED' }}>Join Waitlist</button>
+            </form>
+          </div>
+        </div>
       )}
     </main>
   );
