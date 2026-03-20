@@ -422,7 +422,8 @@ class Mem0Service {
     query: string,
     userId: string,
     businessId: string,
-    limit: number = 10
+    limit: number = 10,
+    threshold: number = 0.7  // Similarity threshold (0.0-1.0), default 0.7 per research.md
   ): Promise<Memory[]> {
     const isReady = await this.initialize()
     if (!isReady || !this.client) {
@@ -431,14 +432,22 @@ class Mem0Service {
     }
 
     try {
+      // Fetch more results than limit to account for threshold filtering
+      const fetchLimit = Math.max(limit * 2, 20)
+
       const result = await this.client.search(query, {
         user_id: userId,
         app_id: businessId,
-        limit
+        limit: fetchLimit
       })
 
-      console.log(`[Mem0Service] Found ${result.results?.length || 0} memories for query`)
-      return result.results || []
+      // Filter by similarity threshold and limit results
+      const filtered = (result.results || [])
+        .filter(memory => (memory.score !== undefined && memory.score >= threshold))
+        .slice(0, limit)
+
+      console.log(`[Mem0Service] Found ${result.results?.length || 0} memories, ${filtered.length} above threshold ${threshold}`)
+      return filtered
     } catch (error) {
       console.error('[Mem0Service] Error searching memories:', error)
       return []

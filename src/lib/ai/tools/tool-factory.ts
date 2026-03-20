@@ -24,6 +24,11 @@ import { TeamSummaryTool } from './team-summary-tool'
 import { ARSummaryTool } from './ar-summary-tool'
 import { APAgingTool } from './ap-aging-tool'
 import { BusinessTransactionsTool } from './business-transactions-tool'
+// Memory tools (029-dspy-mem0-activation)
+import { MemoryStoreTool } from './memory/memory-store-tool'
+import { MemorySearchTool } from './memory/memory-search-tool'
+import { MemoryRecallTool } from './memory/memory-recall-tool'
+import { MemoryForgetTool } from './memory/memory-forget-tool'
 
 export type ToolName =
   // Category 1-2: Data retrieval tools
@@ -46,6 +51,11 @@ export type ToolName =
   | 'get_ar_summary'
   | 'get_ap_aging'
   | 'get_business_transactions'
+  // Memory tools (029-dspy-mem0-activation)
+  | 'memory_store'
+  | 'memory_search'
+  | 'memory_recall'
+  | 'memory_forget'
 
 /**
  * Tool Factory implementing dependency injection pattern
@@ -83,6 +93,12 @@ export class ToolFactory {
     this.registerTool('get_ar_summary', () => new ARSummaryTool())
     this.registerTool('get_ap_aging', () => new APAgingTool())
     this.registerTool('get_business_transactions', () => new BusinessTransactionsTool())
+
+    // Memory tools (029-dspy-mem0-activation)
+    this.registerTool('memory_store', () => new MemoryStoreTool())
+    this.registerTool('memory_search', () => new MemorySearchTool())
+    this.registerTool('memory_recall', () => new MemoryRecallTool())
+    this.registerTool('memory_forget', () => new MemoryForgetTool())
   }
 
   /**

@@ -18,7 +18,7 @@ export async function runChatAgentOptimization(): Promise<Omit<JobResult, 'durat
       optimizationRun?: boolean;
       reason?: string;
       durationMs?: number;
-    }>('functions/chatOptimization:weeklyOptimization', { force: false });
+    }>('functions/chatOptimizationNew:weeklyOptimization', { force: false });
 
     console.log(
       `[ChatAgentOptimization] Complete: ${result.readyToOptimize ? 'optimized' : 'skipped'} (${result.reason || 'success'})`

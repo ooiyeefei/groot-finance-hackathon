@@ -17,8 +17,8 @@ import { internalAction, internalMutation, internalQuery } from "../_generated/s
 const _internal: any = require("../_generated/api").internal;
 import { callMCPTool } from "../lib/mcpClient";
 
-const MIN_CORRECTIONS = 100;
-const MIN_UNIQUE_QUERIES = 10;
+const MIN_CORRECTIONS = 20;      // Changed from 100 to 20 per spec (029-dspy-mem0-activation)
+const MIN_UNIQUE_INTENTS = 10;   // New requirement: intent diversity, not just query diversity
 
 /**
  * Check if a module type has enough corrections for optimization.
@@ -31,7 +31,7 @@ export const getModuleReadiness = internalQuery({
     const readyModules: Array<{
       moduleType: string;
       totalCorrections: number;
-      uniqueQueries: number;
+      uniqueIntents: number;
       latestCorrectionId: string;
     }> = [];
 
@@ -48,7 +48,12 @@ export const getModuleReadiness = internalQuery({
         .withIndex("by_correctionType", (q) => q.eq("correctionType", correctionType))
         .collect();
 
-      const uniqueQueries = new Set(corrections.map((c) => c.originalQuery.toLowerCase().trim()));
+      // Check intent diversity (not query diversity)
+      const uniqueIntents = new Set(
+        corrections
+          .map((c) => c.correctedIntent)
+          .filter(Boolean)
+      );
       const unconsumed = corrections.filter((c) => !c.consumed);
 
       let latestId = "";
@@ -64,10 +69,10 @@ export const getModuleReadiness = internalQuery({
         continue;
       }
 
-      if (uniqueQueries.size < MIN_UNIQUE_QUERIES) {
+      if (uniqueIntents.size < MIN_UNIQUE_INTENTS) {
         skippedModules.push({
           moduleType,
-          reason: `Only ${uniqueQueries.size} unique queries (need ${MIN_UNIQUE_QUERIES})`,
+          reason: `Only ${uniqueIntents.size} unique intents (need ${MIN_UNIQUE_INTENTS})`,
         });
         continue;
       }
@@ -83,7 +88,7 @@ export const getModuleReadiness = internalQuery({
       readyModules.push({
         moduleType,
         totalCorrections: corrections.length,
-        uniqueQueries: uniqueQueries.size,
+        uniqueIntents: uniqueIntents.size,
         latestCorrectionId: latestId,
       });
     }
@@ -113,7 +118,7 @@ export const weeklyOptimization = internalAction({
     }
 
     for (const ready of readiness.readyModules) {
-      console.log(`[ChatOptimization] Optimizing ${ready.moduleType} (${ready.totalCorrections} corrections, ${ready.uniqueQueries} unique)`);
+      console.log(`[ChatOptimization] Optimizing ${ready.moduleType} (${ready.totalCorrections} corrections, ${ready.uniqueIntents} unique intents)`);
 
       try {
         // Get corrections for this module type

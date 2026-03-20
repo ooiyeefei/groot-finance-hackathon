@@ -2867,9 +2867,37 @@ export default defineSchema({
     lastCorrectionId: v.optional(v.string()),  // _id of last correction consumed — prevents re-optimizing same data
     domain: v.optional(v.string()),            // "fee_classification" | "bank_recon" | "chat_intent" | "chat_tool_selector" | "chat_param_extractor" | "chat_response_quality" | "chat_clarification"
     optimizedPrompt: v.optional(v.string()),   // JSON-serialized optimized prompt + few-shot examples (for chat modules, loaded by TypeScript nodes)
+
+    // Quality gate evaluation (added for 029-dspy-mem0-activation)
+    qualityGateResult: v.optional(v.object({
+      passed: v.boolean(),
+      candidateAccuracy: v.number(),
+      previousAccuracy: v.optional(v.number()),
+      accuracyDelta: v.optional(v.number()),
+      rejectionReason: v.optional(v.string()),
+      evalSetSize: v.number(),
+      perCategoryBreakdown: v.optional(v.any()), // Intent-level metrics
+    })),
+
+    // Comparison to previous active version (added for 029-dspy-mem0-activation)
+    comparisonVsPrevious: v.optional(v.object({
+      previousVersionId: v.string(),
+      accuracyDelta: v.number(),
+      passed: v.boolean(),
+    })),
+
+    // Additional metadata for chat agent (029-dspy-mem0-activation)
+    versionId: v.optional(v.string()),         // e.g., "v20260320-001"
+    module: v.optional(v.string()),            // e.g., "chat-agent-intent"
+    correctionsConsumed: v.optional(v.number()),
+    validationExamples: v.optional(v.number()),
+    promotedAt: v.optional(v.number()),
+    supersededBy: v.optional(v.string()),
+    rejectionReason: v.optional(v.string()),
   })
     .index("by_platform_status", ["platform", "status"])
-    .index("by_platform_version", ["platform", "version"]),
+    .index("by_platform_version", ["platform", "version"])
+    .index("by_module_status", ["module", "status"]),
 
   dspy_optimization_logs: defineTable({
     platform: v.string(),
@@ -3388,6 +3416,44 @@ export default defineSchema({
     .index("by_createdAt", ["createdAt"])
     .index("by_consumed", ["consumed"])
     .index("by_businessId", ["businessId"]),
+
+
+  // ============================================
+  // MEM0 MEMORIES — Persistent User Memory (029-dspy-mem0-activation)
+  // ============================================
+  // Stores user preferences, facts, and context for chat agent personalization.
+  // Scoped to (businessId, userId) for isolation. Supports semantic search via embeddings.
+
+  mem0_memories: defineTable({
+    // Scope (CRITICAL for isolation)
+    businessId: v.id("businesses"),
+    userId: v.string(),                       // Clerk user ID
+
+    // Content
+    content: v.string(),                      // Natural language memory (max 500 chars)
+    memoryType: v.string(),                   // "preference" | "fact" | "instruction" | "context"
+
+    // Source tracking
+    source: v.string(),                       // "explicit_command" | "auto_save_confirmed" | "system_inferred"
+    sourceConversationId: v.optional(v.string()),
+
+    // Retrieval metadata
+    embeddings: v.array(v.float64()),        // OpenAI text-embedding-3-small (1536 dims)
+    topicTags: v.array(v.string()),          // Auto-detected topics (currency, team, reporting, etc.)
+
+    // Usage tracking
+    lastAccessedAt: v.optional(v.number()),
+    accessCount: v.number(),                  // LRU eviction
+
+    // Contradiction detection
+    conflictsWith: v.optional(v.array(v.string())), // IDs of conflicting memories
+
+    // Lifecycle
+    archivedAt: v.optional(v.number()),      // Soft delete
+  })
+    .index("by_user_business", ["businessId", "userId"])
+    .index("by_user_business_active", ["businessId", "userId", "archivedAt"])
+    .index("by_topic", ["topicTags"]),
 
   // ============================================
   // DSPY METRICS — Daily Aggregates (027-dspy-dash)
