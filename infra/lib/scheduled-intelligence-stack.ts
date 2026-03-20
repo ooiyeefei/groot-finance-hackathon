@@ -8,6 +8,7 @@ import * as sns from 'aws-cdk-lib/aws-sns';
 import * as snsSubscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as actions from 'aws-cdk-lib/aws-cloudwatch-actions';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { Construct } from 'constructs';
 
 interface ScheduledJob {
@@ -26,6 +27,21 @@ export class ScheduledIntelligenceStack extends cdk.Stack {
     super(scope, id, props);
 
     const alarmEmail = props?.alarmEmail || 'dev@hellogroot.com';
+
+    // Convex deployment key — passed at deploy time, stored as SSM SecureString
+    // Usage: npx cdk deploy --parameters ConvexDeployKey=$CONVEX_DEPLOY_KEY
+    const convexDeployKeyParam = new cdk.CfnParameter(this, 'ConvexDeployKey', {
+      type: 'String',
+      noEcho: true, // Masks value in CloudFormation console
+      description: 'Convex deployment key for HTTP API authentication',
+    });
+
+    new ssm.StringParameter(this, 'ConvexDeployKeySSM', {
+      parameterName: '/finanseal/convex-deployment-key',
+      description: 'Convex deployment key for Lambda → Convex HTTP API auth',
+      stringValue: convexDeployKeyParam.valueAsString,
+      tier: ssm.ParameterTier.STANDARD,
+    });
 
     // DLQ for failed EventBridge events
     const dlq = new sqs.Queue(this, 'ScheduledIntelligenceDLQ', {
