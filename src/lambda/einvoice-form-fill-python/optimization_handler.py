@@ -39,6 +39,7 @@ def handler(event: dict, context=None) -> dict:
         )
         from optimization.optimizer import optimize_troubleshooter, optimize_recon
         from optimization.evaluator import run_evaluation
+        from optimization.quality_gate import run_quality_gate, serialize_quality_gate_result
 
         # ── Step 0: Get last optimization checkpoint (Refinement 5) ──
         last_ts = _get_last_optimized_timestamp()

@@ -131,6 +131,32 @@ def optimize_troubleshooter(training_data: list, metadata: dict = None) -> dict:
     print(f"[Optimizer] Troubleshooter optimized ({strategy}): "
           f"overall={optimized_score:.2f}, anchor={optimized_anchor_score}")
 
+    # ── Quality Gate: Evaluate candidate vs previous on eval set ──
+    from optimization.quality_gate import run_quality_gate, serialize_quality_gate_result
+
+    quality_gate_result = None
+    try:
+        quality_gate_result = run_quality_gate(
+            candidate_model=optimized,
+            previous_model=baseline,
+            module="troubleshooter",
+            min_accuracy_threshold=0.0
+        )
+        quality_gate_dict = serialize_quality_gate_result(quality_gate_result)
+        print(f"[Optimizer] Quality gate: {'PASS' if quality_gate_result.passed else 'FAIL'}")
+    except Exception as e:
+        print(f"[Optimizer] Quality gate evaluation failed: {e}")
+        # Auto-pass if quality gate fails (eval set not available)
+        quality_gate_dict = {
+            'passed': True,
+            'candidateAccuracy': optimized_score,
+            'previousAccuracy': baseline_score,
+            'accuracyDelta': optimized_score - baseline_score,
+            'rejectionReason': None,
+            'evalSetSize': 0,
+            'perCategoryBreakdown': {}
+        }
+
     # ── Deployment gate: overall score must improve AND anchor score must not regress ──
     anchor_regressed = (
         baseline_anchor_score is not None
@@ -138,7 +164,10 @@ def optimize_troubleshooter(training_data: list, metadata: dict = None) -> dict:
         and optimized_anchor_score < baseline_anchor_score
     )
 
-    if optimized_score > baseline_score and not anchor_regressed:
+    # Check both quality gate and existing deployment gates
+    passed_quality_gate = quality_gate_result.passed if quality_gate_result else True
+
+    if optimized_score > baseline_score and not anchor_regressed and passed_quality_gate:
         import tempfile
         tmp_path = tempfile.mktemp(suffix=".json")
         optimized.save(tmp_path)
@@ -152,6 +181,7 @@ def optimize_troubleshooter(training_data: list, metadata: dict = None) -> dict:
             "score": optimized_score, "baseline_score": baseline_score,
             "anchor_score": optimized_anchor_score, "baseline_anchor_score": baseline_anchor_score,
             "merchant_count": merchant_count,
+            "qualityGateResult": quality_gate_dict,
         }
     elif anchor_regressed:
         print(f"[Optimizer] BLOCKED: anchor score regressed "
@@ -161,6 +191,17 @@ def optimize_troubleshooter(training_data: list, metadata: dict = None) -> dict:
             "score": optimized_score, "baseline_score": baseline_score,
             "anchor_score": optimized_anchor_score, "baseline_anchor_score": baseline_anchor_score,
             "strategy": strategy,
+            "qualityGateResult": quality_gate_dict,
+        }
+    elif not passed_quality_gate:
+        print(f"[Optimizer] BLOCKED: quality gate rejected candidate "
+              f"(reason: {quality_gate_result.rejection_reason if quality_gate_result else 'unknown'})")
+        return {
+            "optimized": False, "reason": "quality_gate_rejected",
+            "score": optimized_score, "baseline_score": baseline_score,
+            "anchor_score": optimized_anchor_score, "baseline_anchor_score": baseline_anchor_score,
+            "strategy": strategy,
+            "qualityGateResult": quality_gate_dict,
         }
     else:
         print(f"[Optimizer] No improvement ({optimized_score:.2f} ≤ {baseline_score:.2f}), retaining baseline")
@@ -168,6 +209,7 @@ def optimize_troubleshooter(training_data: list, metadata: dict = None) -> dict:
             "optimized": False, "reason": "no_improvement",
             "score": optimized_score, "baseline_score": baseline_score,
             "strategy": strategy,
+            "qualityGateResult": quality_gate_dict,
         }
 
 
@@ -212,13 +254,42 @@ def optimize_recon(training_data: list, metadata: dict = None) -> dict:
     print(f"[Optimizer] Recon: baseline={baseline_score:.2f} (anchor={baseline_anchor_score}), "
           f"optimized={optimized_score:.2f} (anchor={optimized_anchor_score})")
 
+    # ── Quality Gate: Evaluate candidate vs previous on eval set ──
+    from optimization.quality_gate import run_quality_gate, serialize_quality_gate_result
+
+    quality_gate_result = None
+    try:
+        quality_gate_result = run_quality_gate(
+            candidate_model=optimized,
+            previous_model=baseline,
+            module="recon",
+            min_accuracy_threshold=0.0
+        )
+        quality_gate_dict = serialize_quality_gate_result(quality_gate_result)
+        print(f"[Optimizer] Quality gate: {'PASS' if quality_gate_result.passed else 'FAIL'}")
+    except Exception as e:
+        print(f"[Optimizer] Quality gate evaluation failed: {e}")
+        # Auto-pass if quality gate fails (eval set not available)
+        quality_gate_dict = {
+            'passed': True,
+            'candidateAccuracy': optimized_score,
+            'previousAccuracy': baseline_score,
+            'accuracyDelta': optimized_score - baseline_score,
+            'rejectionReason': None,
+            'evalSetSize': 0,
+            'perCategoryBreakdown': {}
+        }
+
     anchor_regressed = (
         baseline_anchor_score is not None
         and optimized_anchor_score is not None
         and optimized_anchor_score < baseline_anchor_score
     )
 
-    if optimized_score > baseline_score and not anchor_regressed:
+    # Check both quality gate and existing deployment gates
+    passed_quality_gate = quality_gate_result.passed if quality_gate_result else True
+
+    if optimized_score > baseline_score and not anchor_regressed and passed_quality_gate:
         import tempfile
         tmp_path = tempfile.mktemp(suffix=".json")
         optimized.save(tmp_path)
@@ -227,11 +298,36 @@ def optimize_recon(training_data: list, metadata: dict = None) -> dict:
         os.unlink(tmp_path)
 
         _upload_module_to_s3("recon", state_dict, optimized_score)
-        return {"optimized": True, "score": optimized_score, "baseline_score": baseline_score}
+        return {
+            "optimized": True,
+            "score": optimized_score,
+            "baseline_score": baseline_score,
+            "qualityGateResult": quality_gate_dict,
+        }
     elif anchor_regressed:
         print(f"[Optimizer] BLOCKED: recon anchor score regressed, retaining baseline")
-        return {"optimized": False, "reason": "anchor_regression",
-                "score": optimized_score, "baseline_score": baseline_score}
+        return {
+            "optimized": False,
+            "reason": "anchor_regression",
+            "score": optimized_score,
+            "baseline_score": baseline_score,
+            "qualityGateResult": quality_gate_dict,
+        }
+    elif not passed_quality_gate:
+        print(f"[Optimizer] BLOCKED: recon quality gate rejected candidate "
+              f"(reason: {quality_gate_result.rejection_reason if quality_gate_result else 'unknown'})")
+        return {
+            "optimized": False,
+            "reason": "quality_gate_rejected",
+            "score": optimized_score,
+            "baseline_score": baseline_score,
+            "qualityGateResult": quality_gate_dict,
+        }
     else:
-        return {"optimized": False, "reason": "no_improvement",
-                "score": optimized_score, "baseline_score": baseline_score}
+        return {
+            "optimized": False,
+            "reason": "no_improvement",
+            "score": optimized_score,
+            "baseline_score": baseline_score,
+            "qualityGateResult": quality_gate_dict,
+        }

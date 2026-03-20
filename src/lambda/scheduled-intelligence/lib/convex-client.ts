@@ -3,16 +3,17 @@
  *
  * Docs: https://docs.convex.dev/http-api
  *
- * Authentication: Deployment key from SSM Parameter Store
+ * Authentication: Deployment key from SSM Parameter Store (SecureString)
  * Endpoints:
  * - POST /api/query - Read data
  * - POST /api/mutation - Write data
+ * - POST /api/action - Run actions
  */
 
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 
-const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL || 'https://kindhearted-lynx-129.convex.cloud';
-const SSM_PARAM_NAME = process.env.CONVEX_DEPLOYMENT_KEY_SSM_PARAM || '/finanseal/convex-deployment-key';
+const CONVEX_URL = process.env.CONVEX_DEPLOYMENT_URL || 'https://kindhearted-lynx-129.convex.cloud';
+const SSM_PARAM_NAME = process.env.CONVEX_DEPLOYMENT_KEY_PARAM || '/finanseal/convex-deployment-key';
 
 let cachedDeploymentKey: string | null = null;
 

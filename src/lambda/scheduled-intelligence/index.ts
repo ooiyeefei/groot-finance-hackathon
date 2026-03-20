@@ -60,6 +60,7 @@ export async function handler(event: EventBridgeEvent): Promise<JobResult> {
       case 'chat-agent-optimization':
         result = await runChatAgentOptimization();
         break;
+
       case 'weekly-email-digest':
         result = await runWeeklyEmailDigest();
         break;

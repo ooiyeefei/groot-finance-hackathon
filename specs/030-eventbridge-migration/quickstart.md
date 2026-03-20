@@ -75,6 +75,79 @@ cat response.json
 # Expected: {"module":"proactive-analysis","status":"success","durationMs":2450,...}
 ```
 
+#### Test Each Job Module
+
+Test all 13 migrated jobs individually to verify they work correctly:
+
+```bash
+# Daily jobs (4am UTC)
+aws lambda invoke --function-name finanseal-scheduled-intelligence \
+  --payload '{"detail":{"module":"proactive-analysis"}}' \
+  --profile groot-finanseal --region us-west-2 response.json && cat response.json
+
+aws lambda invoke --function-name finanseal-scheduled-intelligence \
+  --payload '{"detail":{"module":"ai-discovery"}}' \
+  --profile groot-finanseal --region us-west-2 response.json && cat response.json
+
+aws lambda invoke --function-name finanseal-scheduled-intelligence \
+  --payload '{"detail":{"module":"notification-digest"}}' \
+  --profile groot-finanseal --region us-west-2 response.json && cat response.json
+
+aws lambda invoke --function-name finanseal-scheduled-intelligence \
+  --payload '{"detail":{"module":"einvoice-monitoring"}}' \
+  --profile groot-finanseal --region us-west-2 response.json && cat response.json
+
+aws lambda invoke --function-name finanseal-scheduled-intelligence \
+  --payload '{"detail":{"module":"ai-daily-digest"}}' \
+  --profile groot-finanseal --region us-west-2 response.json && cat response.json
+
+# Weekly DSPy jobs (Sunday 2am UTC)
+aws lambda invoke --function-name finanseal-scheduled-intelligence \
+  --payload '{"detail":{"module":"dspy-fee"}}' \
+  --profile groot-finanseal --region us-west-2 response.json && cat response.json
+
+aws lambda invoke --function-name finanseal-scheduled-intelligence \
+  --payload '{"detail":{"module":"dspy-bank-recon"}}' \
+  --profile groot-finanseal --region us-west-2 response.json && cat response.json
+
+aws lambda invoke --function-name finanseal-scheduled-intelligence \
+  --payload '{"detail":{"module":"dspy-po-match"}}' \
+  --profile groot-finanseal --region us-west-2 response.json && cat response.json
+
+aws lambda invoke --function-name finanseal-scheduled-intelligence \
+  --payload '{"detail":{"module":"dspy-ar-match"}}' \
+  --profile groot-finanseal --region us-west-2 response.json && cat response.json
+
+aws lambda invoke --function-name finanseal-scheduled-intelligence \
+  --payload '{"detail":{"module":"chat-agent-optimization"}}' \
+  --profile groot-finanseal --region us-west-2 response.json && cat response.json
+
+# Weekly digest jobs (Sunday 2am UTC)
+aws lambda invoke --function-name finanseal-scheduled-intelligence \
+  --payload '{"detail":{"module":"einvoice-dspy-digest"}}' \
+  --profile groot-finanseal --region us-west-2 response.json && cat response.json
+
+aws lambda invoke --function-name finanseal-scheduled-intelligence \
+  --payload '{"detail":{"module":"weekly-email-digest"}}' \
+  --profile groot-finanseal --region us-west-2 response.json && cat response.json
+
+# Monthly reports (1st of month, 3am UTC)
+aws lambda invoke --function-name finanseal-scheduled-intelligence \
+  --payload '{"detail":{"module":"scheduled-reports"}}' \
+  --profile groot-finanseal --region us-west-2 response.json && cat response.json
+```
+
+Expected response format:
+```json
+{
+  "module": "proactive-analysis",
+  "status": "success",
+  "durationMs": 2450,
+  "documentsRead": 127,
+  "documentsWritten": 5
+}
+```
+
 ### Monitor Execution
 
 #### CloudWatch Logs

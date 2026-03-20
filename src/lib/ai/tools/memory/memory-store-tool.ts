@@ -1,13 +1,35 @@
 /**
- * Memory Store Tool (T022)
+ * Memory Store Tool (T022) - WITH CONTRADICTION DETECTION
+ *
  * Allows the AI agent to explicitly persist user facts and preferences
  * discovered during conversation for future context enrichment.
+ *
+ * Architecture (029-dspy-mem0-activation):
+ * Frontend → MemoryStoreTool → Generate Embeddings → Convex storeMemory mutation
+ *                                                    ↓
+ *                                         Contradiction Detection (T025)
+ *                                         LRU Eviction (T026)
+ *                                                    ↓
+ *                                         Return conflict or success
  *
  * Security: Multi-tenant isolation via businessId/userId
  */
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from '../base-tool'
-import { mem0Service, ConversationMessage } from '../../agent/memory/mem0-service'
+import { mem0Service } from '../../agent/memory/mem0-service'
+import { ConvexHttpClient } from 'convex/browser'
+
+// Lazy-initialize Convex client to avoid build-time errors
+let convexClient: ConvexHttpClient | null = null
+function getConvexClient(): ConvexHttpClient {
+  if (!convexClient) {
+    if (!process.env.NEXT_PUBLIC_CONVEX_URL) {
+      throw new Error('NEXT_PUBLIC_CONVEX_URL environment variable is not set')
+    }
+    convexClient = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL)
+  }
+  return convexClient
+}
 
 interface MemoryStoreParameters {
   /** The fact or preference to store */
@@ -16,6 +38,22 @@ interface MemoryStoreParameters {
   category: 'preference' | 'fact' | 'context' | 'instruction'
   /** Optional metadata tags for retrieval */
   tags?: string[]
+}
+
+/**
+ * Conflict response from Convex storeMemory mutation (T025)
+ */
+interface ConflictResponse {
+  topic: string
+  existingMemory: {
+    id: string
+    content: string
+    createdAt: number
+  }
+  options: Array<{
+    action: 'replace' | 'keep_both' | 'cancel'
+    label: string
+  }>
 }
 
 export class MemoryStoreTool extends BaseTool {
@@ -132,50 +170,70 @@ export class MemoryStoreTool extends BaseTool {
         }
       }
 
-      // Format as conversation message for Mem0
-      // Mem0 will extract and deduplicate facts automatically
-      const messages: ConversationMessage[] = [
-        {
-          role: 'user',
-          content: `Remember this ${category}: ${content}`
-        },
-        {
-          role: 'assistant',
-          content: `I'll remember that ${category} about you.`
-        }
-      ]
+      // Step 1: Generate embeddings for contradiction detection
+      console.log('[MemoryStoreTool] Generating embeddings...')
+      const embeddings = await mem0Service.generateEmbedding(content)
 
-      // Store with metadata for categorization
-      const result = await mem0Service.addConversationMemories(
-        messages,
-        userContext.userId,
-        userContext.businessId,
-        {
-          category,
-          tags,
-          source: 'explicit_store',
-          conversationId: userContext.conversationId
-        }
-      )
-
-      if (!result) {
+      if (!embeddings) {
+        console.error('[MemoryStoreTool] Failed to generate embeddings')
         return {
           success: false,
-          error: 'Failed to store memory. Please try again.'
+          error: 'Failed to generate embeddings for memory storage. Please try again.'
         }
       }
 
-      const storedCount = result.results?.length || 0
-      console.log(`[MemoryStoreTool] Stored ${storedCount} memory entries for user ${userContext.userId}`)
+      // Step 2: Call Convex storeMemory mutation with contradiction detection
+      console.log('[MemoryStoreTool] Calling Convex storeMemory mutation...')
+
+      const convex = getConvexClient()
+      const result = await convex.mutation(
+        'functions/memoryTools:storeMemory' as any,
+        {
+          content,
+          businessId: userContext.businessId,
+          userId: userContext.userId,
+          memoryType: category,
+          source: 'explicit_store',
+          sourceConversationId: userContext.conversationId,
+          embeddings: embeddings as number[],
+          topicTags: tags,
+        }
+      )
+
+      // Step 3: Check for conflicts (T025 - Contradiction Detection)
+      if (result.conflict) {
+        const conflict = result.conflict as ConflictResponse
+        console.log(`[MemoryStoreTool] Contradiction detected: ${conflict.topic}`)
+
+        // Return conflict data to frontend for user resolution
+        return {
+          success: false,
+          error: 'CONTRADICTION_DETECTED', // Special error code for frontend to recognize
+          metadata: {
+            conflict: {
+              topic: conflict.topic,
+              existingMemory: conflict.existingMemory,
+              newMemory: content,
+              options: conflict.options,
+            },
+            category,
+            tags,
+          }
+        }
+      }
+
+      // Step 4: Success - memory stored without conflict
+      console.log(`[MemoryStoreTool] Memory stored successfully: ${result.memoryId}`)
 
       return {
         success: true,
         data: `I've remembered this ${category}: "${content}"${tags.length > 0 ? ` (tagged: ${tags.join(', ')})` : ''}. I'll use this information to provide better assistance in future conversations.`,
         metadata: {
-          memoriesStored: storedCount,
+          memoryId: result.memoryId,
           category,
           tags,
-          userId: userContext.userId
+          userId: userContext.userId,
+          hasContradiction: false,
         }
       }
 

@@ -1,17 +1,26 @@
 /**
  * Convex Cron Jobs
  *
- * Scheduled background tasks for proactive analysis and maintenance.
+ * IMPORTANT: If a job reads >10 documents or scans tables for all businesses,
+ * use EventBridge → Lambda instead (see infra/lib/scheduled-intelligence-stack.ts).
  *
- * T034: Proactive analysis cron - runs every 4 hours
- * T035: Deadline tracking cron - runs daily at 6 AM UTC
+ * Convex crons are ONLY for lightweight jobs (<10 doc reads per execution):
+ * - deadline-tracking
+ * - cleanup-* jobs
+ * - mark-overdue-invoices
+ * - generate-recurring-invoices
+ * - expire-credit-packs
+ * - attendance/timesheet jobs
+ * - PDPA retention jobs
+ * - expire-manual-subscriptions
  *
- * Additional maintenance jobs:
- * - Expired insights cleanup
- * - MCP proposal cleanup
+ * Heavy analysis jobs have been migrated to EventBridge (2026-03-20, issue #353):
+ * - proactive-analysis, ai-discovery, notification-digest, einvoice-monitoring
+ * - dspy-fee, dspy-bank-recon, dspy-po-match, dspy-ar-match
+ * - chat-agent-optimization, ai-daily-digest, einvoice-dspy-digest
+ * - weekly-email-digest, scheduled-reports
  *
- * Note: Notification crons are disabled until push/email integration is complete.
- * See convex/crons.ts.disabled for full list.
+ * See specs/030-eventbridge-migration/ for architecture and rationale.
  */
 
 import { cronJobs } from "convex/server";
@@ -19,24 +28,9 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
-/**
- * T034: Proactive Analysis Job
- *
- * Runs every 4 hours to analyze all businesses for:
- * - Anomalies (statistical outliers)
- * - Compliance gaps (missing receipts, tax thresholds)
- * - Cash flow warnings (projected negative balance)
- * - Duplicate transactions
- * - Vendor intelligence (concentration, spending changes, risk)
- * - Critical alerts (deadlines, low runway)
- *
- * Creates actionCenterInsights for any issues detected.
- */
-crons.daily(
-  "proactive-analysis",
-  { hourUTC: 6, minuteUTC: 30 },
-  internal.functions.actionCenterJobs.runProactiveAnalysis
-);
+// ============================================
+// LIGHTWEIGHT CRONS (kept in Convex, <10 docs per run)
+// ============================================
 
 /**
  * T035: Deadline Tracking Job
@@ -67,24 +61,9 @@ crons.daily(
 );
 
 /**
- * Layer 2b: AI Novel Discovery
- *
- * Runs daily at 7:00 AM UTC (3 PM MYT) to discover patterns
- * that hard-coded algorithms miss. Uses LLM to analyze each
- * business's financial data holistically and surface novel insights.
- *
- * Cost: ~$0.003/business/day (Qwen3-8B on Modal serverless)
- */
-crons.daily(
-  "ai-discovery",
-  { hourUTC: 7, minuteUTC: 0 },
-  internal.functions.actionCenterJobs.runAIDiscovery
-);
-
-/**
  * MCP Proposals Cleanup
  *
- * Runs every 5 minutes to clean up expired MCP proposals.
+ * Runs every hour to clean up expired MCP proposals.
  * Proposals expire after 5 minutes if not confirmed.
  */
 crons.interval(
@@ -143,18 +122,6 @@ crons.daily(
   "expire-credit-packs",
   { hourUTC: 3, minuteUTC: 0 },
   internal.functions.creditPacks.expireDaily
-);
-
-/**
- * Notification Digest (018-app-email-notif)
- *
- * Runs daily at 8:00 AM UTC to send digest emails
- * aggregating unread notifications per user.
- */
-crons.daily(
-  "notification-digest",
-  { hourUTC: 8, minuteUTC: 0 },
-  internal.functions.notificationJobs.runDigest
 );
 
 /**
@@ -223,41 +190,6 @@ crons.daily(
 // Handled by AWS EventBridge → Lambda (every 5 min). No Convex cron needed.
 // Lambda queries Convex for businesses with pending requests, polls LHDN directly.
 
-/**
- * E-Invoice DSPy Weekly Intelligence Digest (001-dspy-cua-integration)
- *
- * Every Monday 9 AM MYT (1 AM UTC):
- * - Queries getEinvoiceDspyDashboard for last 7 days
- * - Emails dev+einvoiceMY@hellogroot.com with:
- *   Success rates, tier usage, failure categories,
- *   gatekeeper accuracy, merchants needing attention
- *
- * This is internal dev tooling — NOT customer-facing.
- */
-// TODO: Re-enable when einvoiceDspyDigest module is created
-// crons.weekly(
-//   "einvoice-dspy-weekly-digest",
-//   { dayOfWeek: "monday", hourUTC: 1, minuteUTC: 0 },
-//   internal.functions.einvoiceDspyDigest.sendWeeklyDigest
-// );
-
-/**
- * E-Invoice Monitoring: Self-Improving Error Detection
- *
- * Runs every 2 hours to:
- * 1. Clean up stale in_progress records (Lambda timeout >15 min)
- * 2. Categorize new failures into error patterns
- * 3. Email dev@hellogroot.com about unresolved new patterns
- *
- * This enables the system to self-improve by catching new error types
- * as merchants update their forms or new merchants are added.
- */
-crons.daily(
-  "einvoice-monitoring",
-  { hourUTC: 8, minuteUTC: 30 },
-  internal.functions.einvoiceMonitoring.runMonitoringCycle
-);
-
 // ============================================
 // PDPA Data Retention Cleanup (001-pdpa-data-retention-cleanup)
 // ============================================
@@ -316,70 +248,22 @@ crons.daily(
   internal.functions.retentionJobs.hardDeleteExpiredUsers
 );
 
-/**
- * DSPy Fee Classifier — Weekly Optimization
- *
- * Runs every Sunday at 2:00 AM UTC to optimize fee classification models
- * using MIPROv2 on accumulated user corrections (≥100 per platform).
- */
-crons.weekly(
-  "dspy-fee-optimization",
-  { dayOfWeek: "sunday", hourUTC: 2, minuteUTC: 0 },
-  internal.functions.dspyOptimization.weeklyOptimization,
-  { force: false }
-);
-
-/**
- * DSPy Bank Recon — Weekly Optimization
- *
- * Runs every Sunday at 3:00 AM UTC (staggered 1h after fee optimization)
- * to optimize bank transaction classification models using MIPROv2
- * on accumulated user corrections (≥20 per business, ≥10 unique descriptions).
- */
-crons.weekly(
-  "bank-recon-optimization",
-  { dayOfWeek: "sunday", hourUTC: 3, minuteUTC: 0 },
-  internal.functions.bankReconOptimization.weeklyOptimization,
-  { force: false }
-);
-
-/**
- * DSPy PO Match — Weekly Optimization
- *
- * Runs every Sunday at 4:00 AM UTC (staggered 1h after bank recon optimization)
- * to optimize PO-Invoice line matching models using MIPROv2
- * on accumulated user corrections (≥20 per business, ≥10 unique descriptions).
- */
-crons.weekly(
-  "po-match-optimization",
-  { dayOfWeek: "sunday", hourUTC: 4, minuteUTC: 0 },
-  internal.functions.poMatchOptimization.weeklyOptimization,
-  { force: false }
-);
-
-/**
- * AR Matching DSPy Optimization
- * Runs weekly on Sunday at 5 AM UTC (after PO match optimization).
- */
-// NOTE: Cast to fix build — new module, types regenerate with `npx convex dev`
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-crons.weekly(
-  "ar-match-dspy-optimization",
-  { dayOfWeek: "sunday", hourUTC: 5, minuteUTC: 0 },
-  (internal.functions as any).orderMatchingOptimization.weeklyOptimization
-);
-
-/**
- * Daily AI Intelligence Digest
- *
- * DISABLED: Was running hourly and scanning multiple tables for every business.
- * At ~1.96 GB / 2 GB bandwidth with no real users, this is too expensive.
- * Re-enable when we have paying customers on a Pro Convex plan.
- */
-// crons.hourly(
-//   "ai-daily-digest",
-//   { minuteUTC: 0 },
-//   (internal.functions as any).aiDigest.dailyDigest
-// );
+// ============================================
+// MIGRATED TO EVENTBRIDGE (DO NOT RE-ADD HERE)
+// See infra/lib/scheduled-intelligence-stack.ts
+// ============================================
+// proactive-analysis      → EventBridge daily 4am UTC
+// ai-discovery            → EventBridge daily 4am UTC
+// notification-digest     → EventBridge daily 4am UTC
+// einvoice-monitoring     → EventBridge daily 4am UTC
+// ai-daily-digest         → EventBridge daily 4am UTC
+// dspy-fee                → EventBridge weekly Sun 2am UTC
+// dspy-bank-recon         → EventBridge weekly Sun 2am UTC
+// dspy-po-match           → EventBridge weekly Sun 2am UTC
+// dspy-ar-match           → EventBridge weekly Sun 2am UTC
+// chat-agent-optimization → EventBridge weekly Sun 2am UTC
+// einvoice-dspy-digest    → EventBridge weekly Sun 2am UTC
+// weekly-email-digest     → EventBridge weekly Sun 2am UTC
+// scheduled-reports       → EventBridge monthly 1st 3am UTC
 
 export default crons;

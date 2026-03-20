@@ -5,6 +5,7 @@ import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as sns from 'aws-cdk-lib/aws-sns';
+import * as snsSubscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as actions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import { Construct } from 'constructs';
@@ -13,11 +14,18 @@ interface ScheduledJob {
   module: string;
   schedule: string; // EventBridge cron expression
   description: string;
+  isWeeklyDspy?: boolean; // Flag for weekly DSPy jobs (different alarm threshold)
+}
+
+export interface ScheduledIntelligenceStackProps extends cdk.StackProps {
+  alarmEmail?: string; // Email for alarm notifications (defaults to dev@hellogroot.com)
 }
 
 export class ScheduledIntelligenceStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props?: ScheduledIntelligenceStackProps) {
     super(scope, id, props);
+
+    const alarmEmail = props?.alarmEmail || 'dev@hellogroot.com';
 
     // DLQ for failed EventBridge events
     const dlq = new sqs.Queue(this, 'ScheduledIntelligenceDLQ', {
@@ -30,6 +38,11 @@ export class ScheduledIntelligenceStack extends cdk.Stack {
       topicName: 'finanseal-scheduled-intelligence-alarms',
       displayName: 'Groot Finance Scheduled Intelligence Alarms',
     });
+
+    // Email subscription for alarm notifications
+    alarmTopic.addSubscription(
+      new snsSubscriptions.EmailSubscription(alarmEmail)
+    );
 
     // Lambda function
     const scheduledIntelligenceLambda = new lambda.Function(
@@ -58,6 +71,7 @@ export class ScheduledIntelligenceStack extends cdk.Stack {
         }),
         memorySize: 512,
         timeout: cdk.Duration.seconds(300), // 5 minutes (analysis jobs can be slow)
+        reservedConcurrentExecutions: 1, // Prevent overlapping executions
         environment: {
           NODE_ENV: 'production',
           // Convex deployment URL (kindhearted-lynx-129)
@@ -135,26 +149,31 @@ export class ScheduledIntelligenceStack extends cdk.Stack {
         module: 'dspy-fee',
         schedule: 'cron(0 2 ? * SUN *)',
         description: 'Weekly DSPy fee classification optimization',
+        isWeeklyDspy: true,
       },
       {
         module: 'dspy-bank-recon',
         schedule: 'cron(0 2 ? * SUN *)',
         description: 'Weekly DSPy bank reconciliation optimization',
+        isWeeklyDspy: true,
       },
       {
         module: 'dspy-po-match',
         schedule: 'cron(0 2 ? * SUN *)',
         description: 'Weekly DSPy PO-Invoice matching optimization',
+        isWeeklyDspy: true,
       },
       {
         module: 'dspy-ar-match',
         schedule: 'cron(0 2 ? * SUN *)',
         description: 'Weekly DSPy AR order matching optimization',
+        isWeeklyDspy: true,
       },
       {
         module: 'chat-agent-optimization',
         schedule: 'cron(0 2 ? * SUN *)',
         description: 'Weekly chat agent RAG optimization',
+        isWeeklyDspy: true,
       },
       {
         module: 'einvoice-dspy-digest',
@@ -220,7 +239,30 @@ export class ScheduledIntelligenceStack extends cdk.Stack {
 
     errorAlarm.addAlarmAction(new actions.SnsAction(alarmTopic));
 
-    // CloudWatch alarm for DLQ depth
+    // CloudWatch alarm for weekly DSPy jobs (2+ consecutive failures)
+    // Weekly DSPy jobs: dspy-fee, dspy-bank-recon, dspy-po-match, dspy-ar-match, chat-agent-optimization
+    const weeklyDspyJobs = scheduledJobs.filter((job) => job.isWeeklyDspy);
+    const weeklyDspyErrorMetric = scheduledIntelligenceLambda.metricErrors({
+      period: cdk.Duration.days(7), // 1 week window
+      statistic: 'Sum',
+    });
+
+    const weeklyDspyAlarm = new cloudwatch.Alarm(
+      this,
+      'WeeklyDspyJobsErrorAlarm',
+      {
+        metric: weeklyDspyErrorMetric,
+        threshold: 2, // Alert if 2+ errors in 1 week (indicates consecutive failures)
+        evaluationPeriods: 1,
+        alarmDescription:
+          'Alert when weekly DSPy jobs fail 2+ times in 1 week (consecutive failures)',
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      }
+    );
+
+    weeklyDspyAlarm.addAlarmAction(new actions.SnsAction(alarmTopic));
+
+    // CloudWatch alarm for DLQ depth (metric alarm on DLQ message count)
     const dlqDepthMetric = dlq.metricApproximateNumberOfMessagesVisible({
       period: cdk.Duration.minutes(5),
       statistic: 'Maximum',

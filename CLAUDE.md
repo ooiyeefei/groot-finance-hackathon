@@ -195,13 +195,15 @@ Fix errors and repeat until successful.
 - **Before starting any dev session**: Run `ps aux | grep convex | grep -v grep` and kill ALL convex processes. Then run `npx convex deploy --yes` from `main` to ensure production has the latest code.
 - **After finishing a worktree branch**: Remove it with `git worktree remove <name>` to prevent accidental future `convex dev` runs.
 
-**Rule 6: EventBridge-first for scheduled jobs (CRITICAL).**
+**Rule 6: EventBridge-first for scheduled jobs (CRITICAL).** ✅ IMPLEMENTED
 - **For any scheduled job that reads >10 documents from Convex, use AWS EventBridge → Lambda → Convex HTTP API instead of Convex crons.**
-- Convex crons run INSIDE Convex, every table read counts toward bandwidth. EventBridge triggers Lambda OUTSIDE Convex, Lambda does one small HTTP query, processes locally, writes back one result.
-- **Pattern**: EventBridge schedule → Lambda → `fetch('https://kindhearted-lynx-129.convex.cloud/api/query', { functionPath, args })` → process in Lambda → `fetch('/api/mutation', result)`
-- **Already proven**: LHDN polling uses this pattern (line 223 of crons.ts). DSPy optimizations (fee, bank recon, PO match, AR match, chat agent) should ALL use this pattern.
-- **Convex crons are ONLY for**: lightweight cleanup (delete expired records, mark overdue invoices) that touch <10 documents per run.
-- **See issue #353** for full migration plan.
+- **Rationale**: Convex crons run inside Convex runtime, every table read counts toward 2GB/month bandwidth limit. EventBridge triggers Lambda outside Convex, Lambda makes one HTTP query to Convex, processes data locally (zero Convex bandwidth), writes back minimal result.
+- **Pattern**: EventBridge schedule → Lambda (Node.js dispatcher) → Convex HTTP API → business logic in Convex action
+- **Stack**: `infra/lib/scheduled-intelligence-stack.ts` (13 EventBridge rules, 1 Lambda dispatcher, SQS DLQ, CloudWatch alarms)
+- **Migration complete**: 2026-03-20 (8 heavy crons migrated, 94% bandwidth reduction from ~446MB to ~25MB/month)
+- **Migrated jobs**: proactive-analysis, ai-discovery, notification-digest, einvoice-monitoring, ai-daily-digest, DSPy optimizations (fee, bank-recon, PO-match, AR-match), chat-agent optimization, einvoice-dspy-digest, weekly-email-digest, scheduled-reports
+- **Convex crons now ONLY for**: lightweight cleanup (delete expired records, mark overdue invoices) that touch <10 documents per run
+- **See specs/030-eventbridge-migration/** for architecture, quickstart, and verification guide
 
 **Anti-patterns that burn bandwidth:**
 - `useQuery` with `.collect()` on large tables (reactive re-runs on every change)
@@ -270,6 +272,7 @@ All AWS infrastructure is defined in `infra/lib/`. Any new AWS resource MUST be 
 | Stack | File | Resources |
 |-------|------|-----------|
 | **DocumentProcessing** | `document-processing-stack.ts` | `finanseal-document-processor` (Python Docker, 1024MB, x86_64), `finanseal-einvoice-form-fill` (Python Docker, 2048MB, x86_64), `finanseal-lhdn-polling` (Node.js 20, 256MB, ARM_64), `finanseal-dspy-optimizer` (Python Docker, 1024MB, x86_64, EventBridge every 3 days), `finanseal-einvoice-email-processor` (Node.js 20) |
+| **ScheduledIntelligence** | `scheduled-intelligence-stack.ts` | `finanseal-scheduled-intelligence` (Node.js 20, 512MB, ARM_64, 5 min timeout), 13 EventBridge rules (proactive-analysis, ai-discovery, DSPy optimizations, digests), SQS DLQ (14-day retention), CloudWatch alarms (errors, DLQ depth), SNS alarm topic |
 | **CDN** | `cdn-stack.ts` | CloudFront distribution (OAC → `finanseal-bucket`), signed URL key pair, SSM params for key-pair-id/domain |
 | **SystemEmail** | `system-email-stack.ts` | `finanseal-welcome-workflow` (Node.js 22, Durable Function), SES domain identity (`notifications.hellogroot.com`), SES config set, SNS topics, CloudWatch alarms (bounce/complaint rates) |
 | **MCPServer** | `mcp-server-stack.ts` | `finanseal-mcp-server` (Node.js 20, 512MB, ARM_64), API Gateway REST `/mcp` endpoint |
@@ -452,6 +455,75 @@ const arBalance = arLines.reduce((sum, line) =>
 4. AP queries: Query `invoices` table with `paymentStatus` and `accountingStatus` filters
 5. AR queries: Query `sales_invoices` table directly
 6. Never write to `accounting_entries` — all write mutations are deleted
+
+---
+
+## DSPy Self-Improvement System (2026-03-20 Activation)
+
+**Overview**: Corrections from thumbs-down feedback train the AI agent weekly, creating a self-improving flywheel.
+
+**Architecture**:
+- **Flywheel**: Correction → training → quality gate → promotion → inference → better accuracy → fewer corrections
+- **Readiness gate**: 20+ corrections, 10+ unique intents (lowered from 100 to enable faster iteration)
+- **Train/validation split**: 80/20, stratified by intent category to ensure balanced representation
+- **Optimization**: BootstrapFewShot (max_bootstrapped_demos=4, max_labeled_demos=8, max_rounds=3)
+- **Quality gate**: Compare candidate accuracy vs previous on held-out eval set
+- **Promotion**: candidate → promoted (active), previous → superseded
+- **Schedule**: EventBridge weekly (Sunday 2am UTC)
+
+**Key Files**:
+- `convex/functions/chatOptimizationNew.ts` - Complete pipeline (readiness → split → train → gate → promote → consume)
+- `src/lib/ai/dspy/model-version-loader.ts` - Load active model from S3 with 5min cache
+- `src/lib/ai/dspy/types.ts` - ModelVersion, OptimizedPromptArtifact types
+- `src/lambda/einvoice-form-fill-python/optimization/quality_gate.py` - Eval set evaluation
+
+**Tables**:
+- `dspy_model_versions` - Model lifecycle: candidate → promoted → superseded
+- `chat_agent_corrections` - User corrections with consumed flag
+- `dspy_optimization_logs` - Audit trail of training runs
+
+**First Run**: Auto-passes quality gate (no eval set yet). Subsequent runs require candidate > previous accuracy.
+
+---
+
+## Mem0 Persistent Memory System (2026-03-20 Activation)
+
+**Overview**: Long-term memory across sessions with semantic search, contradiction detection, and LRU eviction.
+
+**Architecture**:
+- **Storage**: Qdrant Cloud (vector embeddings) + Convex (metadata: accessCount, lastAccessedAt, topicTags)
+- **Auto-recall**: Before generation, semantic search for top-5 relevant memories (0.7 cosine similarity threshold)
+- **Auto-save**: Heuristic candidate detection after user messages (keywords: "always/never/prefer", amounts, dates, people)
+- **Contradiction detection**: Topic-based classification (<10ms), 6 financial domain topics (currency, team roles, business facts, approval, payment, compliance)
+- **LRU eviction**: 200-memory limit per user per business, oldest unused memory deleted
+- **Confirmation UX**: Dark gray toast with Yes/No buttons (conflicts), 5s auto-dismiss toast (auto-save candidates)
+
+**Tools** (registered in tool-factory.ts):
+- `memory_store` - Explicit storage with contradiction detection
+- `memory_search` - Semantic search (user-facing)
+- `memory_recall` - Top-K recall (agent-facing, synonym for search)
+- `memory_forget` - Soft delete (sets archivedAt)
+
+**Key Files**:
+- `src/lib/ai/agent/memory/mem0-service.ts` - Mem0 API wrapper with 0.7 threshold filter
+- `src/lib/ai/agent/auto-recall.ts` - Semantic search before generation, context injection
+- `src/lib/ai/agent/memory-candidate-detector.ts` - Heuristic detection (keywords, amounts, dates)
+- `convex/functions/memoryTools.ts` - Contradiction detection, LRU eviction
+- `src/domains/chat/components/memory-confirmation-toast.tsx` - Replace/Keep Both/Cancel UI
+- `src/domains/chat/components/memory-auto-save-toast.tsx` - Yes/No confirmation UI
+
+**Tables**:
+- `mem0_memories` - Metadata (businessId, userId, content, embeddings, topicTags, accessCount, lastAccessedAt, archivedAt)
+
+**Topic Classification**:
+- currency_preference: ["currency", "sgd", "myr", "prefer", "always"]
+- team_roles: ["handles", "responsible", "reports to", "manages", "approves"]
+- business_facts: ["our company", "we use", "our process", "fiscal year"]
+- approval_workflow: ["approval", "threshold", "requires", "must", "need"]
+- payment_terms: ["payment", "terms", "net", "days", "due"]
+- compliance_rules: ["must not", "prohibited", "required", "regulation", "compliance"]
+
+**Performance**: <100ms auto-recall (cached), <10ms contradiction detection, <50ms memory storage
 
 ---
 

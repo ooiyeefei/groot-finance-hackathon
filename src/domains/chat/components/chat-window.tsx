@@ -19,6 +19,10 @@ import { useAuth } from '@clerk/nextjs'
 import { useActiveBusiness } from '@/contexts/business-context'
 import type { CitationData } from '@/lib/ai/tools/base-tool'
 import type { ChatAction } from '../lib/sse-parser'
+import { shouldAutoRecall, autoRecallMemories } from '@/lib/ai/agent/auto-recall'
+import { detectMemoryCandidates } from '@/lib/ai/agent/memory-candidate-detector'
+import { showMultipleMemoryCandidates } from './memory-auto-save-toast'
+import { showMemoryConfirmationToast, type MemoryConflict } from './memory-confirmation-toast'
 
 interface ChatWindowProps {
   onClose: () => void
@@ -41,6 +45,8 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const { userId } = useAuth()
+  const { businessId: contextBusinessId } = useActiveBusiness()
+  const resolvedBusinessId = businessId || contextBusinessId
 
   // Smart auto-scroll: track if user has scrolled up
   const [userScrolledUp, setUserScrolledUp] = useState(false)
@@ -110,6 +116,85 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
     const lastMsg = convexMessages[convexMessages.length - 1]
     if (lastMsg.role === 'assistant' && !sessionStreamedIds.current.has(lastMsg.id)) {
       sessionStreamedIds.current.add(lastMsg.id)
+
+      // INTEGRATION POINT 3: Auto-save detection after streaming completes
+      // Check if the user's last message has memory-worthy content
+      if (convexMessages.length >= 2) {
+        const lastUserMsg = convexMessages[convexMessages.length - 2]
+        if (lastUserMsg.role === 'user' && userId && resolvedBusinessId) {
+          const candidates = detectMemoryCandidates(lastUserMsg.content, 'user')
+          if (candidates.length > 0) {
+            console.log(`[ChatWindow] Detected ${candidates.length} memory candidates`)
+            showMultipleMemoryCandidates(
+              candidates,
+              async (candidate) => {
+                // INTEGRATION POINT 1: Memory tool handler - call memory_store via API
+                try {
+                  const response = await fetch('/api/v1/memory/store', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      memory: candidate.content,
+                      businessId: resolvedBusinessId,
+                    }),
+                  })
+                  const result = await response.json()
+                  if (response.ok && result.success) {
+                    console.log('[ChatWindow] Memory stored successfully:', candidate.content)
+                  } else if (result.error === 'CONTRADICTION_DETECTED' && result.metadata?.conflict) {
+                    // Contradiction detected (T025) - show confirmation toast
+                    const conflict: MemoryConflict = {
+                      topic: result.metadata.conflict.topic,
+                      existingMemory: result.metadata.conflict.existingMemory,
+                      newMemory: { content: result.metadata.conflict.newMemory },
+                      options: result.metadata.conflict.options,
+                    }
+
+                    console.log('[ChatWindow] Memory contradiction detected:', conflict.topic)
+
+                    showMemoryConfirmationToast(conflict, async (action) => {
+                      console.log('[ChatWindow] User resolved contradiction:', action)
+
+                      if (action === 'cancel') return
+
+                      try {
+                        const resolveResponse = await fetch('/api/v1/memory/resolve', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            action,
+                            existingMemoryId: conflict.existingMemory.id,
+                            content: conflict.newMemory.content,
+                            businessId: resolvedBusinessId,
+                            category: result.metadata.category || 'preference',
+                            tags: result.metadata.tags || [],
+                            embeddings: [], // Embeddings regenerated server-side if needed
+                          }),
+                        })
+                        const resolveResult = await resolveResponse.json()
+                        if (resolveResult.success) {
+                          console.log('[ChatWindow] Contradiction resolved:', action)
+                        } else {
+                          console.error('[ChatWindow] Resolution failed:', resolveResult.error)
+                        }
+                      } catch (err) {
+                        console.error('[ChatWindow] Resolution error:', err)
+                      }
+                    })
+                  } else {
+                    console.error('[ChatWindow] Memory store failed:', result.error)
+                  }
+                } catch (error) {
+                  console.error('[ChatWindow] Memory store error:', error)
+                }
+              },
+              (candidate) => {
+                console.log('[ChatWindow] Memory declined:', candidate.content)
+              }
+            )
+          }
+        }
+      }
     }
   }
   // Track loading state for next render (must come after the check above)
@@ -194,6 +279,26 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
       const trimmed = input.trim()
       if (!trimmed) return
 
+      // INTEGRATION POINT 2: Auto-recall before generation
+      let recalledContext = ''
+      if (userId && resolvedBusinessId && shouldAutoRecall(trimmed)) {
+        try {
+          const recallResult = await autoRecallMemories(
+            trimmed,
+            userId,
+            resolvedBusinessId,
+            5, // top 5 memories
+            0.7 // 0.7 similarity threshold
+          )
+          if (recallResult.memories.length > 0) {
+            recalledContext = recallResult.injectedContext
+            console.log(`[ChatWindow] Auto-recalled ${recallResult.memories.length} memories (${recallResult.durationMs}ms)`)
+          }
+        } catch (error) {
+          console.error('[ChatWindow] Auto-recall failed:', error)
+        }
+      }
+
       // If there's insight context from Action Center, prepend it as hidden context
       let messageToSend = trimmed
       if (activeInsightContext) {
@@ -205,6 +310,11 @@ ${ctx.recommendedAction ? `Suggested action: ${ctx.recommendedAction}` : ''}
 
 User question: ${trimmed}`
         setActiveInsightContext(undefined)
+      }
+
+      // Inject recalled context if available
+      if (recalledContext) {
+        messageToSend = `${recalledContext}\n\n${messageToSend}`
       }
 
       setInput('')
@@ -219,7 +329,7 @@ User question: ${trimmed}`
 
       await sendMessage(messageToSend)
     },
-    [input, isLoading, sendMessage, activeInsightContext]
+    [input, isLoading, sendMessage, activeInsightContext, userId, resolvedBusinessId]
   )
 
   // Handle textarea Enter key (send on Enter, newline on Shift+Enter)

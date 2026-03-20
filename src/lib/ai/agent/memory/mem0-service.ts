@@ -546,6 +546,56 @@ class Mem0Service {
   getMode(): 'cloud' | 'direct' | 'unavailable' {
     return this.mode
   }
+
+  /**
+   * Generate embedding for a single text string
+   * Used by memory-store-tool for Convex contradiction detection
+   */
+  async generateEmbedding(text: string): Promise<number[] | null> {
+    const isReady = await this.initialize()
+    if (!isReady) {
+      console.warn('[Mem0Service] Cannot generate embedding - service not available')
+      return null
+    }
+
+    try {
+      if (this.mode === 'direct' && this.client instanceof DirectQdrantClient) {
+        // Use DirectQdrantClient's private method via type assertion
+        return await (this.client as any).getEmbedding(text)
+      } else if (this.mode === 'cloud') {
+        // For cloud mode, we need to make a direct API call
+        // since Mem0 Cloud doesn't expose a standalone embedding method
+        const config = getMem0Config()
+        if (config.mode === 'cloud') {
+          // Fallback: use OpenAI embedding API directly
+          const response = await fetch('https://api.openai.com/v1/embeddings', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              model: 'text-embedding-3-small',
+              input: text
+            })
+          })
+
+          if (!response.ok) {
+            throw new Error(`Embedding request failed: ${response.statusText}`)
+          }
+
+          const data = await response.json()
+          return data.data[0].embedding
+        }
+      }
+
+      console.error('[Mem0Service] Cannot generate embedding - unsupported mode')
+      return null
+    } catch (error) {
+      console.error('[Mem0Service] Error generating embedding:', error)
+      return null
+    }
+  }
 }
 
 // Singleton instance

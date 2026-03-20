@@ -306,6 +306,57 @@ export const forgetMemory = mutation({
 });
 
 /**
+ * Resolve a memory contradiction (T025)
+ * Called when user clicks Replace, Keep Both, or Cancel in the confirmation toast.
+ */
+export const resolveMemoryConflict = mutation({
+  args: {
+    action: v.union(v.literal("replace"), v.literal("keep_both"), v.literal("cancel")),
+    existingMemoryId: v.id("mem0_memories"),
+    // New memory fields (needed for replace/keep_both to store the new memory)
+    content: v.string(),
+    businessId: v.id("businesses"),
+    userId: v.string(),
+    memoryType: v.string(),
+    source: v.string(),
+    sourceConversationId: v.optional(v.string()),
+    embeddings: v.array(v.float64()),
+    topicTags: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    if (args.action === "cancel") {
+      console.log(`[MemoryTools] User cancelled contradiction resolution`);
+      return { success: true, action: "cancel" };
+    }
+
+    if (args.action === "replace") {
+      // Archive the existing memory
+      await ctx.db.patch(args.existingMemoryId, { archivedAt: Date.now() });
+      console.log(`[MemoryTools] Archived existing memory ${args.existingMemoryId}`);
+    }
+
+    // Store the new memory (for both replace and keep_both)
+    const memoryId = await ctx.db.insert("mem0_memories", {
+      businessId: args.businessId,
+      userId: args.userId,
+      content: args.content,
+      memoryType: args.memoryType,
+      source: args.source,
+      sourceConversationId: args.sourceConversationId,
+      embeddings: args.embeddings,
+      topicTags: args.topicTags,
+      accessCount: 0,
+    });
+
+    console.log(
+      `[MemoryTools] Resolved contradiction (${args.action}): stored ${memoryId}`
+    );
+
+    return { success: true, action: args.action, memoryId };
+  },
+});
+
+/**
  * Update memory access tracking (called after auto-recall)
  */
 export const updateMemoryAccess = mutation({

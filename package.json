@@ -16,6 +16,10 @@
     "build": "next build",
     "build:analyze": "ANALYZE=true npm run build",
     "start": "next start",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:ui": "vitest --ui",
     "lint": "next lint",
     "lint:translations": "node scripts/translations/validate-translations.js",
     "type-check": "tsc --noEmit",
@@ -153,6 +157,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@typescript-eslint/eslint-plugin": "^8.46.1",
+    "@vitest/coverage-v8": "^4.1.0",
+    "@vitest/ui": "^4.1.0",
     "autoprefixer": "^10.4.21",
     "baseline-browser-mapping": "^2.9.11",
     "concurrently": "^9.2.1",
@@ -169,6 +175,7 @@
     "ts-prune": "^0.10.3",
     "ts-unused-exports": "^11.0.1",
     "typescript": "5.9.3",
+    "vitest": "^4.1.0",
     "webpack-bundle-analyzer": "^4.10.2"
   }
 }

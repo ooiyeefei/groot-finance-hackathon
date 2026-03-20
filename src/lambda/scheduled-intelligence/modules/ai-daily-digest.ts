@@ -1,7 +1,7 @@
 /**
  * AI Daily Digest Module
  *
- * Calls convex/functions/actionCenterJobs.ts:runAIDailyDigest
+ * Calls convex/functions/aiDigest.ts:dailyDigest
  * via Convex HTTP API.
  *
  * IMPORTANT: This was previously disabled due to bandwidth concerns.
@@ -16,21 +16,16 @@ export async function runAiDailyDigest(): Promise<Omit<JobResult, 'durationMs'>>
   console.log('[AIDailyDigest] Calling Convex action...');
 
   try {
-    const result = await convexAction<{
-      businessesProcessed: number;
-      digestsGenerated: number;
-      durationMs: number;
-    }>('functions/actionCenterJobs:runAIDailyDigest', {});
+    // Note: dailyDigest returns void (no return value)
+    await convexAction<void>('functions/aiDigest:dailyDigest', {});
 
-    console.log(
-      `[AIDailyDigest] Complete: ${result.businessesProcessed} businesses, ${result.digestsGenerated} digests`
-    );
+    console.log('[AIDailyDigest] Complete: digest job finished');
 
     return {
       module: 'ai-daily-digest',
       status: 'success',
-      documentsRead: result.businessesProcessed,
-      documentsWritten: result.digestsGenerated,
+      documentsRead: 0, // Function doesn't return counts
+      documentsWritten: 0,
     };
   } catch (error) {
     console.error('[AIDailyDigest] Error:', error);

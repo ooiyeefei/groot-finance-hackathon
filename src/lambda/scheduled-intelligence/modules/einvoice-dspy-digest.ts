@@ -1,7 +1,7 @@
 /**
  * E-Invoice DSPy Digest Module
  *
- * Calls convex/functions/einvoiceDspyJobs.ts:runWeeklyDigest
+ * Calls convex/functions/einvoiceDspyDigest.ts:sendWeeklyDigest
  * via Convex HTTP API.
  *
  * Generates weekly e-invoice processing insights and patterns for DSPy optimization.
@@ -14,21 +14,16 @@ export async function runEinvoiceDspyDigest(): Promise<Omit<JobResult, 'duration
   console.log('[EinvoiceDspyDigest] Calling Convex action...');
 
   try {
-    const result = await convexAction<{
-      businessesAnalyzed: number;
-      patternsFound: number;
-      durationMs: number;
-    }>('functions/einvoiceDspyJobs:runWeeklyDigest', {});
+    // Note: sendWeeklyDigest returns void (no return value)
+    await convexAction<void>('functions/einvoiceDspyDigest:sendWeeklyDigest', {});
 
-    console.log(
-      `[EinvoiceDspyDigest] Complete: ${result.businessesAnalyzed} businesses, ${result.patternsFound} patterns`
-    );
+    console.log('[EinvoiceDspyDigest] Complete: weekly digest sent');
 
     return {
       module: 'einvoice-dspy-digest',
       status: 'success',
-      documentsRead: result.businessesAnalyzed,
-      documentsWritten: result.patternsFound,
+      documentsRead: 0, // Function doesn't return counts
+      documentsWritten: 0,
     };
   } catch (error) {
     console.error('[EinvoiceDspyDigest] Error:', error);
