@@ -23,7 +23,8 @@ const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
 const ses = new SESClient({ region: process.env.AWS_REGION || "us-west-2" });
 const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL || "";
 const S3_BUCKET = process.env.S3_BUCKET_NAME || "finanseal-bucket";
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
+// Read lazily — handler.ts resolves from SSM at runtime and sets process.env
+const getGeminiApiKey = () => process.env.GEMINI_API_KEY || "";
 const SYSTEM_EMAIL = "noreply@notifications.hellogroot.com";
 
 const CONFIDENCE_THRESHOLD = 0.85; // Auto-route if confidence >= 85%
@@ -205,7 +206,8 @@ async function classifyDocument(
   confidence: number;
   reasoning: string;
 }> {
-  if (!GEMINI_API_KEY) {
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
     console.log("[DocForward] No GEMINI_API_KEY - skipping classification");
     return { type: "unknown", confidence: 0, reasoning: "No API key" };
   }
@@ -229,7 +231,7 @@ Respond in JSON only:
     else if (contentType.includes("png")) mimeType = "image/png";
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
