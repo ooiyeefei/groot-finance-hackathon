@@ -495,7 +495,7 @@ export default function LandingContent({ country }: { country: string }) {
       </section>
 
       {/* Features */}
-      <section className="section-muted px-6 lg:px-16 py-10 snap-section">
+      <section className="section-muted px-6 lg:px-16 py-14 snap-section">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-8">
             <h2 className="text-2xl md:text-3xl font-semibold text-[#111111] mb-2 tracking-tight">
@@ -506,14 +506,14 @@ export default function LandingContent({ country }: { country: string }) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {FEATURES.map((feature) => (
-              <div key={feature.title} className="fly-in feature-card p-5">
-                <div className="icon-box inline-block p-2.5 mb-3">
-                  <feature.icon className="w-5 h-5 text-[#4285F4]" />
+              <div key={feature.title} className="fly-in feature-card p-4">
+                <div className="icon-box inline-block p-2 mb-2">
+                  <feature.icon className="w-4.5 h-4.5 text-[#4285F4]" />
                 </div>
-                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                  <h3 className="text-base font-medium text-[#111111]">{feature.title}</h3>
+                <div className="mb-1">
+                  <h3 className="text-base font-medium text-[#111111] inline">{feature.title}</h3>
                   {feature.earlyAccess && (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-violet-100 text-violet-700 border border-violet-200 whitespace-nowrap leading-none">Early Access</span>
+                    <span className="inline-flex items-center ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-violet-100 text-violet-700 border border-violet-200 align-middle whitespace-nowrap leading-none">Early Access</span>
                   )}
                 </div>
                 <p className="text-sm text-[#6B7280] leading-relaxed">{feature.description}</p>
