@@ -400,10 +400,11 @@ export class DocumentProcessingStack extends cdk.Stack {
     formFillFunction.grantInvoke(emailProcessorFunction);
 
     // Allow email processor to invoke document processor for OCR (auto-route receipts)
-    this.documentProcessorFunction.grantInvoke(emailProcessorFunction);
+    // Must use the :prod alias — durable functions reject unqualified ARNs
+    this.documentProcessorAlias.grantInvoke(emailProcessorFunction);
     emailProcessorFunction.addEnvironment(
       'DOCUMENT_PROCESSOR_LAMBDA_ARN',
-      this.documentProcessorFunction.functionArn
+      this.documentProcessorAlias.functionArn
     );
 
     // SES send permission: forward e-invoice emails to user
