@@ -9,7 +9,7 @@
  * conversation state across navigations.
  */
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { MessageCircle } from 'lucide-react'
 import { ChatWindow } from './chat-window'
 import { useAuth } from '@clerk/nextjs'
@@ -78,6 +78,46 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
     return () => window.removeEventListener('finanseal:open-chat', handleOpenChat)
   }, [])
 
+  // Draggable FAB state
+  const fabRef = useRef<HTMLButtonElement>(null)
+  const dragState = useRef({ dragging: false, startX: 0, startY: 0, startRight: 24, startBottom: 24, moved: false })
+  const [fabPosition, setFabPosition] = useState({ right: 24, bottom: 24 })
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    const ds = dragState.current
+    ds.dragging = true
+    ds.moved = false
+    ds.startX = e.clientX
+    ds.startY = e.clientY
+    ds.startRight = fabPosition.right
+    ds.startBottom = fabPosition.bottom
+    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+  }, [fabPosition])
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    const ds = dragState.current
+    if (!ds.dragging) return
+    const dx = ds.startX - e.clientX
+    const dy = ds.startY - e.clientY
+    if (!ds.moved && Math.abs(dx) < 5 && Math.abs(dy) < 5) return
+    ds.moved = true
+    const maxRight = window.innerWidth - 56
+    const maxBottom = window.innerHeight - 56
+    setFabPosition({
+      right: Math.max(8, Math.min(maxRight, ds.startRight + dx)),
+      bottom: Math.max(8, Math.min(maxBottom, ds.startBottom + dy)),
+    })
+  }, [])
+
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    const ds = dragState.current
+    ds.dragging = false
+    if (!ds.moved) {
+      handleOpen()
+    }
+    ;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
+  }, [handleOpen])
+
   // Don't render for unauthenticated users or when subscription is locked
   const LOCKED_STATUSES = ['paused', 'canceled', 'unpaid']
   if (!isSignedIn) return null
@@ -113,18 +153,21 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
         />
       </div>
 
-      {/* Floating Action Button — hidden when drawer is open (header X handles close) */}
+      {/* Floating Action Button — draggable, hidden when drawer is open */}
       {!isOpen && (
         <button
-          onClick={handleOpen}
-          className="fixed z-50 bottom-6 right-6 md:bottom-8 md:right-8
-            w-14 h-14 rounded-full shadow-lg
-            flex items-center justify-center
-            transition-all duration-200 ease-out
+          ref={fabRef}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          style={{ right: fabPosition.right, bottom: fabPosition.bottom }}
+          className="fixed z-50 w-14 h-14 rounded-full shadow-lg
+            flex items-center justify-center select-none touch-none
+            transition-shadow duration-200 ease-out
             bg-primary hover:bg-primary/90 text-primary-foreground"
           aria-label="Open chat assistant"
         >
-          <MessageCircle className="w-6 h-6" />
+          <MessageCircle className="w-6 h-6 pointer-events-none" />
         </button>
       )}
     </>

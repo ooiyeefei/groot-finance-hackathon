@@ -39,7 +39,13 @@ export async function analyzeIntent(state: AgentState): Promise<Partial<AgentSta
   const BUSINESS_DATA_PATTERN = /\b(revenue|cash\s*flow|runway|burn\s*rate|invoices?|aging|owe|suppliers?|vendors?|outstanding|receivable|payable|AP\b|AR\b|overdue|expenses?|spending|transactions?|income|budget|profit|loss|balance|how\s+much|show\s+me|what('s|\s+is)\s+(our|my|the|total))\b/i;
   const isObviousBusinessData = BUSINESS_DATA_PATTERN.test(userQuery);
 
-  if (isObviousBusinessData) {
+  // EXPENSE DISAMBIGUATION: "my expenses"/"my spending"/"my claims" is ambiguous —
+  // for Owner/Finance Admin, it could mean personal expense claims OR business-wide P&L.
+  // Let the LLM handle these with the disambiguation prompt instead of fast-pathing.
+  const MY_EXPENSE_PATTERN = /\b(my\s+(expenses?|spending|claims?)|summarize\s+my\s+expenses?|my\s+expense\s+claims?)\b/i;
+  const needsExpenseDisambiguation = MY_EXPENSE_PATTERN.test(userQuery);
+
+  if (isObviousBusinessData && !needsExpenseDisambiguation) {
     console.log('[IntentAnalysis] FAST-PATH: Business data query detected, skipping LLM classification → direct execution');
     return {
       currentIntent: {

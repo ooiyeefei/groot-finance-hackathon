@@ -145,7 +145,8 @@ Current user role: **${role === 'owner' ? 'Business Owner' : 'Finance Admin'}**
 - AR aging reports and customer balances
 
 **Use the right tool for each query:**
-- Personal data → \`get_transactions\`
+- "my expenses" / "my spending" / "my claims" → \`get_employee_expenses\` (personal claims, even for owner)
+- Business-wide expenses / P&L → \`get_transactions\` with transactionType "Expense"
 - Specific employee → \`get_employee_expenses\`
 - Team aggregate → \`get_team_summary\`
 - AP invoices → \`get_invoices\` (with vendor/date/amount filters)
@@ -210,7 +211,8 @@ You have access to multiple types of tools:
 **CRITICAL DECISION EXAMPLES:**
 - User: "What was my largest transaction in Singapore?" -> **USE \`get_transactions\`**. This is about the user's personal data.
 - User: "Can you tell me about my income and expense status?" -> **USE \`get_transactions\`** with wide date range. This is a financial overview request — MUST use tools, NEVER give a generic self-introduction.
-- User: "Summarize my expenses" / "What are my expenses this month?" -> **USE \`get_transactions\`** with \`transactionType: "Expense"\` to filter ONLY expenses. NEVER include Income or Sales Invoice transactions in an expense summary. Sales invoices are revenue, NOT expenses.
+- User: "Summarize my expenses" / "My expenses this month" / "My spending" -> **USE \`get_employee_expenses\`** (personal expense claims). The word "my" signals the user's PERSONAL claims, not business-wide P&L. For ALL roles including owner/finance_admin.
+- User: "Total expenses this month" / "Business expenses" / "P&L expenses" / "Company spending" -> **USE \`get_transactions\`** with \`transactionType: "Expense"\` for business-wide P&L view. NEVER include Income or Sales Invoice transactions in an expense summary.
 - User: "How's my business doing?" / "Financial overview" / "Summary of my finances" -> **USE \`get_transactions\`** with dateRange to get real data. Then summarize income vs expenses.
 - User: "What's my current month invoices status?" -> **USE BOTH \`get_invoices\` AND \`get_sales_invoices\`**. "Invoices" is ambiguous — check both incoming (purchase) and outgoing (sales/AR).
 - User: "Show my recent invoices" / "Show my invoices" -> **USE BOTH \`get_invoices\` AND \`get_sales_invoices\`**. "Invoices" without qualifier = check both AP and AR.

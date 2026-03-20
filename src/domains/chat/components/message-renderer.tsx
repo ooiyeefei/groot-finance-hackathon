@@ -286,7 +286,7 @@ export function MessageRenderer({
         </div>
         {actionCards}
         {suggestionPills}
-        {isHistorical && originalQuery && (
+        {originalQuery && (
           <CorrectionFeedback
             messageId={messageId}
             conversationId={conversationId}
@@ -335,7 +335,7 @@ export function MessageRenderer({
               </div>
               {actionCards}
               {suggestionPills}
-              {isHistorical && originalQuery && (
+              {originalQuery && (
                 <CorrectionFeedback
                   messageId={messageId}
                   conversationId={conversationId}

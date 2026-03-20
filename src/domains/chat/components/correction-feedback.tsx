@@ -166,7 +166,7 @@ export function CorrectionFeedback({
       </span>
 
       {isOpen && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs max-w-full overflow-hidden">
           {!correctionType ? (
             <>
               {CORRECTION_TYPES.map((ct) => (
@@ -228,7 +228,7 @@ export function CorrectionFeedback({
             <input
               type="text"
               placeholder="Tell us what went wrong..."
-              className="px-2.5 py-1.5 rounded-md bg-muted text-foreground text-xs w-52"
+              className="px-2.5 py-1.5 rounded-md bg-muted text-foreground text-xs w-52 max-w-[60%]"
               value={otherText}
               onChange={(e) => setOtherText(e.target.value)}
             />
@@ -236,7 +236,7 @@ export function CorrectionFeedback({
             <input
               type="text"
               placeholder="What should the correct value be?"
-              className="px-2.5 py-1.5 rounded-md bg-muted text-foreground text-xs w-52"
+              className="px-2.5 py-1.5 rounded-md bg-muted text-foreground text-xs w-52 max-w-[60%]"
               onChange={(e) => setCorrectedValue(e.target.value)}
             />
           )}

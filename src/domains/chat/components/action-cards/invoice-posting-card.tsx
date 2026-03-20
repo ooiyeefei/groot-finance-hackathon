@@ -132,7 +132,7 @@ function InvoicePostingCard({ action, isHistorical }: ActionCardProps) {
       <div className="px-3 py-2.5">
         <div className="flex items-start justify-between mb-1.5">
           <div>
-            <p className="text-xs font-medium text-foreground">{data.vendorName}</p>
+            <p className="text-xs font-medium text-foreground truncate max-w-[180px]">{data.vendorName}</p>
             <p className="text-xs text-muted-foreground">
               {data.invoiceDate}
               {data.dueDate && ` · Due ${data.dueDate}`}
@@ -156,7 +156,7 @@ function InvoicePostingCard({ action, isHistorical }: ActionCardProps) {
           <div className="mb-2 space-y-1">
             {data.lineItems.slice(0, 3).map((item, idx) => (
               <div key={idx} className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground truncate mr-2">{item.description}</span>
+                <span className="text-muted-foreground truncate mr-2 max-w-[65%]">{item.description}</span>
                 <span className="text-foreground font-medium flex-shrink-0">
                   {formatCurrency(item.totalAmount, data.currency)}
                 </span>
@@ -201,7 +201,7 @@ function InvoicePostingCard({ action, isHistorical }: ActionCardProps) {
             {/* Inline confirmation */}
             {cardState === 'confirming' && (
               <div className="bg-muted/50 border border-border rounded p-2">
-                <p className="text-xs text-foreground mb-2">
+                <p className="text-xs text-foreground mb-2 truncate">
                   Post {formatCurrency(data.amount, data.currency)} from {data.vendorName} to accounting?
                 </p>
                 <div className="flex gap-2">
