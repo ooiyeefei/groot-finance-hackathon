@@ -121,6 +121,7 @@ export interface UseExpenseFormReturn {
   // Status info (for edit mode)
   claimStatus: string
   processingStatus: string
+  sourceType: string
 
   // Line items status (for two-phase extraction)
   lineItemsStatus: 'pending' | 'extracting' | 'complete' | 'skipped' | undefined
@@ -196,6 +197,7 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
   const [receiptInfo, setReceiptInfo] = useState<ReceiptInfo>({ hasReceipt: false })
   const [claimStatus, setClaimStatus] = useState<string>('')
   const [processingStatusState, setProcessingStatusState] = useState<string>('')
+  const [sourceType, setSourceType] = useState<string>('')
 
   // Line items status for two-phase extraction
   const [lineItemsStatus, setLineItemsStatus] = useState<'pending' | 'extracting' | 'complete' | 'skipped' | undefined>(undefined)
@@ -281,6 +283,9 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
       if (!claim) {
         throw new Error('Expense claim not found')
       }
+
+      // Set source type (e.g., "email_forward" for email-forwarded documents)
+      setSourceType(claim.sourceType || '')
 
       // Set status information - separate workflow and AI processing status
       setClaimStatus(claim.status || '') // Workflow status (draft, submitted, approved, etc.)
@@ -1103,6 +1108,7 @@ export function useExpenseForm(props: UseExpenseFormProps): UseExpenseFormReturn
     // Status info
     claimStatus,
     processingStatus: processingStatusState,
+    sourceType,
 
     // Line items status (for two-phase extraction)
     lineItemsStatus,

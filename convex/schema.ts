@@ -1080,6 +1080,36 @@ export default defineSchema({
     .index("by_isDuplicate", ["isDuplicate"]),
 
   // ============================================
+  // DOCUMENT CLASSIFICATION CORRECTIONS (DSPy training data)
+  // ============================================
+
+  document_classification_corrections: defineTable({
+    businessId: v.id("businesses"),
+    inboxEntryId: v.optional(v.id("document_inbox_entries")),
+    expenseClaimId: v.optional(v.id("expense_claims")),
+    invoiceId: v.optional(v.id("invoices")),
+
+    // Classification data
+    originalType: v.union(v.literal("receipt"), v.literal("invoice")),
+    correctedType: v.union(v.literal("receipt"), v.literal("invoice")),
+    aiConfidence: v.optional(v.number()),
+    aiReasoning: v.optional(v.string()),
+
+    // File reference for DSPy training
+    fileHash: v.optional(v.string()),
+    s3Key: v.optional(v.string()),
+    mimeType: v.optional(v.string()),
+
+    // Correction metadata
+    correctedBy: v.id("users"),
+    correctedAt: v.number(),
+    consumed: v.optional(v.boolean()),  // Has this been used in DSPy training?
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_consumed", ["consumed"])
+    .index("by_correctedAt", ["correctedAt"]),
+
+  // ============================================
   // CHAT DOMAIN (Real-time enabled)
   // ============================================
 

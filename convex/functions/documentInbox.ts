@@ -237,6 +237,91 @@ export const autoRouteDocument = mutation({
 });
 
 /**
+ * Reclassify a document from receipt (expense claim) to invoice.
+ * Moves the record, updates inbox entry, and saves a correction for DSPy training.
+ * Called by: Frontend reclassify action on expense claims
+ */
+export const reclassifyDocument = mutation({
+  args: {
+    expenseClaimId: v.id("expense_claims"),
+    newType: v.literal("invoice"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    // Get the expense claim
+    const claim = await ctx.db.get(args.expenseClaimId);
+    if (!claim) throw new Error("Expense claim not found");
+
+    // Find the linked inbox entry
+    const inboxEntry = await ctx.db
+      .query("document_inbox_entries")
+      .withIndex("by_businessId", (q) => q.eq("businessId", claim.businessId))
+      .filter((q) => q.eq(q.field("destinationRecordId"), args.expenseClaimId))
+      .first();
+
+    // Get the user
+    const user = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("clerkUserId"), identity.subject))
+      .first();
+    if (!user) throw new Error("User not found");
+
+    // Create invoice entry
+    const invoiceId = await ctx.db.insert("invoices", {
+      businessId: claim.businessId,
+      userId: claim.userId,
+      fileName: claim.fileName || "unknown",
+      fileType: claim.fileType || "image/jpeg",
+      fileSize: claim.fileSize || 0,
+      storagePath: claim.storagePath || "",
+      status: "pending",
+      documentDomain: "invoices",
+      sourceType: claim.sourceType as any,
+      sourceEmailMetadata: claim.sourceEmailMetadata,
+      updatedAt: Date.now(),
+    });
+
+    // Save correction for DSPy training
+    await ctx.db.insert("document_classification_corrections", {
+      businessId: claim.businessId,
+      inboxEntryId: inboxEntry?._id,
+      expenseClaimId: args.expenseClaimId,
+      invoiceId: invoiceId,
+      originalType: "receipt",
+      correctedType: "invoice",
+      aiConfidence: inboxEntry?.aiConfidence,
+      aiReasoning: inboxEntry?.aiReasoning,
+      fileHash: inboxEntry?.fileHash,
+      s3Key: inboxEntry?.s3ExpenseClaimsKey,
+      mimeType: inboxEntry?.mimeType,
+      correctedBy: user._id,
+      correctedAt: Date.now(),
+      consumed: false,
+    });
+
+    // Update inbox entry destination
+    if (inboxEntry) {
+      await ctx.db.patch(inboxEntry._id, {
+        destinationDomain: "invoices",
+        destinationRecordId: invoiceId as any,
+        updatedAt: Date.now(),
+      });
+    }
+
+    // Delete the expense claim
+    await ctx.db.delete(args.expenseClaimId);
+
+    return {
+      success: true,
+      newInvoiceId: invoiceId,
+      message: "Moved to AP Invoices",
+    };
+  },
+});
+
+/**
  * Get inbox documents for "Needs Review" page
  * Called by: Frontend inbox page
  */

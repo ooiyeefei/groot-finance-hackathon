@@ -8,7 +8,7 @@
 
 import React from 'react'
 import { createPortal } from 'react-dom'
-import { X, Save, Send, ArrowLeft, Trash2, Loader2, AlertCircle, Receipt, FileText, Brain, DollarSign, Copy, CheckCircle } from 'lucide-react'
+import { X, Save, Send, ArrowLeft, Trash2, Loader2, AlertCircle, Receipt, FileText, Brain, DollarSign, Copy, CheckCircle, Mail } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -25,6 +25,9 @@ import { formatBusinessDate } from '@/lib/utils'
 import type { DuplicateMatchPreview, DuplicateOverride, MatchTier } from '@/domains/expense-claims/types/duplicate-detection'
 import EinvoiceSection from './einvoice-section'
 import { useBusinessProfile, useActiveBusiness } from '@/contexts/business-context'
+import { useMutation } from 'convex/react'
+import { api } from '@/convex/_generated/api'
+import { toast } from 'sonner'
 
 interface EditExpenseModalNewProps {
   expenseClaimId: string
@@ -71,6 +74,12 @@ export default function EditExpenseModalNew({
   const { profile: bizProfile } = useBusinessProfile()
   const { businessId: activeBusinessId, role: activeRole } = useActiveBusiness()
 
+  // State for reclassify action (email-forwarded documents)
+  const [isReclassifying, setIsReclassifying] = useState(false)
+
+  // Convex mutation for reclassifying email-forwarded documents
+  const reclassifyMutation = useMutation(api.functions.documentInbox.reclassifyDocument)
+
   // State for duplicate detection
   const [showDuplicateModal, setShowDuplicateModal] = useState(false)
   const [duplicateMatches, setDuplicateMatches] = useState<DuplicateMatchPreview[]>([])
@@ -110,6 +119,7 @@ export default function EditExpenseModalNew({
 
     // Status info
     claimStatus,
+    sourceType,
 
     // Line items status (for two-phase extraction)
     lineItemsStatus,
@@ -239,6 +249,30 @@ export default function EditExpenseModalNew({
       setShowDeleteConfirm(false)
     }
   }, [isDeleting])
+
+  // Handle reclassifying email-forwarded document to AP Invoice
+  const handleReclassifyToInvoice = useCallback(async () => {
+    if (!expenseClaimId) return
+    setIsReclassifying(true)
+    try {
+      const result = await reclassifyMutation({
+        expenseClaimId: expenseClaimId as any,
+        newType: "invoice" as const,
+      })
+      if (result?.success) {
+        toast.success("Moved to AP Invoices", {
+          description: "Document reclassified and moved to Invoices"
+        })
+        onClose()
+      }
+    } catch (error) {
+      toast.error("Reclassify failed", {
+        description: error instanceof Error ? error.message : "Failed to reclassify"
+      })
+    } finally {
+      setIsReclassifying(false)
+    }
+  }, [expenseClaimId, reclassifyMutation, onClose])
 
   // Fetch e-invoice data for the EinvoiceSection
   useEffect(() => {
@@ -592,6 +626,29 @@ export default function EditExpenseModalNew({
                       </button>
                     </AlertDescription>
                   </Alert>
+                )}
+
+                {/* Email Forward Reclassify Banner */}
+                {sourceType === "email_forward" && claimStatus === "draft" && (
+                  <div className="flex items-center justify-between bg-blue-500/10 border border-blue-500/30 rounded-lg px-4 py-2 mx-6 mt-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Mail className="h-4 w-4 text-blue-500" />
+                      <span className="text-foreground">Auto-classified as <strong>Receipt</strong> from email forwarding</span>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={handleReclassifyToInvoice}
+                      disabled={isReclassifying}
+                      className="bg-secondary hover:bg-secondary/80 text-secondary-foreground text-xs"
+                    >
+                      {isReclassifying ? (
+                        <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                      ) : (
+                        <ArrowLeft className="h-3 w-3 mr-1" />
+                      )}
+                      Move to AP Invoices
+                    </Button>
+                  </div>
                 )}
 
                 {/* Bottom Section - Stacked on mobile, 40/60 Split on desktop */}
