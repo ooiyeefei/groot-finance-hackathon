@@ -495,7 +495,7 @@ export default function LandingContent({ country }: { country: string }) {
       </section>
 
       {/* Features */}
-      <section className="section-muted px-6 lg:px-16 py-14 snap-section">
+      <section className="section-muted px-6 lg:px-16 pt-20 pb-10 snap-section">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-8">
             <h2 className="text-2xl md:text-3xl font-semibold text-[#111111] mb-2 tracking-tight">
@@ -510,10 +510,10 @@ export default function LandingContent({ country }: { country: string }) {
                 <div className="icon-box inline-block p-2 mb-2">
                   <feature.icon className="w-4.5 h-4.5 text-[#4285F4]" />
                 </div>
-                <div className="mb-1">
-                  <h3 className="text-base font-medium text-[#111111] inline">{feature.title}</h3>
+                <p className="mb-1">
+                  <span className="text-base font-medium text-[#111111]">{feature.title}</span>
                   {feature.earlyAccess && (
-                    <span className="inline-flex items-center ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-violet-100 text-violet-700 border border-violet-200 align-middle whitespace-nowrap leading-none">Early Access</span>
+                    <span className="ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-violet-100 text-violet-700 border border-violet-200 whitespace-nowrap align-text-top">Early Access</span>
                   )}
                 </div>
                 <p className="text-sm text-[#6B7280] leading-relaxed">{feature.description}</p>
