@@ -30,31 +30,31 @@ const FEATURES = [
   {
     icon: Radar,
     title: 'Proactive Insights Engine',
-    description: 'Your finances, watched around the clock. Spending spikes, vendor price creep, and cash flow risks surface as alerts before they become problems \u2014 not buried in a report you\u2019ll read next month. Always on. Always ahead.',
+    description: 'Spending spikes. Vendor price creep. Cash flow risks. Groot flags issues in real time \u2014 not in reports you\u2019ll read next month. Always on. Always ahead.',
     earlyAccess: false,
   },
   {
     icon: Zap,
     title: 'eInvoice Autopilot \u2014 Malaysia (LHDN)',
-    description: 'Without valid e-invoices, your business can\u2019t claim tax deductions under LHDN rules. Our AI agent opens each merchant\u2019s portal, fills every form, requests the e-invoice, and attaches it to your expense claim \u2014 in seconds. It remembers every merchant and gets faster each time. One click, fully compliant.',
+    description: 'Without valid e-invoices, your business can\u2019t claim tax deductions under LHDN rules. Groot logs into each merchant\u2019s portal, fills every form, retrieves the e-invoice, and attaches it to the expense claim \u2014 automatically. Gets faster every time. One click, fully compliant.',
     earlyAccess: true,
   },
   {
     icon: ScanLine,
     title: 'AI Expense Intelligence',
-    description: 'Snap a receipt. Done. AI reads every line, sorts it to the right category, and catches duplicates before they cost you. Approvals route to the right manager automatically \u2014 no chasing, no spreadsheets, no month-end panic.',
+    description: 'Snap a receipt. Done. Receipts are read, categorized, deduplicated, and routed for approval automatically. No chasing. No manual entry. No month-end chaos.',
     earlyAccess: false,
   },
   {
     icon: Brain,
     title: 'AI That Learns Your Business',
-    description: 'Every correction your team makes trains the AI \u2014 not just for that transaction, but for every future one like it. Invoices matched. Bank transactions classified. Expenses categorized. Every match shows you exactly why it was made. The more you use it, the less you need to correct. That\u2019s the flywheel.',
+    description: 'Every correction trains the system \u2014 not just for that transaction, but for every future one like it. Better matching. Better categorization. Fewer errors over time. Most tools stay the same. Groot gets smarter every week.',
     earlyAccess: false,
   },
   {
     icon: Building2,
     title: 'Enterprise Command Center',
-    description: 'Multiple business units. Full data isolation. Role-based access. Configurable approval chains. Complete audit trails. Governance that scales \u2014 built for companies that need control without complexity.',
+    description: 'Multi-entity. Approval workflows. Audit trails. Role-based access. Built for real operations \u2014 not just dashboards.',
     earlyAccess: false,
   },
 ];
@@ -500,7 +500,7 @@ export default function LandingContent({ country }: { country: string }) {
             <h2 className="text-2xl md:text-3xl font-semibold text-[#111111] mb-2 tracking-tight">
               One platform, every <span className="text-[#4285F4]">advantage</span>
             </h2>
-            <p className="text-sm text-[#6B7280] font-medium">AI that works for you, learns from you, and gets better because of you</p>
+            <p className="text-sm text-[#6B7280] font-medium">AI that doesn\u2019t just automate \u2014 it learns, adapts, and gets better the more you use it</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
