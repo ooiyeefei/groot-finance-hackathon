@@ -35,8 +35,8 @@ const FEATURES = [
   },
   {
     icon: Zap,
-    title: 'eInvoice Autopilot',
-    description: 'Stop filling buyer details on every merchant\u2019s e-invoice portal. Our AI agent opens the portal, fills every form, requests the e-invoice, and attaches it straight to your expense claim \u2014 automatically, on any merchant site, in seconds. It remembers every merchant and gets faster each time. One click, every e-invoice, done.',
+    title: 'eInvoice Autopilot \u2014 Malaysia (LHDN)',
+    description: 'Without valid e-invoices, your business can\u2019t claim tax deductions under LHDN rules. Our AI agent opens each merchant\u2019s portal, fills every form, requests the e-invoice, and attaches it to your expense claim \u2014 in seconds. It remembers every merchant and gets faster each time. One click, fully compliant.',
     earlyAccess: true,
   },
   {
@@ -48,13 +48,13 @@ const FEATURES = [
   {
     icon: Brain,
     title: 'AI That Learns Your Business',
-    description: 'Every finance app claims AI. Most just match keywords \u2014 same as five years ago. Groot is different. Every time your team corrects a match, the AI learns \u2014 not just for that transaction, but for every future one like it. Corrections become training. Training becomes accuracy. Accuracy means fewer corrections. That\u2019s the flywheel: your whole company gets smarter together, every single week. Payments matched to invoices. Bank transactions classified. Every match shows you exactly why \u2014 so your auditors love it as much as your accountants do.',
+    description: 'Every correction your team makes trains the AI \u2014 not just for that transaction, but for every future one like it. Invoices matched. Bank transactions classified. Expenses categorized. Every match shows you exactly why it was made. The more you use it, the less you need to correct. That\u2019s the flywheel.',
     earlyAccess: false,
   },
   {
     icon: Building2,
     title: 'Enterprise Command Center',
-    description: 'Run multiple business units with full data isolation, role-based access, and configurable approval chains. Complete audit trails, team management, and governance that scales \u2014 built for companies that need control without complexity.',
+    description: 'Multiple business units. Full data isolation. Role-based access. Configurable approval chains. Complete audit trails. Governance that scales \u2014 built for companies that need control without complexity.',
     earlyAccess: false,
   },
 ];
