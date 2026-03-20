@@ -12,7 +12,7 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "../_generated/server";
+import { internalAction, internalMutation, mutation, query } from "../_generated/server";
 import { resolveById } from "../lib/resolvers";
 import { internal } from "../_generated/api";
 import { Id } from "../_generated/dataModel";
@@ -1370,6 +1370,20 @@ export const reportEinvoiceFormFillResult = mutation({
       sourceEvent: `einvoice_${args.status}_${args.expenseClaimId}`,
     });
 
+    // ── #330: Send e-invoice copy to user's email for direct-link merchants ──
+    if (args.status === "submitted" && args.einvoiceStoragePath) {
+      await ctx.scheduler.runAfter(2000, internal.functions.system.sendEinvoiceCopyToUser, {
+        expenseClaimId: args.expenseClaimId,
+        userId: claim.userId as string,
+        businessId: claim.businessId as string,
+        vendorName: claim.vendorName || "merchant",
+        amount: claim.totalAmount || 0,
+        currency: claim.currency || "MYR",
+        einvoiceStoragePath: args.einvoiceStoragePath,
+        einvoiceDirectUrl: args.einvoiceDirectUrl,
+      });
+    }
+
     // ── DSPy Alert: Email Groot dev team when a new/unknown merchant fails ──
     // Internal ops alert — NOT a customer notification.
     // Sends to dev+einvoiceMY@hellogroot.com via existing notifications API.
@@ -2594,3 +2608,67 @@ export const getEinvoiceDspyDashboard = query({
   },
 });
 
+// ============================================
+// SEND E-INVOICE COPY TO USER (#330)
+// ============================================
+
+/**
+ * Send captured e-invoice copy to user's email.
+ * Triggered for direct-link merchants where e-invoice is captured as PDF/HTML.
+ */
+export const sendEinvoiceCopyToUser = internalAction({
+  args: {
+    expenseClaimId: v.string(),
+    userId: v.string(),
+    businessId: v.string(),
+    vendorName: v.string(),
+    amount: v.number(),
+    currency: v.string(),
+    einvoiceStoragePath: v.string(),
+    einvoiceDirectUrl: v.optional(v.string()),
+  },
+  handler: async (_ctx, args) => {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000";
+    const internalKey = process.env.MCP_INTERNAL_SERVICE_KEY;
+
+    if (!internalKey) {
+      console.error("[sendEinvoiceCopyToUser] MCP_INTERNAL_SERVICE_KEY not configured, skipping");
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/v1/expense-claims/${args.expenseClaimId}/send-einvoice-copy`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Internal-Key": internalKey,
+          },
+          body: JSON.stringify({
+            userId: args.userId,
+            businessId: args.businessId,
+            vendorName: args.vendorName,
+            amount: args.amount,
+            currency: args.currency,
+            einvoiceStoragePath: args.einvoiceStoragePath,
+            einvoiceDirectUrl: args.einvoiceDirectUrl,
+          }),
+        }
+      );
+
+      const result = await response.json();
+      if (result.success && !result.skipped) {
+        console.log(`[sendEinvoiceCopyToUser] Sent for ${args.expenseClaimId} to ${result.data?.sentTo}`);
+      } else if (result.skipped) {
+        console.log(`[sendEinvoiceCopyToUser] Skipped: ${result.reason}`);
+      } else {
+        console.error(`[sendEinvoiceCopyToUser] Failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error(`[sendEinvoiceCopyToUser] Error:`, error);
+    }
+  },
+});

@@ -1048,6 +1048,10 @@ export default defineSchema({
     errorDetails: v.optional(v.any()),
     retryCount: v.optional(v.number()),
 
+    // S3 keys for routed documents
+    s3StagingKey: v.optional(v.string()),          // Staging path in S3
+    s3ExpenseClaimsKey: v.optional(v.string()),    // Final path after routing to expense_claims
+
     // Duplicate Detection
     isDuplicate: v.optional(v.boolean()),
     duplicateOriginalId: v.optional(v.union(
