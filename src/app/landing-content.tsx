@@ -506,11 +506,11 @@ export default function LandingContent({ country }: { country: string }) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {FEATURES.map((feature) => (
-              <div key={feature.title} className="fly-in feature-card p-4">
-                <div className="icon-box inline-block p-2 mb-2">
-                  <feature.icon className="w-4.5 h-4.5 text-[#4285F4]" />
+              <div key={feature.title} className="fly-in feature-card p-5">
+                <div className="icon-box inline-block p-2.5 mb-3">
+                  <feature.icon className="w-5 h-5 text-[#4285F4]" />
                 </div>
-                <p className="mb-1">
+                <p className="mb-1.5">
                   <span className="text-base font-medium text-[#111111]">{feature.title}</span>
                   {feature.earlyAccess && (
                     <span className="ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-violet-100 text-violet-700 border border-violet-200 whitespace-nowrap align-text-top">Early Access</span>
@@ -521,7 +521,7 @@ export default function LandingContent({ country }: { country: string }) {
                   <button
                     type="button"
                     onClick={() => setShowWaitlistForm(true)}
-                    className="mt-3 px-4 py-2 text-sm font-medium rounded-lg transition-colors border"
+                    className="mt-3 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors border"
                     style={{ color: '#7C3AED', background: '#F5F3FF', borderColor: '#DDD6FE' }}
                   >
                     Get Early Access →
