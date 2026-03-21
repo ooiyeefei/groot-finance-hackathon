@@ -120,6 +120,7 @@ import type * as functions_systemMonitoring from "../functions/systemMonitoring.
 import type * as functions_teamCalendar from "../functions/teamCalendar.js";
 import type * as functions_timesheets from "../functions/timesheets.js";
 import type * as functions_trendAnalysis from "../functions/trendAnalysis.js";
+import type * as functions_trendAnalysisQueries from "../functions/trendAnalysisQueries.js";
 import type * as functions_users from "../functions/users.js";
 import type * as functions_vendorIntelligenceMCP from "../functions/vendorIntelligenceMCP.js";
 import type * as functions_vendorItemMatching from "../functions/vendorItemMatching.js";
@@ -267,6 +268,7 @@ declare const fullApi: ApiFromModules<{
   "functions/teamCalendar": typeof functions_teamCalendar;
   "functions/timesheets": typeof functions_timesheets;
   "functions/trendAnalysis": typeof functions_trendAnalysis;
+  "functions/trendAnalysisQueries": typeof functions_trendAnalysisQueries;
   "functions/users": typeof functions_users;
   "functions/vendorIntelligenceMCP": typeof functions_vendorIntelligenceMCP;
   "functions/vendorItemMatching": typeof functions_vendorItemMatching;
