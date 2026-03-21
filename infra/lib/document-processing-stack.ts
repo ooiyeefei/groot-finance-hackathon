@@ -143,6 +143,28 @@ export class DocumentProcessingStack extends cdk.Stack {
     });
 
     // ========================================================================
+    // Vercel OIDC S3 Permission for Chat Attachments (031-chat-receipt-process)
+    // ========================================================================
+    // Create a managed policy for chat-attachments S3 access and attach to the
+    // Vercel OIDC role. Uses a managed policy (CDK-owned) attached to the
+    // externally-managed role, so CDK can deploy it.
+    const chatAttachmentsPolicy = new iam.ManagedPolicy(this, 'ChatAttachmentsS3Policy', {
+      managedPolicyName: 'FinanSEAL-ChatAttachments-S3',
+      description: 'Allow Vercel to upload/read chat attachment images in finanseal-bucket/chat-attachments/',
+      statements: [
+        new iam.PolicyStatement({
+          sid: 'ChatAttachmentsS3Access',
+          effect: iam.Effect.ALLOW,
+          actions: ['s3:PutObject', 's3:GetObject'],
+          resources: ['arn:aws:s3:::finanseal-bucket/chat-attachments/*'],
+        }),
+      ],
+      roles: [
+        iam.Role.fromRoleArn(this, 'VercelOidcRoleForChat', vercelOidcRoleArn),
+      ],
+    });
+
+    // ========================================================================
     // E-Invoice Form Fill Lambda (019-lhdn-einv-flow-2)
     // Node.js Lambda that uses Stagehand + Browserbase to fill merchant forms
     // Triggered by: Python document-processor (boto3) or Vercel API (OIDC)
