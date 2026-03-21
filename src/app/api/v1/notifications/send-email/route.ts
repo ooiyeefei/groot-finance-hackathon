@@ -15,8 +15,14 @@ import { emailService } from '@/lib/services/email-service'
 export async function POST(request: NextRequest) {
   try {
     const apiKey = request.headers.get('x-api-key')
-    if (apiKey !== process.env.INTERNAL_API_KEY) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const envKey = process.env.INTERNAL_API_KEY
+    if (!envKey) {
+      console.error('[send-email] INTERNAL_API_KEY env var is NOT SET. Available env keys:', Object.keys(process.env).filter(k => k.includes('INTERNAL')).join(', ') || 'none')
+      return NextResponse.json({ error: 'Unauthorized', message: 'Authentication required', debug: 'env_not_set' }, { status: 401 })
+    }
+    if (apiKey !== envKey) {
+      console.error('[send-email] API key mismatch. Header length:', apiKey?.length, 'Env length:', envKey.length)
+      return NextResponse.json({ error: 'Unauthorized', message: 'Authentication required' }, { status: 401 })
     }
 
     const body = await request.json()
