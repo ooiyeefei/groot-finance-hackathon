@@ -77,9 +77,35 @@ For bulk_accept: ALWAYS confirm the count of matches to be accepted with the use
     parameters: ToolParameters,
     userContext: UserContext,
   ): Promise<ToolResult> {
-    return {
-      success: true,
-      data: { message: 'Tool executed via MCP endpoint' },
+    if (!this.convex) {
+      return { success: false, error: 'Missing authenticated Convex client' }
+    }
+
+    try {
+      if (parameters.action === 'accept' && parameters.match_id) {
+        await this.convex.mutation(
+          (this.convexApi as any).functions.reconciliationMatches.confirmMatch,
+          { matchId: parameters.match_id }
+        )
+        return { success: true, data: 'Match accepted and transaction reconciled.' }
+      }
+
+      if (parameters.action === 'reject' && parameters.match_id) {
+        await this.convex.mutation(
+          (this.convexApi as any).functions.reconciliationMatches.rejectMatch,
+          { matchId: parameters.match_id }
+        )
+        return { success: true, data: 'Match rejected.' }
+      }
+
+      if (parameters.action === 'bulk_accept') {
+        return { success: true, data: 'Bulk accept requires the MCP endpoint. Please use the action card buttons to accept individual matches, or try again when the MCP server is deployed.' }
+      }
+
+      return { success: false, error: `Unknown action: ${parameters.action}` }
+    } catch (error) {
+      console.error('[AcceptReconMatchTool] Error:', error)
+      return { success: false, error: `Match action failed: ${error instanceof Error ? error.message : 'Unknown error'}` }
     }
   }
 }

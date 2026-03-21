@@ -59,9 +59,44 @@ Use when users ask about reconciliation status, unmatched transactions, or speci
     parameters: ToolParameters,
     userContext: UserContext,
   ): Promise<ToolResult> {
-    return {
-      success: true,
-      data: { message: 'Tool executed via MCP endpoint' },
+    if (!this.convex || !userContext.businessId) {
+      return { success: false, error: 'Missing authenticated Convex client or business context' }
+    }
+
+    try {
+      // Get bank accounts for the business
+      const accounts = await this.convex.query(
+        (this.convexApi as any).functions.bankAccounts.list,
+        { businessId: userContext.businessId }
+      )
+
+      if (!accounts || accounts.length === 0) {
+        return { success: true, data: 'No bank accounts found. Import a bank statement first to set up bank reconciliation.' }
+      }
+
+      const lines: string[] = []
+      for (const account of accounts.filter((a: any) => a.status === 'active')) {
+        const summary = await this.convex.query(
+          (this.convexApi as any).functions.bankTransactions.getReconciliationSummary,
+          { bankAccountId: account._id }
+        )
+
+        if (summary) {
+          lines.push(
+            `**${account.accountName || account.bankName}**: ${summary.totalTransactions} transactions — ${summary.reconciled || 0} reconciled, ${summary.suggested || 0} pending review, ${summary.unmatched || 0} unmatched`
+          )
+        }
+      }
+
+      return {
+        success: true,
+        data: lines.length > 0
+          ? `Bank Reconciliation Status:\n\n${lines.join('\n')}`
+          : 'No bank transactions found for reconciliation.'
+      }
+    } catch (error) {
+      console.error('[ShowReconStatusTool] Error:', error)
+      return { success: false, error: `Failed to get reconciliation status: ${error instanceof Error ? error.message : 'Unknown error'}` }
     }
   }
 }
