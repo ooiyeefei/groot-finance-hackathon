@@ -100,6 +100,7 @@ import type * as functions_payrollAdjustments from "../functions/payrollAdjustme
 import type * as functions_poMatchOptimization from "../functions/poMatchOptimization.js";
 import type * as functions_poMatches from "../functions/poMatches.js";
 import type * as functions_poMatchingAI from "../functions/poMatchingAI.js";
+import type * as functions_proactiveAlerts from "../functions/proactiveAlerts.js";
 import type * as functions_publicHolidays from "../functions/publicHolidays.js";
 import type * as functions_purchaseOrders from "../functions/purchaseOrders.js";
 import type * as functions_pushSubscriptions from "../functions/pushSubscriptions.js";
@@ -117,6 +118,7 @@ import type * as functions_system from "../functions/system.js";
 import type * as functions_systemMonitoring from "../functions/systemMonitoring.js";
 import type * as functions_teamCalendar from "../functions/teamCalendar.js";
 import type * as functions_timesheets from "../functions/timesheets.js";
+import type * as functions_trendAnalysis from "../functions/trendAnalysis.js";
 import type * as functions_users from "../functions/users.js";
 import type * as functions_vendorIntelligenceMCP from "../functions/vendorIntelligenceMCP.js";
 import type * as functions_vendorItemMatching from "../functions/vendorItemMatching.js";
@@ -244,6 +246,7 @@ declare const fullApi: ApiFromModules<{
   "functions/poMatchOptimization": typeof functions_poMatchOptimization;
   "functions/poMatches": typeof functions_poMatches;
   "functions/poMatchingAI": typeof functions_poMatchingAI;
+  "functions/proactiveAlerts": typeof functions_proactiveAlerts;
   "functions/publicHolidays": typeof functions_publicHolidays;
   "functions/purchaseOrders": typeof functions_purchaseOrders;
   "functions/pushSubscriptions": typeof functions_pushSubscriptions;
@@ -261,6 +264,7 @@ declare const fullApi: ApiFromModules<{
   "functions/systemMonitoring": typeof functions_systemMonitoring;
   "functions/teamCalendar": typeof functions_teamCalendar;
   "functions/timesheets": typeof functions_timesheets;
+  "functions/trendAnalysis": typeof functions_trendAnalysis;
   "functions/users": typeof functions_users;
   "functions/vendorIntelligenceMCP": typeof functions_vendorIntelligenceMCP;
   "functions/vendorItemMatching": typeof functions_vendorItemMatching;
