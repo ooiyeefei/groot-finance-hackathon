@@ -139,8 +139,18 @@ export async function POST(
       userError = 'Business TIN is not configured. Please update in Settings → Business Profile.'
     } else if (rawError.includes('address not configured')) {
       userError = 'Business address is not configured. Please update in Settings → Business Profile.'
+    } else if (rawError.includes('not authorized') || rawError.includes('AccessDenied') || rawError.includes('InvokeFunction')) {
+      userError = 'E-invoice service is temporarily unavailable. Please try again later.'
+      console.error('[Request E-Invoice API] IAM/auth error:', rawError)
+    } else if (rawError.includes('ResourceNotFoundException') || rawError.includes('Function not found')) {
+      userError = 'E-invoice service is not configured. Please contact support.'
+      console.error('[Request E-Invoice API] Lambda not found:', rawError)
     } else if (rawError.includes('Server Error') || rawError.includes('Request ID')) {
       userError = 'Something went wrong. Please check your business settings (TIN, address) and try again.'
+    } else if (!rawError.includes('TIN') && !rawError.includes('address') && !rawError.includes('merchant')) {
+      // Catch-all: never expose raw system errors to users
+      userError = 'Something went wrong while requesting the e-invoice. Please try again.'
+      console.error('[Request E-Invoice API] Unhandled error:', rawError)
     }
 
     return NextResponse.json(
