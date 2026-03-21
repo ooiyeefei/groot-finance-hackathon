@@ -95,6 +95,10 @@ Current user role: **Employee**
 
 **IMPORTANT**: When querying \`get_transactions\`, ONLY use transactionType "Expense" — never "Income" or "Revenue".
 
+**Scheduled Reports**: You can schedule **expense_summary** reports for yourself only. To schedule financial reports (P&L, Cash Flow, AR/AP Aging), ask your manager or admin.
+- "Send me a monthly expense summary" → \`schedule_report\` (action=create, report_type=expense_summary)
+- "Show my scheduled reports" → \`schedule_report\` (action=list)
+
 **When the user asks about restricted data**, respond with:
 "Per your organization's access policy, this data is only available to Managers, Finance Admins, and Business Owners. Please contact your admin if you need access. I can help you with your own expense claims and transactions — would you like to see those instead?"`;
   }
@@ -128,6 +132,10 @@ Current user role: **Manager**
 - "What expenses need my approval?" → Query pending expense submissions (employee claims), NOT AP invoices
 - Ambiguous query without a name → Ask: "Would you like to look up a specific team member, or see a team-wide summary?"
 
+**Scheduled Reports**: You can schedule all report types (P&L, Cash Flow, AR/AP Aging, Expense Summary).
+- "Send me weekly P&L" → \`schedule_report\` (action=create)
+- "Show my scheduled reports" → \`schedule_report\` (action=list)
+
 **When the user asks about restricted data**, respond with:
 "Per your organization's access policy, this data is only available to Finance Admins and Business Owners. Please contact your admin if you need access. As a manager, I can help you with your team's expense claims and approvals — would you like to see those instead?"`;
   }
@@ -148,6 +156,8 @@ Current user role: **${role === 'owner' ? 'Business Owner' : 'Finance Admin'}**
 - Action center insights (duplicates, approvals, overdue — business-wide scope)
 - AP aging reports and vendor balances
 - AR aging reports and customer balances
+- **Scheduled reports** — create/list/modify/cancel recurring report schedules (P&L, Cash Flow, AR/AP Aging, Expense Summary)
+- **Bank reconciliation** — trigger matching, view status, accept/reject matches
 
 **Use the right tool for each query:**
 - "my expense claims" / "my claims" / "my reimbursements" → \`get_transactions\` with query "expense claims" (auto-filters to expense_claim source)
@@ -161,7 +171,13 @@ Current user role: **${role === 'owner' ? 'Business Owner' : 'Finance Admin'}**
 - Cash flow → \`analyze_cash_flow\` (use \`forecast_months\` param for monthly projections, e.g., "forecast next 6 months")
 - Board report / quarterly report / PDF → \`generate_report_pdf\` (requires date_range, e.g., "generate Q1 board report")
 - Anomalies → \`detect_anomalies\`
-- Vendor risk → \`analyze_vendor_risk\``;
+- Vendor risk → \`analyze_vendor_risk\`
+- "Send me weekly P&L" / "schedule a report" / "email me monthly cash flow" → \`schedule_report\` (action=create)
+- "Show my scheduled reports" / "list my reports" → \`schedule_report\` (action=list)
+- "Cancel the weekly P&L" / "stop the report" → \`schedule_report\` (action=cancel)
+- "Run bank reconciliation" / "reconcile bank" / "match bank transactions" → \`run_bank_reconciliation\` (ALWAYS ask which bank account first)
+- "Accept all above 90%" / "accept match" → \`accept_recon_match\`
+- "Reconciliation status" / "unmatched transactions" → \`show_recon_status\``;
 }
 
 /**

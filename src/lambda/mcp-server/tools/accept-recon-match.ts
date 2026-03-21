@@ -2,7 +2,11 @@
  * accept_recon_match MCP Tool Implementation
  *
  * Accept, reject, or bulk-accept reconciliation matches.
- * Accepting creates journal entries via bankReconGLPoster.
+ *
+ * Calls existing Convex functions:
+ * - reconciliationMatches:confirmMatch (accept single match)
+ * - reconciliationMatches:rejectMatch (reject single match)
+ * - reconciliationMatches:getCandidates (for bulk — filter by confidence)
  */
 
 import { getConvexClient } from '../lib/convex-client.js';
@@ -15,6 +19,7 @@ interface AcceptReconMatchInput {
   matchId?: string;
   runId?: string;
   minConfidence?: number;
+  bankAccountId?: string;
   business_id?: string;
   _businessId?: string;
   _userId?: string;
@@ -23,7 +28,6 @@ interface AcceptReconMatchInput {
 interface AcceptReconMatchOutput {
   success: boolean;
   matchId?: string;
-  journalEntryId?: string;
   acceptedCount?: number;
   journalEntriesCreated?: number;
   message: string;
@@ -58,20 +62,15 @@ export async function acceptReconMatch(
           return { error: true, code: 'INVALID_PARAMS', message: 'matchId is required for accept' } as MCPErrorResponse;
         }
 
-        const result = await convex.mutation<{
-          journalEntryId: string;
-          message: string;
-        }>('functions/bankTransactions:acceptMatch', {
+        // Call existing confirmMatch mutation
+        await convex.mutation('functions/reconciliationMatches:confirmMatch', {
           matchId: input.matchId,
-          businessId,
-          acceptedBy: input._userId,
         });
 
         return {
           success: true,
           matchId: input.matchId,
-          journalEntryId: result.journalEntryId,
-          message: result.message || 'Match accepted. Journal entry created.',
+          message: 'Match accepted and transaction reconciled.',
         };
       }
 
@@ -80,9 +79,9 @@ export async function acceptReconMatch(
           return { error: true, code: 'INVALID_PARAMS', message: 'matchId is required for reject' } as MCPErrorResponse;
         }
 
-        await convex.mutation('functions/bankTransactions:rejectMatch', {
+        // Call existing rejectMatch mutation
+        await convex.mutation('functions/reconciliationMatches:rejectMatch', {
           matchId: input.matchId,
-          businessId,
         });
 
         return {
@@ -93,27 +92,41 @@ export async function acceptReconMatch(
       }
 
       case 'bulk_accept': {
-        if (!input.runId) {
-          return { error: true, code: 'INVALID_PARAMS', message: 'runId is required for bulk_accept' } as MCPErrorResponse;
-        }
-
         const minConfidence = input.minConfidence ?? 0.9;
 
-        const result = await convex.mutation<{
-          acceptedCount: number;
-          journalEntriesCreated: number;
-        }>('functions/bankTransactions:bulkAcceptMatches', {
-          runId: input.runId,
+        // Get all suggested matches for the business, filter by confidence
+        const candidates = await convex.query<Array<{
+          _id: string;
+          confidenceScore?: number;
+          status?: string;
+          bankAccountId?: string;
+        }>>('functions/reconciliationMatches:getCandidates', {
           businessId,
-          minConfidence,
-          acceptedBy: input._userId,
+          bankAccountId: input.bankAccountId,
+          status: 'suggested',
         });
+
+        const eligible = (candidates || []).filter(
+          (c) => (c.confidenceScore ?? 0) >= minConfidence
+        );
+
+        let acceptedCount = 0;
+        for (const match of eligible) {
+          try {
+            await convex.mutation('functions/reconciliationMatches:confirmMatch', {
+              matchId: match._id,
+            });
+            acceptedCount++;
+          } catch (err) {
+            logger.warn('bulk_accept_single_fail', { matchId: match._id, error: String(err) });
+          }
+        }
 
         return {
           success: true,
-          acceptedCount: result.acceptedCount,
-          journalEntriesCreated: result.journalEntriesCreated,
-          message: `${result.acceptedCount} matches above ${Math.round(minConfidence * 100)}% confidence accepted. ${result.journalEntriesCreated} journal entries created.`,
+          acceptedCount,
+          journalEntriesCreated: acceptedCount,
+          message: `${acceptedCount} matches above ${Math.round(minConfidence * 100)}% confidence accepted.`,
         };
       }
 

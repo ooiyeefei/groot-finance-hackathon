@@ -1821,6 +1821,71 @@ Support: https://finance.hellogroot.com/en/support
 
     return { success: false, error: 'No email provider available' }
   }
+
+  /**
+   * Send a scheduled financial report via email
+   * HTML summary in body + PDF as attachment
+   */
+  async sendScheduledReportEmail(params: {
+    recipients: string[]
+    reportTitle: string
+    businessName: string
+    periodStart: string
+    periodEnd: string
+    generatedAt: string
+    htmlSummary: string
+    pdfBase64: string
+    pdfFilename: string
+  }): Promise<{ success: boolean; delivered: string[]; failed: string[]; error?: string }> {
+    const delivered: string[] = []
+    const failed: string[] = []
+
+    const subject = `${params.reportTitle} — ${params.businessName} (${params.periodStart} to ${params.periodEnd})`
+    const htmlBody = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+        <h1 style="font-size: 20px; color: #333;">${params.reportTitle}</h1>
+        <p style="color: #666; font-size: 14px;">
+          <strong>${params.businessName}</strong> · ${params.periodStart} to ${params.periodEnd}
+        </p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 16px 0;" />
+        ${params.htmlSummary}
+        <hr style="border: none; border-top: 1px solid #eee; margin: 16px 0;" />
+        <p style="font-size: 12px; color: #999;">
+          Generated ${params.generatedAt} · Full report attached as PDF · Groot Finance
+        </p>
+      </div>
+    `
+    const textBody = `${params.reportTitle} — ${params.businessName}\nPeriod: ${params.periodStart} to ${params.periodEnd}\nGenerated: ${params.generatedAt}\n\nFull report attached as PDF.`
+
+    for (const recipient of params.recipients) {
+      try {
+        const result = await this.sendGenericEmail({
+          to: recipient,
+          subject,
+          htmlBody,
+          textBody,
+          attachments: [{
+            content: params.pdfBase64,
+            filename: params.pdfFilename,
+          }],
+        })
+        if (result.success) {
+          delivered.push(recipient)
+        } else {
+          failed.push(recipient)
+        }
+      } catch {
+        failed.push(recipient)
+      }
+    }
+
+    return {
+      success: failed.length === 0,
+      delivered,
+      failed,
+      error: failed.length > 0 ? `Failed to deliver to: ${failed.join(', ')}` : undefined,
+    }
+  }
 }
 
 // Export singleton instance

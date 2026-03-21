@@ -184,11 +184,12 @@ export class ToolFactory {
     'get_ar_summary',
     'get_ap_aging',
     'get_business_transactions',
-    // 031: Scheduled reports & bank recon (admin/manager only, except expense_summary)
-    'schedule_report',
+    // 031: Bank recon tools (admin/manager only)
     'run_bank_reconciliation',
     'accept_recon_match',
     'show_recon_status',
+    // NOTE: schedule_report is NOT here — it has granular RBAC
+    // (employees can schedule expense_summary, but not financial reports)
   ])
 
   /**

@@ -3,6 +3,11 @@
  *
  * Returns current reconciliation status: matched/pending/unmatched counts
  * per bank account, with optional unmatched transaction listing.
+ *
+ * Calls existing Convex functions:
+ * - bankAccounts:list (query — list bank accounts for business)
+ * - reconciliationMatches:getReconciliationSummary (query — counts per account)
+ * - bankTransactions:list (query — filtered by reconciliationStatus for unmatched listing)
  */
 
 import { getConvexClient } from '../lib/convex-client.js';
@@ -24,7 +29,6 @@ interface AccountStatus {
   matched: number;
   pendingReview: number;
   unmatched: number;
-  dateRange: { from: string; to: string };
   lastReconDate?: string;
 }
 
@@ -65,52 +69,81 @@ export async function showReconStatus(
   }
 
   try {
-    // Get reconciliation status summary
-    const statusResult = await convex.query<{
-      accounts: Array<{
-        bankAccountId: string;
-        accountName: string;
+    // Get bank accounts for the business
+    const bankAccounts = await convex.query<Array<{
+      _id: string;
+      accountName?: string;
+      bankName?: string;
+      status?: string;
+    }>>('functions/bankAccounts:list', { businessId });
+
+    const accountsToCheck = input.bankAccountId
+      ? (bankAccounts || []).filter((a) => a._id === input.bankAccountId)
+      : (bankAccounts || []).filter((a) => a.status === 'active');
+
+    const accounts: AccountStatus[] = [];
+    const allUnmatched: UnmatchedTransaction[] = [];
+
+    for (const account of accountsToCheck) {
+      // Get reconciliation summary for this account
+      const summary = await convex.query<{
         totalTransactions: number;
-        matched: number;
-        pendingReview: number;
+        reconciled: number;
+        suggested: number;
         unmatched: number;
-        minDate: string;
-        maxDate: string;
-        lastReconDate?: string;
-      }>;
-      unmatchedTransactions: Array<{
-        _id: string;
-        transactionDate?: string;
-        date?: string;
-        amount: number;
-        description?: string;
-        narrative?: string;
-        reconciliationStatus?: string;
-      }>;
-    }>('functions/bankTransactions:getReconciliationStatus', {
-      businessId,
-      bankAccountId: input.bankAccountId,
-      limit: 10,
-    });
+        categorized: number;
+      } | null>('functions/reconciliationMatches:getReconciliationSummary', {
+        businessId,
+        bankAccountId: account._id,
+      });
 
-    const accounts: AccountStatus[] = (statusResult.accounts || []).map((a) => ({
-      bankAccountId: a.bankAccountId,
-      bankAccountName: a.accountName,
-      totalTransactions: a.totalTransactions,
-      matched: a.matched,
-      pendingReview: a.pendingReview,
-      unmatched: a.unmatched,
-      dateRange: { from: a.minDate, to: a.maxDate },
-      lastReconDate: a.lastReconDate,
-    }));
+      if (summary) {
+        accounts.push({
+          bankAccountId: account._id,
+          bankAccountName: account.accountName || account.bankName || 'Unknown Account',
+          totalTransactions: summary.totalTransactions,
+          matched: summary.reconciled,
+          pendingReview: summary.suggested,
+          unmatched: summary.unmatched,
+        });
+      }
 
-    const unmatchedTransactions: UnmatchedTransaction[] = (statusResult.unmatchedTransactions || []).map((t) => ({
-      id: t._id,
-      date: t.transactionDate || t.date || '',
-      amount: t.amount,
-      description: t.description || t.narrative || '',
-      status: t.reconciliationStatus || 'unmatched',
-    }));
+      // Get unmatched transactions (limit 10 total across all accounts)
+      if (allUnmatched.length < 10) {
+        const txns = await convex.query<Array<{
+          _id: string;
+          transactionDate?: string;
+          amount: number;
+          description?: string;
+          narrative?: string;
+          reconciliationStatus?: string;
+        }>>('functions/bankTransactions:list', {
+          bankAccountId: account._id,
+          reconciliationStatus: 'unmatched',
+          limit: 10 - allUnmatched.length,
+        });
+
+        for (const t of (txns || [])) {
+          // If there's a natural language query, filter by description match
+          if (input.query) {
+            const desc = (t.description || t.narrative || '').toLowerCase();
+            const queryLower = input.query.toLowerCase();
+            // Simple keyword matching — check if query terms appear in description
+            const queryTerms = queryLower.split(/\s+/).filter((w) => w.length > 2);
+            const matches = queryTerms.some((term) => desc.includes(term));
+            if (!matches) continue;
+          }
+
+          allUnmatched.push({
+            id: t._id,
+            date: t.transactionDate || '',
+            amount: t.amount,
+            description: t.description || t.narrative || '',
+            status: t.reconciliationStatus || 'unmatched',
+          });
+        }
+      }
+    }
 
     // Build summary message
     const parts: string[] = [];
@@ -122,8 +155,8 @@ export async function showReconStatus(
 
     return {
       accounts,
-      unmatchedTransactions,
-      message: parts.length > 0 ? parts.join('\n') : 'No bank transactions found.',
+      unmatchedTransactions: allUnmatched,
+      message: parts.length > 0 ? parts.join('\n') : 'No bank accounts or transactions found.',
     };
   } catch (err) {
     logger.error('show_recon_status_error', { error: err instanceof Error ? err.message : String(err) });

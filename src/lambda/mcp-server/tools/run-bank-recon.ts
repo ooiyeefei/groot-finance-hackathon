@@ -3,6 +3,12 @@
  *
  * Triggers Tier 1 (rule-based) + Tier 2 (DSPy) bank reconciliation
  * for a specific bank account. Returns match results for chat display.
+ *
+ * Calls existing Convex functions:
+ * - reconciliationMatches:runMatching (action — runs Tier 1+2 matching)
+ * - reconciliationMatches:getReconciliationSummary (query — counts)
+ * - reconciliationMatches:getCandidates (query — pending matches)
+ * - bankAccounts:getById (query — account name)
  */
 
 import { getConvexClient } from '../lib/convex-client.js';
@@ -17,14 +23,6 @@ interface RunBankReconInput {
   _userId?: string;
 }
 
-interface MatchItem {
-  type: string;
-  id: string;
-  reference: string;
-  amount: number;
-  vendor?: string;
-}
-
 interface PendingMatch {
   matchId: string;
   bankTransaction: {
@@ -33,7 +31,13 @@ interface PendingMatch {
     amount: number;
     description: string;
   };
-  matchedItems: MatchItem[];
+  matchedItems: Array<{
+    type: string;
+    id: string;
+    reference: string;
+    amount: number;
+    vendor?: string;
+  }>;
   confidence: number;
   matchType: string;
 }
@@ -50,35 +54,6 @@ interface RunBankReconOutput {
   };
   pendingMatches: PendingMatch[];
   message: string;
-}
-
-interface BankTransaction {
-  _id: string;
-  date?: string;
-  transactionDate?: string;
-  amount: number;
-  description?: string;
-  narrative?: string;
-  reconciliationStatus?: string;
-  direction?: string;
-}
-
-interface BankAccount {
-  _id: string;
-  accountName?: string;
-  bankName?: string;
-}
-
-interface ReconMatch {
-  _id: string;
-  bankTransactionId: string;
-  matchType?: string;
-  confidenceScore?: number;
-  status?: string;
-  matchedInvoiceId?: string;
-  matchedReference?: string;
-  matchedAmount?: number;
-  matchedVendor?: string;
 }
 
 export async function runBankReconciliation(
@@ -108,7 +83,7 @@ export async function runBankReconciliation(
   }
 
   try {
-    // Check for concurrent run
+    // Concurrency guard — create run record (returns error if already running)
     const createResult = await convex.mutation<{ runId?: string; error?: string }>('functions/bankReconRuns:create', {
       businessId,
       bankAccountId: input.bankAccountId,
@@ -125,83 +100,94 @@ export async function runBankReconciliation(
 
     const runId = createResult.runId!;
 
-    // Get bank account details
-    const bankAccount = await convex.query<BankAccount | null>('functions/bankAccounts:getById', {
-      bankAccountId: input.bankAccountId,
-    });
+    // Get bank account name
+    const bankAccount = await convex.query<{ accountName?: string; bankName?: string } | null>(
+      'functions/bankAccounts:getById',
+      { bankAccountId: input.bankAccountId }
+    );
     const accountName = bankAccount?.accountName || bankAccount?.bankName || 'Bank Account';
 
-    // Get unmatched transactions for this account
-    const unmatchedTxns = await convex.query<BankTransaction[]>('functions/bankTransactions:getUnmatchedByAccount', {
-      bankAccountId: input.bankAccountId,
-      limit: 500,
-    });
+    // Trigger existing matching engine (reconciliationMatches:runMatching)
+    // This runs Tier 1 rules + Tier 2 DSPy candidate matching
+    const matchResult = await convex.mutation<{ matched: number; unmatched: number }>(
+      'functions/reconciliationMatches:runMatching',
+      { businessId, bankAccountId: input.bankAccountId }
+    );
 
-    if (!unmatchedTxns || unmatchedTxns.length === 0) {
-      await convex.mutation('functions/bankReconRuns:updateStatus', {
-        runId,
-        status: 'complete',
-        matchedCount: 0,
-        pendingReviewCount: 0,
-        unmatchedCount: 0,
-      });
-
-      return {
-        runId,
-        bankAccountName: accountName,
-        status: 'complete',
-        summary: { totalProcessed: 0, matched: 0, pendingReview: 0, unmatched: 0 },
-        pendingMatches: [],
-        message: `All transactions in ${accountName} are already reconciled.`,
-      };
-    }
-
-    // Trigger existing Tier 1 + Tier 2 classification
-    // This calls the existing bankReconClassifier + DSPy pipeline
-    const reconResult = await convex.mutation<{
-      matchedCount: number;
-      pendingReviewCount: number;
-      unmatchedCount: number;
-      pendingMatches: ReconMatch[];
-    }>('functions/bankTransactions:runReconciliation', {
+    // Get updated reconciliation summary
+    const summary = await convex.query<{
+      totalTransactions: number;
+      reconciled: number;
+      suggested: number;
+      unmatched: number;
+    } | null>('functions/reconciliationMatches:getReconciliationSummary', {
       businessId,
       bankAccountId: input.bankAccountId,
-      transactionIds: unmatchedTxns.map((t) => t._id),
     });
 
-    // Update run record
+    const matchedCount = matchResult.matched;
+    const pendingReviewCount = summary?.suggested ?? 0;
+    const unmatchedCount = summary?.unmatched ?? matchResult.unmatched;
+
+    // Update run record with results
     await convex.mutation('functions/bankReconRuns:updateStatus', {
       runId,
       status: 'complete',
-      matchedCount: reconResult.matchedCount,
-      pendingReviewCount: reconResult.pendingReviewCount,
-      unmatchedCount: reconResult.unmatchedCount,
+      matchedCount,
+      pendingReviewCount,
+      unmatchedCount,
     });
 
-    // Build pending match cards for chat display
-    const pendingMatches: PendingMatch[] = (reconResult.pendingMatches || []).map((m) => {
-      const txn = unmatchedTxns.find((t) => t._id === m.bankTransactionId);
-      return {
-        matchId: m._id,
-        bankTransaction: {
-          id: m.bankTransactionId,
-          date: txn?.transactionDate || txn?.date || '',
-          amount: txn?.amount || 0,
-          description: txn?.description || txn?.narrative || '',
-        },
-        matchedItems: [{
-          type: 'invoice',
-          id: m.matchedInvoiceId || '',
-          reference: m.matchedReference || '',
-          amount: m.matchedAmount || 0,
-          vendor: m.matchedVendor || '',
-        }],
-        confidence: m.confidenceScore || 0,
-        matchType: m.matchType || 'fuzzy',
-      };
+    // Get pending match candidates for chat display
+    const candidates = await convex.query<Array<{
+      _id: string;
+      bankTransactionId: string;
+      matchType?: string;
+      confidenceScore?: number;
+      confidenceLevel?: string;
+      matchReason?: string;
+      status?: string;
+    }>>('functions/reconciliationMatches:getCandidates', {
+      businessId,
+      bankAccountId: input.bankAccountId,
+      status: 'suggested',
     });
 
-    const total = reconResult.matchedCount + reconResult.pendingReviewCount + reconResult.unmatchedCount;
+    // Enrich with bank transaction details
+    const pendingMatches: PendingMatch[] = [];
+    for (const c of (candidates || []).slice(0, 20)) {
+      const txn = await convex.query<{
+        _id: string;
+        transactionDate?: string;
+        amount: number;
+        description?: string;
+        narrative?: string;
+      } | null>('functions/bankTransactions:getById', {
+        bankTransactionId: c.bankTransactionId,
+      });
+
+      if (txn) {
+        pendingMatches.push({
+          matchId: c._id,
+          bankTransaction: {
+            id: c.bankTransactionId,
+            date: txn.transactionDate || '',
+            amount: txn.amount,
+            description: txn.description || txn.narrative || '',
+          },
+          matchedItems: [{
+            type: 'journal_entry',
+            id: '', // JE ID from the match
+            reference: c.matchReason || '',
+            amount: Math.abs(txn.amount),
+          }],
+          confidence: c.confidenceScore || 0,
+          matchType: c.matchType || 'fuzzy',
+        });
+      }
+    }
+
+    const total = (summary?.totalTransactions ?? matchedCount + unmatchedCount);
 
     return {
       runId,
@@ -209,12 +195,12 @@ export async function runBankReconciliation(
       status: 'complete',
       summary: {
         totalProcessed: total,
-        matched: reconResult.matchedCount,
-        pendingReview: reconResult.pendingReviewCount,
-        unmatched: reconResult.unmatchedCount,
+        matched: matchedCount,
+        pendingReview: pendingReviewCount,
+        unmatched: unmatchedCount,
       },
       pendingMatches,
-      message: `Reconciled ${total} transactions in ${accountName}: ${reconResult.matchedCount} matched, ${reconResult.pendingReviewCount} need review, ${reconResult.unmatchedCount} unmatched.`,
+      message: `Reconciled ${total} transactions in ${accountName}: ${matchedCount} matched, ${pendingReviewCount} need review, ${unmatchedCount} unmatched.`,
     };
   } catch (err) {
     logger.error('run_bank_recon_error', { error: err instanceof Error ? err.message : String(err) });

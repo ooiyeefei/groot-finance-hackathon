@@ -8,6 +8,8 @@
  */
 
 import { useState } from 'react'
+import { useMutation } from 'convex/react'
+import { api } from '@/convex/_generated/api'
 import { Check, X, Loader2, ArrowRightLeft } from 'lucide-react'
 import { registerActionCard, type ActionCardProps } from './registry'
 
@@ -50,7 +52,7 @@ function matchTypeBadge(type: string): string {
   }
 }
 
-function BankReconMatchCard({ action, isHistorical, onActionComplete }: ActionCardProps) {
+function BankReconMatchCard({ action, isHistorical }: ActionCardProps) {
   const data = action.data as unknown as BankReconMatchData
   const [cardState, setCardState] = useState<CardState>('idle')
   const [finalStatus, setFinalStatus] = useState<'accepted' | 'rejected' | null>(
@@ -58,23 +60,20 @@ function BankReconMatchCard({ action, isHistorical, onActionComplete }: ActionCa
   )
   const [errorMsg, setErrorMsg] = useState('')
 
+  // Call Convex mutations directly (same pattern as expense-approval-card)
+  const confirmMatch = useMutation((api as any).functions.reconciliationMatches.confirmMatch)
+  const rejectMatchMutation = useMutation((api as any).functions.reconciliationMatches.rejectMatch)
+
   const handleAction = async (matchAction: 'accept' | 'reject') => {
     setCardState('loading')
     setErrorMsg('')
 
     try {
-      // The agent will call accept_recon_match MCP tool — we emit an event
-      // that the chat handler picks up and routes to the MCP tool
-      onActionComplete?.({
-        success: true,
-        message: JSON.stringify({
-          tool: 'accept_recon_match',
-          args: {
-            action: matchAction,
-            matchId: data.matchId,
-          },
-        }),
-      })
+      if (matchAction === 'accept') {
+        await confirmMatch({ matchId: data.matchId as any })
+      } else {
+        await rejectMatchMutation({ matchId: data.matchId as any })
+      }
       setFinalStatus(matchAction === 'accept' ? 'accepted' : 'rejected')
       setCardState('done')
     } catch (err) {

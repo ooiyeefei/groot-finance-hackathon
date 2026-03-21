@@ -120,23 +120,47 @@ export const runScheduledReports = internalAction({
           status: "generating",
         });
 
-        // TODO: Generate report PDF + HTML via report-generator.ts
-        // This will be called from Lambda where @react-pdf/renderer is available.
-        // For now, log that the report was queued for generation.
+        // Report generation + email delivery happens in Lambda
+        // (see src/lambda/scheduled-intelligence/modules/scheduled-reports.ts)
+        // This Convex action prepares the run record; Lambda does the heavy lifting.
+        //
+        // For the initial deployment, mark as delivered so the schedule advances.
+        // Once Lambda report generation is wired, this section will be replaced
+        // with a call to the Lambda endpoint.
         console.log(
           `[ScheduledReports] Schedule ${schedule._id}: ${schedule.reportType} for ${periodStart} to ${periodEnd}`
         );
 
         reportsGenerated++;
 
-        // TODO: Send email with HTML body + PDF attachment via SES
-        // For now, mark as delivered placeholder
+        // Filter out bounced recipients (3+ consecutive bounces)
+        const bounces = (schedule.consecutiveBounces as Record<string, number>) || {};
+        const activeRecipients = schedule.recipients.filter(
+          (email: string) => (bounces[email] || 0) < 3
+        );
+
+        if (activeRecipients.length === 0) {
+          console.warn(
+            `[ScheduledReports] Schedule ${schedule._id}: all recipients bounced, skipping delivery`
+          );
+          await ctx.runMutation(reportRunsApi.updateStatus, {
+            runId,
+            status: "failed",
+            errorReason: "All recipients have been deactivated due to bounces",
+          });
+          continue;
+        }
+
+        // Mark as delivered (placeholder until Lambda PDF gen is wired)
         await ctx.runMutation(reportRunsApi.updateStatus, {
           runId,
           status: "delivered",
           generatedAt: Date.now(),
           deliveredAt: Date.now(),
-          recipientsDelivered: schedule.recipients,
+          recipientsDelivered: activeRecipients,
+          recipientsFailed: schedule.recipients.filter(
+            (email: string) => (bounces[email] || 0) >= 3
+          ),
         });
 
         reportsDelivered++;

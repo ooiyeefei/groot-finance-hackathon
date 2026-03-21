@@ -74,13 +74,26 @@ For CANCEL: need schedule_id.`
     }
   }
 
-  protected async validateParameters(parameters: ToolParameters): Promise<{ valid: boolean; error?: string }> {
+  protected async validateParameters(parameters: ToolParameters, userContext?: UserContext): Promise<{ valid: boolean; error?: string }> {
     if (!parameters.action) {
       return { valid: false, error: 'action is required' }
     }
     if (parameters.action === 'create' && (!parameters.report_type || !parameters.frequency)) {
       return { valid: false, error: 'report_type and frequency are required for create' }
     }
+
+    // RBAC: employees can only schedule expense_summary
+    if (parameters.action === 'create' && userContext?.role) {
+      const financialReportTypes = ['pnl', 'cash_flow', 'ar_aging', 'ap_aging']
+      const isEmployee = !['owner', 'finance_admin', 'manager'].includes(userContext.role)
+      if (isEmployee && financialReportTypes.includes(parameters.report_type as string)) {
+        return {
+          valid: false,
+          error: `Only managers and admins can schedule ${parameters.report_type} reports. You can schedule expense_summary reports.`
+        }
+      }
+    }
+
     return { valid: true }
   }
 
