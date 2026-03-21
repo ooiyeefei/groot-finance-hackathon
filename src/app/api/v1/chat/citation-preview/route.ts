@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 
-const ALLOWED_DOMAINS = ['ssm.com.my', 'gov.sg', 'jhi.gov.my', 'mida.gov.my']
+const ALLOWED_DOMAINS = ['ssm.com.my', 'gov.sg', 'jhi.gov.my', 'mida.gov.my', 'hasil.gov.my', 'iras.gov.sg']
 
 export async function GET(request: NextRequest) {
   try {
