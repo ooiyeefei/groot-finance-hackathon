@@ -181,8 +181,8 @@ function ProactiveAlertCard({ action, isHistorical, onActionComplete }: ActionCa
           <p className="text-xs text-primary italic">Investigating...</p>
         )}
 
-        {/* Action buttons */}
-        {!isHistorical && !actionTaken && (
+        {/* Action buttons — always show for proactive alerts (they're never streamed live) */}
+        {!actionTaken && (
           <div className="flex gap-2 mt-1">
             <button
               onClick={onInvestigate}
