@@ -102,7 +102,7 @@ export const analyzeTrends = action({
       v.union(v.literal("monthly"), v.literal("quarterly"), v.literal("yearly"))
     ),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<Record<string, any>> => {
     // Resolve business ID
     const business = await ctx.runQuery(internal.functions.trendAnalysis.lookupBusiness, {
       businessId: args.businessId,
