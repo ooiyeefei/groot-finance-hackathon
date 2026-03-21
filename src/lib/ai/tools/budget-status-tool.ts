@@ -21,7 +21,7 @@ export class BudgetStatusTool extends BaseTool {
   }
 
   getDescription(_modelType: ModelType = 'openai'): string {
-    return "Check budget utilization status across expense categories. Shows spending vs budget limits with visual status indicators. Use when a manager asks 'What is our budget status?' or 'How is Travel spending?'"
+    return "Check budget utilization status across expense categories. Shows spending vs configured budget limits with visual status indicators. Use when a manager asks 'What is our budget status?' or 'How is Travel spending vs budget?'. If no budgets are configured, the response will indicate this — you should then proactively offer to help the manager set up budgets using the set_budget tool."
   }
 
   getToolSchema(_modelType: ModelType = 'openai'): OpenAIToolSchema {
