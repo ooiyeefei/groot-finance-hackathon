@@ -8,6 +8,7 @@
  */
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
+import { convertForDisplay } from './currency-display-helper'
 import { resolveDateRange } from '@/lib/ai/utils/date-range-resolver'
 import { mapCategoryTerm } from '@/lib/ai/utils/category-mapper'
 
@@ -59,6 +60,10 @@ This differs from get_transactions which only returns the current user's own dat
             limit: {
               type: "number",
               description: "Max transactions to return (default: 50, max: 100)."
+            },
+            display_currency: {
+              type: "string",
+              description: "Optional currency code (e.g., 'USD', 'SGD') to show converted amounts alongside home currency."
             }
           },
           required: []
@@ -127,8 +132,16 @@ This differs from get_transactions which only returns the current user's own dat
         }
       }
 
+      // Currency conversion if requested
+      const displayCurrency = parameters.display_currency as string | undefined
+      const homeCurrency = result.currency || userContext.homeCurrency || 'MYR'
+      const conversion = displayCurrency ? await convertForDisplay(1, homeCurrency, displayCurrency) : null
+      const rate = conversion?.exchangeRate || 1
+      const convertSuffix = (amount: number) =>
+        conversion ? ` (~ ${displayCurrency} ${(amount * rate).toFixed(2)})` : ''
+
       let dataText = `**Business-Wide Transactions** (${result.totalCount} total, showing ${transactions.length})\n\n`
-      dataText += `Total: ${result.totalAmount.toFixed(2)} ${result.currency}\n\n`
+      dataText += `Total: ${result.totalAmount.toFixed(2)} ${result.currency}${convertSuffix(result.totalAmount)}\n\n`
 
       dataText += `Transactions:\n`
       for (let i = 0; i < transactions.length; i++) {

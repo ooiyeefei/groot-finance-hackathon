@@ -23,6 +23,7 @@ import './budget-alert-card'
 import './spending-time-series'
 import './revenue-summary-card'
 import './expense-reimbursement-card'
+import './trend-comparison-card'
 
 // --- Fallback Card ---
 

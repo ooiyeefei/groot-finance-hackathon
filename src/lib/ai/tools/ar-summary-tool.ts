@@ -7,6 +7,7 @@
  */
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
+import { convertForDisplay } from './currency-display-helper'
 import { resolveDateRange } from '@/lib/ai/utils/date-range-resolver'
 
 export class ARSummaryTool extends BaseTool {
@@ -39,6 +40,10 @@ Use for: "total revenue this month", "which customers are overdue", "AR aging re
             end_date: {
               type: "string",
               description: "Explicit end date in YYYY-MM-DD format."
+            },
+            display_currency: {
+              type: "string",
+              description: "Optional currency code (e.g., 'USD', 'SGD') to show converted amounts alongside home currency."
             },
           },
           required: []
@@ -80,11 +85,19 @@ Use for: "total revenue this month", "which customers are overdue", "AR aging re
         return { success: false, error: result.error as string }
       }
 
+      // Currency conversion if requested
+      const displayCurrency = parameters.display_currency as string | undefined
+      const homeCurrency = result.currency || userContext.homeCurrency || 'MYR'
+      const conversion = displayCurrency ? await convertForDisplay(1, homeCurrency, displayCurrency) : null
+      const rate = conversion?.exchangeRate || 1
+      const convertSuffix = (amount: number) =>
+        conversion ? ` (~ ${displayCurrency} ${(amount * rate).toFixed(2)})` : ''
+
       // Format conversational text
       let dataText = `**Accounts Receivable Summary**\n\n`
-      dataText += `Total Revenue: ${result.totalRevenue.toFixed(2)} ${result.currency}\n`
-      dataText += `Outstanding: ${result.totalOutstanding.toFixed(2)} ${result.currency}\n`
-      dataText += `Overdue: ${result.totalOverdue.toFixed(2)} ${result.currency}\n`
+      dataText += `Total Revenue: ${result.totalRevenue.toFixed(2)} ${result.currency}${convertSuffix(result.totalRevenue)}\n`
+      dataText += `Outstanding: ${result.totalOutstanding.toFixed(2)} ${result.currency}${convertSuffix(result.totalOutstanding)}\n`
+      dataText += `Overdue: ${result.totalOverdue.toFixed(2)} ${result.currency}${convertSuffix(result.totalOverdue)}\n`
       dataText += `Outstanding Invoices: ${result.invoiceCount}\n`
       if (result.totalInvoiceCount) {
         dataText += `Total Invoices (all statuses): ${result.totalInvoiceCount}\n`

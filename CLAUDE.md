@@ -540,6 +540,8 @@ const arBalance = arLines.reduce((sum, line) =>
 - TypeScript 5.9.3 (frontend + Convex), Python 3.11 (Lambda instrumentation) + Next.js 15.5.7, Convex 1.31.3, Recharts (existing), Radix UI (existing) (027-dspy-dash)
 - Convex (`dspy_metrics_daily` aggregate table + existing correction tables) (027-dspy-dash)
 - TypeScript 5.9.3 (Node.js 20), Python 3.11 (DSPy optimizer, already exists) (030-eventbridge-migration)
+- TypeScript 5.9.3 + Next.js 15.5.7, Convex 1.31.3, LangGraph 0.4.5 (031-multi-curr-history-analysis)
+- Convex (journal_entries, journal_entry_lines, manual_exchange_rates) (031-multi-curr-history-analysis)
 
 
 ## Recent Changes

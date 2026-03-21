@@ -24,6 +24,8 @@ import { TeamSummaryTool } from './team-summary-tool'
 import { ARSummaryTool } from './ar-summary-tool'
 import { APAgingTool } from './ap-aging-tool'
 import { BusinessTransactionsTool } from './business-transactions-tool'
+// Trend analysis tools (031-multi-curr-history-analysis)
+import { AnalyzeTrendsTool } from './analyze-trends-tool'
 // Memory tools (029-dspy-mem0-activation)
 import { MemoryStoreTool } from './memory/memory-store-tool'
 import { MemorySearchTool } from './memory/memory-search-tool'
@@ -51,6 +53,8 @@ export type ToolName =
   | 'get_ar_summary'
   | 'get_ap_aging'
   | 'get_business_transactions'
+  // Trend analysis tools (031-multi-curr-history-analysis)
+  | 'analyze_trends'
   // Memory tools (029-dspy-mem0-activation)
   | 'memory_store'
   | 'memory_search'
@@ -94,6 +98,9 @@ export class ToolFactory {
     this.registerTool('get_ap_aging', () => new APAgingTool())
     this.registerTool('get_business_transactions', () => new BusinessTransactionsTool())
 
+    // Trend analysis tools (031-multi-curr-history-analysis)
+    this.registerTool('analyze_trends', () => new AnalyzeTrendsTool())
+
     // Memory tools (029-dspy-mem0-activation)
     this.registerTool('memory_store', () => new MemoryStoreTool())
     this.registerTool('memory_search', () => new MemorySearchTool())
@@ -109,6 +116,7 @@ export class ToolFactory {
     'get_employee_expenses',
     'get_team_summary',
     'get_action_center_insight',
+    'analyze_trends',
   ])
 
   /**

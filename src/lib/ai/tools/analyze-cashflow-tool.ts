@@ -9,6 +9,7 @@
  */
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
+import { convertForDisplay } from './currency-display-helper'
 
 export class AnalyzeCashFlowTool extends BaseTool {
   getToolName(modelType?: ModelType): string {
@@ -34,6 +35,10 @@ Use this when users ask about cash flow, runway, burn rate, or financial health.
             horizon_days: {
               type: "number",
               description: "Analysis period in days (default: 90). Uses historical data to calculate burn rate and projections."
+            },
+            display_currency: {
+              type: "string",
+              description: "Optional currency code (e.g., 'USD', 'SGD') to show converted amounts alongside home currency."
             }
           },
           required: []
@@ -81,9 +86,41 @@ Use this when users ask about cash flow, runway, burn rate, or financial health.
 
       console.log(`[AnalyzeCashFlowTool] Analysis complete. Runway: ${result.runwayDays} days, Alerts: ${result.alerts.length}`)
 
+      // Apply currency conversion if requested
+      const displayCurrency = parameters.display_currency as string | undefined
+      const homeCurrency = userContext.homeCurrency || 'MYR'
+      let enrichedResult = result
+
+      if (displayCurrency && displayCurrency !== homeCurrency) {
+        const conversion = await convertForDisplay(
+          result.estimatedBalance || 0,
+          homeCurrency,
+          displayCurrency
+        )
+        if (conversion) {
+          enrichedResult = {
+            ...result,
+            currencyConversion: {
+              displayCurrency,
+              exchangeRate: conversion.exchangeRate,
+              estimatedBalance_converted: conversion.convertedAmount,
+              monthlyBurnRate_converted: result.monthlyBurnRate
+                ? Math.round(result.monthlyBurnRate * conversion.exchangeRate * 100) / 100
+                : undefined,
+              totalIncome_converted: result.totalIncome
+                ? Math.round(result.totalIncome * conversion.exchangeRate * 100) / 100
+                : undefined,
+              totalExpenses_converted: result.totalExpenses
+                ? Math.round(result.totalExpenses * conversion.exchangeRate * 100) / 100
+                : undefined,
+            },
+          } as any
+        }
+      }
+
       return {
         success: true,
-        data: result,
+        data: enrichedResult,
         metadata: {
           runwayDays: result.runwayDays,
           monthlyBurnRate: result.monthlyBurnRate,

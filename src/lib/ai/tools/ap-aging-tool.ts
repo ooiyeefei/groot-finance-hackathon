@@ -7,6 +7,7 @@
  */
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
+import { convertForDisplay } from './currency-display-helper'
 import { resolveDateRange } from '@/lib/ai/utils/date-range-resolver'
 
 export class APAgingTool extends BaseTool {
@@ -39,6 +40,10 @@ Use for: "how much do we owe suppliers", "AP aging", "vendor balances", "what's 
             end_date: {
               type: "string",
               description: "Explicit end date in YYYY-MM-DD format."
+            },
+            display_currency: {
+              type: "string",
+              description: "Optional currency code (e.g., 'USD', 'SGD') to show converted amounts alongside home currency."
             },
           },
           required: []
@@ -80,9 +85,17 @@ Use for: "how much do we owe suppliers", "AP aging", "vendor balances", "what's 
         return { success: false, error: result.error as string }
       }
 
+      // Currency conversion if requested
+      const displayCurrency = parameters.display_currency as string | undefined
+      const homeCurrency = result.currency || userContext.homeCurrency || 'MYR'
+      const conversion = displayCurrency ? await convertForDisplay(1, homeCurrency, displayCurrency) : null
+      const rate = conversion?.exchangeRate || 1
+      const convertSuffix = (amount: number) =>
+        conversion ? ` (~ ${displayCurrency} ${(amount * rate).toFixed(2)})` : ''
+
       let dataText = `**Accounts Payable Aging**\n\n`
-      dataText += `Total Outstanding: ${result.totalOutstanding.toFixed(2)} ${result.currency}\n`
-      dataText += `Total Overdue: ${result.totalOverdue.toFixed(2)} ${result.currency}\n`
+      dataText += `Total Outstanding: ${result.totalOutstanding.toFixed(2)} ${result.currency}${convertSuffix(result.totalOutstanding)}\n`
+      dataText += `Total Overdue: ${result.totalOverdue.toFixed(2)} ${result.currency}${convertSuffix(result.totalOverdue)}\n`
 
       if (result.agingBuckets.some((b: any) => b.amount > 0)) {
         dataText += `\nAging Breakdown:\n`

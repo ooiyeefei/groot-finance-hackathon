@@ -19,6 +19,7 @@ export interface DateRangeResult {
  *
  * Supported patterns:
  * - Named months: "January 2026", "jan 2026", "January"
+ * - Named quarters: "Q1 2025", "q2 2026", "Q3" (defaults to current year)
  * - Relative periods: "last month", "this month", "last quarter", "this quarter", "this year", "last year"
  * - Rolling windows: "past 60 days", "last 30 days", "past_60_days"
  * - Multi-month: "last 2 months", "past 3 months"
@@ -43,7 +44,22 @@ export function resolveDateRange(
     return { startDate, endDate, description: `${startDate} to ${endDate}` }
   }
 
-  // 2. Named months with optional year: "January 2026", "jan", "feb 2025"
+  // 2. Named quarters: "Q1 2025", "q2 2026", "Q3" (defaults to current year)
+  const quarterMatch = input.match(/^q([1-4])(?:\s+(\d{4}))?$/)
+  if (quarterMatch) {
+    const q = parseInt(quarterMatch[1])
+    const year = quarterMatch[2] ? parseInt(quarterMatch[2]) : ref.getFullYear()
+    const startMonth = (q - 1) * 3
+    const start = new Date(year, startMonth, 1)
+    const end = new Date(year, startMonth + 3, 0) // last day of quarter
+    return {
+      startDate: formatDate(start),
+      endDate: formatDate(end),
+      description: `Q${q} ${year}`,
+    }
+  }
+
+  // Named months with optional year: "January 2026", "jan", "feb 2025"
   const monthNames: Record<string, number> = {
     january: 0, jan: 0, february: 1, feb: 1, march: 2, mar: 2,
     april: 3, apr: 3, may: 4, june: 5, jun: 5,
