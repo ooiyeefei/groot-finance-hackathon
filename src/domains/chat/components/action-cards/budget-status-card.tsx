@@ -105,25 +105,26 @@ function BudgetStatusCard({ action }: ActionCardProps) {
       <div className="px-3 py-2.5 space-y-2.5">
         {data.categories.map((cat) => {
           const config = STATUS_CONFIG[cat.status] || STATUS_CONFIG.on_track
-          const barPercent = Math.min(cat.percentUsed, 100)
+
+          const pctUsed = typeof cat.percentUsed === 'number' && !isNaN(cat.percentUsed) ? cat.percentUsed : 0
 
           return (
-            <div key={cat.categoryId}>
+            <div key={cat.categoryId || cat.categoryName}>
               <div className="flex items-center justify-between text-xs mb-0.5">
                 <span className="text-foreground truncate mr-2">{cat.categoryName}</span>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <span className="text-foreground font-medium">
-                    {formatCurrency(cat.currentSpend, currency)} / {formatCurrency(cat.budgetLimit, currency)}
+                    {formatCurrency(cat.currentSpend || 0, currency)} / {formatCurrency(cat.budgetLimit || 0, currency)}
                   </span>
                   <span className={`text-[10px] font-medium px-1 py-0.5 rounded ${config.badge}`}>
-                    {cat.status === 'overspent' ? 'Over' : `${Math.round(cat.percentUsed)}%`}
+                    {cat.status === 'overspent' ? 'Over' : `${Math.round(pctUsed)}%`}
                   </span>
                 </div>
               </div>
               <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-all ${getBarColor(cat.percentUsed)}`}
-                  style={{ width: `${barPercent}%` }}
+                  className={`h-full rounded-full transition-all ${getBarColor(pctUsed)}`}
+                  style={{ width: `${Math.min(pctUsed, 100)}%` }}
                 />
               </div>
             </div>

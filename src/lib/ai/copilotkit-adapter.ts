@@ -274,7 +274,7 @@ export async function* streamLangGraphAgent(
 
     // Always strip residual action card JSON from text (safety net for edge cases
     // where the regex extraction partially matched or the LLM used unusual formatting).
-    const ACTION_TYPES_PATTERN = 'invoice_posting|cash_flow_dashboard|compliance_alert|budget_alert|spending_time_series|anomaly_card|vendor_comparison|expense_approval|expense_reimbursement|revenue_summary|receipt_claim|trend_comparison_card'
+    const ACTION_TYPES_PATTERN = 'invoice_posting|cash_flow_dashboard|compliance_alert|budget_alert|budget_status|spending_time_series|anomaly_card|vendor_comparison|expense_approval|expense_reimbursement|revenue_summary|receipt_claim|trend_comparison_card|late_approvals|team_comparison'
     finalContent = finalContent
       // Strip ```actions ... ``` fenced blocks
       .replace(/(?:\\*`){3,}actions[\s\S]*?(?:\\*`){3,}/g, '')
