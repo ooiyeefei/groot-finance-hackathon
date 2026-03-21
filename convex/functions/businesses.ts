@@ -1439,7 +1439,7 @@ export const updateExpenseCategory = mutation({
       ...(args.is_active !== undefined && { is_active: args.is_active }),
       ...(args.glCode !== undefined && { glCode: args.glCode }),
       ...(args.budgetLimit !== undefined && { budgetLimit: args.budgetLimit || undefined }),
-      ...(args.budgetCurrency !== undefined && { budgetCurrency: args.budgetCurrency }),
+      ...(args.budgetCurrency !== undefined && { budgetCurrency: args.budgetCurrency || undefined }),
       updated_at: new Date().toISOString(),
     };
 

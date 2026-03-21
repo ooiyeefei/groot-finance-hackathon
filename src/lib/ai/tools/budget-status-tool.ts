@@ -111,32 +111,17 @@ export class BudgetStatusTool extends BaseTool {
       let totalSpent = 0
 
       const categoryBreakdown = result.categories.map((cat: any) => {
-        const utilization = cat.budgetLimit > 0
-          ? Math.round((cat.spent / cat.budgetLimit) * 100)
-          : 0
         totalBudget += cat.budgetLimit
-        totalSpent += cat.spent
-        const remaining = cat.budgetLimit - cat.spent
-
-        // Status indicators
-        let status: string
-        if (utilization >= 100) {
-          status = 'OVER BUDGET'
-        } else if (utilization >= 80) {
-          status = 'WARNING'
-        } else {
-          status = 'ON TRACK'
-        }
+        totalSpent += cat.currentSpend
 
         return {
+          categoryId: cat.categoryId,
           categoryName: cat.categoryName,
           budgetLimit: cat.budgetLimit,
-          spent: cat.spent,
-          remaining,
-          utilization,
-          status,
-          currency: cat.currency || result.currency,
-          transactionCount: cat.transactionCount || 0,
+          currentSpend: cat.currentSpend,
+          remaining: cat.remaining,
+          percentUsed: cat.percentUsed,
+          status: cat.status, // 'on_track' | 'warning' | 'overspent'
         }
       })
 
@@ -146,20 +131,18 @@ export class BudgetStatusTool extends BaseTool {
 
       // Per-category breakdown
       categoryBreakdown.forEach((cat: any, i: number) => {
-        const bar = this.renderUtilizationBar(cat.utilization)
-        dataText += `${i + 1}. ${cat.categoryName} [${cat.status}]\n`
-        dataText += `   ${bar} ${cat.utilization}%\n`
-        dataText += `   Spent: ${cat.spent.toFixed(2)} / ${cat.budgetLimit.toFixed(2)} ${cat.currency}`
-        dataText += ` | Remaining: ${cat.remaining.toFixed(2)} ${cat.currency}`
-        if (cat.transactionCount > 0) {
-          dataText += ` | ${cat.transactionCount} transaction(s)`
-        }
+        const bar = this.renderUtilizationBar(cat.percentUsed)
+        const statusLabel = cat.status === 'overspent' ? 'OVER BUDGET' : cat.status === 'warning' ? 'WARNING' : 'ON TRACK'
+        dataText += `${i + 1}. ${cat.categoryName} [${statusLabel}]\n`
+        dataText += `   ${bar} ${cat.percentUsed}%\n`
+        dataText += `   Spent: ${cat.currentSpend.toFixed(2)} / ${cat.budgetLimit.toFixed(2)} ${result.currency}`
+        dataText += ` | Remaining: ${cat.remaining.toFixed(2)} ${result.currency}`
         dataText += '\n\n'
       })
 
       // Highlight over-budget categories
-      const overBudget = categoryBreakdown.filter((c: any) => c.utilization >= 100)
-      const warnings = categoryBreakdown.filter((c: any) => c.utilization >= 80 && c.utilization < 100)
+      const overBudget = categoryBreakdown.filter((c: any) => c.percentUsed >= 100)
+      const warnings = categoryBreakdown.filter((c: any) => c.percentUsed >= 80 && c.percentUsed < 100)
 
       if (overBudget.length > 0) {
         dataText += `Attention: ${overBudget.length} category/categories over budget: ${overBudget.map((c: any) => c.categoryName).join(', ')}\n`
@@ -188,8 +171,8 @@ export class BudgetStatusTool extends BaseTool {
             period,
             currency: result.currency,
             totalBudget,
-            totalSpent,
-            overallUtilization,
+            totalSpend: totalSpent,
+            overallStatus: result.overallStatus,
             categories: categoryBreakdown,
           },
           resultsCount: categoryBreakdown.length,

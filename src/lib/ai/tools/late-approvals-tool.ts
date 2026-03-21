@@ -96,12 +96,11 @@ export class LateApprovalsTool extends BaseTool {
 
       console.log(`[LateApprovalsTool] Checking for submissions overdue by >${thresholdDays} business days`)
 
-      // Query pending submissions
+      // Query pending submissions assigned to this manager
       const submissions = await this.convex!.query(
-        this.convexApi.functions.expenseSubmissions.list,
+        this.convexApi.functions.expenseSubmissions.getPendingApprovals,
         {
           businessId: userContext.businessId as any,
-          status: 'submitted',
         }
       )
 
@@ -114,21 +113,26 @@ export class LateApprovalsTool extends BaseTool {
       }
 
       // Filter submissions that exceed the threshold
+      const homeCurrency = userContext.homeCurrency || 'MYR'
       const lateSubmissions = submissions
         .map((sub: any) => {
-          const submittedAt = new Date(sub.submittedAt || sub._creationTime)
+          const submittedAt = new Date(sub.submittedAt)
           const waitingDays = countBusinessDays(submittedAt, now)
 
+          // Sum totals across currencies (use first currency or home)
+          const totals = sub.totalsByCurrency || []
+          const totalAmount = totals.reduce((sum: number, t: any) => sum + (t.total || 0), 0)
+          const currency = totals.length > 0 ? totals[0].currency : homeCurrency
+
           return {
-            id: sub._id,
-            employeeName: sub.employeeName || sub.submittedByName || 'Unknown',
-            employeeEmail: sub.employeeEmail || sub.submittedByEmail || '',
+            submissionId: sub._id,
+            submitterName: sub.submitterName || 'Unknown',
+            title: sub.title || 'Expense Submission',
             submittedAt: submittedAt.toISOString().split('T')[0],
             waitingDays,
-            totalAmount: sub.totalAmount || 0,
-            currency: sub.currency || userContext.homeCurrency || 'MYR',
-            claimCount: sub.claimCount || sub.items?.length || 0,
-            description: sub.description || sub.title || 'Expense Submission',
+            totalAmount,
+            currency,
+            claimCount: sub.claimCount || 0,
           }
         })
         .filter((sub: any) => sub.waitingDays > thresholdDays)
@@ -153,14 +157,14 @@ export class LateApprovalsTool extends BaseTool {
 
       lateSubmissions.forEach((sub: any, i: number) => {
         const urgency = sub.waitingDays >= thresholdDays * 2 ? 'CRITICAL' : 'OVERDUE'
-        dataText += `${i + 1}. [${urgency}] ${sub.employeeName}\n`
+        dataText += `${i + 1}. [${urgency}] ${sub.submitterName}\n`
         dataText += `   Submitted: ${sub.submittedAt} (${sub.waitingDays} business days ago)\n`
         dataText += `   Amount: ${sub.totalAmount.toFixed(2)} ${sub.currency}`
         if (sub.claimCount > 0) {
           dataText += ` | ${sub.claimCount} claim(s)`
         }
         dataText += '\n'
-        dataText += `   Description: ${sub.description}\n\n`
+        dataText += `   Title: ${sub.title}\n\n`
       })
 
       // Summary stats
@@ -190,13 +194,9 @@ export class LateApprovalsTool extends BaseTool {
         data: dataText,
         metadata: {
           structured: {
-            thresholdDays,
-            totalPending: submissions.length,
             lateSubmissions,
-            totalOverdueAmount,
-            currency: lateSubmissions[0].currency,
-            maxWaitingDays: maxWaiting,
-            criticalCount,
+            totalLate: lateSubmissions.length,
+            oldestWaitingDays: maxWaiting,
           },
           resultsCount: lateSubmissions.length,
         }

@@ -136,8 +136,8 @@ export class SetBudgetTool extends BaseTool {
         {
           businessId: userContext.businessId as any,
           categoryId: matchedCategory.id,
-          budgetLimit: isRemoving ? undefined : params.monthly_limit,
-          budgetCurrency: isRemoving ? undefined : currency,
+          budgetLimit: isRemoving ? 0 : params.monthly_limit,
+          budgetCurrency: isRemoving ? '' : currency,
         }
       )
 

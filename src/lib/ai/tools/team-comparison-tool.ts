@@ -18,11 +18,13 @@ interface TeamComparisonParameters {
 }
 
 interface EmployeeSpending {
-  name: string
-  totalAmount: number
-  transactionCount: number
+  employeeId: string
+  employeeName: string
+  totalSpend: number
+  claimCount: number
   percentage: number
   isOutlier: boolean
+  topCategories: Array<{ name: string; amount: number }>
 }
 
 export class TeamComparisonTool extends BaseTool {
@@ -126,7 +128,7 @@ export class TeamComparisonTool extends BaseTool {
           filters: {
             startDate,
             endDate,
-            groupBy: 'employee',
+            groupBy,
           },
         }
       )
@@ -163,13 +165,15 @@ export class TeamComparisonTool extends BaseTool {
 
       const employees: EmployeeSpending[] = result.breakdown
         .map((b: any) => ({
-          name: b.groupKey,
-          totalAmount: b.totalAmount,
-          transactionCount: b.recordCount,
+          employeeId: b.groupKey,
+          employeeName: b.groupKey,
+          totalSpend: b.totalAmount,
+          claimCount: b.recordCount,
           percentage: b.percentage,
           isOutlier: b.totalAmount > outlierThreshold,
+          topCategories: [] as Array<{ name: string; amount: number }>,
         }))
-        .sort((a: EmployeeSpending, b: EmployeeSpending) => b.totalAmount - a.totalAmount)
+        .sort((a: EmployeeSpending, b: EmployeeSpending) => b.totalSpend - a.totalSpend)
 
       const outliers = employees.filter(e => e.isOutlier)
 
@@ -183,16 +187,16 @@ export class TeamComparisonTool extends BaseTool {
       employees.forEach((emp, i) => {
         const outlierFlag = emp.isOutlier ? ' ** ABOVE AVERAGE **' : ''
         const bar = this.renderBar(emp.percentage)
-        dataText += `${i + 1}. ${emp.name}${outlierFlag}\n`
-        dataText += `   ${bar} ${emp.totalAmount.toFixed(2)} ${currency} (${emp.percentage}%)`
-        dataText += ` — ${emp.transactionCount} transaction(s)\n`
+        dataText += `${i + 1}. ${emp.employeeName}${outlierFlag}\n`
+        dataText += `   ${bar} ${emp.totalSpend.toFixed(2)} ${currency} (${emp.percentage}%)`
+        dataText += ` — ${emp.claimCount} transaction(s)\n`
       })
 
       if (outliers.length > 0) {
         dataText += `\nOutliers (spending >1.5x team average):\n`
         outliers.forEach(o => {
-          const ratio = teamAverage > 0 ? (o.totalAmount / teamAverage).toFixed(1) : 'N/A'
-          dataText += `  - ${o.name}: ${o.totalAmount.toFixed(2)} ${currency} (${ratio}x average)\n`
+          const ratio = teamAverage > 0 ? (o.totalSpend / teamAverage).toFixed(1) : 'N/A'
+          dataText += `  - ${o.employeeName}: ${o.totalSpend.toFixed(2)} ${currency} (${ratio}x average)\n`
         })
       } else {
         dataText += `\nNo spending outliers detected — all employees are within 1.5x of the team average.\n`
@@ -223,19 +227,12 @@ export class TeamComparisonTool extends BaseTool {
         data: dataText,
         metadata: {
           structured: {
-            period: { startDate, endDate },
+            period: `${startDate} to ${endDate}`,
             currency,
-            totalAmount,
+            teamTotal: totalAmount,
             teamAverage,
             outlierThreshold,
-            employeeCount,
             employees,
-            outliers: outliers.map(o => ({
-              name: o.name,
-              totalAmount: o.totalAmount,
-              ratio: teamAverage > 0 ? parseFloat((o.totalAmount / teamAverage).toFixed(1)) : 0,
-            })),
-            topCategories: result.topCategories || [],
           },
           resultsCount: employeeCount,
         }
