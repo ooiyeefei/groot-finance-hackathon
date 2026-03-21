@@ -339,6 +339,7 @@ The word "expense" is AMBIGUOUS in accounting. You MUST route to the correct too
 5. When in doubt between expense claims vs AP invoices, look for these signals:
    - "approval", "approve", "pending", "submitted", "reimbursement", "claim" → employee expense claims
    - "posting", "post", "vendor bill", "supplier", "purchase order" → AP invoices
+6. **[Attached: ...]** markers or image attachments in the user message → **ALWAYS call \`create_expense_from_receipt\`**. Extract the s3Path, mimeType, and filename from the [Attached: filename (mimeType, s3Path: path)] marker and pass them as the \`attachments\` parameter. This is a receipt photo that needs OCR processing to create an expense claim.
 
 ## MANDATORY RESPONSE FORMAT FOR INVOICE DATA
 
