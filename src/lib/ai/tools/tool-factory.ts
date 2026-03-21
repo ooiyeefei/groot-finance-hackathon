@@ -38,6 +38,8 @@ import { LateApprovalsTool } from './late-approvals-tool'
 import { TeamComparisonTool } from './team-comparison-tool'
 // CFO copilot tools (031-cfo-copilot-tools)
 import { GenerateReportTool } from './generate-report-tool'
+// Receipt processing tool (031-chat-receipt-process)
+import { ReceiptClaimTool } from './receipt-claim-tool'
 
 export type ToolName =
   // Category 1-2: Data retrieval tools
@@ -74,6 +76,8 @@ export type ToolName =
   | 'check_budget_status'
   | 'get_late_approvals'
   | 'compare_team_spending'
+  // Receipt processing tool (031-chat-receipt-process)
+  | 'create_expense_from_receipt'
 
 /**
  * Tool Factory implementing dependency injection pattern
@@ -129,6 +133,9 @@ export class ToolFactory {
     this.registerTool('check_budget_status', () => new BudgetStatusTool())
     this.registerTool('get_late_approvals', () => new LateApprovalsTool())
     this.registerTool('compare_team_spending', () => new TeamComparisonTool())
+
+    // Receipt processing tool (031-chat-receipt-process)
+    this.registerTool('create_expense_from_receipt', () => new ReceiptClaimTool())
   }
 
   /**

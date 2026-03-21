@@ -14,11 +14,21 @@ import { HumanMessage, AIMessage, ToolMessage, type BaseMessage } from '@langcha
 import type { CitationData } from '@/lib/ai/tools/base-tool'
 import type { UserContext } from '@/lib/ai/tools/base-tool'
 
+/** Attachment metadata from pre-uploaded files via /api/v1/chat/upload */
+export interface ChatAttachment {
+  id: string
+  s3Path: string
+  mimeType: string
+  filename: string
+  size: number
+}
+
 export interface CopilotAgentRequest {
   message: string
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>
   userContext: UserContext & { conversationId: string }
   language: string
+  attachments?: ChatAttachment[]
 }
 
 export interface CopilotAgentResponse {
@@ -162,14 +172,28 @@ const NODE_STATUS_MAP: Record<string, string> = {
 export async function* streamLangGraphAgent(
   request: CopilotAgentRequest
 ): AsyncGenerator<SSEEvent> {
-  const { message, conversationHistory, userContext, language } = request
+  const { message, conversationHistory, userContext, language, attachments } = request
 
   const langchainHistory: BaseMessage[] = conversationHistory.map((msg) =>
     msg.role === 'user' ? new HumanMessage(msg.content) : new AIMessage(msg.content)
   )
 
-  const agentState = createAgentState(userContext, message, language)
-  agentState.messages = [...langchainHistory, new HumanMessage(message)]
+  // If attachments are present, include them in the message context so the agent
+  // knows to invoke the receipt processing tool.
+  let augmentedMessage = message
+  if (attachments && attachments.length > 0) {
+    const attachmentSummary = attachments.map(a =>
+      `[Attached: ${a.filename} (${a.mimeType}, s3Path: ${a.s3Path})]`
+    ).join('\n')
+    augmentedMessage = `${attachmentSummary}\n\n${message}`
+  }
+
+  const agentState = createAgentState(userContext, augmentedMessage, language)
+  // Store attachments in agent state metadata for tool access
+  if (attachments && attachments.length > 0) {
+    ;(agentState as Record<string, unknown>).attachments = attachments
+  }
+  agentState.messages = [...langchainHistory, new HumanMessage(augmentedMessage)]
 
   const financialAgent = createFinancialAgent()
 
@@ -250,7 +274,7 @@ export async function* streamLangGraphAgent(
 
     // Always strip residual action card JSON from text (safety net for edge cases
     // where the regex extraction partially matched or the LLM used unusual formatting).
-    const ACTION_TYPES_PATTERN = 'invoice_posting|cash_flow_dashboard|compliance_alert|budget_alert|spending_time_series|anomaly_card|vendor_comparison|expense_approval|expense_reimbursement|revenue_summary'
+    const ACTION_TYPES_PATTERN = 'invoice_posting|cash_flow_dashboard|compliance_alert|budget_alert|spending_time_series|anomaly_card|vendor_comparison|expense_approval|expense_reimbursement|revenue_summary|receipt_claim'
     finalContent = finalContent
       // Strip ```actions ... ``` fenced blocks
       .replace(/(?:\\*`){3,}actions[\s\S]*?(?:\\*`){3,}/g, '')
@@ -537,6 +561,21 @@ function autoGenerateActionsFromToolResults(messages: BaseMessage[]): ActionCard
           id: `team-comparison-auto-${Date.now()}`,
           data: structured,
         })
+      }
+    }
+
+    // 031-chat-receipt-process: Receipt claim tool returns action card data
+    if (toolName === 'create_expense_from_receipt' && content) {
+      try {
+        if (parsed && (parsed.claimId || parsed.batch || parsed.claims)) {
+          actions.push({
+            type: 'receipt_claim',
+            id: `receipt-${parsed.claimId || `batch-${Date.now()}`}`,
+            data: parsed,
+          })
+        }
+      } catch {
+        // Tool returned text-only, no structured card data
       }
     }
   }

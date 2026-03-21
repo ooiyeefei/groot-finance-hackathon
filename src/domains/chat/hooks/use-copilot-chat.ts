@@ -56,8 +56,8 @@ export interface UseCopilotBridgeReturn {
   convexMessages: ChatMessage[]
   isLoadingMessages: boolean
 
-  // Send a message and get AI response
-  sendMessage: (content: string) => Promise<void>
+  // Send a message and get AI response (with optional attachments)
+  sendMessage: (content: string, attachments?: Array<{ id: string; s3Path: string; mimeType: string; filename: string; size: number }>) => Promise<void>
 
   // Stop generation (abort in-flight request)
   stopGeneration: () => void
@@ -209,7 +209,7 @@ export function useCopilotBridge(
   // Send message: persist user message, stream API response, persist final response.
   // Supports concurrent streams — each conversation gets its own stream lifecycle.
   const handleSendMessage = useCallback(
-    async (content: string) => {
+    async (content: string, attachments?: Array<{ id: string; s3Path: string; mimeType: string; filename: string; size: number }>) => {
       // Read from ref to always get the latest conversation ID,
       // even if the callback hasn't been recreated yet after a switch.
       let conversationId = activeConversationIdRef.current
@@ -244,11 +244,14 @@ export function useCopilotBridge(
       setStreamingStatus('')
       setStreamingActions([])
 
-      // Persist user message to Convex immediately
+      // Persist user message to Convex immediately (with attachment metadata if present)
       await createMessage({
         conversationId: convId,
         role: 'user',
         content,
+        metadata: attachments && attachments.length > 0
+          ? { attachments: attachments.map(a => ({ ...a, uploadedAt: Date.now() })) }
+          : undefined,
       })
 
       // Build conversation history from Convex messages (read from ref for latest)
@@ -287,6 +290,7 @@ export function useCopilotBridge(
             conversationHistory: history,
             language,
             businessId: businessIdRef.current,
+            attachments: attachments && attachments.length > 0 ? attachments : undefined,
           }),
           signal: controller.signal,
         })

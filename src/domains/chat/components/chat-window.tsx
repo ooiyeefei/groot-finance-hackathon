@@ -23,6 +23,7 @@ import { shouldAutoRecall, autoRecallMemories } from '@/lib/ai/agent/auto-recall
 import { detectMemoryCandidates } from '@/lib/ai/agent/memory-candidate-detector'
 import { showMultipleMemoryCandidates } from './memory-auto-save-toast'
 import { showMemoryConfirmationToast, type MemoryConflict } from './memory-confirmation-toast'
+import { ImageAttachmentInput, AttachmentPreviewStrip, type AttachedFile } from './image-attachment-input'
 
 interface ChatWindowProps {
   onClose: () => void
@@ -47,6 +48,10 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
   const { userId } = useAuth()
   const { businessId: contextBusinessId } = useActiveBusiness()
   const resolvedBusinessId = businessId || contextBusinessId
+
+  // Image attachment state (031-chat-receipt-process)
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
+  const [uploadingIds, setUploadingIds] = useState<Set<string>>(new Set())
 
   // Smart auto-scroll: track if user has scrolled up
   const [userScrolledUp, setUserScrolledUp] = useState(false)
@@ -273,11 +278,38 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
     }
   }, [isLoading, sendMessage])
 
+  // Listen for chat:send-message events from action card buttons and suggestion pills
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      if (detail?.message && typeof detail.message === 'string') {
+        setUserScrolledUp(false)
+        sendMessage(detail.message)
+      }
+    }
+    window.addEventListener('chat:send-message', handler)
+    return () => window.removeEventListener('chat:send-message', handler)
+  }, [sendMessage])
+
+  // Attachment handlers
+  const handleFilesSelected = useCallback((files: AttachedFile[]) => {
+    setAttachedFiles(prev => [...prev, ...files])
+  }, [])
+
+  const handleRemoveFile = useCallback((id: string) => {
+    setAttachedFiles(prev => {
+      const removed = prev.find(f => f.id === id)
+      if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl)
+      return prev.filter(f => f.id !== id)
+    })
+  }, [])
+
   const handleSubmit = useCallback(
     async (e: FormEvent) => {
       e.preventDefault()
       const trimmed = input.trim()
-      if (!trimmed) return
+      const hasFiles = attachedFiles.length > 0
+      if (!trimmed && !hasFiles) return
 
       // INTEGRATION POINT 2: Auto-recall before generation
       let recalledContext = ''
@@ -327,9 +359,43 @@ User question: ${trimmed}`
         return
       }
 
-      await sendMessage(messageToSend)
+      // Upload attached files to S3 before sending message
+      let uploadedAttachments: Array<{ id: string; s3Path: string; mimeType: string; filename: string; size: number }> = []
+      if (hasFiles && resolvedBusinessId) {
+        const filesToUpload = [...attachedFiles]
+        setAttachedFiles([])
+        setUploadingIds(new Set(filesToUpload.map(f => f.id)))
+
+        try {
+          const uploadPromises = filesToUpload.map(async (af) => {
+            const formData = new FormData()
+            formData.append('file', af.file)
+            formData.append('conversationId', activeConversationId || 'new')
+            formData.append('businessId', resolvedBusinessId)
+
+            const res = await fetch('/api/v1/chat/upload', { method: 'POST', body: formData })
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({ error: 'Upload failed' }))
+              throw new Error(err.error || `Upload failed for ${af.file.name}`)
+            }
+            return res.json()
+          })
+
+          uploadedAttachments = await Promise.all(uploadPromises)
+
+          // Clean up preview URLs
+          filesToUpload.forEach(f => { if (f.previewUrl) URL.revokeObjectURL(f.previewUrl) })
+        } catch (uploadErr) {
+          console.error('[ChatWindow] File upload failed:', uploadErr)
+          setUploadingIds(new Set())
+          return // Don't send message if upload failed
+        }
+        setUploadingIds(new Set())
+      }
+
+      await sendMessage(messageToSend, uploadedAttachments.length > 0 ? uploadedAttachments : undefined)
     },
-    [input, isLoading, sendMessage, activeInsightContext, userId, resolvedBusinessId]
+    [input, isLoading, sendMessage, activeInsightContext, userId, resolvedBusinessId, attachedFiles, activeConversationId]
   )
 
   // Handle textarea Enter key (send on Enter, newline on Shift+Enter)
@@ -363,6 +429,7 @@ User question: ${trimmed}`
         content: msg.content,
         citations: meta?.citations as CitationData[] | undefined,
         actions: meta?.actions as ChatAction[] | undefined,
+        attachments: meta?.attachments as DisplayMessage['attachments'],
         originalQuery,
         originalIntent: meta?.intent as string | undefined,
         originalToolName: meta?.toolName as string | undefined,
@@ -452,6 +519,7 @@ User question: ${trimmed}`
               role={msg.role}
               citations={msg.citations}
               actions={msg.actions}
+              attachments={msg.attachments}
               isHistorical={!sessionStreamedIds.current.has(msg.id)}
               onViewDetails={handleViewDetails}
               messageId={msg.id}
@@ -537,13 +605,25 @@ User question: ${trimmed}`
             ))}
           </div>
         )}
+        {/* Attachment preview thumbnails */}
+        <AttachmentPreviewStrip
+          attachedFiles={attachedFiles}
+          onRemoveFile={handleRemoveFile}
+          uploadingIds={uploadingIds}
+        />
         <form onSubmit={handleSubmit} className="flex items-end gap-2">
+          <ImageAttachmentInput
+            attachedFiles={attachedFiles}
+            onFilesSelected={handleFilesSelected}
+            onRemoveFile={handleRemoveFile}
+            disabled={isLoading}
+          />
           <textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about expenses, compliance, vendors..."
+            placeholder={attachedFiles.length > 0 ? "Add a note (optional)..." : "Ask about expenses, compliance, vendors..."}
             className="flex-1 resize-none bg-input border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring min-h-[44px] max-h-[120px]"
             rows={1}
             disabled={false}
@@ -560,7 +640,7 @@ User question: ${trimmed}`
           ) : (
             <button
               type="submit"
-              disabled={!input.trim()}
+              disabled={!input.trim() && attachedFiles.length === 0}
               className="p-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
               aria-label="Send message"
             >
@@ -660,6 +740,7 @@ interface DisplayMessage {
   content: string
   citations?: CitationData[]
   actions?: ChatAction[]
+  attachments?: Array<{ id: string; s3Path: string; mimeType: string; filename: string; size: number }>
   // Correction feedback metadata (for assistant messages)
   originalQuery?: string
   originalIntent?: string

@@ -38,6 +38,7 @@ export const S3_PREFIXES = {
   business_profiles: 'business-profiles',
   account_deletions: 'account-deletions',
   einvoices: 'einvoices', // 001-einv-pdf-gen: LHDN-validated e-invoice PDFs
+  chat_attachments: 'chat-attachments', // 031-chat-receipt-process: images sent in chat
 } as const
 
 export type S3Prefix = keyof typeof S3_PREFIXES

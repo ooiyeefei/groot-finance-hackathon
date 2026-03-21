@@ -20,12 +20,22 @@ import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profil
 import { api } from '@/convex/_generated/api'
 import { Id } from '@/convex/_generated/dataModel'
 
+/** Attachment metadata from pre-uploaded files via /api/v1/chat/upload */
+export interface ChatAttachment {
+  id: string
+  s3Path: string
+  mimeType: string
+  filename: string
+  size: number
+}
+
 interface ChatRequestBody {
   message: string
   conversationId?: string
   conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
   language?: string
   businessId?: string
+  attachments?: ChatAttachment[]
 }
 
 export async function POST(req: NextRequest) {
@@ -66,14 +76,19 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const { message, conversationId, conversationHistory = [], language = 'en', businessId: requestBusinessId } = body
+  const { message, conversationId, conversationHistory = [], language = 'en', businessId: requestBusinessId, attachments } = body
 
-  if (!message || typeof message !== 'string') {
+  // Message is required unless attachments are provided (image-only submission)
+  const hasAttachments = attachments && attachments.length > 0
+  if ((!message || typeof message !== 'string') && !hasAttachments) {
     return NextResponse.json(
-      { error: 'Message is required' },
+      { error: 'Message or attachments required' },
       { status: 400 }
     )
   }
+
+  // Default message for attachment-only submissions
+  const resolvedMessage = message || 'Process these receipt images'
 
   // 5. Resolve businessId — prefer frontend-provided, fall back to user default.
   // The frontend sends the active business from BusinessContextProvider.
@@ -177,7 +192,7 @@ export async function POST(req: NextRequest) {
         writeEvent('status', { phase: 'Connecting to AI agent...' })
 
         const eventStream = streamLangGraphAgent({
-          message,
+          message: resolvedMessage,
           conversationHistory,
           userContext: {
             userId,
@@ -188,6 +203,7 @@ export async function POST(req: NextRequest) {
             role: userRole,
           },
           language,
+          attachments: hasAttachments ? attachments : undefined,
         })
 
         for await (const event of eventStream) {

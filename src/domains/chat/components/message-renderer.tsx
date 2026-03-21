@@ -9,7 +9,7 @@
  * Renders action cards from the extensible registry after text content.
  */
 
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo, useState, useCallback, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
@@ -36,15 +36,26 @@ import { BulkActionBar } from './action-cards/bulk-action-bar'
 import type { CitationData } from '@/lib/ai/tools/base-tool'
 import type { ChatAction } from '../lib/sse-parser'
 import { CorrectionFeedback } from './correction-feedback'
+import { FileImage } from 'lucide-react'
 
 /** Module-level counter for assistant messages to trigger periodic "Was this helpful?" prompt */
 let assistantMessageCounter = 0
+
+/** Attachment metadata stored in message.metadata.attachments */
+interface MessageAttachment {
+  id: string
+  s3Path: string
+  mimeType: string
+  filename: string
+  size: number
+}
 
 interface MessageRendererProps {
   content: string
   role: 'user' | 'assistant'
   citations?: CitationData[]
   actions?: ChatAction[]
+  attachments?: MessageAttachment[]
   isHistorical?: boolean
   /** When true, renders without the outer bubble wrapper (used inside streaming container) */
   isInline?: boolean
@@ -66,6 +77,7 @@ export function MessageRenderer({
   role,
   citations = [],
   actions,
+  attachments,
   isHistorical = true,
   isInline = false,
   className = '',
@@ -166,6 +178,26 @@ export function MessageRenderer({
   }, [content, citations])
 
   const isUser = role === 'user'
+
+  // Strip [Attached: ...] markers from user message content for clean display
+  const cleanUserContent = useMemo(() => {
+    if (!isUser) return content
+    return content.replace(/\[Attached: [^\]]+\]\n*/g, '').trim()
+  }, [isUser, content])
+
+  // Determine which attachments to show (from props or parsed from content markers)
+  const displayAttachments = useMemo(() => {
+    if (!isUser) return [] as { filename: string; mimeType: string; s3Path: string }[]
+    if (attachments && attachments.length > 0) return attachments
+    // Fallback: parse from [Attached: filename (mimeType, s3Path: path)] markers
+    const parsed: { filename: string; mimeType: string; s3Path: string }[] = []
+    const markerRegex = /\[Attached: ([^(]+)\(([^,]+), s3Path: ([^)]+)\)\]/g
+    let m
+    while ((m = markerRegex.exec(content)) !== null) {
+      parsed.push({ filename: m[1].trim(), mimeType: m[2].trim(), s3Path: m[3].trim() })
+    }
+    return parsed
+  }, [isUser, attachments, content])
 
   // Handle citation clicks from action cards (event delegation for compliance_alert cards)
   const handleCardCitationClick = useCallback(
@@ -321,7 +353,21 @@ export function MessageRenderer({
           `}
         >
           {isUser ? (
-            <p className="whitespace-pre-wrap">{content}</p>
+            <>
+              {displayAttachments.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-1.5">
+                  {displayAttachments.map((att, i) => (
+                    <AttachmentThumbnail
+                      key={att.s3Path || i}
+                      filename={att.filename}
+                      mimeType={att.mimeType}
+                      s3Path={att.s3Path}
+                    />
+                  ))}
+                </div>
+              )}
+              {cleanUserContent && <p className="whitespace-pre-wrap">{cleanUserContent}</p>}
+            </>
           ) : (
             <>
               <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5">
@@ -357,6 +403,57 @@ export function MessageRenderer({
         onClose={handleCloseCitation}
       />
     </>
+  )
+}
+
+/** Attachment thumbnail that fetches a pre-signed URL from the server */
+function AttachmentThumbnail({ filename, mimeType, s3Path }: { filename: string; mimeType: string; s3Path: string }) {
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const isImage = mimeType.startsWith('image/')
+
+  // Fetch pre-signed URL on mount for image attachments
+  useEffect(() => {
+    if (!isImage || !s3Path) {
+      setLoading(false)
+      return
+    }
+    let cancelled = false
+    fetch(`/api/v1/chat/attachment-url?s3Path=${encodeURIComponent(s3Path)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (!cancelled && data.url) setImageUrl(data.url)
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [isImage, s3Path])
+
+  if (!isImage) {
+    // PDF indicator
+    return (
+      <span className="inline-flex items-center gap-1 text-xs bg-primary-foreground/20 rounded px-1.5 py-0.5">
+        <FileImage className="w-3 h-3" />
+        {filename}
+      </span>
+    )
+  }
+
+  return (
+    <div className="w-20 h-20 rounded-lg overflow-hidden bg-primary-foreground/10 border border-primary-foreground/20">
+      {loading ? (
+        <div className="w-full h-full flex items-center justify-center">
+          <div className="w-4 h-4 border-2 border-primary-foreground/40 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={imageUrl} alt={filename} className="w-full h-full object-cover" />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center">
+          <FileImage className="w-5 h-5 text-primary-foreground/60" />
+        </div>
+      )}
+    </div>
   )
 }
 

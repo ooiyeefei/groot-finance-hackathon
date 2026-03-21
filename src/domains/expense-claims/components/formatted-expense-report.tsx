@@ -67,16 +67,65 @@ interface FormattedExpenseReportProps {
   reportData: FormattedExpenseReport
 }
 
-// Count duplicates from DB-sourced duplicateStatus field
-function countDuplicatesFromDB(sections: CategorySection[]): Set<string> {
+/**
+ * Detect duplicates using DB-sourced duplicateStatus + client-side fallback.
+ * Client-side fallback catches historical claims that don't have duplicateStatus
+ * set in the DB (e.g., claims created before the duplicate detection pipeline).
+ *
+ * Client-side detection (Tier 1/2):
+ * - Tier 1: Same reference number (exact receipt number match)
+ * - Tier 2: Same vendor + same date + same amount
+ */
+function detectDuplicates(sections: CategorySection[]): Set<string> {
   const flagged = new Set<string>()
+
+  // Collect all line items across sections for cross-category comparison
+  const allItems: CategoryLineItem[] = []
   for (const section of sections) {
-    for (const item of section.lineItems) {
-      if (item.duplicateStatus && item.duplicateStatus !== 'none') {
-        flagged.add(item.claimId)
-      }
+    allItems.push(...section.lineItems)
+  }
+
+  // Pass 1: DB-sourced duplicateStatus (authoritative when present)
+  for (const item of allItems) {
+    if (item.duplicateStatus && item.duplicateStatus !== 'none') {
+      flagged.add(item.claimId)
     }
   }
+
+  // Pass 2: Client-side fallback for items without DB duplicateStatus
+  // Only applies to items that weren't already flagged by the DB
+  const unflaggedItems = allItems.filter(item => !flagged.has(item.claimId))
+
+  // Tier 1: Same reference number
+  const refMap = new Map<string, CategoryLineItem[]>()
+  for (const item of allItems) {
+    if (item.referenceNumber) {
+      const key = item.referenceNumber.trim()
+      if (!refMap.has(key)) refMap.set(key, [])
+      refMap.get(key)!.push(item)
+    }
+  }
+  for (const [, group] of refMap) {
+    if (group.length >= 2) {
+      for (const item of group) flagged.add(item.claimId)
+    }
+  }
+
+  // Tier 2: Same vendor + same date + same amount (for unflagged items)
+  const vendorDateAmountMap = new Map<string, CategoryLineItem[]>()
+  for (const item of unflaggedItems) {
+    if (item.vendor && item.amount && item.date) {
+      const key = `${item.vendor.toLowerCase().trim()}|${item.date}|${item.amount}`
+      if (!vendorDateAmountMap.has(key)) vendorDateAmountMap.set(key, [])
+      vendorDateAmountMap.get(key)!.push(item)
+    }
+  }
+  for (const [, group] of vendorDateAmountMap) {
+    if (group.length >= 2) {
+      for (const item of group) flagged.add(item.claimId)
+    }
+  }
+
   return flagged
 }
 
@@ -85,8 +134,8 @@ export default function FormattedExpenseReport({ reportData }: FormattedExpenseR
   const reportRef = useRef<HTMLDivElement>(null)
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false)
 
-  // Detect duplicates from DB-sourced duplicateStatus (consolidated with Layer 1/2/3 detection)
-  const duplicateSet = useMemo(() => countDuplicatesFromDB(categorySections), [categorySections])
+  // Detect duplicates: DB-sourced duplicateStatus + client-side fallback for historical claims
+  const duplicateSet = useMemo(() => detectDuplicates(categorySections), [categorySections])
   const duplicateCount = duplicateSet.size
 
   const handlePrint = () => {
@@ -398,7 +447,7 @@ export default function FormattedExpenseReport({ reportData }: FormattedExpenseR
 
                   {/* Category Line Items */}
                   {category.lineItems.map((item, itemIndex) => {
-                    const isDuplicate = item.duplicateStatus && item.duplicateStatus !== 'none'
+                    const isDuplicate = duplicateSet.has(item.claimId)
 
                     return (
                     <tr
