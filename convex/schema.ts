@@ -2495,6 +2495,29 @@ export default defineSchema({
     .index("by_deviceToken", ["deviceToken"])
     .index("by_userId_platform", ["userId", "platform"]),
 
+  proactive_alert_delivery: defineTable({
+    insightId: v.string(),
+    userId: v.id("users"),
+    businessId: v.id("businesses"),
+    conversationId: v.id("conversations"),
+    messageId: v.id("messages"),
+    priority: v.union(v.literal("critical"), v.literal("high")),
+    category: v.string(),
+    status: v.union(
+      v.literal("delivered"),
+      v.literal("batched"),
+      v.literal("investigated"),
+      v.literal("dismissed")
+    ),
+    deliveredAt: v.number(),
+    interactedAt: v.optional(v.number()),
+    pushSent: v.optional(v.boolean()),
+  })
+    .index("by_user_business", ["userId", "businessId", "deliveredAt"])
+    .index("by_insight", ["insightId"])
+    .index("by_user_status", ["userId", "status"])
+    .index("by_business_delivered", ["businessId", "deliveredAt"]),
+
   app_versions: defineTable({
     platform: v.union(v.literal("ios"), v.literal("android")),
     minimumVersion: v.string(),

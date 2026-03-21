@@ -15,6 +15,8 @@ import { ChatWindow } from './chat-window'
 import { useAuth } from '@clerk/nextjs'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { useSubscription } from '@/domains/billing/hooks/use-subscription'
+import { useQuery } from 'convex/react'
+import { api } from '@/convex/_generated/api'
 
 interface ChatWidgetProps {
   businessId?: string
@@ -118,6 +120,14 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
     ;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
   }, [handleOpen])
 
+  // Proactive alert unread badge count (031-action-center-push-chat)
+  // @ts-ignore — new Convex module, types not yet generated (will resolve after convex deploy)
+  const unreadData = useQuery(api.functions.proactiveAlerts.getUnreadCount,
+    businessId ? { businessId } : "skip"
+  )
+  const unreadCount = unreadData?.count ?? 0
+  const unreadCapped = unreadData?.capped ?? false
+
   // Don't render for unauthenticated users or when subscription is locked
   const LOCKED_STATUSES = ['paused', 'canceled', 'unpaid']
   if (!isSignedIn) return null
@@ -168,6 +178,13 @@ export function ChatWidget({ businessId: businessIdProp }: ChatWidgetProps) {
           aria-label="Open chat assistant"
         >
           <MessageCircle className="w-6 h-6 pointer-events-none" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1
+              flex items-center justify-center rounded-full text-[10px] font-bold
+              bg-destructive text-destructive-foreground pointer-events-none">
+              {unreadCapped ? '20+' : unreadCount}
+            </span>
+          )}
         </button>
       )}
     </>

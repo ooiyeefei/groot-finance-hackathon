@@ -434,6 +434,23 @@ export const internalCreate = internalMutation({
 
     console.log(`[ActionCenterInsights] Created insight ${insightId}: ${args.title} (${args.priority})`);
 
+    // Push proactive chat alert for high/critical insights (031-action-center-push-chat)
+    if (args.priority === "critical" || args.priority === "high") {
+      // @ts-ignore — Convex type instantiation depth limit
+      await ctx.scheduler.runAfter(0, internal.functions.proactiveAlerts.pushToChat, {
+        insightId: insightId.toString(),
+        userId: args.userId,
+        businessId: args.businessId,
+        category: args.category,
+        priority: args.priority,
+        title: args.title,
+        description: args.description,
+        recommendedAction: args.recommendedAction,
+        affectedEntities: args.affectedEntities,
+        metadata: args.metadata,
+      });
+    }
+
     // Create notifications for finance admins and owners (018-app-email-notif)
     const categoryToType: Record<string, "anomaly" | "compliance" | "insight"> = {
       anomaly: "anomaly",
