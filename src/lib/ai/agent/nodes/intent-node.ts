@@ -85,7 +85,11 @@ export async function analyzeIntent(state: AgentState): Promise<Partial<AgentSta
       const isCrossEmployee = /\b(team|employee|staff|someone|everybody|everyone|all\s+(expenses?|spending|claims?))\b/i.test(queryLower);
       const hasSpecificName = /\b(how much did \w+|what did \w+ (spend|claim|buy))\b/i.test(queryLower);
 
-      if (!isCrossEmployee && !hasSpecificName) {
+      // EXCEPTION: "my expenses"/"my spending" is ambiguous for owner — the LLM prompt
+      // tells the agent to clarify. Do NOT override clarification for these queries.
+      const isAmbiguousExpense = needsExpenseDisambiguation;
+
+      if (!isCrossEmployee && !hasSpecificName && !isAmbiguousExpense) {
         console.log('[IntentAnalysis] OVERRIDE: Personal data query, skipping clarification');
         finalRequiresClarification = false;
         finalClarificationQuestions = [];
