@@ -8,7 +8,7 @@
 export const dynamic = "force-dynamic";
 
 import { Metadata } from "next";
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import Sidebar from "@/components/ui/sidebar";
 import HeaderWithUser from "@/components/ui/header-with-user";
@@ -28,8 +28,9 @@ export default async function DspyObservabilityPage() {
   }
 
   // Restrict to Groot team members only
-  const { sessionClaims } = await auth();
-  const userEmail = sessionClaims?.email as string | undefined;
+  // Use currentUser() to get full user profile — sessionClaims doesn't include email by default
+  const user = await currentUser();
+  const userEmail = user?.emailAddresses?.[0]?.emailAddress;
 
   if (!userEmail?.endsWith("@hellogroot.com")) {
     return (
