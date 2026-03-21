@@ -88,6 +88,10 @@ export type ToolName =
   | 'run_bank_reconciliation'
   | 'accept_recon_match'
   | 'show_recon_status'
+  // Email + benchmarking MCP tools (031-chat-cross-biz-voice)
+  | 'send_email_report'
+  | 'compare_to_industry'
+  | 'toggle_benchmarking'
 
 /**
  * Tool Factory implementing dependency injection pattern
@@ -190,6 +194,10 @@ export class ToolFactory {
     'show_recon_status',
     // NOTE: schedule_report is NOT here — it has granular RBAC
     // (employees can schedule expense_summary, but not financial reports)
+    // 031-chat-cross-biz-voice: Email + benchmarking (finance_admin/owner only)
+    'send_email_report',
+    'compare_to_industry',
+    'toggle_benchmarking',
   ])
 
   /**

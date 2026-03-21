@@ -29,7 +29,8 @@ export type JobModule =
   | 'dspy-fee'
   | 'dspy-bank-recon'
   | 'dspy-po-match'
-  | 'dspy-ar-match';
+  | 'dspy-ar-match'
+  | 'benchmarking-aggregation';
 
 export interface ConvexHttpQuery {
   path: string;

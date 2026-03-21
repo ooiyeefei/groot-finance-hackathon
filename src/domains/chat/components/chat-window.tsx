@@ -24,6 +24,7 @@ import { detectMemoryCandidates } from '@/lib/ai/agent/memory-candidate-detector
 import { showMultipleMemoryCandidates } from './memory-auto-save-toast'
 import { showMemoryConfirmationToast, type MemoryConflict } from './memory-confirmation-toast'
 import { ImageAttachmentInput, AttachmentPreviewStrip, type AttachedFile } from './image-attachment-input'
+import { VoiceInputButton } from './voice-input-button'
 
 interface ChatWindowProps {
   onClose: () => void
@@ -628,6 +629,12 @@ User question: ${trimmed}`
             rows={1}
             disabled={false}
           />
+          {!isLoading && (
+            <VoiceInputButton
+              onTranscript={(text) => setInput(text)}
+              disabled={isLoading}
+            />
+          )}
           {isLoading ? (
             <button
               type="button"

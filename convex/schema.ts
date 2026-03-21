@@ -3612,5 +3612,58 @@ export default defineSchema({
   })
     .index("by_businessId_status", ["businessId", "status"])
     .index("by_bankAccountId", ["bankAccountId"]),
+  // EMAIL SEND LOGS — Audit + Rate Limiting (031-chat-cross-biz-voice)
+  // ============================================
+  // Tracks all financial report emails sent via the chat agent.
+  // Used for audit (FR-007) and rate limiting (FR-007a: 50/business/day).
+
+  email_send_logs: defineTable({
+    businessId: v.id("businesses"),
+    userId: v.string(),
+    userRole: v.string(),
+    reportType: v.string(),
+    recipients: v.array(v.string()),
+    subject: v.string(),
+    status: v.string(),
+    sesMessageId: v.optional(v.string()),
+    sentAt: v.number(),
+  })
+    .index("by_business_date", ["businessId", "sentAt"]),
+
+  // ============================================
+  // BENCHMARKING OPT-INS — Business participation (031-chat-cross-biz-voice)
+  // ============================================
+
+  benchmarking_opt_ins: defineTable({
+    businessId: v.id("businesses"),
+    isActive: v.boolean(),
+    industryGroup: v.string(),
+    industryLabel: v.string(),
+    optedInAt: v.number(),
+    optedInBy: v.string(),
+    optedOutAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_industry_active", ["industryGroup", "isActive"]),
+
+  // ============================================
+  // BENCHMARKING AGGREGATES — Pre-computed industry stats (031-chat-cross-biz-voice)
+  // ============================================
+
+  benchmarking_aggregates: defineTable({
+    industryGroup: v.string(),
+    industryLabel: v.string(),
+    metric: v.string(),
+    period: v.string(),
+    sampleSize: v.number(),
+    average: v.float64(),
+    median: v.float64(),
+    p25: v.float64(),
+    p75: v.float64(),
+    p10: v.float64(),
+    p90: v.float64(),
+    updatedAt: v.number(),
+  })
+    .index("by_industry_metric", ["industryGroup", "metric", "period"]),
 
 });

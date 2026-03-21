@@ -37,6 +37,10 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Groot Finance needs camera access to capture receipt photos for expense claims.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Groot Finance needs microphone access to transcribe your voice queries into text for the chat assistant.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Groot Finance uses speech recognition to convert your spoken questions into text for the chat assistant.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Groot Finance needs photo library access to select receipt images for expense claims.</string>
 	<key>NSUserNotificationUsageDescription</key>

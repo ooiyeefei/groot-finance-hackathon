@@ -240,7 +240,8 @@ export class McpToolWrapper extends BaseTool {
         _userContext: {
           userId: userContext.userId,
           businessId: userContext.businessId,
-          conversationId: userContext.conversationId
+          conversationId: userContext.conversationId,
+          role: userContext.role,
         }
       }
 

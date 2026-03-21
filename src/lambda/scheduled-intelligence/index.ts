@@ -21,6 +21,7 @@ import { runAiDailyDigest } from './modules/ai-daily-digest';
 import { runEinvoiceDspyDigest } from './modules/einvoice-dspy-digest';
 import { runChatAgentOptimization } from './modules/chat-agent-optimization';
 import { runWeeklyEmailDigest } from './modules/weekly-email-digest';
+import { runBenchmarkingAggregation } from './modules/benchmarking-aggregation';
 import { runScheduledReports } from './modules/scheduled-reports';
 import { runDspyOptimization } from './modules/dspy-optimization';
 
@@ -66,6 +67,9 @@ export async function handler(event: EventBridgeEvent): Promise<JobResult> {
         break;
       case 'scheduled-reports':
         result = await runScheduledReports();
+        break;
+      case 'benchmarking-aggregation':
+        result = await runBenchmarkingAggregation();
         break;
 
       // DSPy optimization modules (all use same handler)

@@ -629,6 +629,119 @@ const TEMPLATES: Record<string, string> = {
   </div>
 </body>
 </html>`,
+
+  financial_report: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{reportTitle}} — {{businessName}}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: #1a1a1a;
+      background-color: #f5f5f5;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+    .card {
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 40px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+    .logo {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .logo-text {
+      font-size: 20px;
+      font-weight: 700;
+      color: #0066cc;
+    }
+    h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin: 0 0 8px;
+      color: #1a1a1a;
+    }
+    .meta {
+      color: #6b7280;
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+    th {
+      background: #f8fafc;
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 2px solid #e2e8f0;
+      font-weight: 600;
+      color: #374151;
+    }
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #f1f5f9;
+      color: #4a4a4a;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    .total-row td {
+      font-weight: 700;
+      border-top: 2px solid #e2e8f0;
+      color: #1a1a1a;
+    }
+    .amount {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .footer {
+      margin-top: 32px;
+      padding-top: 16px;
+      border-top: 1px solid #e2e8f0;
+      font-size: 12px;
+      color: #9ca3af;
+      text-align: center;
+    }
+    .footer a {
+      color: #6b7280;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="logo">
+        <span class="logo-text">Groot Finance</span>
+      </div>
+      <h1>{{reportTitle}}</h1>
+      <div class="meta">
+        <strong>Business:</strong> {{businessName}}<br>
+        <strong>Period:</strong> {{reportPeriod}}<br>
+        <strong>Sent by:</strong> {{senderName}} on {{sentDate}}
+      </div>
+      {{reportData}}
+      <div class="footer">
+        <p>This report was generated and sent via Groot Finance AI assistant.</p>
+        <p>© 2026 Groot Finance. All rights reserved.</p>
+        <p><a href="{{unsubscribeUrl}}">Manage email preferences</a></p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`,
 };
 
 /**

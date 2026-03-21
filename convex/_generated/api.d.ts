@@ -30,6 +30,7 @@ import type * as functions_bankReconCorrections from "../functions/bankReconCorr
 import type * as functions_bankReconOptimization from "../functions/bankReconOptimization.js";
 import type * as functions_bankTransactions from "../functions/bankTransactions.js";
 import type * as functions_budgetTracking from "../functions/budgetTracking.js";
+import type * as functions_benchmarking from "../functions/benchmarking.js";
 import type * as functions_businesses from "../functions/businesses.js";
 import type * as functions_catalogItems from "../functions/catalogItems.js";
 import type * as functions_chartOfAccounts from "../functions/chartOfAccounts.js";
@@ -56,6 +57,7 @@ import type * as functions_einvoiceMonitoring from "../functions/einvoiceMonitor
 import type * as functions_einvoiceReceivedDocuments from "../functions/einvoiceReceivedDocuments.js";
 import type * as functions_einvoiceUsage from "../functions/einvoiceUsage.js";
 import type * as functions_emailDigestJobs from "../functions/emailDigestJobs.js";
+import type * as functions_emailSendLogs from "../functions/emailSendLogs.js";
 import type * as functions_emails from "../functions/emails.js";
 import type * as functions_expenseClaims from "../functions/expenseClaims.js";
 import type * as functions_expenseSubmissions from "../functions/expenseSubmissions.js";
@@ -178,6 +180,7 @@ declare const fullApi: ApiFromModules<{
   "functions/bankReconOptimization": typeof functions_bankReconOptimization;
   "functions/bankTransactions": typeof functions_bankTransactions;
   "functions/budgetTracking": typeof functions_budgetTracking;
+  "functions/benchmarking": typeof functions_benchmarking;
   "functions/businesses": typeof functions_businesses;
   "functions/catalogItems": typeof functions_catalogItems;
   "functions/chartOfAccounts": typeof functions_chartOfAccounts;
@@ -204,6 +207,7 @@ declare const fullApi: ApiFromModules<{
   "functions/einvoiceReceivedDocuments": typeof functions_einvoiceReceivedDocuments;
   "functions/einvoiceUsage": typeof functions_einvoiceUsage;
   "functions/emailDigestJobs": typeof functions_emailDigestJobs;
+  "functions/emailSendLogs": typeof functions_emailSendLogs;
   "functions/emails": typeof functions_emails;
   "functions/expenseClaims": typeof functions_expenseClaims;
   "functions/expenseSubmissions": typeof functions_expenseSubmissions;

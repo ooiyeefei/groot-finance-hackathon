@@ -33,6 +33,10 @@ export interface AuthContext {
   permissions: string[];
   rateLimitPerMinute: number;
   keyPrefix: string;
+  // Optional user-level fields (populated by internal service auth when available)
+  userId?: string;
+  userName?: string;
+  userRole?: string;
 }
 
 /**

@@ -33,6 +33,9 @@ import { scheduleReport } from './tools/schedule-report.js';
 import { runBankReconciliation } from './tools/run-bank-recon.js';
 import { acceptReconMatch } from './tools/accept-recon-match.js';
 import { showReconStatus } from './tools/show-recon-status.js';
+import { sendEmailReport } from './tools/send-email-report.js';
+import { compareToIndustry } from './tools/compare-to-industry.js';
+import { toggleBenchmarking } from './tools/toggle-benchmarking.js';
 import {
   authenticateApiKey,
   authenticateInternalService,
@@ -61,6 +64,11 @@ const TOOL_IMPLEMENTATIONS: Record<string, (args: Record<string, unknown>, authC
   run_bank_reconciliation: runBankReconciliation,
   accept_recon_match: acceptReconMatch,
   show_recon_status: showReconStatus,
+  // Email report sending (031-chat-cross-biz-voice)
+  send_email_report: sendEmailReport,
+  // Cross-business benchmarking (031-chat-cross-biz-voice)
+  compare_to_industry: compareToIndustry,
+  toggle_benchmarking: toggleBenchmarking,
 };
 
 // CORS headers for all responses
@@ -158,6 +166,9 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const authHeader = event.headers?.Authorization || event.headers?.authorization;
   const internalKeyHeader = event.headers?.['X-Internal-Key'] || event.headers?.['x-internal-key'];
   const internalBusinessId = request.params?._businessId as string | undefined;
+  const internalUserId = request.params?._userId as string | undefined;
+  const internalUserName = request.params?._userName as string | undefined;
+  const internalUserRole = request.params?._userRole as string | undefined;
   let authContext: AuthContext | undefined;
 
   // Initialize doesn't require auth (discovery phase)
@@ -208,6 +219,13 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     authContext = authResult.context;
+
+    // Enrich auth context with user-level fields from request params (internal service calls)
+    if (authContext && internalKeyHeader) {
+      if (internalUserId) authContext.userId = internalUserId;
+      if (internalUserName) authContext.userName = internalUserName;
+      if (internalUserRole) authContext.userRole = internalUserRole;
+    }
   }
 
   try {

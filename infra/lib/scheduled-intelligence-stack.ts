@@ -205,6 +205,14 @@ export class ScheduledIntelligenceStack extends cdk.Stack {
 
       // Scheduled reports — daily at 4am UTC (12pm MYT)
       // Handler checks each schedule's frequency and only processes due ones
+      // Weekly benchmarking aggregation (Sunday 3am UTC, after DSPy optimization)
+      {
+        module: 'benchmarking-aggregation',
+        schedule: 'cron(0 3 ? * SUN *)',
+        description: 'Weekly cross-business benchmarking metric aggregation (031-chat-cross-biz-voice)',
+      },
+
+      // Monthly reports (1st of month, 3am UTC = 11am MYT)
       {
         module: 'scheduled-reports',
         schedule: 'cron(0 4 * * ? *)',

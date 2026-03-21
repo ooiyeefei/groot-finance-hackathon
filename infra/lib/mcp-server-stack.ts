@@ -99,6 +99,21 @@ export class MCPServerStack extends cdk.Stack {
     reportsBucket.grantWrite(this.mcpServerFunction, 'reports/*');
 
     // ========================================================================
+    // SES Permissions (031-chat-cross-biz-voice: send_email_report tool)
+    // ========================================================================
+    this.mcpServerFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ses:SendEmail', 'ses:SendRawEmail'],
+        resources: ['*'],
+        conditions: {
+          StringEquals: {
+            'ses:FromAddress': 'noreply@notifications.hellogroot.com',
+          },
+        },
+      })
+    );
+
+    // ========================================================================
     // Lambda Version and Alias
     // ========================================================================
     const currentVersion = this.mcpServerFunction.currentVersion;

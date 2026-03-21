@@ -552,6 +552,8 @@ const arBalance = arLines.reduce((sum, line) =>
 - S3 (finanseal-bucket, `chat-attachments/` prefix), Convex (messages, expense_claims tables) (031-chat-receipt-process)
 - TypeScript 5.9.3 (Next.js 15.5.7, Convex 1.31.3), Node.js 20 (Lambda) + Convex, LangGraph 0.4.5, @react-pdf/renderer, AWS SES, MCP client (031-chat-sched-report-bank-recon)
 - Convex (report_schedules, report_runs, bank_recon_runs tables) (031-chat-sched-report-bank-recon)
+- TypeScript 5.9.3 (Next.js 15.5.7, Node.js 20 Lambda) + LangGraph 0.4.5, Convex 1.31.3, AWS SES, Capacitor 8.1.0, Web Speech API (031-chat-cross-biz-voice)
+- Convex (3 new tables: `email_send_logs`, `benchmarking_opt_ins`, `benchmarking_aggregates`) (031-chat-cross-biz-voice)
 
 
 ## Recent Changes
