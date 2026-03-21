@@ -112,7 +112,8 @@ function ProactiveAlertCard({ action, isHistorical, onActionComplete }: ActionCa
   const priority = (data.priority || 'high') as 'critical' | 'high'
   const style = PRIORITY_STYLES[priority] || PRIORITY_STYLES.high
   const Icon = style.icon
-  const messageId = action.id
+  // Use messageId from data (patched after insert) or fall back to action.id
+  const messageId = (data as any).messageId || action.id
 
   const onInvestigate = async () => {
     if (!messageId || isHistorical || actionTaken) return

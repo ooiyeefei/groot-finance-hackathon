@@ -417,6 +417,18 @@ async function createAlertMessage(
     updatedAt: args.now,
   });
 
+  // Patch action card ID to include actual message ID (needed for Investigate/Dismiss)
+  const msg = await ctx.db.get(messageId);
+  if (msg?.metadata) {
+    const meta = msg.metadata as Record<string, unknown>;
+    const actions = meta.actions as Array<{ id: string; data: Record<string, unknown>; type: string }>;
+    if (actions?.[0]) {
+      actions[0].id = messageId.toString();
+      actions[0].data.messageId = messageId.toString();
+      await ctx.db.patch(messageId, { metadata: { ...meta, actions } });
+    }
+  }
+
   // Update conversation preview
   const conversation = await ctx.db.get(args.conversationId);
   if (conversation) {
