@@ -61,11 +61,21 @@ function ForecastCard({ action }: ActionCardProps) {
   const currency = data.currency || 'MYR'
   const maxAmount = Math.max(...data.months.flatMap(m => [m.income, m.expenses]))
 
-  // Format month label: "2026-04" → "Apr"
+  // Format month label: "2026-04" → "Apr", "Apr 2026" → "Apr", etc.
   const formatMonth = (m: string) => {
-    const [year, month] = m.split('-')
-    const date = new Date(parseInt(year), parseInt(month) - 1)
-    return date.toLocaleDateString('en', { month: 'short' })
+    if (!m) return '?'
+    // Handle "YYYY-MM" format
+    if (/^\d{4}-\d{2}$/.test(m)) {
+      const [year, month] = m.split('-')
+      return new Date(parseInt(year), parseInt(month) - 1).toLocaleDateString('en', { month: 'short' })
+    }
+    // Handle "Apr 2026" or "April 2026" — already formatted, extract short month
+    const parsed = new Date(m + ' 1')
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toLocaleDateString('en', { month: 'short' })
+    }
+    // Fallback: return first 3 chars
+    return m.substring(0, 3)
   }
 
   return (

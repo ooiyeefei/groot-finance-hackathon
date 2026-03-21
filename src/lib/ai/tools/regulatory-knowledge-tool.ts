@@ -157,18 +157,18 @@ export class RegulatoryKnowledgeTool extends BaseTool {
       // Embed citations in the data string for extraction by chat API
       const citationsData = JSON.stringify(citations);
       
-      // Check if results include tax-related content — add disclaimer
-      // Matches both new entries (top-level category/topic) and existing KB entries (metadata.tax_type, metadata.topics)
-      const hasTaxContent = searchResults.some((r: any) => {
+      // Check if query or results are tax-related — add disclaimer
+      // Uses query keywords as primary signal (most reliable), then checks result payloads
+      const taxKeywords = ['tax', 'gst', 'sst', 'filing', 'corporate tax', 'income tax', 'withholding']
+      const queryLower = query.toLowerCase()
+      const queryIsTax = taxKeywords.some(k => queryLower.includes(k))
+
+      const hasTaxContent = queryIsTax || searchResults.some((r: any) => {
         const p = r.payload || {};
         const m = p.metadata || {};
         return p.category === 'tax_reference' ||
-          p.topic?.includes('tax') ||
           m.tax_type?.includes('tax') ||
-          (Array.isArray(m.topics) && m.topics.some((t: string) => t.toLowerCase().includes('tax'))) ||
-          p.text?.toLowerCase().includes('tax rate') ||
-          p.text?.toLowerCase().includes('gst') ||
-          p.text?.toLowerCase().includes('filing deadline');
+          (Array.isArray(m.topics) && m.topics.some((t: string) => t.toLowerCase().includes('tax')));
       });
       const disclaimer = hasTaxContent
         ? '\n\n*This is factual reference information only. Please consult a qualified tax professional for advice specific to your situation.*'
