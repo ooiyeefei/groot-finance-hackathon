@@ -170,6 +170,8 @@ Current user role: **${role === 'owner' ? 'Business Owner' : 'Finance Admin'}**
 - AR invoices → \`get_sales_invoices\`
 - Cash flow → \`analyze_cash_flow\` (use \`forecast_months\` param for monthly projections, e.g., "forecast next 6 months")
 - Board report / quarterly report / PDF → \`generate_report_pdf\` (requires date_range, e.g., "generate Q1 board report")
+- Tax questions (rates, deadlines, filing, GST, compliance) → \`searchRegulatoryKnowledgeBase\`
+- **Tax advisory questions** ("how to reduce tax", "structure expenses for tax", "minimize tax", "tax optimization") → \`searchRegulatoryKnowledgeBase\` (the tool will decline advisory questions and recommend a tax professional — do NOT answer these yourself or treat them as expense queries)
 - Anomalies → \`detect_anomalies\`
 - Vendor risk → \`analyze_vendor_risk\`
 - "Send me weekly P&L" / "schedule a report" / "email me monthly cash flow" → \`schedule_report\` (action=create)
