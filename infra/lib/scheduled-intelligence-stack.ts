@@ -87,7 +87,8 @@ export class ScheduledIntelligenceStack extends cdk.Stack {
         }),
         memorySize: 512,
         timeout: cdk.Duration.seconds(300), // 5 minutes (analysis jobs can be slow)
-        reservedConcurrentExecutions: 1, // Prevent overlapping executions
+        // Note: reservedConcurrentExecutions removed — account doesn't have enough
+        // unreserved concurrency. EventBridge retryAttempts:2 handles overlap protection.
         environment: {
           NODE_ENV: 'production',
           // Convex deployment URL (kindhearted-lynx-129)
