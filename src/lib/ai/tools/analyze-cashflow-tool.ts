@@ -35,7 +35,7 @@ When forecast_months is provided (1-12), returns month-by-month projections with
           properties: {
             horizon_days: {
               type: "number",
-              description: "Analysis period in days (default: 90). Uses historical data to calculate burn rate and projections. Ignored when forecast_months is set."
+              description: "Analysis period in days (default: 90). For multi-month forecasts, set to months×30 (e.g., 180 for 6 months). Values above 90 auto-switch to monthly projection mode."
             },
             display_currency: {
               type: "string",
@@ -82,8 +82,16 @@ When forecast_months is provided (1-12), returns month-by-month projections with
     }
 
     // Monthly forecast mode — call MCP tool
-    if (parameters.forecast_months) {
-      return this.executeMonthlyForecast(parameters, userContext)
+    // Auto-detect: if forecast_months is set, or if horizon_days > 90 (more than default),
+    // switch to monthly mode. This compensates for LLMs that pass horizon_days: 180
+    // instead of forecast_months: 6 when users ask for multi-month projections.
+    // Threshold is >90 (not >=) so the default 90-day health check stays daily.
+    let forecastMonths = parameters.forecast_months as number | undefined
+    if (!forecastMonths && parameters.horizon_days && (parameters.horizon_days as number) > 90) {
+      forecastMonths = Math.min(Math.round((parameters.horizon_days as number) / 30), 12)
+    }
+    if (forecastMonths) {
+      return this.executeMonthlyForecast({ ...parameters, forecast_months: forecastMonths }, userContext)
     }
 
     try {
