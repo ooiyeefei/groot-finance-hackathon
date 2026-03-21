@@ -9,7 +9,7 @@
  */
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
-import { invokeDocumentProcessorSync } from '@/lib/lambda-invoker'
+import { invokeDocumentProcessor } from '@/lib/lambda-invoker'
 import { getAuthenticatedConvex } from '@/lib/convex'
 
 interface ReceiptAttachment {
@@ -149,22 +149,51 @@ export class ReceiptClaimTool extends BaseTool {
     const { userId, businessId } = userContext
     if (!businessId) throw new Error('Business context required')
 
-    const documentId = crypto.randomUUID()
     const fileType = attachment.mimeType === 'application/pdf' ? 'pdf' : 'image'
 
-    // 1. Invoke document processor Lambda SYNCHRONOUSLY for OCR
-    // Uses RequestResponse invocation to get results immediately (15-20s typical)
-    console.log(`[ReceiptClaimTool] Invoking doc processor (sync) for ${attachment.filename}`)
-    let lambdaResult: unknown = null
+    // 1. Create submission + claim FIRST (Lambda needs a documentId to update)
+    const { client } = await getAuthenticatedConvex()
+    if (!client) throw new Error('Could not connect to database')
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-explicit-any
+    const { api } = require('@/convex/_generated/api') as any
+
+    // 1a. Create expense submission so claim is visible in the UI
+    const submissionId = await client.mutation(api.functions.expenseSubmissions.create, {
+      businessId,
+      title: `Chat: ${attachment.filename}`,
+    } as any)
+
+    // 1b. Create the expense claim with status "uploading" (Lambda will update it)
+    const createArgs = {
+      businessId,
+      vendorName: 'Processing...',
+      totalAmount: 0,
+      currency: 'MYR',
+      transactionDate: new Date().toISOString().split('T')[0],
+      expenseCategory: 'General',
+      businessPurpose: businessPurpose || `Receipt: ${attachment.filename}`,
+      status: 'uploading' as const,
+      storagePath: attachment.s3Path,
+      fileName: attachment.filename,
+      fileType: attachment.mimeType,
+      submissionId,
+    }
+    const claimId = await client.mutation(api.functions.expenseClaims.create, createArgs as any)
+    console.log(`[ReceiptClaimTool] Created claim ${claimId} + submission ${submissionId}`)
+
+    // 2. Invoke document processor Lambda ASYNC with the claimId as documentId
+    // The Lambda will process the image and update the claim via Convex directly
+    console.log(`[ReceiptClaimTool] Invoking doc processor (async) for ${attachment.filename}`)
     try {
-      lambdaResult = await invokeDocumentProcessorSync({
-        documentId,
+      await invokeDocumentProcessor({
+        documentId: String(claimId),
         domain: 'expense_claims',
         storagePath: attachment.s3Path,
         fileType: fileType as 'pdf' | 'image',
         userId,
         businessId,
-        idempotencyKey: `chat-receipt-${documentId}`,
+        idempotencyKey: `chat-receipt-${claimId}`,
         expectedDocumentType: 'receipt',
       })
     } catch (invokeErr) {
@@ -172,45 +201,36 @@ export class ReceiptClaimTool extends BaseTool {
       throw new Error(`Receipt processing failed: ${invokeErr instanceof Error ? invokeErr.message : 'Unknown error'}`)
     }
 
-    // 2. Parse OCR results from Lambda response
-    const extractedData = this.parseLambdaResult(lambdaResult)
+    // 3. Poll Convex for the Lambda to finish updating the claim
+    const extractedData = await this.pollClaimForExtraction(client, api, claimId)
 
-    // 3. Check for duplicates (requires Convex user ID for the query)
+    // 4. Update the claim with extracted data (if Lambda populated it)
+    if (extractedData.vendorName) {
+      try {
+        await client.mutation(api.functions.expenseClaims.update, {
+          id: claimId,
+          vendorName: extractedData.vendorName,
+          totalAmount: extractedData.totalAmount,
+          currency: extractedData.currency,
+          transactionDate: extractedData.transactionDate,
+          expenseCategory: extractedData.category,
+          businessPurpose: businessPurpose || `Receipt: ${extractedData.vendorName}`,
+          status: 'draft',
+        } as any)
+        // Update submission title with vendor name
+        await client.mutation(api.functions.expenseSubmissions.update, {
+          id: submissionId,
+          title: `Chat: ${extractedData.vendorName}`,
+        } as any)
+      } catch (updateErr) {
+        console.warn('[ReceiptClaimTool] Failed to update claim with OCR data:', updateErr)
+      }
+    }
+
+    // 5. Check for duplicates
     const duplicate = await this.checkDuplicate(extractedData, businessId, userContext.convexUserId)
 
-    // 4. Create draft expense claim via Convex mutation
-    const { client } = await getAuthenticatedConvex()
-    if (!client) throw new Error('Could not connect to database')
-
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-explicit-any
-    const { api } = require('@/convex/_generated/api') as any
-
-    // 4a. Create an expense submission (container) so the claim appears in the UI
-    const vendorLabel = extractedData.vendorName || 'Receipt'
-    const submissionId = await client.mutation(api.functions.expenseSubmissions.create, {
-      businessId,
-      title: `Chat: ${vendorLabel}`,
-    } as any)
-    console.log(`[ReceiptClaimTool] Created submission ${submissionId} for ${attachment.filename}`)
-
-    // 4b. Create the expense claim linked to the submission
-    const createArgs = {
-      businessId,
-      vendorName: extractedData.vendorName || 'Unknown Merchant',
-      totalAmount: extractedData.totalAmount,
-      currency: extractedData.currency || 'MYR',
-      transactionDate: extractedData.transactionDate,
-      expenseCategory: extractedData.category || 'General',
-      businessPurpose: businessPurpose || `Receipt: ${extractedData.vendorName || attachment.filename}`,
-      status: 'draft' as const,
-      storagePath: attachment.s3Path,
-      fileName: attachment.filename,
-      fileType: attachment.mimeType,
-      submissionId,
-    }
-    const claimId = await client.mutation(api.functions.expenseClaims.create, createArgs as any)
-
-    console.log(`[ReceiptClaimTool] Created draft claim ${claimId} for ${attachment.filename}`)
+    console.log(`[ReceiptClaimTool] Claim ${claimId} processed: ${extractedData.vendorName || 'Unknown'} ${extractedData.currency} ${extractedData.totalAmount}`)
 
     // Identify low-confidence fields
     const lowConfidenceFields: string[] = []
@@ -238,7 +258,17 @@ export class ReceiptClaimTool extends BaseTool {
     }
   }
 
-  private parseLambdaResult(result: unknown): {
+  /**
+   * Poll Convex for the Lambda to finish processing the expense claim.
+   * The Lambda updates the claim's processingMetadata via convex.update_expense_claim_extraction().
+   * We poll the claim record until it has vendor/amount data or timeout.
+   */
+  private async pollClaimForExtraction(
+    client: any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    api: any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    claimId: string,
+    maxWaitMs = 25000
+  ): Promise<{
     vendorName: string
     totalAmount: number
     currency: string
@@ -247,7 +277,7 @@ export class ReceiptClaimTool extends BaseTool {
     description: string
     confidence: number
     fieldConfidence: Record<string, number>
-  } {
+  }> {
     const defaults = {
       vendorName: '',
       totalAmount: 0,
@@ -259,48 +289,56 @@ export class ReceiptClaimTool extends BaseTool {
       fieldConfidence: {} as Record<string, number>,
     }
 
-    if (!result || typeof result !== 'object') {
-      console.warn('[ReceiptClaimTool] Lambda returned no data, using defaults')
-      return defaults
-    }
+    const startTime = Date.now()
+    const pollInterval = 3000 // 3 seconds between polls
 
-    // The document processor Lambda returns: { success, document_id, extraction_result: { vendorName, totalAmount, ... } }
-    const r = result as Record<string, unknown>
-    console.log('[ReceiptClaimTool] Lambda response keys:', Object.keys(r))
+    while (Date.now() - startTime < maxWaitMs) {
+      await new Promise(resolve => setTimeout(resolve, pollInterval))
 
-    // Primary path: extraction_result (the actual Lambda response format)
-    const extraction = (r.extraction_result || r.extractionResult || r.extraction || r.financial_data || r.financialData || r.data) as Record<string, unknown> | undefined
+      try {
+        const claim = await client.query(api.functions.expenseClaims.getById, { id: claimId } as any)
+        if (!claim) continue
 
-    if (extraction) {
-      console.log('[ReceiptClaimTool] Found extraction data:', JSON.stringify(extraction).slice(0, 300))
-      return {
-        vendorName: String(extraction.vendorName || extraction.vendor_name || extraction.merchant || ''),
-        totalAmount: Number(extraction.totalAmount || extraction.total_amount || extraction.amount || 0),
-        currency: String(extraction.currency || extraction.original_currency || 'MYR'),
-        transactionDate: String(extraction.transactionDate || extraction.transaction_date || extraction.date || defaults.transactionDate),
-        category: String(extraction.suggestedCategory || extraction.suggested_category || extraction.category || 'General'),
-        description: String(extraction.description || extraction.vendorName || ''),
-        confidence: Number(extraction.confidence || r.confidence || 0.5),
-        fieldConfidence: (extraction.fieldConfidence || extraction.field_confidence || {}) as Record<string, number>,
+        // Check if Lambda has updated the claim with vendor/amount data
+        // The Lambda calls update_expense_claim_extraction which sets vendorName, totalAmount, etc.
+        if (claim.vendorName && claim.vendorName !== 'Processing...' && claim.totalAmount > 0) {
+          console.log(`[ReceiptClaimTool] OCR complete after ${Date.now() - startTime}ms: ${claim.vendorName} ${claim.currency} ${claim.totalAmount}`)
+          return {
+            vendorName: String(claim.vendorName || ''),
+            totalAmount: Number(claim.totalAmount || 0),
+            currency: String(claim.currency || 'MYR'),
+            transactionDate: String(claim.transactionDate || defaults.transactionDate),
+            category: String(claim.expenseCategory || 'General'),
+            description: String(claim.businessPurpose || claim.description || ''),
+            confidence: Number(claim.processingMetadata?.confidenceScore || claim.processingMetadata?.confidence || 0.8),
+            fieldConfidence: (claim.processingMetadata?.fieldConfidence || {}) as Record<string, number>,
+          }
+        }
+
+        // Also check processingMetadata for extraction data
+        const meta = claim.processingMetadata
+        if (meta?.financialData?.vendorName || meta?.financial_data?.vendor_name) {
+          const fd = meta.financialData || meta.financial_data
+          console.log(`[ReceiptClaimTool] OCR complete (from metadata) after ${Date.now() - startTime}ms`)
+          return {
+            vendorName: String(fd.vendorName || fd.vendor_name || ''),
+            totalAmount: Number(fd.totalAmount || fd.total_amount || 0),
+            currency: String(fd.currency || fd.originalCurrency || fd.original_currency || 'MYR'),
+            transactionDate: String(fd.transactionDate || fd.transaction_date || defaults.transactionDate),
+            category: String(meta.categoryMapping?.accountingCategory || meta.category_mapping?.accounting_category || 'General'),
+            description: String(fd.description || ''),
+            confidence: Number(meta.confidenceScore || meta.confidence_score || 0.8),
+            fieldConfidence: (meta.fieldConfidence || meta.field_confidence || {}) as Record<string, number>,
+          }
+        }
+
+        console.log(`[ReceiptClaimTool] Polling... claim status: ${claim.status}, vendorName: ${claim.vendorName}, elapsed: ${Date.now() - startTime}ms`)
+      } catch (pollErr) {
+        console.warn('[ReceiptClaimTool] Poll error:', pollErr instanceof Error ? pollErr.message : pollErr)
       }
     }
 
-    // Fallback: try top-level fields (if Lambda returns flat structure)
-    if (r.vendorName || r.vendor_name || r.merchant || r.totalAmount || r.total_amount) {
-      console.log('[ReceiptClaimTool] Using top-level fields from response')
-      return {
-        vendorName: String(r.vendorName || r.vendor_name || r.merchant || ''),
-        totalAmount: Number(r.totalAmount || r.total_amount || r.amount || 0),
-        currency: String(r.currency || 'MYR'),
-        transactionDate: String(r.transactionDate || r.transaction_date || r.date || defaults.transactionDate),
-        category: String(r.suggestedCategory || r.suggested_category || r.category || 'General'),
-        description: String(r.description || ''),
-        confidence: Number(r.confidence || r.confidence_score || 0.5),
-        fieldConfidence: (r.field_confidence || r.fieldConfidence || {}) as Record<string, number>,
-      }
-    }
-
-    console.warn('[ReceiptClaimTool] Lambda result did not contain extractable financial data:', JSON.stringify(r).slice(0, 500))
+    console.warn(`[ReceiptClaimTool] OCR polling timed out after ${maxWaitMs}ms for claim ${claimId}`)
     return defaults
   }
 
