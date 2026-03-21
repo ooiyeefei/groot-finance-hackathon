@@ -24,6 +24,7 @@ import {
   Loader2,
   Upload,
   PenLine,
+  RotateCcw,
 } from 'lucide-react'
 import { useExpenseCategories, getCategoryName } from '../hooks/use-expense-categories'
 import ConfirmationDialog from '@/components/ui/confirmation-dialog'
@@ -59,7 +60,7 @@ const CLAIM_STATUS_BADGES: Record<string, { className: string; label: string }> 
   rejected: { className: 'bg-red-500/10 text-red-600 dark:text-red-400', label: 'Rejected' },
   reimbursed: { className: 'bg-purple-500/10 text-purple-600 dark:text-purple-400', label: 'Reimbursed' },
   failed: { className: 'bg-red-500/10 text-red-600 dark:text-red-400', label: 'Failed' },
-  classification_failed: { className: 'bg-red-500/10 text-red-600 dark:text-red-400', label: 'Invalid Document' },
+  classification_failed: { className: 'bg-red-500/10 text-red-600 dark:text-red-400', label: 'Processing Failed' },
 }
 
 export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employee' }: SubmissionDetailPageProps) {
@@ -92,6 +93,43 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
   const [partialRejectionReason, setPartialRejectionReason] = useState('')
   const [showPartialRejectConfirm, setShowPartialRejectConfirm] = useState(false)
   const [partialRejectReason, setPartialRejectReason] = useState('')
+
+  // Retry processing state
+  const [retryingClaims, setRetryingClaims] = useState<Set<string>>(new Set())
+
+  const handleRetryProcessing = useCallback(async (claimId: string) => {
+    try {
+      setRetryingClaims(prev => new Set(prev).add(claimId))
+
+      // Step 1: Reset status to 'analyzing' for UI feedback
+      await fetch(`/api/v1/expense-claims/${claimId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'analyzing' })
+      }).catch(() => {}) // Non-blocking
+
+      // Step 2: Trigger reprocessing
+      const response = await fetch(`/api/v1/expense-claims/${claimId}/reprocess`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+
+      if (!response.ok) {
+        const result = await response.json()
+        throw new Error(result.error || 'Failed to start reprocessing')
+      }
+
+      refetch()
+    } catch (err) {
+      console.error('[Retry] Failed:', err)
+    } finally {
+      setRetryingClaims(prev => {
+        const next = new Set(prev)
+        next.delete(claimId)
+        return next
+      })
+    }
+  }, [refetch])
 
   const submission = data?.submission
   const claims = data?.claims || []
@@ -686,9 +724,11 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
                               </Badge>
                               {(claim.status === 'classification_failed' || claim.status === 'failed') && (
                                 <span
-                                  title={claim.status === 'classification_failed'
-                                    ? ((claim as any).errorMessage || 'This document does not appear to be a receipt or invoice. Please delete and upload a valid receipt.')
-                                    : ((claim as any).errorMessage || 'Processing failed. Please try re-uploading.')}
+                                  title={
+                                    (claim as any).errorMessage
+                                      ? `${(claim as any).errorMessage}. Tap retry to reprocess.`
+                                      : 'Processing failed. Our team has been notified. Tap retry to try again.'
+                                  }
                                   className="cursor-help"
                                 >
                                   <AlertCircle className="w-4 h-4 text-red-500" />
@@ -699,14 +739,29 @@ export function SubmissionDetailPage({ submissionId, locale, viewMode = 'employe
                         </td>
                         {isDraft && (
                           <td className="px-4 py-3 text-right">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="hover:bg-red-500/10"
-                              onClick={(e) => { e.stopPropagation(); handleRemoveClaimClick(claim._id) }}
-                            >
-                              <Trash2 className="h-4 w-4 text-red-500 dark:text-red-400" />
-                            </Button>
+                            <div className="flex items-center justify-end gap-1">
+                              {/* Retry button for failed claims */}
+                              {(claim.status === 'failed' || claim.status === 'classification_failed') && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="hover:bg-blue-500/10"
+                                  disabled={retryingClaims.has(claim._id)}
+                                  title="Retry processing"
+                                  onClick={(e) => { e.stopPropagation(); handleRetryProcessing(claim._id) }}
+                                >
+                                  <RotateCcw className={`h-4 w-4 text-blue-500 dark:text-blue-400 ${retryingClaims.has(claim._id) ? 'animate-spin' : ''}`} />
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="hover:bg-red-500/10"
+                                onClick={(e) => { e.stopPropagation(); handleRemoveClaimClick(claim._id) }}
+                              >
+                                <Trash2 className="h-4 w-4 text-red-500 dark:text-red-400" />
+                              </Button>
+                            </div>
                           </td>
                         )}
                       </tr>
