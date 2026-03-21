@@ -193,8 +193,8 @@ Supports optional currency conversion: "Show revenue in USD", "Compare Q1 vs Q2 
 
     return {
       success: true,
-      data: text,
-      metadata: {
+      data: {
+        text,
         actionCard: {
           type: 'trend_comparison_card',
           data: {
@@ -218,7 +218,7 @@ Supports optional currency conversion: "Show revenue in USD", "Compare Q1 vs Q2 
             direction,
           }
         }
-      }
+      },
     }
   }
 
@@ -281,8 +281,8 @@ Supports optional currency conversion: "Show revenue in USD", "Compare Q1 vs Q2 
 
     return {
       success: true,
-      data: text,
-      metadata: {
+      data: {
+        text,
         actionCard: {
           type: 'trend_comparison_card',
           data: {
@@ -300,7 +300,7 @@ Supports optional currency conversion: "Show revenue in USD", "Compare Q1 vs Q2 
             overallChangePercent,
           }
         }
-      }
+      },
     }
   }
 

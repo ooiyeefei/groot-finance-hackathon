@@ -528,7 +528,11 @@ When your response includes actionable data, you MUST include an \`actions\` JSO
    Example trigger: "Spending trends for last 6 months", "Show spending over time", "Monthly spending comparison"
    Data schema: \`{"chartType": "time_series", "title": "6-Month Spending Trend", "currency": "<from transaction data>", "periods": [{"label": "Sep 2025", "total": 4200, "categories": [{"name": "Office", "amount": 1500}]}], "trendPercent": 12, "trendDirection": "up"}\`
 
-10. **expense_reimbursement** — When showing approved expense claims ready for reimbursement. Include businessId, employees array (each with employeeName, claims array, totalAmount, currency), overall totalAmount, currency, and claimCount. Only emit for finance_admin/owner roles.
+10. **trend_comparison_card** — When comparing financial periods or showing trends. The analyze_trends tool returns this card automatically in its metadata — do NOT emit it manually. It renders as either a side-by-side comparison (compare mode) or a bar chart (trend mode).
+   Example trigger: "Compare Q1 vs Q2 revenue", "6-month expense trend", "Revenue growth rate"
+   Note: This card is auto-generated from analyze_trends tool results. You do not need to emit JSON for it.
+
+11. **expense_reimbursement** — When showing approved expense claims ready for reimbursement. Include businessId, employees array (each with employeeName, claims array, totalAmount, currency), overall totalAmount, currency, and claimCount. Only emit for finance_admin/owner roles.
    Example trigger: "Show claims ready to reimburse", "Any approved expenses to pay?", "Pending reimbursements"
    Data schema: \`{"businessId": "...", "employees": [{"employeeName": "John Doe", "claims": [{"claimId": "...", "vendorName": "Starbucks", "amount": 45.50, "currency": "MYR", "category": "Meals", "transactionDate": "2026-03-15"}], "totalAmount": 45.50, "currency": "MYR"}], "totalAmount": 45.50, "currency": "MYR", "claimCount": 1}\`
 

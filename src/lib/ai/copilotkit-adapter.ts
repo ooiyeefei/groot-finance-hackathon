@@ -274,7 +274,7 @@ export async function* streamLangGraphAgent(
 
     // Always strip residual action card JSON from text (safety net for edge cases
     // where the regex extraction partially matched or the LLM used unusual formatting).
-    const ACTION_TYPES_PATTERN = 'invoice_posting|cash_flow_dashboard|compliance_alert|budget_alert|spending_time_series|anomaly_card|vendor_comparison|expense_approval|expense_reimbursement|revenue_summary|receipt_claim'
+    const ACTION_TYPES_PATTERN = 'invoice_posting|cash_flow_dashboard|compliance_alert|budget_alert|spending_time_series|anomaly_card|vendor_comparison|expense_approval|expense_reimbursement|revenue_summary|receipt_claim|trend_comparison_card'
     finalContent = finalContent
       // Strip ```actions ... ``` fenced blocks
       .replace(/(?:\\*`){3,}actions[\s\S]*?(?:\\*`){3,}/g, '')
@@ -527,6 +527,18 @@ function autoGenerateActionsFromToolResults(messages: BaseMessage[]): ActionCard
         if (timeSeriesCard) actions.push(timeSeriesCard)
         const revenueCard = buildRevenueSummaryFromTransactions(txns, content)
         if (revenueCard) actions.push(revenueCard)
+      }
+    }
+
+    // Trend analysis tool (031-multi-curr-history-analysis)
+    if (toolName === 'analyze_trends' && parsed) {
+      const actionCard = (parsed as any)?.actionCard
+      if (actionCard?.type === 'trend_comparison_card' && actionCard?.data) {
+        actions.push({
+          type: 'trend_comparison_card',
+          id: `trend-auto-${Date.now()}`,
+          data: actionCard.data,
+        })
       }
     }
 
