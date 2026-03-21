@@ -206,157 +206,22 @@ export const weeklyOptimization = internalAction({
       { module: "chat-agent-intent" }
     );
 
-    // Step 4: Invoke Lambda for training (T014)
-    // NOTE: This uses direct Lambda invocation, not MCP
-    // For now, we'll stub this since Lambda integration needs AWS SDK setup
-    console.log(
-      `[ChatOptimization] Would invoke Lambda with ${train.length} train, ${validation.length} validation examples`
-    );
-
-    // TODO T014: Invoke finanseal-dspy-optimizer Lambda
-    // const lambdaResult = await invokeLambda({
-    //   FunctionName: 'finanseal-dspy-optimizer',
-    //   Payload: JSON.stringify({
-    //     module: 'chat-agent-intent',
-    //     train_corrections: train,
-    //     validation_corrections: validation,
-    //     current_version_s3_key: currentVersion?.s3Key,
-    //     optimizer_type: 'bootstrap_fewshot',
-    //     optimizer_config: {
-    //       max_bootstrapped_demos: 4,
-    //       max_labeled_demos: 8,
-    //       max_rounds: 3,
-    //     },
-    //   }),
-    // });
-
-    // Stub Lambda response for now
-    const lambdaResult = {
-      success: true,
-      versionId: `v${new Date().toISOString().split("T")[0].replace(/-/g, "")}-001`,
-      s3Key: `dspy/chat-agent/chat-agent-intent/v${new Date().toISOString().split("T")[0].replace(/-/g, "")}-001.json`,
-      promptHash: "stub-hash-" + Math.random().toString(36).substring(7),
-      accuracy: 0.85 + Math.random() * 0.1, // Random 0.85-0.95
-      trainingExamples: train.length,
-      validationExamples: validation.length,
-      qualityGateResult: {
-        passed: true,
-        candidateAccuracy: 0.85 + Math.random() * 0.1,
-        previousAccuracy: currentVersion?.accuracy,
-        accuracyDelta: currentVersion ? 0.02 : undefined,
-        evalSetSize: 50,
-        perCategoryBreakdown: {},
-      },
-      durationMs: 25000,
-    };
-
-    // Step 5: Create ModelVersion with candidate status (T015)
-    const versionId = await ctx.runMutation(
-      _internal.functions.chatOptimizationNew.createModelVersion,
-      {
-        versionId: lambdaResult.versionId,
-        module: "chat-agent-intent",
-        s3Key: lambdaResult.s3Key,
-        promptHash: lambdaResult.promptHash,
-        correctionsConsumed: train.length + validation.length,
-        trainingExamples: train.length,
-        validationExamples: validation.length,
-        optimizerType: "bootstrapfewshot",
-        optimizerConfig: {
-          max_bootstrapped_demos: 4,
-          max_labeled_demos: 8,
-          max_rounds: 3,
-        },
-        evalMetrics: {
-          validationAccuracy: lambdaResult.accuracy,
-          perCategoryMetrics: {},
-          confusionMatrix: [],
-        },
-        qualityGateResult: lambdaResult.qualityGateResult,
-        comparisonVsPrevious: currentVersion
-          ? {
-              previousVersionId: currentVersion.versionId || "",
-              accuracyDelta: lambdaResult.qualityGateResult.accuracyDelta || 0,
-              passed: lambdaResult.qualityGateResult.passed,
-            }
-          : undefined,
-        status: "candidate",
-        triggerType: "manual",
-        durationMs: lambdaResult.durationMs,
-      }
-    );
-
-    // Prepare correction IDs for audit record
-    type CorrectionResult = { _id: string };
-    const correctionIds = [
-      ...train.map((c: CorrectionResult) => c._id),
-      ...validation.map((c: CorrectionResult) => c._id),
-    ];
-
-    // Step 6: Promote if quality gate passed (T017-T018)
-    if (lambdaResult.qualityGateResult.passed) {
-      await ctx.runMutation(
-        _internal.functions.chatOptimizationNew.promoteVersion,
-        {
-          versionId,
-          supersedePrevious: currentVersion?._id,
-        }
-      );
-
-      // Step 7: Mark corrections consumed (T019)
-      await ctx.runMutation(
-        _internal.functions.chatOptimizationNew.markCorrectionsConsumed,
-        {
-          correctionIds,
-          versionId: lambdaResult.versionId,
-        }
-      );
-
-      console.log(
-        `[ChatOptimization] Successfully promoted ${lambdaResult.versionId} (accuracy: ${lambdaResult.accuracy.toFixed(3)})`
-      );
-    } else {
-      console.log(
-        `[ChatOptimization] Quality gate rejected ${lambdaResult.versionId}: candidate accuracy ${lambdaResult.qualityGateResult.candidateAccuracy?.toFixed(3) || "N/A"}`
-      );
-    }
-
-    // Step 8: Create OptimizationRun audit record (T021)
-    await ctx.runMutation(
-      _internal.functions.chatOptimizationNew.createOptimizationRun,
-      {
-        runId,
-        module: "chat-agent-intent",
-        triggerType: "manual",
-        correctionsProcessed: train.length + validation.length,
-        correctionsConsumed: correctionIds,
-        trainValidationSplit: {
-          train: train.length,
-          validation: validation.length,
-        },
-        status: lambdaResult.qualityGateResult.passed
-          ? "success"
-          : "quality_gate_rejected",
-        resultingVersionId: lambdaResult.qualityGateResult.passed
-          ? lambdaResult.versionId
-          : undefined,
-        qualityGateResult: lambdaResult.qualityGateResult,
-        startTime,
-        endTime: Date.now(),
-        durationMs: Date.now() - startTime,
-      }
+    // Step 4: Lambda invocation handled by EventBridge → scheduled-intelligence Lambda
+    // The production path uses prepareOptimization + completeOptimization (below).
+    // This weeklyOptimization action is kept for backward compatibility but
+    // delegates to the same prepare/complete flow without direct Lambda invocation.
+    // When called directly (not via EventBridge), it skips Lambda and logs a warning.
+    console.warn(
+      `[ChatOptimization] weeklyOptimization called directly (not via EventBridge). ` +
+      `${train.length} train, ${validation.length} validation examples. ` +
+      `Use EventBridge chat-agent-optimization module for real Lambda invocation.`
     );
 
     return {
       readyToOptimize: true,
       correctionsCount: train.length + validation.length,
-      optimizationRun: lambdaResult.qualityGateResult.passed,
-      reason: lambdaResult.qualityGateResult.passed
-        ? `Model optimized with ${train.length + validation.length} corrections`
-        : `Quality gate rejected candidate (accuracy: ${lambdaResult.qualityGateResult.candidateAccuracy?.toFixed(3) || "N/A"})`,
-      resultingVersionId: lambdaResult.qualityGateResult.passed
-        ? lambdaResult.versionId
-        : undefined,
+      optimizationRun: false,
+      reason: "Direct call skipped — use EventBridge chat-agent-optimization module for real Lambda invocation",
       durationMs: Date.now() - startTime,
     };
   },

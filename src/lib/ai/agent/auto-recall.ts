@@ -108,13 +108,22 @@ export async function updateMemoryAccessTracking(memoryIds: string[]): Promise<v
   }
 
   try {
-    // This would call a Convex mutation to update lastAccessedAt and accessCount
-    // For now, just log (actual implementation in convex/functions/memoryTools.ts)
-    console.log(`[AutoRecall] Would update access tracking for ${memoryIds.length} memories`);
+    const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+    if (!convexUrl) {
+      console.warn('[AutoRecall] NEXT_PUBLIC_CONVEX_URL not set, skipping access tracking');
+      return;
+    }
 
-    // TODO: Call convex mutation
-    // await ctx.runMutation(internal.functions.memoryTools.updateMemoryAccess, { memoryIds });
+    // Call Convex mutation via HTTP API (client-side, no deploy key needed for internal)
+    const { ConvexHttpClient } = await import('convex/browser');
+    const client = new ConvexHttpClient(convexUrl);
+    await client.mutation('functions/memoryTools:updateMemoryAccess' as any, {
+      memoryIds,
+    });
+
+    console.log(`[AutoRecall] Updated access tracking for ${memoryIds.length} memories`);
   } catch (error) {
+    // Non-critical — don't block recall if tracking fails
     console.error('[AutoRecall] Failed to update memory access tracking:', error);
   }
 }

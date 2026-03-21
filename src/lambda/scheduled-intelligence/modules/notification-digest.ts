@@ -5,14 +5,14 @@
  * via Convex HTTP API.
  */
 
-import { convexAction } from '../lib/convex-client';
+import { convexMutation } from '../lib/convex-client';
 import { JobResult } from '../lib/types';
 
 export async function runNotificationDigest(): Promise<Omit<JobResult, 'durationMs'>> {
   console.log('[NotificationDigest] Calling Convex action...');
 
   try {
-    const result = await convexAction<{
+    const result = await convexMutation<{
       usersProcessed: number;
       emailsSent: number;
       durationMs: number;
