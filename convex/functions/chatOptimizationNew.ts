@@ -519,3 +519,173 @@ export const createOptimizationRun = internalMutation({
     console.log(`[ChatOptimization] Created optimization run ${args.runId} with status ${args.status}`);
   },
 });
+
+/**
+ * Prepare optimization data for Lambda (called by scheduled-intelligence Lambda)
+ *
+ * Returns readiness status + train/val split + current version info
+ * so the Lambda can invoke the DSPy optimizer and call completeOptimization with results.
+ */
+export const prepareOptimization = internalAction({
+  args: {
+    force: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    // Step 1: Check readiness
+    const readiness = await ctx.runQuery(
+      _internal.functions.chatOptimizationNew.checkReadiness,
+      { force: args.force }
+    );
+
+    if (!readiness.readyToOptimize) {
+      return {
+        ready: false,
+        reason: readiness.reason,
+        correctionsCount: readiness.correctionsCount,
+      };
+    }
+
+    // Step 2: Get train/validation split
+    const { train, validation } = await ctx.runQuery(
+      _internal.functions.chatOptimizationNew.getCorrectionsWithSplit,
+      {}
+    );
+
+    // Step 3: Get current active version
+    const currentVersion = await ctx.runQuery(
+      _internal.functions.chatOptimizationNew.getActiveVersion,
+      { module: "chat-agent-intent" }
+    );
+
+    return {
+      ready: true,
+      train,
+      validation,
+      currentVersion: currentVersion
+        ? {
+            _id: currentVersion._id,
+            versionId: currentVersion.versionId,
+            s3Key: currentVersion.s3Key,
+            accuracy: currentVersion.accuracy,
+          }
+        : null,
+    };
+  },
+});
+
+/**
+ * Complete optimization after Lambda returns results (called by scheduled-intelligence Lambda)
+ *
+ * Takes the DSPy optimizer result and creates model version, runs quality gate,
+ * promotes if passed, and marks corrections consumed.
+ */
+export const completeOptimization = internalAction({
+  args: {
+    runId: v.string(),
+    startTime: v.number(),
+    lambdaResult: v.object({
+      success: v.boolean(),
+      versionId: v.string(),
+      s3Key: v.string(),
+      promptHash: v.string(),
+      accuracy: v.number(),
+      trainingExamples: v.number(),
+      validationExamples: v.number(),
+      qualityGateResult: v.object({
+        passed: v.boolean(),
+        candidateAccuracy: v.number(),
+        previousAccuracy: v.optional(v.number()),
+        accuracyDelta: v.optional(v.number()),
+        evalSetSize: v.number(),
+        perCategoryBreakdown: v.any(),
+      }),
+      durationMs: v.number(),
+    }),
+    currentVersionId: v.optional(v.id("dspy_model_versions")),
+    correctionIds: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { lambdaResult } = args;
+
+    // Step 5: Create ModelVersion with candidate status
+    const versionDocId = await ctx.runMutation(
+      _internal.functions.chatOptimizationNew.createModelVersion,
+      {
+        versionId: lambdaResult.versionId,
+        module: "chat-agent-intent",
+        s3Key: lambdaResult.s3Key,
+        promptHash: lambdaResult.promptHash,
+        correctionsConsumed: lambdaResult.trainingExamples + lambdaResult.validationExamples,
+        trainingExamples: lambdaResult.trainingExamples,
+        validationExamples: lambdaResult.validationExamples,
+        optimizerType: "bootstrapfewshot",
+        optimizerConfig: {
+          max_bootstrapped_demos: 4,
+          max_labeled_demos: 8,
+          max_rounds: 3,
+        },
+        evalMetrics: {
+          validationAccuracy: lambdaResult.accuracy,
+          perCategoryMetrics: {},
+          confusionMatrix: [],
+        },
+        qualityGateResult: lambdaResult.qualityGateResult,
+        comparisonVsPrevious: args.currentVersionId
+          ? {
+              previousVersionId: lambdaResult.versionId,
+              accuracyDelta: lambdaResult.qualityGateResult.accuracyDelta || 0,
+              passed: lambdaResult.qualityGateResult.passed,
+            }
+          : undefined,
+        status: "candidate",
+        triggerType: "scheduled",
+        durationMs: lambdaResult.durationMs,
+      }
+    );
+
+    // Step 6: Promote if quality gate passed
+    if (lambdaResult.qualityGateResult.passed) {
+      await ctx.runMutation(
+        _internal.functions.chatOptimizationNew.promoteVersion,
+        {
+          versionId: versionDocId,
+          supersedePrevious: args.currentVersionId,
+        }
+      );
+
+      // Step 7: Mark corrections consumed
+      // Cast string IDs to Convex IDs (they come from Lambda as strings)
+      const typedIds = args.correctionIds as unknown as Array<import("../_generated/dataModel").Id<"chat_agent_corrections">>;
+      await ctx.runMutation(
+        _internal.functions.chatOptimizationNew.markCorrectionsConsumed,
+        {
+          correctionIds: typedIds,
+          versionId: lambdaResult.versionId,
+        }
+      );
+    }
+
+    // Step 8: Create audit record
+    await ctx.runMutation(
+      _internal.functions.chatOptimizationNew.createOptimizationRun,
+      {
+        runId: args.runId,
+        module: "chat-agent-intent",
+        triggerType: "scheduled",
+        correctionsProcessed: lambdaResult.trainingExamples + lambdaResult.validationExamples,
+        status: lambdaResult.qualityGateResult.passed ? "success" : "quality_gate_rejected",
+        resultingVersionId: lambdaResult.qualityGateResult.passed ? lambdaResult.versionId : undefined,
+        qualityGateResult: lambdaResult.qualityGateResult,
+        startTime: args.startTime,
+        endTime: Date.now(),
+        durationMs: Date.now() - args.startTime,
+      }
+    );
+
+    return {
+      promoted: lambdaResult.qualityGateResult.passed,
+      versionId: lambdaResult.versionId,
+      accuracy: lambdaResult.accuracy,
+    };
+  },
+});
