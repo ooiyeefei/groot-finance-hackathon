@@ -165,7 +165,7 @@ export const runWeeklyDigest: ReturnType<typeof internalAction> = internalAction
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "x-api-key": process.env.INTERNAL_API_KEY || "",
+              "x-api-key": process.env.INTERNAL_API_KEY || process.env.MCP_INTERNAL_SERVICE_KEY || "",
             },
             body: JSON.stringify({
               to: recipient.email,

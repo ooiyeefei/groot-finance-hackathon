@@ -15,13 +15,9 @@ import { emailService } from '@/lib/services/email-service'
 export async function POST(request: NextRequest) {
   try {
     const apiKey = request.headers.get('x-api-key')
-    const envKey = process.env.INTERNAL_API_KEY
-    if (!envKey) {
-      console.error('[send-email] INTERNAL_API_KEY env var is NOT SET. Available env keys:', Object.keys(process.env).filter(k => k.includes('INTERNAL')).join(', ') || 'none')
-      return NextResponse.json({ error: 'Unauthorized', message: 'Authentication required', debug: 'env_not_set' }, { status: 401 })
-    }
-    if (apiKey !== envKey) {
-      console.error('[send-email] API key mismatch. Header length:', apiKey?.length, 'Env length:', envKey.length)
+    // Also accept MCP_INTERNAL_SERVICE_KEY as fallback (pre-existing Convex env var)
+    const envKey = process.env.INTERNAL_API_KEY || process.env.MCP_INTERNAL_SERVICE_KEY
+    if (!envKey || apiKey !== envKey) {
       return NextResponse.json({ error: 'Unauthorized', message: 'Authentication required' }, { status: 401 })
     }
 
