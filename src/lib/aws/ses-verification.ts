@@ -38,7 +38,7 @@ function createVercelOidcCredentialProvider(
     const provider = fromWebToken({
       roleArn,
       webIdentityToken: token,
-      roleSessionName: `finanseal-ses-verify-${Date.now()}`,
+      roleSessionName: `groot-ses-verify-${Date.now()}`,
       durationSeconds: 3600,
     })
     return provider()

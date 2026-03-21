@@ -1,13 +1,7 @@
 """
 DSPy Configuration Module
 
-Configures DSPy once at module-level to avoid threading issues with
-AWS Durable Execution SDK.
-
-IMPORTANT: This module must be imported BEFORE any extraction steps run.
-DSPy's settings can only be changed by the thread that initially configured it.
-By configuring at import time (Lambda cold start), we ensure consistent
-thread ownership.
+Configures DSPy once at module-level for reuse across warm Lambda invocations.
 
 Usage:
     from steps.dspy_config import ensure_dspy_configured, get_lm
@@ -18,12 +12,10 @@ Usage:
 """
 
 import os
-import threading
 import dspy
 
 # Module-level state
 _configured = False
-_configured_lock = threading.Lock()
 _lm_instance = None
 
 
@@ -63,7 +55,7 @@ def _configure_dspy():
 
 def ensure_dspy_configured():
     """
-    Ensure DSPy is configured. Thread-safe, no-op if already configured.
+    Ensure DSPy is configured. No-op if already configured.
 
     Call this at the start of extraction functions to ensure DSPy is ready.
     """
@@ -72,12 +64,7 @@ def ensure_dspy_configured():
     if _configured:
         return True
 
-    with _configured_lock:
-        # Double-check after acquiring lock
-        if _configured:
-            return True
-
-        return _configure_dspy()
+    return _configure_dspy()
 
 
 def get_lm():
@@ -101,7 +88,7 @@ def is_configured():
 
 
 # Auto-configure on import if API key is available
-# This happens at Lambda cold start, establishing thread ownership
+# This happens at Lambda cold start
 if os.environ.get("GEMINI_API_KEY"):
     _configure_dspy()
 else:

@@ -1,9 +1,6 @@
 # Document Processor Lambda - Python 3.11 Container Image
-# AWS Durable Execution SDK for fault-tolerant workflows
-# Note: Container images support ANY Python version with durable SDK
-
-# AWS Durable Execution SDK (works with container images on any Python version)
-aws-durable-execution-sdk-python
+# Plain Lambda handler — no durable execution SDK needed.
+# Total processing ~15-20s, well within Lambda's 5-minute timeout.
 
 # Pin numpy for stability (pre-built wheels for Python 3.11)
 numpy==1.26.4

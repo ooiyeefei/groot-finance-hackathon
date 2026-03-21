@@ -74,7 +74,13 @@ def validate_document_step(
         # Infra errors (missing API key, network, rate limit) should NOT reject
         # the document as "invalid". Re-raise so the workflow retries or fails
         # with a proper error status instead of classification_failed.
-        infra_error_keywords = ["API_KEY", "api_key", "rate limit", "quota", "timeout", "connection", "503", "500"]
+        infra_error_keywords = [
+            "API_KEY", "api_key", "API key",  # Google uses "API key" (with space)
+            "rate limit", "quota", "timeout", "connection",
+            "503", "500", "400", "401", "403", "429",  # HTTP error codes
+            "INVALID_ARGUMENT", "PERMISSION_DENIED", "UNAUTHENTICATED",  # Google API error statuses
+            "PermissionDenied", "Unauthorized",
+        ]
         if any(kw in str(e) for kw in infra_error_keywords):
             raise  # Let handler.py catch and mark as 'failed' (not 'classification_failed')
 
@@ -117,7 +123,21 @@ def _classify_with_gemini(
     """
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        raise ValueError("GEMINI_API_KEY environment variable not set")
+        # Cold-start SSM resolution may have failed silently.
+        # Try to resolve from SSM directly as a fallback.
+        ssm_param = os.environ.get("GEMINI_API_KEY_SSM_PARAM")
+        if ssm_param:
+            try:
+                import boto3
+                ssm = boto3.client("ssm")
+                param = ssm.get_parameter(Name=ssm_param, WithDecryption=True)
+                api_key = param["Parameter"]["Value"]
+                os.environ["GEMINI_API_KEY"] = api_key
+                print(f"[{document_id}] Resolved GEMINI_API_KEY from SSM (fallback)")
+            except Exception as ssm_err:
+                raise ValueError(f"GEMINI_API_KEY not set and SSM fallback failed: {ssm_err}")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY environment variable not set")
 
     # Build classification prompt
     prompt = """Analyze this document image and classify it.

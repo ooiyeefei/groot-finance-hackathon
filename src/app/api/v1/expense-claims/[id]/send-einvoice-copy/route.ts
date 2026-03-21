@@ -55,7 +55,7 @@ export async function POST(
       s3Credentials = fromWebToken({
         roleArn,
         webIdentityToken: token,
-        roleSessionName: `finanseal-einvoice-copy-${Date.now()}`,
+        roleSessionName: `groot-einvoice-copy-${Date.now()}`,
       });
     }
 

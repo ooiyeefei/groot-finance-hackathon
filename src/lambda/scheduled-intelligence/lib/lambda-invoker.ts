@@ -2,12 +2,12 @@
  * Lambda invoker for calling Python DSPy optimizer
  *
  * Used by DSPy optimization jobs to invoke the existing
- * finanseal-dspy-optimizer Lambda function.
+ * groot-finance-dspy-optimizer Lambda function.
  */
 
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 
-const DSPY_OPTIMIZER_FUNCTION = process.env.DSPY_OPTIMIZER_FUNCTION_NAME || 'finanseal-dspy-optimizer';
+const DSPY_OPTIMIZER_FUNCTION = process.env.DSPY_OPTIMIZER_FUNCTION_NAME || 'groot-finance-dspy-optimizer';
 
 /**
  * Invoke Python DSPy optimizer Lambda

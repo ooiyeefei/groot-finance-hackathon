@@ -39,7 +39,7 @@ export class DocumentProcessingStack extends cdk.Stack {
     // ========================================================================
     const bucket = s3.Bucket.fromBucketName(
       this,
-      'FinansealBucket',
+      'ExistingBucket',
       'finanseal-bucket'
     );
 
@@ -47,7 +47,7 @@ export class DocumentProcessingStack extends cdk.Stack {
     // CloudWatch Log Group with 30-day retention
     // ========================================================================
     const logGroup = new logs.LogGroup(this, 'DocumentProcessorLogs', {
-      logGroupName: `/aws/lambda/finanseal-document-processor`,
+      logGroupName: `/aws/lambda/groot-finance-document-processor`,
       retention: logs.RetentionDays.ONE_MONTH,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -72,14 +72,12 @@ export class DocumentProcessingStack extends cdk.Stack {
     };
 
     // ========================================================================
-    // Document Processor Lambda Function - Docker Container with Durable Execution
+    // Document Processor Lambda Function - Docker Container (plain handler)
     //
-    // Uses AWS Durable Functions for fault-tolerant workflows:
-    // - Automatic checkpointing after each step
-    // - Up to 24-hour execution time
-    // - Survives Lambda restarts and cold starts
+    // Plain sequential handler — total processing ~15-20s. No durable
+    // execution SDK (removed: caused env-var and threading bugs).
     //
-    // Container includes: Python 3.11, DSPy, Poppler, Sentry, Durable SDK
+    // Container includes: Python 3.11, DSPy, Poppler, Sentry
     // ========================================================================
     this.documentProcessorFunction = new lambda.DockerImageFunction(this, 'DocumentProcessor', {
       code: lambda.DockerImageCode.fromImageAsset(
@@ -91,18 +89,12 @@ export class DocumentProcessingStack extends cdk.Stack {
           },
         }
       ),
-      functionName: 'finanseal-document-processor',
-      description: 'Document processing with DSPy extraction and AWS Durable Functions (Python 3.11)',
+      functionName: 'groot-finance-document-processor',
+      description: 'Document processing with DSPy extraction (Python 3.11)',
       memorySize: 1024,
-      timeout: cdk.Duration.minutes(15), // Lambda timeout (durable config extends this)
+      timeout: cdk.Duration.minutes(5), // ~15-20s typical, 5 min generous buffer
       architecture: lambda.Architecture.X86_64,
       logGroup,
-      // AWS Durable Functions configuration
-      // Enables checkpointing for long-running workflows
-      durableConfig: {
-        executionTimeout: cdk.Duration.hours(1), // Up to 1 hour for document processing
-        retentionPeriod: cdk.Duration.days(1),   // Retain execution history for 1 day
-      },
       environment: lambdaEnvVars,
     });
 
@@ -156,7 +148,7 @@ export class DocumentProcessingStack extends cdk.Stack {
     // Triggered by: Python document-processor (boto3) or Vercel API (OIDC)
     // ========================================================================
     const formFillLogGroup = new logs.LogGroup(this, 'FormFillLogs', {
-      logGroupName: `/aws/lambda/finanseal-einvoice-form-fill`,
+      logGroupName: `/aws/lambda/groot-finance-einvoice-form-fill`,
       retention: logs.RetentionDays.ONE_MONTH,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -166,7 +158,7 @@ export class DocumentProcessingStack extends cdk.Stack {
         path.join(__dirname, '../../src/lambda/einvoice-form-fill-python'),
       ),
       architecture: lambda.Architecture.X86_64,
-      functionName: 'finanseal-einvoice-form-fill',
+      functionName: 'groot-finance-einvoice-form-fill',
       description: 'E-Invoice form fill — Python + Playwright + Gemini CUA (3-tier self-evolving)',
       memorySize: 2048, // Playwright Chromium needs more memory in Docker
       timeout: cdk.Duration.minutes(8), // Long forms (MR. D.I.Y. = 20+ fields) need up to 7 min
@@ -238,7 +230,7 @@ export class DocumentProcessingStack extends cdk.Stack {
     // Invoked by the main form-fill Lambda when CUA hits 429 rate limit.
     // ========================================================================
     const formFillBuLogGroup = new logs.LogGroup(this, 'FormFillBuLogs', {
-      logGroupName: `/aws/lambda/finanseal-einvoice-form-fill-bu`,
+      logGroupName: `/aws/lambda/groot-finance-einvoice-form-fill-bu`,
       retention: logs.RetentionDays.ONE_MONTH,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -248,7 +240,7 @@ export class DocumentProcessingStack extends cdk.Stack {
         path.join(__dirname, '../../src/lambda/einvoice-form-fill-browser-use'),
       ),
       architecture: lambda.Architecture.X86_64,
-      functionName: 'finanseal-einvoice-form-fill-bu',
+      functionName: 'groot-finance-einvoice-form-fill-bu',
       description: 'E-Invoice form fill — browser-use + Gemini Flash (Tier 2B, CUA 429 fallback)',
       memorySize: 3008,  // Max Lambda memory for faster Chromium startup (more CPU)
       timeout: cdk.Duration.minutes(5),
@@ -288,7 +280,7 @@ export class DocumentProcessingStack extends cdk.Stack {
     // Triggered by: EventBridge (every 5 min) or direct invocation
     // ========================================================================
     const lhdnPollLogGroup = new logs.LogGroup(this, 'LhdnPollLogs', {
-      logGroupName: `/aws/lambda/finanseal-lhdn-polling`,
+      logGroupName: `/aws/lambda/groot-finance-lhdn-polling`,
       retention: logs.RetentionDays.ONE_MONTH,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -298,7 +290,7 @@ export class DocumentProcessingStack extends cdk.Stack {
       handler: 'handler',
       runtime: lambda.Runtime.NODEJS_20_X,
       architecture: lambda.Architecture.ARM_64, // Cost-optimized
-      functionName: 'finanseal-lhdn-polling',
+      functionName: 'groot-finance-lhdn-polling',
       description: 'LHDN MyInvois polling — per-business SSM creds, fetch received docs, Convex matching (019-lhdn-einv-flow-2)',
       memorySize: 256,
       timeout: cdk.Duration.minutes(2), // Polling + enrichment typically <30s
@@ -340,7 +332,7 @@ export class DocumentProcessingStack extends cdk.Stack {
     // Lambda cost: ~$0 when no businesses have pending requests (< 1s runtime).
     // ========================================================================
     const lhdnPollSchedule = new events.Rule(this, 'LhdnPollSchedule', {
-      ruleName: 'finanseal-lhdn-poll-schedule',
+      ruleName: 'groot-finance-lhdn-poll-schedule',
       description: 'Trigger LHDN polling Lambda every 5 minutes (019-lhdn-einv-flow-2)',
       schedule: events.Schedule.rate(cdk.Duration.minutes(5)),
     });
@@ -357,7 +349,7 @@ export class DocumentProcessingStack extends cdk.Stack {
     // MX record: einv.hellogroot.com → inbound-smtp.us-west-2.amazonaws.com
     // ========================================================================
     const emailProcessorLogGroup = new logs.LogGroup(this, 'EinvoiceEmailProcessorLogs', {
-      logGroupName: '/aws/lambda/finanseal-einvoice-email-processor',
+      logGroupName: '/aws/lambda/groot-finance-einvoice-email-processor',
       retention: logs.RetentionDays.ONE_MONTH,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -367,7 +359,7 @@ export class DocumentProcessingStack extends cdk.Stack {
       handler: 'handler',
       runtime: lambda.Runtime.NODEJS_20_X,
       architecture: lambda.Architecture.ARM_64,
-      functionName: 'finanseal-einvoice-email-processor',
+      functionName: 'groot-finance-einvoice-email-processor',
       description: 'Process incoming merchant e-invoice emails from SES — Gemini Flash classification (019-lhdn-einv-flow-2)',
       memorySize: 256,
       timeout: cdk.Duration.seconds(120), // Gemini classification + optional Playwright PDF download via form-fill Lambda
@@ -400,7 +392,6 @@ export class DocumentProcessingStack extends cdk.Stack {
     formFillFunction.grantInvoke(emailProcessorFunction);
 
     // Allow email processor to invoke document processor for OCR (auto-route receipts)
-    // Must use the :prod alias — durable functions reject unqualified ARNs
     this.documentProcessorAlias.grantInvoke(emailProcessorFunction);
     emailProcessorFunction.addEnvironment(
       'DOCUMENT_PROCESSOR_LAMBDA_ARN',
@@ -425,7 +416,7 @@ export class DocumentProcessingStack extends cdk.Stack {
     // Cost: Free (first 1,000 emails/month), then $0.10 per 1,000
     // ========================================================================
     const receiptRuleSet = new ses.ReceiptRuleSet(this, 'EinvoiceReceiptRuleSet', {
-      receiptRuleSetName: 'finanseal-einvoice-receipt',
+      receiptRuleSetName: 'groot-finance-einvoice-receipt',
     });
 
     receiptRuleSet.addRule('EinvoiceReceiptRule', {
@@ -618,7 +609,7 @@ exports.handler = async (event) => {
     // Uses same Docker image as form fill (shares dspy_modules/ + optimization/)
     // ========================================================================
     const optimizerLogGroup = new logs.LogGroup(this, 'DspyOptimizerLogs', {
-      logGroupName: `/aws/lambda/finanseal-dspy-optimizer`,
+      logGroupName: `/aws/lambda/groot-finance-dspy-optimizer`,
       retention: logs.RetentionDays.ONE_MONTH,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -631,7 +622,7 @@ exports.handler = async (event) => {
         }
       ),
       architecture: lambda.Architecture.X86_64,
-      functionName: 'finanseal-dspy-optimizer',
+      functionName: 'groot-finance-dspy-optimizer',
       description: 'DSPy optimization pipeline — MIPROv2 troubleshooter + BootstrapFewShot recon (every 3 days)',
       memorySize: 1024,
       timeout: cdk.Duration.minutes(15),  // Optimization can take several minutes
@@ -657,7 +648,7 @@ exports.handler = async (event) => {
 
     // EventBridge rule: every 3 days
     const optimizerRule = new events.Rule(this, 'DspyOptimizerSchedule', {
-      ruleName: 'finanseal-dspy-optimizer-schedule',
+      ruleName: 'groot-finance-dspy-optimizer-schedule',
       schedule: events.Schedule.rate(cdk.Duration.days(3)),
       description: 'Trigger DSPy optimization pipeline every 3 days (001-dspy-cua-optimization)',
     });

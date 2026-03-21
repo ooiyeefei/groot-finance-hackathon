@@ -56,7 +56,7 @@ function getLambdaClient(): LambdaClient {
       const provider = fromWebToken({
         roleArn,
         webIdentityToken: oidcToken,
-        roleSessionName: `finanseal-lhdn-batch-${Date.now()}`,
+        roleSessionName: `groot-lhdn-batch-${Date.now()}`,
         durationSeconds: 3600,
       })
       return provider()

@@ -1,8 +1,7 @@
-# Lambda Container Image for Document Processing with AWS Durable Functions
+# Lambda Container Image for Document Processing
 #
 # This container includes:
 # - Python 3.11 runtime
-# - AWS Durable Execution SDK for fault-tolerant workflows
 # - DSPy for structured LLM extraction with Gemini
 # - Poppler for PDF to image conversion
 # - zxing-cpp for QR code detection (pure wheel, zero system deps)
@@ -28,7 +27,7 @@ RUN pip install --no-cache-dir \
     --only-binary=numpy,tiktoken,zxing-cpp,pillow-heif,pyzbar \
     -r requirements.txt
 
-# Copy function code (SSM resolution added 2026-03-19)
+# Copy function code
 COPY handler.py ${LAMBDA_TASK_ROOT}/
 COPY types_def.py ${LAMBDA_TASK_ROOT}/
 COPY steps/ ${LAMBDA_TASK_ROOT}/steps/

@@ -38,7 +38,7 @@ export function createSSMClient(): SSMClient {
       const provider = fromWebToken({
         roleArn: AWS_ROLE_ARN,
         webIdentityToken: token,
-        roleSessionName: `finanseal-ssm-${Date.now()}`,
+        roleSessionName: `groot-ssm-${Date.now()}`,
         durationSeconds: 3600,
       })
       return provider()
