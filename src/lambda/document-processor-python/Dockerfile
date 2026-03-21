@@ -5,6 +5,7 @@
 # - DSPy for structured LLM extraction with Gemini
 # - Poppler for PDF to image conversion
 # - zxing-cpp for QR code detection (pure wheel, zero system deps)
+# - pyzbar + libzbar for robust QR fallback (smooth+upscale rescue)
 # - Sentry for error tracking
 
 FROM public.ecr.aws/lambda/python:3.11
@@ -13,8 +14,14 @@ FROM public.ecr.aws/lambda/python:3.11
 USER root
 RUN yum install -y \
     poppler-utils \
-    zbar \
     && yum clean all
+
+# Install libzbar shared library (pre-built for Amazon Linux 2 x86_64)
+# pyzbar uses ctypes.util.find_library('zbar') which needs ldconfig cache
+COPY libzbar.so.0 /usr/lib64/libzbar.so.0
+RUN ln -sf /usr/lib64/libzbar.so.0 /usr/lib64/libzbar.so \
+    && echo "/usr/lib64" > /etc/ld.so.conf.d/zbar.conf \
+    && /sbin/ldconfig
 
 # Copy requirements and install dependencies
 COPY requirements.txt ${LAMBDA_TASK_ROOT}/

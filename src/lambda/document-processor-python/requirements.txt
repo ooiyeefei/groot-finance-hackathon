@@ -35,3 +35,4 @@ sentry-sdk>=2.0.0
 zxing-cpp>=2.2.0
 # pyzbar: robust fallback detector (requires libzbar0 system lib)
 pyzbar>=0.1.9
+# Build: 1774085659

@@ -1,10 +1,10 @@
 """
 QR Code Detection Step (019-lhdn-einv-flow-2)
 
-Multi-tier detection with image preprocessing and fallback detectors.
-Tier 1: zxingcpp (fast, primary)
-Tier 2: pyzbar with preprocessing (robust fallback)
-Tier 3: Gemini Vision direct extraction (last resort)
+Multi-tier detection with smart preprocessing.
+Tier 1: zxingcpp on original (fast, catches clean QRs)
+Tier 2: pyzbar on original (different algorithm)
+Tier 3: Gemini Vision locate → crop → smooth+upscale+OTSU → pyzbar decode
 """
 
 import re
@@ -126,12 +126,86 @@ def _detect_qr_pyzbar(image_variants: List[Image.Image], document_id: str) -> Li
                     print(f"[{document_id}] QR Detection: pyzbar found QR (variant #{idx}): {data[:80]}")
 
         return all_qr_data
-    except ImportError:
-        print(f"[{document_id}] QR Detection: pyzbar not available")
+    except ImportError as e:
+        print(f"[{document_id}] QR Detection: pyzbar not available - {e}")
         return []
     except Exception as e:
         print(f"[{document_id}] QR Detection: pyzbar error - {e}")
         return []
+
+
+def _numpy_otsu_threshold(arr: np.ndarray) -> np.ndarray:
+    """Compute OTSU binarization using numpy (no cv2 dependency)."""
+    hist, _ = np.histogram(arr.flatten(), bins=256, range=(0, 256))
+    total = arr.size
+    sum_total = float(np.sum(np.arange(256) * hist))
+    sum_bg, w_bg, max_var, best_thresh = 0.0, 0, 0.0, 0
+    for t in range(256):
+        w_bg += hist[t]
+        if w_bg == 0:
+            continue
+        w_fg = total - w_bg
+        if w_fg == 0:
+            break
+        sum_bg += t * hist[t]
+        mean_bg = sum_bg / w_bg
+        mean_fg = (sum_total - sum_bg) / w_fg
+        var_between = w_bg * w_fg * (mean_bg - mean_fg) ** 2
+        if var_between > max_var:
+            max_var = var_between
+            best_thresh = t
+    return ((arr > best_thresh) * 255).astype(np.uint8)
+
+
+def _decode_qr_smooth_upscale(cropped: Image.Image, document_id: str) -> List[str]:
+    """Decode blurry QR codes using smooth+upscale+OTSU threshold.
+
+    Works on CamScanner and low-quality scans where QR modules bleed together.
+    A light blur BEFORE upscaling reduces inter-module noise, then OTSU
+    binarization produces clean module boundaries for the decoder.
+    Uses zxingcpp (primary, already in Lambda) and pyzbar (fallback).
+    """
+    gray = cropped.convert("L")
+
+    # Filter+scale combos proven effective in testing
+    attempts = [
+        ("SMOOTH", ImageFilter.SMOOTH, 3),
+        ("SMOOTH", ImageFilter.SMOOTH, 4),
+        ("GaussianBlur(1)", ImageFilter.GaussianBlur(radius=1), 3),
+    ]
+
+    for filter_name, img_filter, scale in attempts:
+        try:
+            filtered = gray.filter(img_filter)
+            up = filtered.resize(
+                (filtered.width * scale, filtered.height * scale),
+                Image.LANCZOS,
+            )
+            bw = _numpy_otsu_threshold(np.array(up))
+            bw_img = Image.fromarray(bw).convert("RGB")
+
+            # Try zxingcpp first (primary decoder, no system deps)
+            decoded = _detect_qr_zxingcpp([bw_img], document_id)
+            if decoded:
+                print(
+                    f"[{document_id}] QR Detection: Tier 3 smooth+upscale "
+                    f"({filter_name} {scale}x, zxingcpp) decoded: {decoded[0][:80]}"
+                )
+                return decoded
+
+            # Try pyzbar fallback (different algorithm, may catch more)
+            decoded = _detect_qr_pyzbar([bw_img], document_id)
+            if decoded:
+                print(
+                    f"[{document_id}] QR Detection: Tier 3 smooth+upscale "
+                    f"({filter_name} {scale}x, pyzbar) decoded: {decoded[0][:80]}"
+                )
+                return decoded
+
+        except Exception as e:
+            print(f"[{document_id}] QR Detection: smooth+upscale {filter_name} {scale}x error - {e}")
+
+    return []
 
 
 def _resolve_short_url(url: str, document_id: str) -> str:
@@ -409,10 +483,10 @@ def detect_qr_step(
     Architecture: DETECT → CLASSIFY (always, regardless of QR count)
 
     Detection tiers (find QR codes):
-      Tier 1: zxingcpp on original image (fast)
-      Tier 2: zxingcpp on preprocessed variants + pyzbar fallback
-      Tier 3: Gemini Vision crop+decode rescue (only for multi-QR edge cases
-              like Shell where library can only decode 1 of 2 side-by-side QRs)
+      Tier 1: zxingcpp on original image (fast, catches clean/high-res QRs)
+      Tier 2: pyzbar on original (different algorithm, catches what zxingcpp misses)
+      Tier 3: Gemini Vision locate → crop → zxingcpp/pyzbar on crop → smooth+upscale
+              rescue (handles blurry CamScanner QRs where module edges bleed together)
 
     Classification (determine what each QR is):
       - Single QR: URL pattern matching → page fetch → LLM (no vision needed)
@@ -436,67 +510,73 @@ def detect_qr_step(
         # PHASE 1: DETECTION — find all QR codes in the image
         # ===================================================================
 
-        # Tier 1: zxingcpp on original image (fast path)
+        # Tier 1: zxingcpp on original image (fast path — catches clean QRs)
         qr_data_list = _detect_qr_zxingcpp([image], document_id)
-        print(f"[{document_id}] QR Detection: Tier 1 (zxingcpp on original) found {len(qr_data_list)} QR codes")
+        print(f"[{document_id}] QR Detection: Tier 1 (zxingcpp) found {len(qr_data_list)} QR codes")
 
-        # Tier 2: Only if <2 QRs found, try preprocessing + fallback detectors
+        # Tier 2: pyzbar on original (different algorithm, catches what zxingcpp misses)
         if len(qr_data_list) < 2:
-            print(f"[{document_id}] QR Detection: Activating Tier 2 (preprocessing + fallback detectors)")
+            pyzbar_results = _detect_qr_pyzbar([image], document_id)
+            for data in pyzbar_results:
+                if data not in qr_data_list:
+                    qr_data_list.append(data)
+            print(f"[{document_id}] QR Detection: Tier 2 (pyzbar) total={len(qr_data_list)} QR codes")
 
-            image_variants = _preprocess_image_for_qr(image)
-            print(f"[{document_id}] QR Detection: Created {len(image_variants)} image variants")
-
-            for variant in image_variants[1:]:
-                variant_results = _detect_qr_zxingcpp([variant], document_id)
-                for data in variant_results:
-                    if data not in qr_data_list:
-                        qr_data_list.append(data)
-
-            print(f"[{document_id}] QR Detection: Tier 2a (zxingcpp on variants) total={len(qr_data_list)} QR codes")
-
-            if len(qr_data_list) < 2:
-                pyzbar_results = _detect_qr_pyzbar(image_variants, document_id)
-                for data in pyzbar_results:
-                    if data not in qr_data_list:
-                        qr_data_list.append(data)
-                print(f"[{document_id}] QR Detection: Tier 2b (pyzbar) total={len(qr_data_list)} QR codes")
-
-        # Tier 3: Vision crop+decode rescue
-        # Handles two cases:
-        #   - 0 QRs decoded: library failed but there IS a QR (blurry/damaged)
-        #   - 1 QR decoded: Shell-type receipt where library missed the 2nd QR
-        # If we already have 2+ QRs, no rescue needed — go straight to classification.
+        # Tier 3: Gemini Vision locate → crop → decode
+        # For blurry/CamScanner QRs where Tier 1-2 fail, Vision locates the QR
+        # region, then we crop and apply smart preprocessing (smooth+upscale+OTSU).
+        # Also handles multi-QR receipts (Shell) where library decoded only 1 of 2.
         if len(qr_data_list) < 2:
-            # We have 0-1 QRs — check if Gemini vision sees MORE QRs we missed
             try:
                 vision_locate_result = _vision_locate_qr_regions(image_bytes, (w, h), document_id)
                 vision_qr_count = vision_locate_result.get("count", 0)
 
                 if vision_qr_count > len(qr_data_list):
-                    print(f"[{document_id}] QR Detection: Tier 3 — Vision sees {vision_qr_count} QRs but library decoded {len(qr_data_list)}, cropping missing regions...")
+                    print(f"[{document_id}] QR Detection: Tier 3 — Vision sees {vision_qr_count} QRs but decoded {len(qr_data_list)}, cropping...")
                     for region in vision_locate_result.get("regions", []):
                         bbox = region.get("bbox", {})
-                        if bbox.get("x") is not None and bbox.get("y") is not None:
-                            x, y = bbox["x"], bbox["y"]
+                        # Gemini may return bbox as {x,y,w,h} or {x0,y0,x1,y1,w,h}
+                        bx = bbox.get("x") if bbox.get("x") is not None else bbox.get("x0")
+                        by = bbox.get("y") if bbox.get("y") is not None else bbox.get("y0")
+                        if bx is not None and by is not None:
+                            x, y = bx, by
                             w_bbox = bbox.get("width", 150)
                             h_bbox = bbox.get("height", 150)
-                            padding = int(max(w_bbox, h_bbox) * 0.2)
+                            padding = int(max(w_bbox, h_bbox) * 0.3)
                             x1, y1 = max(0, x - padding), max(0, y - padding)
                             x2, y2 = min(w, x + w_bbox + padding), min(h, y + h_bbox + padding)
 
                             cropped = image.crop((x1, y1, x2, y2))
                             print(f"[{document_id}] QR Detection: Cropped region ({x1},{y1}) to ({x2},{y2})")
 
-                            cropped_variants = _preprocess_image_for_qr(cropped)
-                            cropped_data = _detect_qr_zxingcpp(cropped_variants, document_id)
+                            # Try raw decoders on crop first (fast, free)
+                            cropped_data = _detect_qr_zxingcpp([cropped], document_id)
                             if not cropped_data:
-                                cropped_data = _detect_qr_pyzbar(cropped_variants, document_id)
+                                cropped_data = _detect_qr_pyzbar([cropped], document_id)
+
+                            # Smart preprocessing: smooth+upscale+OTSU for blurry QRs
+                            # CamScanner and low-quality scans cause module bleed.
+                            # A light blur before upscaling reduces inter-module noise,
+                            # then OTSU binarization produces clean module boundaries.
+                            if not cropped_data:
+                                cropped_data = _decode_qr_smooth_upscale(cropped, document_id)
 
                             for data in (cropped_data or []):
                                 if data not in qr_data_list:
                                     qr_data_list.append(data)
                                     print(f"[{document_id}] QR Detection: Decoded from crop: {data[:80]}")
+                    # Fallback: if Vision crop didn't decode, try bottom half of image
+                    # QR codes on receipts are almost always in the bottom half.
+                    # Gemini's bbox coordinates can be inaccurate.
+                    if not qr_data_list:
+                        bottom_crop = image.crop((0, h // 2, w, h))
+                        print(f"[{document_id}] QR Detection: Tier 3 fallback — trying bottom half (0,{h//2}) to ({w},{h})")
+                        bottom_data = _decode_qr_smooth_upscale(bottom_crop, document_id)
+                        for data in (bottom_data or []):
+                            if data not in qr_data_list:
+                                qr_data_list.append(data)
+                                print(f"[{document_id}] QR Detection: Decoded from bottom half: {data[:80]}")
+
                 else:
                     print(f"[{document_id}] QR Detection: Vision confirms {vision_qr_count} QR(s) — no hidden QRs to rescue")
             except Exception as e:
