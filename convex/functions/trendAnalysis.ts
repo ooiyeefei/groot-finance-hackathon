@@ -5,6 +5,9 @@
  * Aggregates journal entries by account code ranges into financial metrics,
  * grouped by time period (monthly/quarterly/yearly).
  *
+ * Internal queries are in trendAnalysisQueries.ts to avoid circular type
+ * references when the action calls internal queries in the same module.
+ *
  * Account code ranges (IFRS Chart of Accounts):
  * - Revenue: 4000-4999 (credit amounts)
  * - Expenses: 5000-5999 (debit amounts)
@@ -13,7 +16,7 @@
  */
 
 import { v } from "convex/values";
-import { action, internalQuery } from "../_generated/server";
+import { action } from "../_generated/server";
 import { internal } from "../_generated/api";
 
 // ============================================
@@ -28,57 +31,12 @@ interface PeriodBucket {
   transactionCount: number
 }
 
-interface TrendAnalysisResult {
-  metric: string
-  periods: PeriodBucket[]
-  homeCurrency: string
+interface JournalLine {
+  accountCode: string;
+  debitAmount: number;
+  creditAmount: number;
+  transactionDate: string;
 }
-
-// ============================================
-// INTERNAL QUERY — reads journal data (runs inside Convex)
-// ============================================
-
-export const getJournalDataForPeriod = internalQuery({
-  args: {
-    businessId: v.id("businesses"),
-    startDate: v.string(),
-    endDate: v.string(),
-  },
-  handler: async (ctx, args) => {
-    // Get posted journal entries in date range
-    const entries = await ctx.db
-      .query("journal_entries")
-      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
-      .filter((q) =>
-        q.and(
-          q.gte(q.field("transactionDate"), args.startDate),
-          q.lte(q.field("transactionDate"), args.endDate),
-          q.eq(q.field("status"), "posted")
-        )
-      )
-      .collect();
-
-    const entryIds = new Set(entries.map((e) => e._id));
-
-    // Get all lines for this business, filter to matching entries
-    const allLines = await ctx.db
-      .query("journal_entry_lines")
-      .withIndex("by_business_account", (q) => q.eq("businessId", args.businessId))
-      .collect();
-
-    const lines = allLines.filter((line) => entryIds.has(line.journalEntryId));
-
-    // Return lines with their transaction dates (from parent entry)
-    const entryDateMap = new Map(entries.map((e) => [e._id, e.transactionDate]));
-
-    return lines.map((line) => ({
-      accountCode: line.accountCode,
-      debitAmount: line.debitAmount,
-      creditAmount: line.creditAmount,
-      transactionDate: entryDateMap.get(line.journalEntryId) || "",
-    }));
-  },
-});
 
 // ============================================
 // PUBLIC ACTION — trend aggregation
@@ -104,7 +62,7 @@ export const analyzeTrends = action({
   },
   handler: async (ctx, args): Promise<Record<string, any>> => {
     // Resolve business ID
-    const business = await ctx.runQuery(internal.functions.trendAnalysis.lookupBusiness, {
+    const business = await ctx.runQuery(internal.functions.trendAnalysisQueries.lookupBusiness, {
       businessId: args.businessId,
     });
     if (!business) {
@@ -120,12 +78,12 @@ export const analyzeTrends = action({
       }
 
       const [linesA, linesB] = await Promise.all([
-        ctx.runQuery(internal.functions.trendAnalysis.getJournalDataForPeriod, {
+        ctx.runQuery(internal.functions.trendAnalysisQueries.getJournalDataForPeriod, {
           businessId: business._id,
           startDate: args.startDateA,
           endDate: args.endDateA,
         }),
-        ctx.runQuery(internal.functions.trendAnalysis.getJournalDataForPeriod, {
+        ctx.runQuery(internal.functions.trendAnalysisQueries.getJournalDataForPeriod, {
           businessId: business._id,
           startDate: args.startDateB,
           endDate: args.endDateB,
@@ -163,7 +121,7 @@ export const analyzeTrends = action({
 
     // Trend or growth mode — query the full date range
     const lines = await ctx.runQuery(
-      internal.functions.trendAnalysis.getJournalDataForPeriod,
+      internal.functions.trendAnalysisQueries.getJournalDataForPeriod,
       {
         businessId: business._id,
         startDate: args.startDateA,
@@ -191,33 +149,9 @@ export const analyzeTrends = action({
   },
 });
 
-// Internal query to look up business by string ID
-export const lookupBusiness = internalQuery({
-  args: { businessId: v.string() },
-  handler: async (ctx, args) => {
-    // Try direct lookup first (if it's a valid Convex ID)
-    try {
-      const normalized = ctx.db.normalizeId("businesses", args.businessId);
-      if (normalized) {
-        return await ctx.db.get(normalized);
-      }
-    } catch {
-      // Not a valid ID format
-    }
-    return null;
-  },
-});
-
 // ============================================
 // HELPERS
 // ============================================
-
-interface JournalLine {
-  accountCode: string;
-  debitAmount: number;
-  creditAmount: number;
-  transactionDate: string;
-}
 
 function aggregateMetric(lines: JournalLine[], metric: string): number {
   let total = 0;
@@ -259,10 +193,8 @@ function groupByPeriod(
   granularity: string,
   metric: string
 ): PeriodBucket[] {
-  // Generate period boundaries
   const boundaries = generatePeriodBoundaries(startDate, endDate, granularity);
 
-  // Bucket each line into its period
   const bucketMap = new Map<string, JournalLine[]>();
   for (const b of boundaries) {
     bucketMap.set(b.label, []);
@@ -278,7 +210,6 @@ function groupByPeriod(
     }
   }
 
-  // Aggregate each bucket
   return boundaries.map((b) => {
     const bucketLines = bucketMap.get(b.label) || [];
     return {
@@ -336,7 +267,6 @@ function generatePeriodBoundaries(
         current = new Date(current.getFullYear(), current.getMonth() + 1, 1);
     }
 
-    // Clamp to the requested range
     const clampedStart = periodStart < start ? start : periodStart;
     const clampedEnd = periodEnd > end ? end : periodEnd;
 
