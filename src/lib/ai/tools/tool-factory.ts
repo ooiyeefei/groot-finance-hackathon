@@ -40,6 +40,11 @@ import { TeamComparisonTool } from './team-comparison-tool'
 import { GenerateReportTool } from './generate-report-tool'
 // Receipt processing tool (031-chat-receipt-process)
 import { ReceiptClaimTool } from './receipt-claim-tool'
+// Chat-driven scheduled reports & bank reconciliation (031)
+import { ScheduleReportTool } from './schedule-report-tool'
+import { RunBankReconTool } from './run-bank-recon-tool'
+import { AcceptReconMatchTool } from './accept-recon-match-tool'
+import { ShowReconStatusTool } from './show-recon-status-tool'
 
 export type ToolName =
   // Category 1-2: Data retrieval tools
@@ -78,6 +83,11 @@ export type ToolName =
   | 'compare_team_spending'
   // Receipt processing tool (031-chat-receipt-process)
   | 'create_expense_from_receipt'
+  // Chat-driven scheduled reports & bank reconciliation (031)
+  | 'schedule_report'
+  | 'run_bank_reconciliation'
+  | 'accept_recon_match'
+  | 'show_recon_status'
 
 /**
  * Tool Factory implementing dependency injection pattern
@@ -136,6 +146,12 @@ export class ToolFactory {
 
     // Receipt processing tool (031-chat-receipt-process)
     this.registerTool('create_expense_from_receipt', () => new ReceiptClaimTool())
+
+    // Chat-driven scheduled reports & bank reconciliation (031)
+    this.registerTool('schedule_report', () => new ScheduleReportTool())
+    this.registerTool('run_bank_reconciliation', () => new RunBankReconTool())
+    this.registerTool('accept_recon_match', () => new AcceptReconMatchTool())
+    this.registerTool('show_recon_status', () => new ShowReconStatusTool())
   }
 
   /**
@@ -168,6 +184,11 @@ export class ToolFactory {
     'get_ar_summary',
     'get_ap_aging',
     'get_business_transactions',
+    // 031: Scheduled reports & bank recon (admin/manager only, except expense_summary)
+    'schedule_report',
+    'run_bank_reconciliation',
+    'accept_recon_match',
+    'show_recon_status',
   ])
 
   /**

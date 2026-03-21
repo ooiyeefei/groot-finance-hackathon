@@ -203,11 +203,12 @@ export class ScheduledIntelligenceStack extends cdk.Stack {
         description: 'Weekly email digest to business owners',
       },
 
-      // Monthly reports (1st of month, 3am UTC = 11am MYT)
+      // Scheduled reports — daily at 4am UTC (12pm MYT)
+      // Handler checks each schedule's frequency and only processes due ones
       {
         module: 'scheduled-reports',
-        schedule: 'cron(0 3 1 * ? *)',
-        description: 'Monthly scheduled reports generation',
+        schedule: 'cron(0 4 * * ? *)',
+        description: 'Daily check for scheduled reports (daily/weekly/monthly)',
       },
     ];
 

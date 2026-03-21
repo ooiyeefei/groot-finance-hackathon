@@ -550,6 +550,8 @@ const arBalance = arLines.reduce((sum, line) =>
 - S3 `finanseal-bucket` (PDF storage), Qdrant Cloud (tax KB embeddings), Convex (transaction data) (031-cfo-copilot-tools)
 - TypeScript 5.9.3, Next.js 15.5.7, React 19.1.2 + Convex 1.31.3, LangGraph 0.4.5, @aws-sdk/client-s3, @aws-sdk/client-lambda (031-chat-receipt-process)
 - S3 (finanseal-bucket, `chat-attachments/` prefix), Convex (messages, expense_claims tables) (031-chat-receipt-process)
+- TypeScript 5.9.3 (Next.js 15.5.7, Convex 1.31.3), Node.js 20 (Lambda) + Convex, LangGraph 0.4.5, @react-pdf/renderer, AWS SES, MCP client (031-chat-sched-report-bank-recon)
+- Convex (report_schedules, report_runs, bank_recon_runs tables) (031-chat-sched-report-bank-recon)
 
 
 ## Recent Changes

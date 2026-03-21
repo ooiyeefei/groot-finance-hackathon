@@ -31,6 +31,7 @@ import './team-comparison-card'
 import './forecast-card'
 import './report-download-card'
 import './receipt-claim-card'
+import './bank-recon-match-card'
 
 // --- Fallback Card ---
 

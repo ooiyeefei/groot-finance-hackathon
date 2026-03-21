@@ -3520,4 +3520,97 @@ export default defineSchema({
     .index("by_date", ["date"])
     .index("by_business", ["businessId"]),
 
+  // ============================================
+  // SCHEDULED REPORTS: Chat-driven report scheduling
+  // ============================================
+
+  // Recurring report delivery configuration, created via chat commands
+  report_schedules: defineTable({
+    businessId: v.id("businesses"),
+    createdBy: v.id("users"),
+
+    // Report configuration
+    reportType: v.union(
+      v.literal("pnl"),
+      v.literal("cash_flow"),
+      v.literal("ar_aging"),
+      v.literal("ap_aging"),
+      v.literal("expense_summary")
+    ),
+
+    // Schedule configuration
+    frequency: exportFrequencyValidator,       // "daily" | "weekly" | "monthly"
+    hourUtc: v.number(),                       // 0-23, default 4 (12pm MYT)
+    minuteUtc: v.optional(v.number()),         // 0-59
+    dayOfWeek: v.optional(v.number()),         // 0-6 (Sun-Sat), for weekly
+    dayOfMonth: v.optional(v.number()),        // 1-28, for monthly
+
+    // Delivery
+    recipients: v.array(v.string()),           // Email addresses
+    currency: v.string(),                      // Business home currency code
+
+    // Status
+    isActive: v.boolean(),
+    nextRunDate: v.number(),                   // Unix timestamp
+    lastRunDate: v.optional(v.number()),
+    lastRunStatus: v.optional(v.union(
+      v.literal("success"),
+      v.literal("failed"),
+      v.literal("pending")
+    )),
+
+    // Bounce tracking: { "email@example.com": 2 }
+    consecutiveBounces: v.optional(v.any()),
+
+    // Soft delete
+    deletedAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_active", ["businessId", "isActive"])
+    .index("by_nextRunDate", ["nextRunDate"]),
+
+  // Individual report execution history
+  report_runs: defineTable({
+    businessId: v.id("businesses"),
+    scheduleId: v.id("report_schedules"),
+    reportType: v.string(),
+    periodStart: v.string(),                   // ISO date
+    periodEnd: v.string(),                     // ISO date
+    status: v.union(
+      v.literal("pending"),
+      v.literal("generating"),
+      v.literal("delivered"),
+      v.literal("failed")
+    ),
+    errorReason: v.optional(v.string()),
+    recipientsDelivered: v.optional(v.array(v.string())),
+    recipientsFailed: v.optional(v.array(v.string())),
+    generatedAt: v.optional(v.number()),
+    deliveredAt: v.optional(v.number()),
+    pdfStorageKey: v.optional(v.string()),      // S3 key for re-download
+  })
+    .index("by_scheduleId", ["scheduleId"])
+    .index("by_businessId_date", ["businessId", "generatedAt"]),
+
+  // Chat-triggered reconciliation execution tracking
+  bank_recon_runs: defineTable({
+    businessId: v.id("businesses"),
+    bankAccountId: v.id("bank_accounts"),
+    triggeredBy: v.id("users"),
+    status: v.union(
+      v.literal("running"),
+      v.literal("complete"),
+      v.literal("failed")
+    ),
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    matchedCount: v.number(),
+    pendingReviewCount: v.number(),
+    unmatchedCount: v.number(),
+    errorReason: v.optional(v.string()),
+  })
+    .index("by_businessId_status", ["businessId", "status"])
+    .index("by_bankAccountId", ["bankAccountId"]),
+
 });

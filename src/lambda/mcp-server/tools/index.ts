@@ -17,3 +17,9 @@ export { analyzeTeamSpending } from './analyze-team-spending.js';
 
 // CFO copilot tools
 export { generateReportPdf } from './generate-report-pdf.js';
+
+// Chat-driven scheduled reports & bank reconciliation
+export { scheduleReport } from './schedule-report.js';
+export { runBankReconciliation } from './run-bank-recon.js';
+export { acceptReconMatch } from './accept-recon-match.js';
+export { showReconStatus } from './show-recon-status.js';

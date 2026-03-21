@@ -29,6 +29,10 @@ import { confirmProposal } from './tools/confirm-proposal.js';
 import { cancelProposal } from './tools/cancel-proposal.js';
 import { analyzeTeamSpending } from './tools/analyze-team-spending.js';
 import { generateReportPdf } from './tools/generate-report-pdf.js';
+import { scheduleReport } from './tools/schedule-report.js';
+import { runBankReconciliation } from './tools/run-bank-recon.js';
+import { acceptReconMatch } from './tools/accept-recon-match.js';
+import { showReconStatus } from './tools/show-recon-status.js';
 import {
   authenticateApiKey,
   authenticateInternalService,
@@ -52,6 +56,11 @@ const TOOL_IMPLEMENTATIONS: Record<string, (args: Record<string, unknown>, authC
   analyze_team_spending: analyzeTeamSpending,
   // CFO copilot tools
   generate_report_pdf: generateReportPdf,
+  // Chat-driven scheduled reports & bank reconciliation
+  schedule_report: scheduleReport,
+  run_bank_reconciliation: runBankReconciliation,
+  accept_recon_match: acceptReconMatch,
+  show_recon_status: showReconStatus,
 };
 
 // CORS headers for all responses

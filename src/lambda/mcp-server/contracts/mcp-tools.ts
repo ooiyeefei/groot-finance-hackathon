@@ -496,6 +496,78 @@ export type MCPToolResponse<T extends MCPToolOutput = MCPToolOutput> =
   | MCPToolError;
 
 // ============================================================================
+// Tool 8: schedule_report
+// ============================================================================
+
+export const ScheduleReportInputSchema = z.object({
+  action: z.enum(['create', 'modify', 'cancel', 'list'])
+    .describe('Action to perform: create a new schedule, modify/cancel an existing one, or list all schedules'),
+  scheduleId: z.string().optional()
+    .describe('Schedule ID (required for modify/cancel)'),
+  reportType: z.enum(['pnl', 'cash_flow', 'ar_aging', 'ap_aging', 'expense_summary']).optional()
+    .describe('Report type (required for create): pnl=Profit & Loss, cash_flow=Cash Flow, ar_aging=AR Aging, ap_aging=AP Aging, expense_summary=Expense Summary'),
+  frequency: z.enum(['daily', 'weekly', 'monthly']).optional()
+    .describe('Delivery frequency (required for create)'),
+  dayOfWeek: z.number().min(0).max(6).optional()
+    .describe('Day of week for weekly reports: 0=Sunday, 1=Monday, ..., 6=Saturday'),
+  dayOfMonth: z.number().min(1).max(28).optional()
+    .describe('Day of month for monthly reports (1-28)'),
+  recipients: z.array(z.string()).optional()
+    .describe('Email addresses to receive the report (defaults to requesting user email)'),
+  business_id: z.string().optional()
+    .describe('Business ID (optional when using API key authentication)'),
+});
+
+export type ScheduleReportInput = z.infer<typeof ScheduleReportInputSchema>;
+
+// ============================================================================
+// Tool 9: run_bank_reconciliation
+// ============================================================================
+
+export const RunBankReconciliationInputSchema = z.object({
+  bankAccountId: z.string()
+    .describe('The bank account ID to reconcile. Always ask the user which account before calling.'),
+  business_id: z.string().optional()
+    .describe('Business ID (optional when using API key authentication)'),
+});
+
+export type RunBankReconciliationInput = z.infer<typeof RunBankReconciliationInputSchema>;
+
+// ============================================================================
+// Tool 10: accept_recon_match
+// ============================================================================
+
+export const AcceptReconMatchInputSchema = z.object({
+  action: z.enum(['accept', 'reject', 'bulk_accept'])
+    .describe('Action: accept/reject a single match, or bulk_accept all above a confidence threshold'),
+  matchId: z.string().optional()
+    .describe('Match ID (required for accept/reject)'),
+  runId: z.string().optional()
+    .describe('Reconciliation run ID (required for bulk_accept)'),
+  minConfidence: z.number().min(0).max(1).default(0.9).optional()
+    .describe('Minimum confidence threshold for bulk_accept (default: 0.9 = 90%)'),
+  business_id: z.string().optional()
+    .describe('Business ID (optional when using API key authentication)'),
+});
+
+export type AcceptReconMatchInput = z.infer<typeof AcceptReconMatchInputSchema>;
+
+// ============================================================================
+// Tool 11: show_recon_status
+// ============================================================================
+
+export const ShowReconStatusInputSchema = z.object({
+  bankAccountId: z.string().optional()
+    .describe('Bank account ID to check (omit for all accounts)'),
+  query: z.string().optional()
+    .describe('Natural language query about a specific transaction (e.g., "the $500 payment from Acme")'),
+  business_id: z.string().optional()
+    .describe('Business ID (optional when using API key authentication)'),
+});
+
+export type ShowReconStatusInput = z.infer<typeof ShowReconStatusInputSchema>;
+
+// ============================================================================
 // Tool Registry (for MCP server initialization)
 // ============================================================================
 
@@ -534,6 +606,26 @@ export const MCP_TOOLS = {
     name: 'analyze_team_spending',
     description: 'Analyze team spending patterns across a manager\'s direct reports. Returns employee rankings, category/vendor breakdowns, and optional period-over-period trends. Requires manager authorization.',
     inputSchema: AnalyzeTeamSpendingInputSchema
+  },
+  schedule_report: {
+    name: 'schedule_report',
+    description: 'Create, modify, cancel, or list recurring financial report schedules. Supports P&L, Cash Flow, AR Aging, AP Aging, and Expense Summary reports with daily/weekly/monthly delivery via email with PDF attachment. Only admin/manager can schedule financial reports; employees can only schedule expense summaries.',
+    inputSchema: ScheduleReportInputSchema
+  },
+  run_bank_reconciliation: {
+    name: 'run_bank_reconciliation',
+    description: 'Trigger bank reconciliation for a specific bank account. Uses Tier 1 (rule-based) + Tier 2 (AI/DSPy) matching to process unmatched transactions. IMPORTANT: Always ask the user which bank account to reconcile before calling this tool. Returns match results with confidence scores for review.',
+    inputSchema: RunBankReconciliationInputSchema
+  },
+  accept_recon_match: {
+    name: 'accept_recon_match',
+    description: 'Accept or reject a bank reconciliation match. Accepting creates a double-entry journal entry. Supports bulk_accept to accept all matches above a confidence threshold (e.g., "Accept all above 90%"). For bulk accept, always confirm the count with the user before executing.',
+    inputSchema: AcceptReconMatchInputSchema
+  },
+  show_recon_status: {
+    name: 'show_recon_status',
+    description: 'Show current bank reconciliation status: matched, pending review, and unmatched transaction counts per bank account. Can also list unmatched transactions and search for specific transactions by description.',
+    inputSchema: ShowReconStatusInputSchema
   }
 } as const;
 
