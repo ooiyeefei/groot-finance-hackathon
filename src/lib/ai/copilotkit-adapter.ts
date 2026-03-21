@@ -457,7 +457,18 @@ function autoGenerateActionsFromToolResults(messages: BaseMessage[]): ActionCard
     }
 
     if (toolName === 'analyze_cash_flow' && parsed) {
-      const card = buildCashFlowCard(parsed)
+      // Monthly forecast mode returns { months, risk_alerts, summary, currency }
+      if (parsed.months && Array.isArray(parsed.months)) {
+        const card = buildForecastCard(parsed)
+        if (card) actions.push(card)
+      } else {
+        const card = buildCashFlowCard(parsed)
+        if (card) actions.push(card)
+      }
+    }
+
+    if (toolName === 'generate_report_pdf' && parsed) {
+      const card = buildReportDownloadCard(parsed)
       if (card) actions.push(card)
     }
 
@@ -552,6 +563,72 @@ function buildCashFlowCard(data: Record<string, unknown>): ActionCard | null {
       alerts: Array.isArray(data.alerts) ? data.alerts : [],
     },
   }
+}
+
+function buildForecastCard(data: Record<string, unknown>): ActionCard | null {
+  const months = data.months as Array<Record<string, unknown>> | undefined
+  if (!months || months.length === 0) return null
+
+  const summary = data.summary as Record<string, unknown> | undefined
+
+  return {
+    type: 'forecast_card',
+    id: `forecast-auto-${hashCode(JSON.stringify(data))}`,
+    data: {
+      months: months.map((m) => ({
+        month: m.month,
+        income: m.projected_income ?? m.income ?? 0,
+        expenses: m.projected_expenses ?? m.expenses ?? 0,
+        balance: m.net_balance ?? m.balance ?? 0,
+        arDue: m.known_ar_due ?? m.arDue ?? 0,
+        apDue: m.known_ap_due ?? m.apDue ?? 0,
+      })),
+      runwayMonths: summary?.runway_months ?? summary?.runwayMonths ?? 0,
+      riskLevel: summary?.risk_level ?? summary?.riskLevel ?? 'low',
+      currency: (data.currency as string) ?? 'MYR',
+      riskAlerts: Array.isArray(data.risk_alerts) ? data.risk_alerts : (Array.isArray(data.riskAlerts) ? data.riskAlerts : []),
+      knownAR: summary?.total_known_ar ?? summary?.knownAR ?? 0,
+      knownAP: summary?.total_known_ap ?? summary?.knownAP ?? 0,
+    },
+  }
+}
+
+function buildReportDownloadCard(data: Record<string, unknown>): ActionCard | null {
+  if (!data.report_url && !data.reportUrl) return null
+
+  return {
+    type: 'report_download',
+    id: `report-auto-${hashCode(JSON.stringify(data))}`,
+    data: {
+      reportUrl: data.report_url ?? data.reportUrl ?? '',
+      filename: data.filename ?? 'Report.pdf',
+      reportType: data.report_type ?? data.reportType ?? 'Board Report',
+      period: formatDateRangePeriod(data.date_range as Record<string, string> | undefined),
+      sections: Array.isArray(data.sections_included) ? data.sections_included.map(formatSectionName) :
+                Array.isArray(data.sections) ? data.sections : [],
+      generatedAt: data.generated_at ?? data.generatedAt ?? new Date().toISOString(),
+    },
+  }
+}
+
+function formatDateRangePeriod(range?: Record<string, string>): string {
+  if (!range?.start || !range?.end) return ''
+  const s = new Date(range.start)
+  const e = new Date(range.end)
+  // Detect quarters
+  if (s.getMonth() % 3 === 0 && e.getMonth() - s.getMonth() === 2) {
+    const q = Math.floor(s.getMonth() / 3) + 1
+    return `Q${q} ${s.getFullYear()}`
+  }
+  return `${s.toLocaleDateString('en', { month: 'short' })} – ${e.toLocaleDateString('en', { month: 'short', year: 'numeric' })}`
+}
+
+function formatSectionName(s: string): string {
+  const names: Record<string, string> = {
+    pnl: 'P&L', cash_flow: 'Cash Flow', ar_aging: 'AR Aging',
+    ap_aging: 'AP Aging', top_vendors: 'Top Vendors', trends: 'Trends',
+  }
+  return names[s] || s
 }
 
 function buildAnomalyCards(data: Record<string, unknown>): ActionCard[] {

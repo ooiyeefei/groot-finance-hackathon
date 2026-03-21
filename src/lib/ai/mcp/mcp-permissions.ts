@@ -72,7 +72,8 @@ const MCP_SERVER_PERMISSIONS: McpServerPermission[] = [
     toolOverrides: {
       // Basic intel tools available to starter
       'detect_anomalies': { minPlan: 'starter', allowedRoles: ['owner', 'admin', 'manager'] },
-      'forecast_cash_flow': { minPlan: 'starter', allowedRoles: ['owner', 'admin', 'manager'] }
+      'forecast_cash_flow': { minPlan: 'starter', allowedRoles: ['owner', 'admin', 'manager'] },
+      'generate_report_pdf': { minPlan: 'starter', allowedRoles: ['owner', 'admin', 'manager'] }
     }
   }
 ]

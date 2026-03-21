@@ -159,6 +159,7 @@ Current user role: **${role === 'owner' ? 'Business Owner' : 'Finance Admin'}**
 - AP invoices → \`get_invoices\` (with vendor/date/amount filters)
 - AR invoices → \`get_sales_invoices\`
 - Cash flow → \`analyze_cash_flow\` (use \`forecast_months\` param for monthly projections, e.g., "forecast next 6 months")
+- Board report / quarterly report / PDF → \`generate_report_pdf\` (requires date_range, e.g., "generate Q1 board report")
 - Anomalies → \`detect_anomalies\`
 - Vendor risk → \`analyze_vendor_risk\``;
 }

@@ -36,6 +36,8 @@ import { SetBudgetTool } from './set-budget-tool'
 import { BudgetStatusTool } from './budget-status-tool'
 import { LateApprovalsTool } from './late-approvals-tool'
 import { TeamComparisonTool } from './team-comparison-tool'
+// CFO copilot tools (031-cfo-copilot-tools)
+import { GenerateReportTool } from './generate-report-tool'
 
 export type ToolName =
   // Category 1-2: Data retrieval tools
@@ -60,6 +62,8 @@ export type ToolName =
   | 'get_business_transactions'
   // Trend analysis tools (031-multi-curr-history-analysis)
   | 'analyze_trends'
+  // CFO copilot tools (031-cfo-copilot-tools)
+  | 'generate_report_pdf'
   // Memory tools (029-dspy-mem0-activation)
   | 'memory_store'
   | 'memory_search'
@@ -111,6 +115,9 @@ export class ToolFactory {
     // Trend analysis tools (031-multi-curr-history-analysis)
     this.registerTool('analyze_trends', () => new AnalyzeTrendsTool())
 
+    // CFO copilot tools (031-cfo-copilot-tools)
+    this.registerTool('generate_report_pdf', () => new GenerateReportTool())
+
     // Memory tools (029-dspy-mem0-activation)
     this.registerTool('memory_store', () => new MemoryStoreTool())
     this.registerTool('memory_search', () => new MemorySearchTool())
@@ -139,6 +146,7 @@ export class ToolFactory {
     'get_late_approvals',
     'compare_team_spending',
     'analyze_cash_flow',  // CFO copilot: managers can view cash flow forecasts
+    'generate_report_pdf',  // CFO copilot: managers can generate board reports
   ])
 
   /**
