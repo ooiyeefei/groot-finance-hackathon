@@ -20,6 +20,7 @@ interface ReceiptAttachment {
 
 interface ReceiptClaimResult {
   claimId: string
+  submissionId: string
   status: 'draft'
   merchant: string
   amount: number
@@ -100,14 +101,39 @@ export class ReceiptClaimTool extends BaseTool {
     const results: ReceiptClaimResult[] = []
     const errors: string[] = []
 
+    // For batch uploads (multiple images in one message), create ONE submission
+    // with all claims inside it — avoids cluttering the submissions list.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-explicit-any
+    const { api } = require('@/convex/_generated/api') as any
+    const { client } = await getAuthenticatedConvex()
+    if (!client) throw new Error('Could not connect to database')
+
+    const batchTitle = attachments.length > 1
+      ? `Chat: ${attachments.length} receipts`
+      : `Chat: ${attachments[0].filename}`
+    const sharedSubmissionId = await client.mutation(api.functions.expenseSubmissions.create, {
+      businessId: userContext.businessId,
+      title: batchTitle,
+    } as any)
+
     for (const attachment of attachments) {
       try {
-        const result = await this.processOneReceipt(attachment, userContext, businessPurpose)
+        const result = await this.processOneReceipt(attachment, userContext, businessPurpose, sharedSubmissionId)
         results.push(result)
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error processing receipt'
         errors.push(`${attachment.filename}: ${msg}`)
       }
+    }
+
+    // Update submission title with actual vendor name if single receipt
+    if (results.length === 1 && results[0].merchant && results[0].merchant !== 'Processing...') {
+      try {
+        await client.mutation(api.functions.expenseSubmissions.update, {
+          id: sharedSubmissionId,
+          title: `Chat: ${results[0].merchant}`,
+        } as any)
+      } catch { /* non-fatal */ }
     }
 
     if (results.length === 0 && errors.length > 0) {
@@ -144,27 +170,23 @@ export class ReceiptClaimTool extends BaseTool {
   private async processOneReceipt(
     attachment: ReceiptAttachment,
     userContext: UserContext,
-    businessPurpose?: string
+    businessPurpose?: string,
+    submissionId?: string
   ): Promise<ReceiptClaimResult> {
     const { userId, businessId } = userContext
     if (!businessId) throw new Error('Business context required')
 
     const fileType = attachment.mimeType === 'application/pdf' ? 'pdf' : 'image'
 
-    // 1. Create submission + claim FIRST (Lambda needs a documentId to update)
+    // 1. Create claim FIRST (Lambda needs a documentId to update)
+    // Submission is created at the batch level (executeInternal) and passed in
     const { client } = await getAuthenticatedConvex()
     if (!client) throw new Error('Could not connect to database')
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-explicit-any
     const { api } = require('@/convex/_generated/api') as any
 
-    // 1a. Create expense submission so claim is visible in the UI
-    const submissionId = await client.mutation(api.functions.expenseSubmissions.create, {
-      businessId,
-      title: `Chat: ${attachment.filename}`,
-    } as any)
-
-    // 1b. Create the expense claim with status "uploading" (Lambda will update it)
+    // 1. Create the expense claim with status "uploading" (Lambda will update it)
     const createArgs = {
       businessId,
       vendorName: 'Processing...',
@@ -223,11 +245,6 @@ export class ReceiptClaimTool extends BaseTool {
           businessPurpose: businessPurpose || `Receipt: ${extractedData.vendorName}`,
           status: 'draft',
         } as any)
-        // Update submission title with vendor name
-        await client.mutation(api.functions.expenseSubmissions.update, {
-          id: submissionId,
-          title: `Chat: ${extractedData.vendorName}`,
-        } as any)
       } catch (updateErr) {
         console.warn('[ReceiptClaimTool] Failed to update claim with OCR data:', updateErr)
       }
@@ -250,6 +267,7 @@ export class ReceiptClaimTool extends BaseTool {
 
     return {
       claimId: claimId as string,
+      submissionId: submissionId as string,
       status: 'draft',
       merchant: extractedData.vendorName || 'Unknown Merchant',
       amount: extractedData.totalAmount,

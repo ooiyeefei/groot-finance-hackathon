@@ -26,6 +26,7 @@ interface SingleClaimData {
   lowConfidenceFields?: string[]
   duplicateWarning?: boolean
   existingClaimId?: string
+  submissionId?: string
 }
 
 interface BatchClaimData {
@@ -206,6 +207,18 @@ function ReceiptClaimCard({ action, isHistorical }: ActionCardProps) {
             <AlertTriangle className="w-3 h-3 flex-shrink-0 mt-0.5" />
             <span>Possible duplicate — a similar claim already exists</span>
           </div>
+        )}
+
+        {/* Link to submission */}
+        {data.submissionId && (
+          <a
+            href={`/en/expense-claims/submissions/${data.submissionId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 mb-2 underline"
+          >
+            View in Expense Claims →
+          </a>
         )}
 
         {/* Historical hint */}

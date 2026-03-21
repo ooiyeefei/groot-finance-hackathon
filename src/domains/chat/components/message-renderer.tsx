@@ -410,6 +410,7 @@ export function MessageRenderer({
 function AttachmentThumbnail({ filename, mimeType, s3Path }: { filename: string; mimeType: string; s3Path: string }) {
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [enlarged, setEnlarged] = useState(false)
   const isImage = mimeType.startsWith('image/')
 
   // Fetch pre-signed URL on mount for image attachments
@@ -430,7 +431,6 @@ function AttachmentThumbnail({ filename, mimeType, s3Path }: { filename: string;
   }, [isImage, s3Path])
 
   if (!isImage) {
-    // PDF indicator
     return (
       <span className="inline-flex items-center gap-1 text-xs bg-primary-foreground/20 rounded px-1.5 py-0.5">
         <FileImage className="w-3 h-3" />
@@ -440,20 +440,54 @@ function AttachmentThumbnail({ filename, mimeType, s3Path }: { filename: string;
   }
 
   return (
-    <div className="w-20 h-20 rounded-lg overflow-hidden bg-primary-foreground/10 border border-primary-foreground/20">
-      {loading ? (
-        <div className="w-full h-full flex items-center justify-center">
-          <div className="w-4 h-4 border-2 border-primary-foreground/40 border-t-transparent rounded-full animate-spin" />
-        </div>
-      ) : imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={imageUrl} alt={filename} className="w-full h-full object-cover" />
-      ) : (
-        <div className="w-full h-full flex items-center justify-center">
-          <FileImage className="w-5 h-5 text-primary-foreground/60" />
+    <>
+      <button
+        type="button"
+        onClick={() => imageUrl && setEnlarged(true)}
+        className="w-20 h-20 rounded-lg overflow-hidden bg-primary-foreground/10 border border-primary-foreground/20 cursor-pointer hover:opacity-80 transition-opacity"
+        title="Click to enlarge"
+      >
+        {loading ? (
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="w-4 h-4 border-2 border-primary-foreground/40 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={imageUrl} alt={filename} className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <FileImage className="w-5 h-5 text-primary-foreground/60" />
+          </div>
+        )}
+      </button>
+
+      {/* Lightbox overlay */}
+      {enlarged && imageUrl && (
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+        <div
+          className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setEnlarged(false)}
+        >
+          <button
+            type="button"
+            onClick={() => setEnlarged(false)}
+            className="absolute top-4 right-4 text-white hover:text-white/80 z-10"
+            aria-label="Close"
+          >
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={imageUrl}
+            alt={filename}
+            className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
-    </div>
+    </>
   )
 }
 
