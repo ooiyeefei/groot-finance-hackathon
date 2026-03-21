@@ -737,6 +737,7 @@ export const MCP_TOOLS = {
     name: 'show_recon_status',
     description: 'Show current bank reconciliation status: matched, pending review, and unmatched transaction counts per bank account. Can also list unmatched transactions and search for specific transactions by description.',
     inputSchema: ShowReconStatusInputSchema
+  },
   send_email_report: {
     name: 'send_email_report',
     description: 'Send a formatted financial report via email. Two-phase: call with confirmed=false for preview, then confirmed=true after user approval. Requires finance_admin or owner role. Rate limit: 50 emails/business/day.',
