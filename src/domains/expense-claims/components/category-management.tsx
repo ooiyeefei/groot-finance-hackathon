@@ -318,6 +318,16 @@ export default function CategoryManagement({ userRole }: CategoryManagementProps
                           Policy limit: ${category.policy_limit || 0}
                         </div>
 
+                        {(category as any).budgetLimit ? (
+                          <div className="text-xs text-blue-600 dark:text-blue-400">
+                            Monthly budget: {(category as any).budgetCurrency || 'MYR'} {((category as any).budgetLimit || 0).toLocaleString()}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-muted-foreground">
+                            No budget set
+                          </div>
+                        )}
+
                         {category.ai_keywords.length > 0 && (
                           <div className="text-xs text-muted-foreground">
                             Keywords: {category.ai_keywords.slice(0, 3).join(', ')}

@@ -26,6 +26,8 @@ export interface ExpenseCategory {
   sort_order: number
   is_default: boolean
   glCode?: string
+  budgetLimit?: number
+  budgetCurrency?: string
 }
 
 export interface CategoryFormData {
@@ -42,6 +44,8 @@ export interface CategoryFormData {
   sort_order: number
   is_active: boolean
   glCode: string
+  budgetLimit: number
+  budgetCurrency: string
 }
 
 interface CategoryFormModalProps {
@@ -74,7 +78,9 @@ export default function CategoryFormModal({
     requires_manager_approval: true,
     sort_order: 99,
     is_active: true,
-    glCode: ''
+    glCode: '',
+    budgetLimit: 0,
+    budgetCurrency: ''
   })
 
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
@@ -96,7 +102,9 @@ export default function CategoryFormModal({
           requires_manager_approval: true,
           sort_order: editingCategory.sort_order,
           is_active: editingCategory.is_active ?? true,
-          glCode: editingCategory.glCode || ''
+          glCode: editingCategory.glCode || '',
+          budgetLimit: editingCategory.budgetLimit || 0,
+          budgetCurrency: editingCategory.budgetCurrency || ''
         })
       } else {
         // Reset to default values for new category
@@ -113,7 +121,9 @@ export default function CategoryFormModal({
           requires_manager_approval: true,
           sort_order: 99,
           is_active: true,
-          glCode: ''
+          glCode: '',
+          budgetLimit: 0,
+          budgetCurrency: ''
         })
       }
       setValidationErrors({})
@@ -432,6 +442,26 @@ export default function CategoryFormModal({
                   />
                   {validationErrors.policy_limit && (
                     <p className="text-destructive text-xs mt-1">{validationErrors.policy_limit}</p>
+                  )}
+                </div>
+
+                <div>
+                  <Label htmlFor="budgetLimit">Monthly Budget Limit</Label>
+                  <Input
+                    id="budgetLimit"
+                    type="number"
+                    step="0.01"
+                    value={formData.budgetLimit || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, budgetLimit: Number(e.target.value) }))}
+                    placeholder="0.00 (0 = no budget tracking)"
+                    className="mt-1"
+                    disabled={isLoading}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Optional monthly spending limit for this category. Set to 0 or leave empty to disable budget tracking. Managers will be alerted when spending reaches 80% of this limit.
+                  </p>
+                  {validationErrors.budgetLimit && (
+                    <p className="text-destructive text-xs mt-1">{validationErrors.budgetLimit}</p>
                   )}
                 </div>
               </div>

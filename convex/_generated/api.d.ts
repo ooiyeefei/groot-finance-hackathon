@@ -29,6 +29,7 @@ import type * as functions_bankReconClassificationRules from "../functions/bankR
 import type * as functions_bankReconCorrections from "../functions/bankReconCorrections.js";
 import type * as functions_bankReconOptimization from "../functions/bankReconOptimization.js";
 import type * as functions_bankTransactions from "../functions/bankTransactions.js";
+import type * as functions_budgetTracking from "../functions/budgetTracking.js";
 import type * as functions_businesses from "../functions/businesses.js";
 import type * as functions_catalogItems from "../functions/catalogItems.js";
 import type * as functions_chartOfAccounts from "../functions/chartOfAccounts.js";
@@ -175,6 +176,7 @@ declare const fullApi: ApiFromModules<{
   "functions/bankReconCorrections": typeof functions_bankReconCorrections;
   "functions/bankReconOptimization": typeof functions_bankReconOptimization;
   "functions/bankTransactions": typeof functions_bankTransactions;
+  "functions/budgetTracking": typeof functions_budgetTracking;
   "functions/businesses": typeof functions_businesses;
   "functions/catalogItems": typeof functions_catalogItems;
   "functions/chartOfAccounts": typeof functions_chartOfAccounts;

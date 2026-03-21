@@ -949,6 +949,28 @@ export const approve = mutation({
 
     console.log(`[Submission Approve] Approved submission ${submission._id} with ${accountingEntriesCreated} accounting entries`);
 
+    // 031-budget-track-manager-team: Check budget thresholds for each affected category
+    const affectedCategories = new Set<string>();
+    for (const claim of activeClaims) {
+      if (claim.expenseCategory) {
+        affectedCategories.add(claim.expenseCategory);
+      }
+    }
+    // Get category names from business settings for each affected category
+    const allCategories = (business?.customExpenseCategories as any[]) || [];
+    for (const catIdOrName of affectedCategories) {
+      const catObj = allCategories.find(
+        (c: any) => c.id === catIdOrName || c.category_name === catIdOrName
+      );
+      if (catObj && catObj.budgetLimit) {
+        await ctx.scheduler.runAfter(0, internal.functions.budgetTracking.checkBudgetThresholds, {
+          businessId: submission.businessId,
+          categoryId: catObj.id,
+          categoryName: catObj.category_name,
+        });
+      }
+    }
+
     return {
       submissionId: submission._id,
       status: "approved" as const,

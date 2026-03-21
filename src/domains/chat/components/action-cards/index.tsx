@@ -25,6 +25,9 @@ import './revenue-summary-card'
 import './expense-reimbursement-card'
 import './trend-comparison-card'
 import './proactive-alert-card'
+import './budget-status-card'
+import './late-approvals-card'
+import './team-comparison-card'
 
 // --- Fallback Card ---
 

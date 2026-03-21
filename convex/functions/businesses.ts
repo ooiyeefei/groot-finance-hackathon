@@ -1255,6 +1255,8 @@ export const createExpenseCategory = mutation({
     requires_manager_approval: v.optional(v.boolean()),
     sort_order: v.optional(v.number()),
     glCode: v.optional(v.string()),
+    budgetLimit: v.optional(v.number()),
+    budgetCurrency: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -1297,6 +1299,8 @@ export const createExpenseCategory = mutation({
       requires_manager_approval?: boolean;
       sort_order?: number;
       glCode?: string;
+      budgetLimit?: number;
+      budgetCurrency?: string;
       created_at: string;
       updated_at: string;
     }>) || [];
@@ -1319,6 +1323,8 @@ export const createExpenseCategory = mutation({
       requires_manager_approval: args.requires_manager_approval ?? true,
       sort_order: args.sort_order || 99,
       glCode: args.glCode,
+      budgetLimit: args.budgetLimit,
+      budgetCurrency: args.budgetCurrency,
       created_at: now,
       updated_at: now,
     };
@@ -1352,6 +1358,8 @@ export const updateExpenseCategory = mutation({
     sort_order: v.optional(v.number()),
     is_active: v.optional(v.boolean()),
     glCode: v.optional(v.string()),
+    budgetLimit: v.optional(v.number()),
+    budgetCurrency: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -1394,6 +1402,8 @@ export const updateExpenseCategory = mutation({
       requires_manager_approval?: boolean;
       sort_order?: number;
       glCode?: string;
+      budgetLimit?: number;
+      budgetCurrency?: string;
       created_at: string;
       updated_at: string;
     }>) || [];
@@ -1428,6 +1438,8 @@ export const updateExpenseCategory = mutation({
       ...(args.sort_order !== undefined && { sort_order: args.sort_order }),
       ...(args.is_active !== undefined && { is_active: args.is_active }),
       ...(args.glCode !== undefined && { glCode: args.glCode }),
+      ...(args.budgetLimit !== undefined && { budgetLimit: args.budgetLimit || undefined }),
+      ...(args.budgetCurrency !== undefined && { budgetCurrency: args.budgetCurrency }),
       updated_at: new Date().toISOString(),
     };
 

@@ -31,6 +31,11 @@ import { MemoryStoreTool } from './memory/memory-store-tool'
 import { MemorySearchTool } from './memory/memory-search-tool'
 import { MemoryRecallTool } from './memory/memory-recall-tool'
 import { MemoryForgetTool } from './memory/memory-forget-tool'
+// Budget & manager team tools (031-budget-track-manager-team)
+import { SetBudgetTool } from './set-budget-tool'
+import { BudgetStatusTool } from './budget-status-tool'
+import { LateApprovalsTool } from './late-approvals-tool'
+import { TeamComparisonTool } from './team-comparison-tool'
 
 export type ToolName =
   // Category 1-2: Data retrieval tools
@@ -60,6 +65,11 @@ export type ToolName =
   | 'memory_search'
   | 'memory_recall'
   | 'memory_forget'
+  // Budget & manager team tools (031-budget-track-manager-team)
+  | 'set_budget'
+  | 'check_budget_status'
+  | 'get_late_approvals'
+  | 'compare_team_spending'
 
 /**
  * Tool Factory implementing dependency injection pattern
@@ -106,6 +116,12 @@ export class ToolFactory {
     this.registerTool('memory_search', () => new MemorySearchTool())
     this.registerTool('memory_recall', () => new MemoryRecallTool())
     this.registerTool('memory_forget', () => new MemoryForgetTool())
+
+    // Budget & manager team tools (031-budget-track-manager-team)
+    this.registerTool('set_budget', () => new SetBudgetTool())
+    this.registerTool('check_budget_status', () => new BudgetStatusTool())
+    this.registerTool('get_late_approvals', () => new LateApprovalsTool())
+    this.registerTool('compare_team_spending', () => new TeamComparisonTool())
   }
 
   /**
@@ -117,6 +133,11 @@ export class ToolFactory {
     'get_team_summary',
     'get_action_center_insight',
     'analyze_trends',
+    // Budget & manager team tools (031-budget-track-manager-team)
+    'set_budget',
+    'check_budget_status',
+    'get_late_approvals',
+    'compare_team_spending',
   ])
 
   /**

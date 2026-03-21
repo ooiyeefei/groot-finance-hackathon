@@ -494,6 +494,40 @@ function autoGenerateActionsFromToolResults(messages: BaseMessage[]): ActionCard
         if (revenueCard) actions.push(revenueCard)
       }
     }
+
+    // Budget & manager team tools (031-budget-track-manager-team)
+    if (toolName === 'check_budget_status' && parsed) {
+      const structured = (parsed as any)?.metadata?.structured || parsed
+      if (structured?.categories) {
+        actions.push({
+          type: 'budget_status',
+          id: `budget-status-auto-${Date.now()}`,
+          data: structured,
+        })
+      }
+    }
+
+    if (toolName === 'get_late_approvals' && parsed) {
+      const structured = (parsed as any)?.metadata?.structured || parsed
+      if (structured?.lateSubmissions || structured?.totalLate !== undefined) {
+        actions.push({
+          type: 'late_approvals',
+          id: `late-approvals-auto-${Date.now()}`,
+          data: structured,
+        })
+      }
+    }
+
+    if (toolName === 'compare_team_spending' && parsed) {
+      const structured = (parsed as any)?.metadata?.structured || parsed
+      if (structured?.employees) {
+        actions.push({
+          type: 'team_comparison',
+          id: `team-comparison-auto-${Date.now()}`,
+          data: structured,
+        })
+      }
+    }
   }
 
   return actions

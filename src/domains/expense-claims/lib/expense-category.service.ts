@@ -158,6 +158,8 @@ export async function createCategory(body: CustomExpenseCategory) {
     requires_manager_approval: body.requires_manager_approval ?? true,
     sort_order: body.sort_order,
     glCode: body.glCode,
+    budgetLimit: (body as any).budgetLimit,
+    budgetCurrency: (body as any).budgetCurrency,
   })
 
   return newCategory
@@ -207,6 +209,8 @@ export async function updateCategory(body: CustomExpenseCategory & { id: string 
     sort_order: body.sort_order,
     is_active: body.is_active,
     glCode: body.glCode,
+    budgetLimit: (body as any).budgetLimit,
+    budgetCurrency: (body as any).budgetCurrency,
   })
 
   return updatedCategory

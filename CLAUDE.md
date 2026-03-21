@@ -544,6 +544,8 @@ const arBalance = arLines.reduce((sum, line) =>
 - Convex (journal_entries, journal_entry_lines, manual_exchange_rates) (031-multi-curr-history-analysis)
 - TypeScript 5.9.3 (Next.js 15.5.7 + Convex 1.31.3) + Convex (DB + real-time), LangGraph (chat agent), SES (email), APNs (push) (031-action-center-push-chat)
 - Convex tables (messages, conversations, proactive_alert_delivery) (031-action-center-push-chat)
+- TypeScript 5.9.3 (Next.js 15.5.7 + Convex 1.31.3) + LangGraph 0.4.5, Zod 3.23.8, Recharts, Radix UI, Tailwind CSS (031-budget-track-manager-team)
+- Convex (businesses table for budget config, actionCenterInsights for alerts, expense_submissions for spending data) (031-budget-track-manager-team)
 
 
 ## Recent Changes
