@@ -88,11 +88,13 @@ export async function POST(req: NextRequest) {
   // 5. Upload to S3
   const attachmentId = crypto.randomUUID()
   const ext = getExtension(file.type)
-  const s3Path = `${businessId}/${conversationId}/${attachmentId}.${ext}`
+  // Store under expense_claims/ prefix so the document processor Lambda can read it
+  // (Lambda constructs S3 key as: expense_claims/{storagePath})
+  const s3Path = `${businessId}/chat/${conversationId}/${attachmentId}.${ext}`
 
   try {
     const result = await uploadFile(
-      'chat_attachments',
+      'expense_claims',
       s3Path,
       file,
       file.type,

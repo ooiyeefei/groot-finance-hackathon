@@ -186,10 +186,16 @@ export class ReceiptClaimTool extends BaseTool {
     // The Lambda will process the image and update the claim via Convex directly
     console.log(`[ReceiptClaimTool] Invoking doc processor (async) for ${attachment.filename}`)
     try {
+      // The Lambda constructs S3 key as: {domain}/{storagePath}
+      // Upload stores at: expense_claims/{businessId}/chat/{convId}/{uuid}.ext
+      // Strip the 'expense_claims/' prefix since Lambda re-adds it
+      const lambdaStoragePath = attachment.s3Path.replace(/^expense_claims\//, '')
+      console.log(`[ReceiptClaimTool] Lambda storagePath: ${lambdaStoragePath} (original: ${attachment.s3Path})`)
+
       await invokeDocumentProcessor({
         documentId: String(claimId),
         domain: 'expense_claims',
-        storagePath: attachment.s3Path,
+        storagePath: lambdaStoragePath,
         fileType: fileType as 'pdf' | 'image',
         userId,
         businessId,
