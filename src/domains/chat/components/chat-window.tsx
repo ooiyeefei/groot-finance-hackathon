@@ -466,7 +466,7 @@ User question: ${trimmed}`
         {/* Streaming response: status + progressive text + action cards */}
         {isLoading && (
           <div className="flex items-start gap-2">
-            <div className="bg-card border border-border rounded-lg px-4 py-3 max-w-[85%] w-full">
+            <div className="bg-card border border-border rounded-lg px-4 py-3 max-w-[85%] w-full text-sm leading-relaxed">
               {/* Progressive streaming text */}
               {streamingText ? (
                 <MessageRenderer

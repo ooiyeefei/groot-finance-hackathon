@@ -1222,11 +1222,17 @@ Please clarify which type you'd like me to search, or say "both" to see all tran
         : ''
       const docType = transaction.source_document_type ? ` • ${transaction.source_document_type.charAt(0).toUpperCase() + transaction.source_document_type.slice(1)}` : ''
 
-      return `${index + 1}. ${transaction.description || 'No description'}
+      const vendor = transaction.vendor_name || 'Unknown'
+      const desc = transaction.description || ''
+      // Show "Vendor - Description" when both exist, or just vendor/description alone
+      const title = desc && vendor !== 'Unknown' && desc !== vendor
+        ? `${vendor} - ${desc}`
+        : (vendor !== 'Unknown' ? vendor : desc || 'No description')
+
+      return `${index + 1}. ${title}
    Amount: ${amount}${homeAmount}
    Date: ${date}
    Category: ${this.resolveCategoryDisplay(transaction.category) || 'Uncategorized'}
-   Vendor: ${transaction.vendor_name || 'Unknown'}
    Type: ${transaction.transaction_type || 'Unknown'}${docType}`
     }).join('\n\n')
   }
