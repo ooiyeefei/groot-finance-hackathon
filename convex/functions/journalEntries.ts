@@ -748,11 +748,38 @@ export const searchForAI = query({
             ? "expense_claim"
             : entry.sourceType,
         sourceId: entry.sourceId,
+        sourceType: entry.sourceType,
         createdBy: entry.createdBy,
         status: entry.status,
         _creationTime: entry.createdAt,
       };
     });
+
+    // Enrich expense_claim entries with vendor/merchant name from the expense_claims table.
+    // Journal entry lines for expense claims store entityType="employee" (the submitter),
+    // but the merchant name (Mr. D.I.Y., Krispy Kreme, etc.) is on the expense_claims record.
+    const expenseClaimEntries = transformedEntries.filter(
+      (e) => e.sourceType === "expense_claim" && e.sourceId && !e.vendorName
+    );
+    if (expenseClaimEntries.length > 0) {
+      const claimIds = [...new Set(expenseClaimEntries.map((e) => e.sourceId).filter(Boolean))];
+      const claims = await Promise.all(
+        claimIds.map((id) => ctx.db.get(id as any).catch(() => null))
+      );
+      const claimMap = new Map<string, any>();
+      for (const claim of claims) {
+        if (claim) claimMap.set(claim._id.toString(), claim);
+      }
+      for (const entry of expenseClaimEntries) {
+        const claim = entry.sourceId ? claimMap.get(entry.sourceId.toString()) : null;
+        if (claim?.vendorName) {
+          entry.vendorName = claim.vendorName;
+        } else if (claim?.description && !entry.vendorName) {
+          // Fallback: some claims have vendor in description field
+          entry.vendorName = claim.description;
+        }
+      }
+    }
 
     // Apply text search (description, vendor)
     if (args.searchQuery) {
