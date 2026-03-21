@@ -13,7 +13,7 @@ import { v } from "convex/values";
 import { query, mutation, internalMutation, internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { resolveUserByClerkId } from "../lib/resolvers";
-import type { Id } from "../_generated/dataModel";
+import { type Id } from "../_generated/dataModel";
 
 const BATCH_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 const BATCH_THRESHOLD = 3;
@@ -245,30 +245,35 @@ export const getUnreadCount = query({
     businessId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity || !args.businessId) return { count: 0, capped: false };
+    try {
+      const identity = await ctx.auth.getUserIdentity();
+      if (!identity || !args.businessId) return { count: 0, capped: false };
 
-    const user = await resolveUserByClerkId(ctx.db, identity.subject);
-    if (!user) return { count: 0, capped: false };
+      const user = await resolveUserByClerkId(ctx.db, identity.subject);
+      if (!user) return { count: 0, capped: false };
 
-    // Count unread proactive alert deliveries (delivered but not interacted)
-    const unread = await ctx.db
-      .query("proactive_alert_delivery")
-      .withIndex("by_user_status", (q) =>
-        q.eq("userId", user._id).eq("status", "delivered")
-      )
-      .collect();
+      // Count unread proactive alert deliveries (delivered but not interacted)
+      const unread = await ctx.db
+        .query("proactive_alert_delivery")
+        .withIndex("by_user_status", (q) =>
+          q.eq("userId", user._id).eq("status", "delivered")
+        )
+        .collect();
 
-    // Filter to only this business
-    const businessUnread = unread.filter(
-      (d) => d.businessId.toString() === args.businessId
-    );
+      // Filter to only this business
+      const businessUnread = unread.filter(
+        (d) => d.businessId.toString() === args.businessId
+      );
 
-    const count = businessUnread.length;
-    return {
-      count: Math.min(count, BADGE_CAP),
-      capped: count > BADGE_CAP,
-    };
+      const count = businessUnread.length;
+      return {
+        count: Math.min(count, BADGE_CAP),
+        capped: count > BADGE_CAP,
+      };
+    } catch (error) {
+      console.error("[ProactiveAlerts] getUnreadCount error:", error);
+      return { count: 0, capped: false };
+    }
   },
 });
 
