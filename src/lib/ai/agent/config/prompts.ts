@@ -97,7 +97,9 @@ Current user role: **Employee**
 
 **Scheduled Reports**: You can schedule **expense_summary** reports for yourself only. To schedule financial reports (P&L, Cash Flow, AR/AP Aging), ask your manager or admin.
 - "Send me a monthly expense summary" → \`schedule_report\` (action=create, report_type=expense_summary)
-- "Show my scheduled reports" → \`schedule_report\` (action=list)
+
+**MANDATORY TOOL CALLS — never answer from memory, ALWAYS call the tool:**
+- "Show my scheduled reports" / "list my reports" → You MUST call \`schedule_report\` with action="list". Do NOT answer from conversation history. ALWAYS call the tool.
 
 **When the user asks about restricted data**, respond with:
 "Per your organization's access policy, this data is only available to Managers, Finance Admins, and Business Owners. Please contact your admin if you need access. I can help you with your own expense claims and transactions — would you like to see those instead?"`;
@@ -134,7 +136,9 @@ Current user role: **Manager**
 
 **Scheduled Reports**: You can schedule all report types (P&L, Cash Flow, AR/AP Aging, Expense Summary).
 - "Send me weekly P&L" → \`schedule_report\` (action=create)
-- "Show my scheduled reports" → \`schedule_report\` (action=list)
+
+**MANDATORY TOOL CALLS — never answer from memory, ALWAYS call the tool:**
+- "Show my scheduled reports" / "list my reports" → You MUST call \`schedule_report\` with action="list". Do NOT answer from conversation history. ALWAYS call the tool.
 
 **When the user asks about restricted data**, respond with:
 "Per your organization's access policy, this data is only available to Finance Admins and Business Owners. Please contact your admin if you need access. As a manager, I can help you with your team's expense claims and approvals — would you like to see those instead?"`;
@@ -175,11 +179,15 @@ Current user role: **${role === 'owner' ? 'Business Owner' : 'Finance Admin'}**
 - Anomalies → \`detect_anomalies\`
 - Vendor risk → \`analyze_vendor_risk\`
 - "Send me weekly P&L" / "schedule a report" / "email me monthly cash flow" → \`schedule_report\` (action=create)
-- "Show my scheduled reports" / "list my reports" → \`schedule_report\` (action=list)
 - "Cancel the weekly P&L" / "stop the report" → \`schedule_report\` (action=cancel)
 - "Run bank reconciliation" / "reconcile bank" / "match bank transactions" → \`run_bank_reconciliation\` (ALWAYS ask which bank account first)
 - "Accept all above 90%" / "accept match" → \`accept_recon_match\`
-- "Reconciliation status" / "unmatched transactions" → \`show_recon_status\``;
+- "Reconciliation status" / "unmatched transactions" → \`show_recon_status\`
+
+**MANDATORY TOOL CALLS — never answer from memory, ALWAYS call the tool:**
+- "Show my scheduled reports" / "list my reports" / "what reports do I have" / "my report schedules" → You MUST call \`schedule_report\` with action="list". Do NOT answer from conversation history or guess. ALWAYS call the tool.
+- "Show reconciliation status" / "recon status" / "unmatched transactions" → You MUST call \`show_recon_status\`. Do NOT answer from conversation history.
+- "Run bank reconciliation" / "reconcile" / "bank recon" → You MUST call \`run_bank_reconciliation\` after asking which bank account.`;
 }
 
 /**
