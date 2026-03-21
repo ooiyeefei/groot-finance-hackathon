@@ -159,6 +159,33 @@ export const runWeeklyDigest: ReturnType<typeof internalAction> = internalAction
     const apiUrl = process.env.APP_URL || "https://finance.hellogroot.com";
 
     for (const business of digestData) {
+      // Build the digest email body
+      const priorityEmoji: Record<string, string> = { critical: "🚨", high: "⚠️", medium: "ℹ️", low: "📋" };
+      const insightLines = business.insights.map((i: any, idx: number) =>
+        `${idx + 1}. ${priorityEmoji[i.priority] || "📋"} [${i.priority.toUpperCase()}] ${i.title}\n   ${i.description.substring(0, 120)}${i.description.length > 120 ? "..." : ""}`
+      ).join("\n\n");
+
+      const emailBody = [
+        `Weekly Finance Digest — ${business.businessName}`,
+        `Week ending ${new Date().toISOString().split("T")[0]}`,
+        "",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        `📊 TOP ${business.insights.length} INSIGHTS THIS WEEK`,
+        `(${business.totalInsightsThisWeek} total insights detected)`,
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "",
+        insightLines,
+        "",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "📋 ACCOUNTS PAYABLE",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "",
+        `Overdue invoices: ${business.overdueInvoiceCount}`,
+        `Total overdue: ${business.currency} ${business.overdueInvoiceTotal.toLocaleString()}`,
+        "",
+        `View all details → ${apiUrl}/en`,
+      ].join("\n");
+
       for (const recipient of business.recipients) {
         try {
           const response = await fetch(`${apiUrl}/api/v1/notifications/send-email`, {
@@ -170,18 +197,9 @@ export const runWeeklyDigest: ReturnType<typeof internalAction> = internalAction
             body: JSON.stringify({
               to: recipient.email,
               subject: `Weekly Finance Digest — ${business.businessName}`,
-              templateType: "weekly_digest",
+              templateType: "plain_text",
               templateData: {
-                recipientName: recipient.name,
-                businessName: business.businessName,
-                currency: business.currency,
-                insights: business.insights,
-                totalInsightsThisWeek: business.totalInsightsThisWeek,
-                overdueInvoiceCount: business.overdueInvoiceCount,
-                overdueInvoiceTotal: business.overdueInvoiceTotal,
-                weekEndDate: new Date().toISOString().split("T")[0],
-                appUrl: apiUrl,
-                unsubscribeUrl: `${apiUrl}/api/v1/unsubscribe?userId=${recipient.userId}`,
+                body: `Hi ${recipient.name},\n\n${emailBody}`,
               },
               unsubscribeToken: recipient.userId,
             }),
