@@ -485,6 +485,7 @@ export const create = mutation({
   args: {
     businessId: v.string(),
     title: v.optional(v.string()),
+    conversationId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -524,10 +525,36 @@ export const create = mutation({
       userId: user._id,
       title,
       status: "draft",
+      conversationId: args.conversationId,
       updatedAt: Date.now(),
     });
 
     return submissionId;
+  },
+});
+
+/**
+ * Find an existing draft submission for a chat conversation.
+ * Used by the receipt-claim tool to group all receipts from the same
+ * chat conversation into one submission instead of creating N submissions.
+ */
+export const findByConversation = query({
+  args: {
+    conversationId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    const submission = await ctx.db
+      .query("expense_submissions")
+      .withIndex("by_conversationId", (q) =>
+        q.eq("conversationId", args.conversationId)
+      )
+      .filter((q) => q.eq(q.field("status"), "draft"))
+      .first();
+
+    return submission?._id ?? null;
   },
 });
 

@@ -101,24 +101,38 @@ export class ReceiptClaimTool extends BaseTool {
     const results: ReceiptClaimResult[] = []
     const errors: string[] = []
 
-    // For batch uploads (multiple images in one message), create ONE submission
-    // with all claims inside it — avoids cluttering the submissions list.
+    // Per-conversation batch grouping: all receipts from the same chat
+    // conversation go into ONE submission (whether sent in 1 message or 10).
     // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-explicit-any
     const { api } = require('@/convex/_generated/api') as any
     const { client } = await getAuthenticatedConvex()
     if (!client) throw new Error('Could not connect to database')
 
-    const batchTitle = attachments.length > 1
-      ? `Chat: ${attachments.length} receipts`
-      : `Chat: ${attachments[0].filename}`
-    const sharedSubmissionId = await client.mutation(api.functions.expenseSubmissions.create, {
-      businessId: userContext.businessId,
-      title: batchTitle,
-    } as any)
+    const conversationId = userContext.conversationId
+
+    // Try to find an existing draft submission for this conversation
+    let sharedSubmissionId: string | null = null
+    if (conversationId) {
+      sharedSubmissionId = await client.query(api.functions.expenseSubmissions.findByConversation, {
+        conversationId,
+      } as any)
+    }
+
+    // If no existing submission, create one
+    if (!sharedSubmissionId) {
+      const batchTitle = attachments.length > 1
+        ? `Chat: ${attachments.length} receipts`
+        : `Chat: ${attachments[0].filename}`
+      sharedSubmissionId = await client.mutation(api.functions.expenseSubmissions.create, {
+        businessId: userContext.businessId,
+        title: batchTitle,
+        conversationId,
+      } as any)
+    }
 
     for (const attachment of attachments) {
       try {
-        const result = await this.processOneReceipt(attachment, userContext, businessPurpose, sharedSubmissionId)
+        const result = await this.processOneReceipt(attachment, userContext, businessPurpose, sharedSubmissionId!)
         results.push(result)
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error processing receipt'
@@ -126,15 +140,25 @@ export class ReceiptClaimTool extends BaseTool {
       }
     }
 
-    // Update submission title with actual vendor name if single receipt
-    if (results.length === 1 && results[0].merchant && results[0].merchant !== 'Processing...') {
-      try {
-        await client.mutation(api.functions.expenseSubmissions.update, {
-          id: sharedSubmissionId,
-          title: `Chat: ${results[0].merchant}`,
-        } as any)
-      } catch { /* non-fatal */ }
-    }
+    // Update submission title to reflect content
+    try {
+      // Count total claims in the submission (including previously added ones)
+      const allClaims = await client.query(api.functions.expenseClaims.listBySubmission, {
+        submissionId: sharedSubmissionId,
+      } as any)
+      const claimCount = Array.isArray(allClaims) ? allClaims.length : results.length
+
+      let newTitle: string
+      if (claimCount === 1 && results.length === 1 && results[0].merchant && results[0].merchant !== 'Processing...') {
+        newTitle = `Chat: ${results[0].merchant}`
+      } else {
+        newTitle = `Chat: ${claimCount} receipts`
+      }
+      await client.mutation(api.functions.expenseSubmissions.update, {
+        id: sharedSubmissionId,
+        title: newTitle,
+      } as any)
+    } catch { /* non-fatal */ }
 
     if (results.length === 0 && errors.length > 0) {
       return {

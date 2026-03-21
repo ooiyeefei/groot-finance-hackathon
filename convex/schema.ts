@@ -614,6 +614,9 @@ export default defineSchema({
     approvedBy: v.optional(v.id("users")),           // Who approved
     approvalNotes: v.optional(v.string()),            // Manager's notes when approving
 
+    // Chat origin (for per-conversation batch grouping)
+    conversationId: v.optional(v.string()),          // Chat conversation ID — groups receipts from same chat
+
     // Timestamps
     submittedAt: v.optional(v.number()),
     approvedAt: v.optional(v.number()),
@@ -627,7 +630,8 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_designatedApproverId", ["designatedApproverId"])
     .index("by_businessId_status", ["businessId", "status"])
-    .index("by_businessId_userId", ["businessId", "userId"]),
+    .index("by_businessId_userId", ["businessId", "userId"])
+    .index("by_conversationId", ["conversationId"]),
 
   // ============================================
   // E-INVOICE RECEIVED DOCUMENTS (019-lhdn-einv-flow-2)

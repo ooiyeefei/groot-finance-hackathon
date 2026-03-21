@@ -232,6 +232,27 @@ export const list = query({
 });
 
 /**
+ * List claims belonging to a specific submission.
+ * Used by receipt-claim tool to count how many claims are in a batch.
+ */
+export const listBySubmission = query({
+  args: { submissionId: v.string() },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+
+    const claims = await ctx.db
+      .query("expense_claims")
+      .withIndex("by_submissionId", (q) =>
+        q.eq("submissionId", args.submissionId as Id<"expense_submissions">)
+      )
+      .collect();
+
+    return claims.map((c) => ({ _id: c._id, vendorName: c.vendorName, totalAmount: c.totalAmount }));
+  },
+});
+
+/**
  * Get single expense claim by ID with access control
  */
 export const getById = query({
