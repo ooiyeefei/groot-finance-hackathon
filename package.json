@@ -47,6 +47,7 @@
     "@aws-sdk/credential-providers": "^3.962.0",
     "@aws-sdk/s3-request-presigner": "^3.958.0",
     "@browserbasehq/stagehand": "^3.1.0",
+    "@capacitor-community/in-app-review": "^8.0.0",
     "@capacitor/app": "^8.0.1",
     "@capacitor/browser": "^8.0.1",
     "@capacitor/camera": "^8.0.1",

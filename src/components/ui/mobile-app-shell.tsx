@@ -9,6 +9,7 @@ import { fetchUserRoleWithCache, clearUserRoleCache } from '@/lib/cache-utils'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { useTranslations } from 'next-intl'
 import { getNavigationItems } from '@/lib/navigation/nav-items'
+import { trackSession, maybeRequestReview } from '@/lib/capacitor/app-review'
 
 interface UserRole {
   employee: boolean
@@ -90,6 +91,12 @@ export function MobileAppShell({
       // Ignore parse errors
     }
     fetchUserRole().then(() => setHasInitialLoad(true))
+
+    // Track session and maybe prompt for App Store review
+    trackSession()
+    // Delay review prompt to avoid interrupting initial load
+    const reviewTimer = setTimeout(() => { maybeRequestReview() }, 10000)
+    return () => clearTimeout(reviewTimer)
   }, [fetchUserRole])
 
   // Re-fetch user role when active business changes
