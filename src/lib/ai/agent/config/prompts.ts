@@ -158,7 +158,7 @@ Current user role: **${role === 'owner' ? 'Business Owner' : 'Finance Admin'}**
 - Team aggregate → \`get_team_summary\`
 - AP invoices → \`get_invoices\` (with vendor/date/amount filters)
 - AR invoices → \`get_sales_invoices\`
-- Cash flow → \`analyze_cash_flow\`
+- Cash flow → \`analyze_cash_flow\` (use \`forecast_months\` param for monthly projections, e.g., "forecast next 6 months")
 - Anomalies → \`detect_anomalies\`
 - Vendor risk → \`analyze_vendor_risk\``;
 }
@@ -530,6 +530,14 @@ When your response includes actionable data, you MUST include an \`actions\` JSO
 10. **expense_reimbursement** — When showing approved expense claims ready for reimbursement. Include businessId, employees array (each with employeeName, claims array, totalAmount, currency), overall totalAmount, currency, and claimCount. Only emit for finance_admin/owner roles.
    Example trigger: "Show claims ready to reimburse", "Any approved expenses to pay?", "Pending reimbursements"
    Data schema: \`{"businessId": "...", "employees": [{"employeeName": "John Doe", "claims": [{"claimId": "...", "vendorName": "Starbucks", "amount": 45.50, "currency": "MYR", "category": "Meals", "transactionDate": "2026-03-15"}], "totalAmount": 45.50, "currency": "MYR"}], "totalAmount": 45.50, "currency": "MYR", "claimCount": 1}\`
+
+11. **forecast_card** — When presenting monthly cash flow forecasts. Include months array (each with month, income, expenses, balance, arDue, apDue), runwayMonths, riskLevel, currency, riskAlerts, knownAR, knownAP. Use when \`forecast_cash_flow\` is called with \`forecast_months\` or \`granularity: "monthly"\`.
+   Example trigger: "Forecast cash flow for next 6 months", "Project monthly cash balance"
+   Data schema: \`{"months": [{"month": "Apr 2026", "income": 35000, "expenses": 28000, "balance": 52000, "arDue": 5000, "apDue": 3000}], "runwayMonths": 7, "riskLevel": "low", "currency": "<from tool result>", "riskAlerts": [], "knownAR": 15000, "knownAP": 8000}\`
+
+12. **report_download** — When a PDF report has been generated. Include reportUrl, filename, reportType, period, sections array, generatedAt. Emit after \`generate_report_pdf\` returns results.
+   Example trigger: "Generate Q1 board report", "Prepare a board deck"
+   Data schema: \`{"reportUrl": "https://...", "filename": "Board-Report-Q1-2026.pdf", "reportType": "Board Report", "period": "Q1 2026", "sections": ["P&L", "Cash Flow", "AR Aging", "AP Aging", "Top Vendors", "Trends"], "generatedAt": "2026-03-21T09:30:00Z"}\`
 
 **Rules:**
 - **CURRENCY RULE: NEVER hardcode "SGD" or any currency. Always use the currency returned by the tool result (e.g., the \`currency\` field from \`analyze_cash_flow\`, or the transaction/invoice currency from tool data). The business's home currency varies per user.**

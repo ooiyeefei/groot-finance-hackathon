@@ -4,6 +4,7 @@ import { NodejsFunction, OutputFormat } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { Construct } from 'constructs';
 import * as path from 'path';
@@ -86,11 +87,16 @@ export class MCPServerStack extends cdk.Stack {
         sourceMap: true,
         target: 'node20',
         // External packages that should not be bundled
-        externalModules: [],
+        // @aws-sdk/* uses Lambda runtime-provided SDK (smaller bundle, faster cold start)
+        externalModules: ['@aws-sdk/*'],
         // esbuild options
         format: OutputFormat.CJS,
       },
     });
+
+    // S3 write permission for PDF report generation
+    const reportsBucket = s3.Bucket.fromBucketName(this, 'ReportsBucket', 'finanseal-bucket');
+    reportsBucket.grantWrite(this.mcpServerFunction, 'reports/*');
 
     // ========================================================================
     // Lambda Version and Alias

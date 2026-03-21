@@ -546,6 +546,8 @@ const arBalance = arLines.reduce((sum, line) =>
 - Convex tables (messages, conversations, proactive_alert_delivery) (031-action-center-push-chat)
 - TypeScript 5.9.3 (Next.js 15.5.7 + Convex 1.31.3) + LangGraph 0.4.5, Zod 3.23.8, Recharts, Radix UI, Tailwind CSS (031-budget-track-manager-team)
 - Convex (businesses table for budget config, actionCenterInsights for alerts, expense_submissions for spending data) (031-budget-track-manager-team)
+- TypeScript 5.9.3 (Node.js 20 for Lambda) + PDFKit (new — PDF generation in Lambda), existing: Convex, Qdrant, AWS S3 (031-cfo-copilot-tools)
+- S3 `finanseal-bucket` (PDF storage), Qdrant Cloud (tax KB embeddings), Convex (transaction data) (031-cfo-copilot-tools)
 
 
 ## Recent Changes

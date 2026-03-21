@@ -28,6 +28,7 @@ import { createProposal } from './tools/create-proposal.js';
 import { confirmProposal } from './tools/confirm-proposal.js';
 import { cancelProposal } from './tools/cancel-proposal.js';
 import { analyzeTeamSpending } from './tools/analyze-team-spending.js';
+import { generateReportPdf } from './tools/generate-report-pdf.js';
 import {
   authenticateApiKey,
   authenticateInternalService,
@@ -49,6 +50,8 @@ const TOOL_IMPLEMENTATIONS: Record<string, (args: Record<string, unknown>, authC
   cancel_proposal: cancelProposal,
   // Manager cross-employee analytics
   analyze_team_spending: analyzeTeamSpending,
+  // CFO copilot tools
+  generate_report_pdf: generateReportPdf,
 };
 
 // CORS headers for all responses

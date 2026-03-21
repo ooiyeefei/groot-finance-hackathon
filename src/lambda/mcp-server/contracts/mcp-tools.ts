@@ -86,9 +86,19 @@ export const ForecastCashFlowInputSchema = z.object({
 
   horizon_days: z.number()
     .min(7)
-    .max(90)
+    .max(365)
     .default(30)
-    .describe('Forecast horizon in days (7-90, default: 30)'),
+    .describe('Forecast horizon in days (7-365, default: 30). Used when granularity is "daily".'),
+
+  forecast_months: z.number()
+    .min(1)
+    .max(12)
+    .optional()
+    .describe('Number of months to forecast (1-12). When provided, overrides horizon_days and sets granularity to "monthly".'),
+
+  granularity: z.enum(['daily', 'monthly'])
+    .default('daily')
+    .describe('Forecast granularity: "daily" for day-by-day, "monthly" for month-by-month projections'),
 
   scenario: z.enum(['conservative', 'moderate', 'optimistic'])
     .default('moderate')
@@ -96,7 +106,11 @@ export const ForecastCashFlowInputSchema = z.object({
 
   include_recurring: z.boolean()
     .default(true)
-    .describe('Factor in recurring transactions for more accurate forecasts')
+    .describe('Factor in recurring transactions for more accurate forecasts'),
+
+  include_known_ar_ap: z.boolean()
+    .default(true)
+    .describe('Include known receivables (unpaid sales invoices) and payables (posted AP invoices) in projections')
 });
 
 export type ForecastCashFlowInput = z.infer<typeof ForecastCashFlowInputSchema>;
@@ -131,6 +145,75 @@ export interface ForecastCashFlowOutput {
     scenario_used: string;
     horizon_days: number;
   };
+}
+
+// --- Monthly Forecast Types (used when granularity = 'monthly') ---
+
+export interface MonthlyBucket {
+  month: string;
+  projected_income: number;
+  projected_expenses: number;
+  known_ar_due: number;
+  known_ap_due: number;
+  net_balance: number;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export interface ForecastRiskAlert {
+  type: 'low_runway' | 'negative_balance' | 'ar_concentration' | 'high_burn_rate';
+  severity: 'critical' | 'warning' | 'info';
+  month?: string;
+  message: string;
+  recommendation: string;
+}
+
+export interface MonthlyForecastOutput {
+  months: MonthlyBucket[];
+  risk_alerts: ForecastRiskAlert[];
+  summary: {
+    current_balance: number;
+    runway_months: number;
+    scenario_used: string;
+    risk_level: 'low' | 'medium' | 'high' | 'critical';
+    total_known_ar: number;
+    total_known_ap: number;
+    avg_monthly_expenses: number;
+    avg_monthly_income: number;
+  };
+  currency: string;
+}
+
+// ============================================================================
+// Tool 8: generate_report_pdf
+// ============================================================================
+
+export const GenerateReportPdfInputSchema = z.object({
+  business_id: z.string()
+    .optional()
+    .describe('Business ID (optional when using API key authentication)'),
+
+  report_type: z.enum(['board_report'])
+    .default('board_report')
+    .describe('Type of report to generate'),
+
+  date_range: DateRangeSchema
+    .describe('Date range for the report period'),
+
+  sections: z.array(z.enum([
+    'pnl', 'cash_flow', 'ar_aging', 'ap_aging', 'top_vendors', 'trends'
+  ])).optional()
+    .describe('Sections to include (defaults to all)'),
+});
+
+export type GenerateReportPdfInput = z.infer<typeof GenerateReportPdfInputSchema>;
+
+export interface GenerateReportPdfOutput {
+  report_url: string;
+  filename: string;
+  sections_included: string[];
+  date_range: { start: string; end: string };
+  generated_at: string;
+  page_count: number;
 }
 
 // ============================================================================

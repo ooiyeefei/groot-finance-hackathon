@@ -14,3 +14,6 @@ export { cancelProposal } from './cancel-proposal.js';
 
 // Manager cross-employee analytics
 export { analyzeTeamSpending } from './analyze-team-spending.js';
+
+// CFO copilot tools
+export { generateReportPdf } from './generate-report-pdf.js';

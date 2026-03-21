@@ -1511,6 +1511,91 @@ export const getMcpAccountingEntries = query({
 });
 
 /**
+ * Get unpaid sales invoices for a business (MCP system access)
+ * Used by forecast_cash_flow for AR-aware projections.
+ * Returns minimal fields: amount, dueDate, paymentStatus.
+ */
+export const getMcpSalesInvoices = query({
+  args: {
+    businessId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) return [];
+
+    const invoices = await ctx.db
+      .query("sales_invoices")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .filter((q) =>
+        q.and(
+          q.gt(q.field("balanceDue"), 0),
+          q.neq(q.field("status"), "voided"),
+          q.neq(q.field("status"), "draft")
+        )
+      )
+      .collect();
+
+    return invoices.map((inv) => ({
+      _id: inv._id.toString(),
+      businessId: business._id.toString(),
+      totalAmount: inv.totalAmount,
+      homeCurrencyAmount: inv.homeCurrencyAmount,
+      dueDate: inv.dueDate,
+      paymentStatus: inv.balanceDue > 0 ? "unpaid" : "paid",
+      status: inv.status,
+      currency: inv.currency || business.homeCurrency || "MYR",
+      customerName: inv.customerSnapshot?.businessName,
+    }));
+  },
+});
+
+/**
+ * Get unpaid purchase invoices for a business (MCP system access)
+ * Used by forecast_cash_flow for AP-aware projections.
+ * Returns minimal fields: amount, dueDate, paymentStatus.
+ */
+export const getMcpPurchaseInvoices = query({
+  args: {
+    businessId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) return [];
+
+    const invoices = await ctx.db
+      .query("invoices")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .filter((q) =>
+        q.and(
+          q.neq(q.field("paymentStatus"), "paid"),
+          q.eq(q.field("accountingStatus"), "posted")
+        )
+      )
+      .collect();
+
+    return invoices.map((inv) => {
+      // Extract amount from extractedData (invoices store OCR data here)
+      const extracted = inv.extractedData as Record<string, unknown> | undefined;
+      const totalAmount = (extracted?.totalAmount as number) || (extracted?.total as number) || (inv.paidAmount ? 0 : 0);
+      const vendorName = (extracted?.vendorName as string) || (extracted?.supplierName as string) || "Unknown";
+      const currency = (extracted?.currency as string) || business.homeCurrency || "MYR";
+
+      return {
+        _id: inv._id.toString(),
+        businessId: business._id.toString(),
+        totalAmount,
+        homeCurrencyAmount: totalAmount, // Use same as totalAmount for now
+        dueDate: inv.dueDate,
+        paymentStatus: inv.paymentStatus,
+        accountingStatus: inv.accountingStatus,
+        currency,
+        vendorName,
+      };
+    });
+  },
+});
+
+/**
  * Get vendors for a business (MCP system access)
  * Used by MCP tools (analyze_vendor_risk)
  */

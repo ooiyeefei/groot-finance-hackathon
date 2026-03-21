@@ -138,16 +138,16 @@ export class ToolFactory {
     'check_budget_status',
     'get_late_approvals',
     'compare_team_spending',
+    'analyze_cash_flow',  // CFO copilot: managers can view cash flow forecasts
   ])
 
   /**
    * Tools that require finance_admin/owner role.
-   * These expose business-wide financial data (cash flow, invoices, anomalies, vendor risk).
+   * These expose business-wide financial data (invoices, anomalies, vendor risk).
    */
   private static readonly FINANCE_TOOLS: Set<ToolName> = new Set([
     'get_invoices',
     'get_sales_invoices',
-    'analyze_cash_flow',
     'detect_anomalies',
     'analyze_vendor_risk',
     'get_ar_summary',

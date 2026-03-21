@@ -63,6 +63,14 @@ export class RegulatoryKnowledgeTool extends BaseTool {
     try {
       console.log(`[RegulatoryKnowledgeTool] Answering question for user ${userContext.userId}: "${query}"`);
 
+      // Check for advisory/optimization questions — decline with professional referral
+      if (this.isAdvisoryQuestion(query)) {
+        return {
+          success: true,
+          data: "I can provide factual tax reference information (rates, deadlines, thresholds), but I'm not able to provide tax optimization advice or strategy recommendations. For questions about how to structure expenses, reduce tax liability, or optimize your tax position, please consult a qualified tax professional.\n\n*This is factual reference information only. Please consult a qualified tax professional for advice specific to your situation.*"
+        };
+      }
+
       // 1. Generate an embedding for the user's query
       const queryEmbedding = await this.embeddingService.generateEmbedding(query, 'RETRIEVAL_QUERY');
 
@@ -149,9 +157,17 @@ export class RegulatoryKnowledgeTool extends BaseTool {
       // Embed citations in the data string for extraction by chat API
       const citationsData = JSON.stringify(citations);
       
+      // Check if results include tax_reference content — add disclaimer
+      const hasTaxContent = searchResults.some((r: any) =>
+        r.payload?.category === 'tax_reference' || r.payload?.topic?.includes('tax')
+      );
+      const disclaimer = hasTaxContent
+        ? '\n\n*This is factual reference information only. Please consult a qualified tax professional for advice specific to your situation.*'
+        : '';
+
       return {
         success: true,
-        data: `${formattedResults}\n\n<!--CITATIONS_DATA:${citationsData}:END_CITATIONS-->`,
+        data: `${formattedResults}${disclaimer}\n\n<!--CITATIONS_DATA:${citationsData}:END_CITATIONS-->`,
         citations: citations
       };
 
@@ -279,6 +295,25 @@ export class RegulatoryKnowledgeTool extends BaseTool {
       needsClarification,
       detectedCountries: uniqueCountries
     };
+  }
+
+  /**
+   * Detect advisory/optimization questions that should be declined.
+   * Factual questions (rates, deadlines, thresholds) are allowed.
+   * Advisory questions (how to reduce, optimize, structure) are declined.
+   */
+  private isAdvisoryQuestion(query: string): boolean {
+    const lower = query.toLowerCase();
+    const advisoryPatterns = [
+      'how should i', 'how can i reduce', 'how to minimize', 'how to avoid',
+      'how to lower', 'how to save on tax', 'what should i do',
+      'optimize', 'optimization', 'tax planning strategy',
+      'structure my expenses', 'reduce my tax', 'minimize tax',
+      'tax saving', 'tax savings', 'deduction strategy',
+      'best way to', 'should i claim', 'should i deduct',
+      'transfer pricing strategy', 'tax shelter', 'tax avoidance',
+    ];
+    return advisoryPatterns.some(p => lower.includes(p));
   }
 
   protected formatResultData(data: any[]): string {

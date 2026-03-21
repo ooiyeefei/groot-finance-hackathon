@@ -28,6 +28,8 @@ import './proactive-alert-card'
 import './budget-status-card'
 import './late-approvals-card'
 import './team-comparison-card'
+import './forecast-card'
+import './report-download-card'
 
 // --- Fallback Card ---
 

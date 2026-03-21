@@ -20,7 +20,8 @@ export class AnalyzeCashFlowTool extends BaseTool {
     return `Analyze cash flow health and calculate runway projections.
 Returns runway days, monthly burn rate, expense-to-income ratio, and actionable alerts.
 The financial analysis is performed server-side - no raw transaction data is returned.
-Use this when users ask about cash flow, runway, burn rate, or financial health.`
+Use this when users ask about cash flow, runway, burn rate, or financial health.
+When forecast_months is provided (1-12), returns month-by-month projections with known AR/AP.`
   }
 
   getToolSchema(modelType?: ModelType): OpenAIToolSchema {
@@ -34,11 +35,20 @@ Use this when users ask about cash flow, runway, burn rate, or financial health.
           properties: {
             horizon_days: {
               type: "number",
-              description: "Analysis period in days (default: 90). Uses historical data to calculate burn rate and projections."
+              description: "Analysis period in days (default: 90). Uses historical data to calculate burn rate and projections. Ignored when forecast_months is set."
             },
             display_currency: {
               type: "string",
               description: "Optional currency code (e.g., 'USD', 'SGD') to show converted amounts alongside home currency."
+            },
+            forecast_months: {
+              type: "number",
+              description: "Number of months to forecast (1-12). When set, returns monthly projections with known AR/AP factored in. Use for 'forecast cash flow for next N months'."
+            },
+            scenario: {
+              type: "string",
+              enum: ["conservative", "moderate", "optimistic"],
+              description: "Projection scenario (default: moderate). Conservative reduces income 20% and increases expenses 20%."
             }
           },
           required: []
@@ -48,10 +58,16 @@ Use this when users ask about cash flow, runway, burn rate, or financial health.
   }
 
   protected async validateParameters(parameters: ToolParameters): Promise<{ valid: boolean; error?: string }> {
-    if (parameters.horizon_days !== undefined) {
+    if (parameters.horizon_days !== undefined && !parameters.forecast_months) {
       const days = parameters.horizon_days
       if (typeof days !== 'number' || days < 30 || days > 365) {
         return { valid: false, error: 'horizon_days must be between 30 and 365' }
+      }
+    }
+    if (parameters.forecast_months !== undefined) {
+      const months = parameters.forecast_months
+      if (typeof months !== 'number' || months < 1 || months > 12) {
+        return { valid: false, error: 'forecast_months must be between 1 and 12' }
       }
     }
     return { valid: true }
@@ -63,6 +79,11 @@ Use this when users ask about cash flow, runway, burn rate, or financial health.
         success: false,
         error: 'Missing authenticated Convex client or business context'
       }
+    }
+
+    // Monthly forecast mode — call MCP tool
+    if (parameters.forecast_months) {
+      return this.executeMonthlyForecast(parameters, userContext)
     }
 
     try {
@@ -134,6 +155,92 @@ Use this when users ask about cash flow, runway, burn rate, or financial health.
       return {
         success: false,
         error: `Cash flow analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      }
+    }
+  }
+
+  /**
+   * Monthly forecast via MCP forecast_cash_flow tool.
+   * Calls the MCP Lambda directly via HTTP with internal service key.
+   */
+  private async executeMonthlyForecast(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
+    const endpointUrl = process.env.MCP_ENDPOINT_URL
+    const serviceKey = process.env.MCP_INTERNAL_SERVICE_KEY
+
+    if (!endpointUrl || !serviceKey) {
+      console.warn('[AnalyzeCashFlowTool] MCP not configured, falling back to basic analysis')
+      return {
+        success: false,
+        error: 'Monthly forecast is not available. MCP server not configured.'
+      }
+    }
+
+    try {
+      console.log(`[AnalyzeCashFlowTool] Running monthly forecast for ${parameters.forecast_months} months via MCP`)
+
+      const response = await fetch(endpointUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Internal-Key': serviceKey,
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: {
+            name: 'forecast_cash_flow',
+            arguments: {
+              forecast_months: parameters.forecast_months,
+              granularity: 'monthly',
+              scenario: parameters.scenario || 'moderate',
+              include_known_ar_ap: true,
+            },
+            _businessId: userContext.businessId,
+          },
+        }),
+      })
+
+      if (!response.ok) {
+        console.error(`[AnalyzeCashFlowTool] MCP HTTP ${response.status}`)
+        return { success: false, error: 'Failed to connect to forecast service' }
+      }
+
+      const data = await response.json()
+
+      if (data.error) {
+        return { success: false, error: data.error.message || 'Forecast failed' }
+      }
+
+      // MCP returns result in content[0].text as JSON string
+      const textContent = data.result?.content?.find((c: { type: string }) => c.type === 'text')
+      if (!textContent?.text) {
+        return { success: false, error: 'Forecast returned empty results' }
+      }
+
+      const result = JSON.parse(textContent.text)
+
+      if (result.error) {
+        return { success: false, error: result.message || 'Forecast failed' }
+      }
+
+      console.log(`[AnalyzeCashFlowTool] Monthly forecast complete. Months: ${result.months?.length || 0}`)
+
+      return {
+        success: true,
+        data: result,
+        metadata: {
+          forecastType: 'monthly',
+          monthCount: result.months?.length || 0,
+          runwayMonths: result.summary?.runway_months,
+          riskLevel: result.summary?.risk_level,
+        }
+      }
+    } catch (error) {
+      console.error('[AnalyzeCashFlowTool] Monthly forecast error:', error)
+      return {
+        success: false,
+        error: `Monthly forecast failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       }
     }
   }
