@@ -31,6 +31,9 @@ const isPublicRoute = createRouteMatcher([
   '/api/v1/support(.*)',
   '/api/v1/partner-application(.*)',
   '/api/v1/referral/validate(.*)',
+  // Internal service-to-service routes (auth via x-api-key, not Clerk)
+  '/api/v1/notifications/send-email(.*)',
+  '/api/v1/notifications/send-push(.*)',
   // Onboarding routes (allowed for expired trial users)
   '/:locale/onboarding(.*)',
   '/onboarding(.*)',
