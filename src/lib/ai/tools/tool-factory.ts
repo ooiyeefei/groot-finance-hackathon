@@ -38,6 +38,7 @@ import { LateApprovalsTool } from './late-approvals-tool'
 import { TeamComparisonTool } from './team-comparison-tool'
 // CFO copilot tools (031-cfo-copilot-tools)
 import { GenerateReportTool } from './generate-report-tool'
+import { ForecastCashFlowTool } from './forecast-cashflow-tool'
 // Receipt processing tool (031-chat-receipt-process)
 import { ReceiptClaimTool } from './receipt-claim-tool'
 // Chat-driven scheduled reports & bank reconciliation (031)
@@ -71,6 +72,7 @@ export type ToolName =
   | 'analyze_trends'
   // CFO copilot tools (031-cfo-copilot-tools)
   | 'generate_report_pdf'
+  | 'forecast_monthly_cashflow'
   // Memory tools (029-dspy-mem0-activation)
   | 'memory_store'
   | 'memory_search'
@@ -135,6 +137,7 @@ export class ToolFactory {
 
     // CFO copilot tools (031-cfo-copilot-tools)
     this.registerTool('generate_report_pdf', () => new GenerateReportTool())
+    this.registerTool('forecast_monthly_cashflow', () => new ForecastCashFlowTool())
 
     // Memory tools (029-dspy-mem0-activation)
     this.registerTool('memory_store', () => new MemoryStoreTool())
@@ -173,6 +176,7 @@ export class ToolFactory {
     'get_late_approvals',
     'compare_team_spending',
     'analyze_cash_flow',  // CFO copilot: managers can view cash flow forecasts
+    'forecast_monthly_cashflow',  // CFO copilot: managers can forecast monthly
     'generate_report_pdf',  // CFO copilot: managers can generate board reports
   ])
 

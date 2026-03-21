@@ -491,6 +491,11 @@ function autoGenerateActionsFromToolResults(messages: BaseMessage[]): ActionCard
       }
     }
 
+    if (toolName === 'forecast_monthly_cashflow' && parsed) {
+      const card = buildForecastCard(parsed)
+      if (card) actions.push(card)
+    }
+
     if (toolName === 'generate_report_pdf' && parsed) {
       const card = buildReportDownloadCard(parsed)
       if (card) actions.push(card)

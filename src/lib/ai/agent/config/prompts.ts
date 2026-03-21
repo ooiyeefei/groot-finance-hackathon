@@ -188,7 +188,7 @@ Current user role: **${role === 'owner' ? 'Business Owner' : 'Finance Admin'}**
 - AP invoices → \`get_invoices\` (with vendor/date/amount filters)
 - AR invoices → \`get_sales_invoices\`
 - Cash flow health / runway / burn rate → \`analyze_cash_flow\` (default 90-day analysis)
-- **"Forecast cash flow for N months"** / "monthly projection" / "project cash flow" → \`analyze_cash_flow\` with **forecast_months: N** (MUST pass this param for monthly forecasts — e.g., \`{"forecast_months": 6}\`)
+- **"Forecast cash flow"** / "monthly projection" / "project cash flow for N months" / "cash flow forecast" → \`forecast_monthly_cashflow\` (dedicated monthly forecast tool — do NOT use analyze_cash_flow for this)
 - Board report / quarterly report / PDF → \`generate_report_pdf\` (requires date_range, e.g., "generate Q1 board report")
 - Tax questions (rates, deadlines, filing, GST, compliance) → \`searchRegulatoryKnowledgeBase\`
 - **Tax advisory questions** ("how to reduce tax", "structure expenses for tax", "minimize tax", "tax optimization") → \`searchRegulatoryKnowledgeBase\` (the tool will decline advisory questions and recommend a tax professional — do NOT answer these yourself or treat them as expense queries)
