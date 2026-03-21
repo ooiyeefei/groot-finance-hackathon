@@ -39,11 +39,34 @@ export async function analyzeIntent(state: AgentState): Promise<Partial<AgentSta
   const BUSINESS_DATA_PATTERN = /\b(revenue|cash\s*flow|runway|burn\s*rate|invoices?|aging|owe|suppliers?|vendors?|outstanding|receivable|payable|AP\b|AR\b|overdue|expenses?|spending|transactions?|income|budget|profit|loss|balance|how\s+much|show\s+me|what('s|\s+is)\s+(our|my|the|total))\b/i;
   const isObviousBusinessData = BUSINESS_DATA_PATTERN.test(userQuery);
 
-  // EXPENSE DISAMBIGUATION: "my expenses"/"my spending"/"my claims" is ambiguous —
-  // for Owner/Finance Admin, it could mean personal expense claims OR business-wide P&L.
-  // Let the LLM handle these with the disambiguation prompt instead of fast-pathing.
-  const MY_EXPENSE_PATTERN = /\b(my\s+(expenses?|spending|claims?)|summarize\s+my\s+expenses?|my\s+expense\s+claims?)\b/i;
-  const needsExpenseDisambiguation = MY_EXPENSE_PATTERN.test(userQuery);
+  // EXPENSE DISAMBIGUATION: "my expenses"/"my spending" is ambiguous for Owner/Finance Admin —
+  // could mean personal expense claims, business P&L, or a specific employee's expenses.
+  // Force clarification deterministically instead of relying on LLM to follow the prompt.
+  const MY_EXPENSE_AMBIGUOUS = /\b(my\s+(expenses?|spending)|summarize\s+my\s+expenses?)\b/i;
+  // These are UNAMBIGUOUS — route directly without clarification
+  const MY_EXPENSE_CLAIMS_EXPLICIT = /\b(my\s+(claims?|reimbursements?|expense\s+claims?))\b/i;
+  const needsExpenseDisambiguation = MY_EXPENSE_AMBIGUOUS.test(userQuery) && !MY_EXPENSE_CLAIMS_EXPLICIT.test(userQuery);
+
+  // DETERMINISTIC CLARIFICATION: Force clarification for ambiguous "my expenses" queries
+  if (needsExpenseDisambiguation && isObviousBusinessData) {
+    console.log('[IntentAnalysis] CLARIFICATION: Ambiguous expense query detected, forcing clarification');
+    return {
+      currentIntent: {
+        primaryIntent: 'transaction_analysis',
+        queryType: 'specific_case',
+        queryCategory: 'personal_data',
+        confidence: 0.6,
+        contextNeeded: {},
+        missingContext: ['expense_type'],
+        originalQuery: userQuery,
+      },
+      needsClarification: true,
+      clarificationQuestions: [
+        'Are you asking about:\n1. **Your personal expense claims** (receipts & reimbursements you submitted)?\n2. **Business-wide expenses** (all operating costs — AP invoices, COGS, etc.)?\n3. **A specific employee\'s expenses**?'
+      ],
+      currentPhase: 'clarification',
+    };
+  }
 
   if (isObviousBusinessData && !needsExpenseDisambiguation) {
     console.log('[IntentAnalysis] FAST-PATH: Business data query detected, skipping LLM classification → direct execution');
@@ -85,11 +108,7 @@ export async function analyzeIntent(state: AgentState): Promise<Partial<AgentSta
       const isCrossEmployee = /\b(team|employee|staff|someone|everybody|everyone|all\s+(expenses?|spending|claims?))\b/i.test(queryLower);
       const hasSpecificName = /\b(how much did \w+|what did \w+ (spend|claim|buy))\b/i.test(queryLower);
 
-      // EXCEPTION: "my expenses"/"my spending" is ambiguous for owner — the LLM prompt
-      // tells the agent to clarify. Do NOT override clarification for these queries.
-      const isAmbiguousExpense = needsExpenseDisambiguation;
-
-      if (!isCrossEmployee && !hasSpecificName && !isAmbiguousExpense) {
+      if (!isCrossEmployee && !hasSpecificName) {
         console.log('[IntentAnalysis] OVERRIDE: Personal data query, skipping clarification');
         finalRequiresClarification = false;
         finalClarificationQuestions = [];
