@@ -182,6 +182,18 @@ export class ReceiptClaimTool extends BaseTool {
     const { client } = await getAuthenticatedConvex()
     if (!client) throw new Error('Could not connect to database')
 
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-explicit-any
+    const { api } = require('@/convex/_generated/api') as any
+
+    // 4a. Create an expense submission (container) so the claim appears in the UI
+    const vendorLabel = extractedData.vendorName || 'Receipt'
+    const submissionId = await client.mutation(api.functions.expenseSubmissions.create, {
+      businessId,
+      title: `Chat: ${vendorLabel}`,
+    } as any)
+    console.log(`[ReceiptClaimTool] Created submission ${submissionId} for ${attachment.filename}`)
+
+    // 4b. Create the expense claim linked to the submission
     const createArgs = {
       businessId,
       vendorName: extractedData.vendorName || 'Unknown Merchant',
@@ -194,9 +206,8 @@ export class ReceiptClaimTool extends BaseTool {
       storagePath: attachment.s3Path,
       fileName: attachment.filename,
       fileType: attachment.mimeType,
+      submissionId,
     }
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-explicit-any
-    const { api } = require('@/convex/_generated/api') as any
     const claimId = await client.mutation(api.functions.expenseClaims.create, createArgs as any)
 
     console.log(`[ReceiptClaimTool] Created draft claim ${claimId} for ${attachment.filename}`)
@@ -253,32 +264,36 @@ export class ReceiptClaimTool extends BaseTool {
       return defaults
     }
 
-    // The document processor Lambda returns a structured response with financial_data
+    // The document processor Lambda returns: { success, document_id, extraction_result: { vendorName, totalAmount, ... } }
     const r = result as Record<string, unknown>
-    const financialData = (r.financial_data || r.financialData || r.extraction || r.data) as Record<string, unknown> | undefined
-    const meta = (r.processing_metadata || r.processingMetadata || r) as Record<string, unknown>
+    console.log('[ReceiptClaimTool] Lambda response keys:', Object.keys(r))
 
-    if (financialData) {
+    // Primary path: extraction_result (the actual Lambda response format)
+    const extraction = (r.extraction_result || r.extractionResult || r.extraction || r.financial_data || r.financialData || r.data) as Record<string, unknown> | undefined
+
+    if (extraction) {
+      console.log('[ReceiptClaimTool] Found extraction data:', JSON.stringify(extraction).slice(0, 300))
       return {
-        vendorName: String(financialData.vendor_name || financialData.vendorName || financialData.merchant || ''),
-        totalAmount: Number(financialData.total_amount || financialData.totalAmount || financialData.amount || 0),
-        currency: String(financialData.currency || financialData.original_currency || financialData.originalCurrency || 'MYR'),
-        transactionDate: String(financialData.transaction_date || financialData.transactionDate || financialData.date || defaults.transactionDate),
-        category: String(financialData.category || (meta.category_mapping as Record<string, unknown>)?.accounting_category || 'General'),
-        description: String(financialData.description || ''),
-        confidence: Number(meta.confidence_score || meta.confidenceScore || r.confidence || 0.5),
-        fieldConfidence: (meta.field_confidence || meta.fieldConfidence || {}) as Record<string, number>,
+        vendorName: String(extraction.vendorName || extraction.vendor_name || extraction.merchant || ''),
+        totalAmount: Number(extraction.totalAmount || extraction.total_amount || extraction.amount || 0),
+        currency: String(extraction.currency || extraction.original_currency || 'MYR'),
+        transactionDate: String(extraction.transactionDate || extraction.transaction_date || extraction.date || defaults.transactionDate),
+        category: String(extraction.suggestedCategory || extraction.suggested_category || extraction.category || 'General'),
+        description: String(extraction.description || extraction.vendorName || ''),
+        confidence: Number(extraction.confidence || r.confidence || 0.5),
+        fieldConfidence: (extraction.fieldConfidence || extraction.field_confidence || {}) as Record<string, number>,
       }
     }
 
-    // Fallback: try top-level fields
-    if (r.vendor_name || r.vendorName || r.merchant) {
+    // Fallback: try top-level fields (if Lambda returns flat structure)
+    if (r.vendorName || r.vendor_name || r.merchant || r.totalAmount || r.total_amount) {
+      console.log('[ReceiptClaimTool] Using top-level fields from response')
       return {
-        vendorName: String(r.vendor_name || r.vendorName || r.merchant || ''),
-        totalAmount: Number(r.total_amount || r.totalAmount || r.amount || 0),
+        vendorName: String(r.vendorName || r.vendor_name || r.merchant || ''),
+        totalAmount: Number(r.totalAmount || r.total_amount || r.amount || 0),
         currency: String(r.currency || 'MYR'),
-        transactionDate: String(r.transaction_date || r.transactionDate || r.date || defaults.transactionDate),
-        category: String(r.category || 'General'),
+        transactionDate: String(r.transactionDate || r.transaction_date || r.date || defaults.transactionDate),
+        category: String(r.suggestedCategory || r.suggested_category || r.category || 'General'),
         description: String(r.description || ''),
         confidence: Number(r.confidence || r.confidence_score || 0.5),
         fieldConfidence: (r.field_confidence || r.fieldConfidence || {}) as Record<string, number>,
