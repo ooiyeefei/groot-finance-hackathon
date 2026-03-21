@@ -37,6 +37,25 @@ export async function POST(request: NextRequest) {
       ? `${baseUrl}/api/v1/unsubscribe?userId=${unsubscribeToken}`
       : undefined
 
+    // For raw_html template, use pre-built HTML directly (e.g. weekly digest)
+    if (templateType === 'raw_html') {
+      const htmlBody = templateData?.htmlBody || ''
+      const textBody = templateData?.textBody || ''
+
+      const result = await emailService.sendGenericEmail({
+        to,
+        subject,
+        htmlBody,
+        textBody: textBody + (unsubscribeUrl ? `\n\nUnsubscribe: ${unsubscribeUrl}` : ''),
+      })
+
+      return NextResponse.json({
+        success: result.success,
+        messageId: result.messageId,
+        error: result.error,
+      })
+    }
+
     // For plain_text template, use the body directly
     if (templateType === 'plain_text') {
       const textBody = templateData?.body || ''
