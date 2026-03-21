@@ -757,9 +757,9 @@ export const searchForAI = query({
 
     // Enrich expense_claim entries with vendor/merchant name from the expense_claims table.
     // Journal entry lines for expense claims store entityType="employee" (the submitter),
-    // but the merchant name (Mr. D.I.Y., Krispy Kreme, etc.) is on the expense_claims record.
+    // so vendorName has the EMPLOYEE name, not the merchant. We ALWAYS override for expense claims.
     const expenseClaimEntries = transformedEntries.filter(
-      (e) => e.sourceType === "expense_claim" && e.sourceId && !e.vendorName
+      (e) => e.sourceType === "expense_claim" && e.sourceId
     );
     if (expenseClaimEntries.length > 0) {
       const claimIds = [...new Set(expenseClaimEntries.map((e) => e.sourceId).filter(Boolean))];
@@ -774,8 +774,8 @@ export const searchForAI = query({
         const claim = entry.sourceId ? claimMap.get(entry.sourceId.toString()) : null;
         if (claim?.vendorName) {
           entry.vendorName = claim.vendorName;
-        } else if (claim?.description && !entry.vendorName) {
-          // Fallback: some claims have vendor in description field
+        } else if (claim?.description) {
+          // Fallback: some claims have vendor in description field (e.g., "Mr. D.I.Y.")
           entry.vendorName = claim.description;
         }
       }

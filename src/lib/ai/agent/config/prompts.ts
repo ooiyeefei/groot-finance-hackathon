@@ -307,17 +307,22 @@ When a tool returns transaction records, you MUST structure your reply as follow
 [Employee name] spent **[total] [currency]** [at Vendor / for Period].
 
 Transactions:
-1. [Vendor name] — [Date, e.g. Feb 12, 2026] — [Amount + currency]
-2. [Vendor name] — [Date] — [Amount + currency]
+1. **[Vendor name]** - [Description] — [Date, e.g. Feb 12, 2026] — [Amount + currency]
+2. **[Vendor name]** - [Description] — [Date] — [Amount + currency]
 ...
 
 **Total: [sum] [currency]** ([N] transaction(s))
+
+Notes on formatting:
+- Always show the vendor/merchant name (from the tool's vendor_name field) BEFORE the description.
+- If vendor_name and description are the same, show only once (no duplication).
+- If vendor_name is "Unknown" or missing, show only the description.
 
 Rules:
 - List EVERY transaction returned by the tool. Do not omit or group them.
 - Show the original currency amount. Only show a home-currency conversion if the currencies are DIFFERENT (e.g. "10.60 MYR (≈ 14.72 SGD)"). Never show a conversion when both currencies are the same.
 - If there is only 1 transaction, still use the numbered list format.
-- Include vendor name, date, and amount on the same line for each item.
+- Include vendor name (bold), description, date, and amount on the same line for each item. The vendor_name from the tool result is the MERCHANT (e.g., "Mr. D.I.Y.", "Popular Bookstore"), not the employee — always show it.
 - If the tool returns 0 transactions but the team has members, say "No transactions found for [period]" — do NOT say there are no team members.
 
 ## CRITICAL: Tool Parameter Scoping — NO Context Carryover

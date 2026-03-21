@@ -34,6 +34,7 @@ import type * as functions_catalogItems from "../functions/catalogItems.js";
 import type * as functions_chartOfAccounts from "../functions/chartOfAccounts.js";
 import type * as functions_chatCorrections from "../functions/chatCorrections.js";
 import type * as functions_chatOptimization from "../functions/chatOptimization.js";
+import type * as functions_chatOptimizationNew from "../functions/chatOptimizationNew.js";
 import type * as functions_consent from "../functions/consent.js";
 import type * as functions_conversations from "../functions/conversations.js";
 import type * as functions_creditPacks from "../functions/creditPacks.js";
@@ -53,6 +54,7 @@ import type * as functions_einvoiceJobsNode from "../functions/einvoiceJobsNode.
 import type * as functions_einvoiceMonitoring from "../functions/einvoiceMonitoring.js";
 import type * as functions_einvoiceReceivedDocuments from "../functions/einvoiceReceivedDocuments.js";
 import type * as functions_einvoiceUsage from "../functions/einvoiceUsage.js";
+import type * as functions_emailDigestJobs from "../functions/emailDigestJobs.js";
 import type * as functions_emails from "../functions/emails.js";
 import type * as functions_expenseClaims from "../functions/expenseClaims.js";
 import type * as functions_expenseSubmissions from "../functions/expenseSubmissions.js";
@@ -84,6 +86,7 @@ import type * as functions_matchingSettings from "../functions/matchingSettings.
 import type * as functions_mcpApiKeys from "../functions/mcpApiKeys.js";
 import type * as functions_mcpProposals from "../functions/mcpProposals.js";
 import type * as functions_memberships from "../functions/memberships.js";
+import type * as functions_memoryTools from "../functions/memoryTools.js";
 import type * as functions_messages from "../functions/messages.js";
 import type * as functions_notificationJobs from "../functions/notificationJobs.js";
 import type * as functions_notifications from "../functions/notifications.js";
@@ -106,6 +109,7 @@ import type * as functions_retentionJobs from "../functions/retentionJobs.js";
 import type * as functions_salesInvoiceUsage from "../functions/salesInvoiceUsage.js";
 import type * as functions_salesInvoices from "../functions/salesInvoices.js";
 import type * as functions_salesOrders from "../functions/salesOrders.js";
+import type * as functions_scheduledReportJobs from "../functions/scheduledReportJobs.js";
 import type * as functions_seedAccounting from "../functions/seedAccounting.js";
 import type * as functions_stripeEvents from "../functions/stripeEvents.js";
 import type * as functions_stripeIntegrations from "../functions/stripeIntegrations.js";
@@ -174,6 +178,7 @@ declare const fullApi: ApiFromModules<{
   "functions/chartOfAccounts": typeof functions_chartOfAccounts;
   "functions/chatCorrections": typeof functions_chatCorrections;
   "functions/chatOptimization": typeof functions_chatOptimization;
+  "functions/chatOptimizationNew": typeof functions_chatOptimizationNew;
   "functions/consent": typeof functions_consent;
   "functions/conversations": typeof functions_conversations;
   "functions/creditPacks": typeof functions_creditPacks;
@@ -193,6 +198,7 @@ declare const fullApi: ApiFromModules<{
   "functions/einvoiceMonitoring": typeof functions_einvoiceMonitoring;
   "functions/einvoiceReceivedDocuments": typeof functions_einvoiceReceivedDocuments;
   "functions/einvoiceUsage": typeof functions_einvoiceUsage;
+  "functions/emailDigestJobs": typeof functions_emailDigestJobs;
   "functions/emails": typeof functions_emails;
   "functions/expenseClaims": typeof functions_expenseClaims;
   "functions/expenseSubmissions": typeof functions_expenseSubmissions;
@@ -224,6 +230,7 @@ declare const fullApi: ApiFromModules<{
   "functions/mcpApiKeys": typeof functions_mcpApiKeys;
   "functions/mcpProposals": typeof functions_mcpProposals;
   "functions/memberships": typeof functions_memberships;
+  "functions/memoryTools": typeof functions_memoryTools;
   "functions/messages": typeof functions_messages;
   "functions/notificationJobs": typeof functions_notificationJobs;
   "functions/notifications": typeof functions_notifications;
@@ -246,6 +253,7 @@ declare const fullApi: ApiFromModules<{
   "functions/salesInvoiceUsage": typeof functions_salesInvoiceUsage;
   "functions/salesInvoices": typeof functions_salesInvoices;
   "functions/salesOrders": typeof functions_salesOrders;
+  "functions/scheduledReportJobs": typeof functions_scheduledReportJobs;
   "functions/seedAccounting": typeof functions_seedAccounting;
   "functions/stripeEvents": typeof functions_stripeEvents;
   "functions/stripeIntegrations": typeof functions_stripeIntegrations;
