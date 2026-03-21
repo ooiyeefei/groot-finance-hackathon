@@ -157,10 +157,19 @@ export class RegulatoryKnowledgeTool extends BaseTool {
       // Embed citations in the data string for extraction by chat API
       const citationsData = JSON.stringify(citations);
       
-      // Check if results include tax_reference content — add disclaimer
-      const hasTaxContent = searchResults.some((r: any) =>
-        r.payload?.category === 'tax_reference' || r.payload?.topic?.includes('tax')
-      );
+      // Check if results include tax-related content — add disclaimer
+      // Matches both new entries (top-level category/topic) and existing KB entries (metadata.tax_type, metadata.topics)
+      const hasTaxContent = searchResults.some((r: any) => {
+        const p = r.payload || {};
+        const m = p.metadata || {};
+        return p.category === 'tax_reference' ||
+          p.topic?.includes('tax') ||
+          m.tax_type?.includes('tax') ||
+          (Array.isArray(m.topics) && m.topics.some((t: string) => t.toLowerCase().includes('tax'))) ||
+          p.text?.toLowerCase().includes('tax rate') ||
+          p.text?.toLowerCase().includes('gst') ||
+          p.text?.toLowerCase().includes('filing deadline');
+      });
       const disclaimer = hasTaxContent
         ? '\n\n*This is factual reference information only. Please consult a qualified tax professional for advice specific to your situation.*'
         : '';
