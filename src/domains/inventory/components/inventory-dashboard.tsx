@@ -29,7 +29,7 @@ export function InventoryDashboard() {
     let cancelled = false
     async function load() {
       try {
-        const result = await getDashboardSummary({ businessId: businessId! })
+        const result = await getDashboardSummary({ businessId: businessId as any })
         if (!cancelled) setData(result)
       } catch (err) {
         console.error('Failed to load inventory dashboard:', err)
