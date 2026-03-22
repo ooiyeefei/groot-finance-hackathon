@@ -235,7 +235,7 @@ export const recallMemory = query({
 export const searchMemories = query({
   args: {
     query: v.string(),
-    businessId: v.id("businesses"),
+    businessId: v.string(), // v.string() for MCP HTTP API compatibility
     userId: v.string(),
     limit: v.optional(v.number()),
   },
@@ -243,7 +243,7 @@ export const searchMemories = query({
     const memories = await ctx.db
       .query("mem0_memories")
       .withIndex("by_user_business_active", (q) =>
-        q.eq("businessId", args.businessId).eq("userId", args.userId).eq("archivedAt", undefined)
+        q.eq("businessId", args.businessId as any).eq("userId", args.userId).eq("archivedAt", undefined)
       )
       .collect();
 

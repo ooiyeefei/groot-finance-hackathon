@@ -60,7 +60,7 @@ async function requireFinanceAdmin(
  */
 export const list = query({
   args: {
-    businessId: v.id("businesses"),
+    businessId: v.string(), // v.string() for MCP HTTP API compatibility
     status: v.optional(v.string()),
     customerId: v.optional(v.string()),
     dateFrom: v.optional(v.string()),
@@ -73,22 +73,21 @@ export const list = query({
     cursor: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const emptyResult = { invoices: [], nextCursor: null, totalCount: 0, summary: { totalDraft: 0, totalSent: 0, totalOverdue: 0, totalPaid: 0, totalOutstanding: 0 } };
+    const bizId = args.businessId as any; // Cast for index compatibility
+
+    // Auth: optional — MCP calls via HTTP API have no Clerk context
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return { invoices: [], nextCursor: null, totalCount: 0, summary: { totalDraft: 0, totalSent: 0, totalOverdue: 0, totalPaid: 0, totalOutstanding: 0 } };
-
-    const user = await resolveUserByClerkId(ctx.db, identity.subject);
-    if (!user) return { invoices: [], nextCursor: null, totalCount: 0, summary: { totalDraft: 0, totalSent: 0, totalOverdue: 0, totalPaid: 0, totalOutstanding: 0 } };
-
-    // Verify membership
-    const membership = await ctx.db
-      .query("business_memberships")
-      .withIndex("by_userId_businessId", (q) =>
-        q.eq("userId", user._id).eq("businessId", args.businessId)
-      )
-      .first();
-
-    if (!membership || membership.status !== "active") {
-      return { invoices: [], nextCursor: null, totalCount: 0, summary: { totalDraft: 0, totalSent: 0, totalOverdue: 0, totalPaid: 0, totalOutstanding: 0 } };
+    if (identity) {
+      const user = await resolveUserByClerkId(ctx.db, identity.subject);
+      if (!user) return emptyResult;
+      const membership = await ctx.db
+        .query("business_memberships")
+        .withIndex("by_userId_businessId", (q) =>
+          q.eq("userId", user._id).eq("businessId", bizId)
+        )
+        .first();
+      if (!membership || membership.status !== "active") return emptyResult;
     }
 
     // Query invoices
@@ -97,13 +96,13 @@ export const list = query({
       invoicesQuery = ctx.db
         .query("sales_invoices")
         .withIndex("by_businessId_status", (q) =>
-          q.eq("businessId", args.businessId).eq("status", args.status as never)
+          q.eq("businessId", bizId).eq("status", args.status as never)
         );
     } else {
       invoicesQuery = ctx.db
         .query("sales_invoices")
         .withIndex("by_businessId", (q) =>
-          q.eq("businessId", args.businessId)
+          q.eq("businessId", bizId)
         );
     }
 

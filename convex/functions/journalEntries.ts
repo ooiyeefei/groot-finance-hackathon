@@ -591,7 +591,7 @@ export const createInternal = internalMutation({
  */
 export const searchForAI = query({
   args: {
-    businessId: v.id("businesses"),
+    businessId: v.string(), // v.string() for MCP HTTP API compatibility
     searchQuery: v.optional(v.string()),
     transactionType: v.optional(v.string()),
     category: v.optional(v.string()),
@@ -616,7 +616,7 @@ export const searchForAI = query({
     // Query journal entries for the business
     let entries = await ctx.db
       .query("journal_entries")
-      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId as any))
       .order("desc")
       .collect();
 
@@ -875,7 +875,7 @@ export const getEntryCount = query({
  */
 export const getUniqueVendors = query({
   args: {
-    businessId: v.id("businesses"),
+    businessId: v.string(), // v.string() for MCP HTTP API compatibility (v.id fails with format:'json')
     sourceDocumentType: v.optional(
       v.union(
         v.literal("invoice"),
@@ -887,7 +887,7 @@ export const getUniqueVendors = query({
     // Query journal entries for the business
     let entries = await ctx.db
       .query("journal_entries")
-      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId as any))
       .collect();
 
     // Filter by source document type if specified

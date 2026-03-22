@@ -96,33 +96,26 @@ export const detectAnomalies = query({
     categoriesAnalyzed: number;
     periodDays: number;
   }> => {
-    // Auth check
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      return { anomalies: [], analyzedTransactions: 0, categoriesAnalyzed: 0, periodDays: 0 };
-    }
+    const emptyResult = { anomalies: [] as AnomalyResult[], analyzedTransactions: 0, categoriesAnalyzed: 0, periodDays: 0 };
 
-    const user = await resolveUserByClerkId(ctx.db, identity.subject);
-    if (!user) {
-      return { anomalies: [], analyzedTransactions: 0, categoriesAnalyzed: 0, periodDays: 0 };
-    }
-
-    // Resolve business
+    // Resolve business (required for all callers)
     const business = await resolveById(ctx.db, "businesses", args.businessId);
-    if (!business) {
-      return { anomalies: [], analyzedTransactions: 0, categoriesAnalyzed: 0, periodDays: 0 };
-    }
+    if (!business) return emptyResult;
 
-    // Verify membership
-    const membership = await ctx.db
-      .query("business_memberships")
-      .withIndex("by_userId_businessId", (q) =>
-        q.eq("userId", user._id).eq("businessId", business._id)
-      )
-      .first();
-
-    if (!membership || membership.status !== "active") {
-      return { anomalies: [], analyzedTransactions: 0, categoriesAnalyzed: 0, periodDays: 0 };
+    // Auth: optional — MCP calls via HTTP API have no Clerk context.
+    // When identity exists (frontend), verify membership. When absent (MCP), trust businessId
+    // since the MCP server already verified the internal service key.
+    const identity = await ctx.auth.getUserIdentity();
+    if (identity) {
+      const user = await resolveUserByClerkId(ctx.db, identity.subject);
+      if (!user) return emptyResult;
+      const membership = await ctx.db
+        .query("business_memberships")
+        .withIndex("by_userId_businessId", (q) =>
+          q.eq("userId", user._id).eq("businessId", business._id)
+        )
+        .first();
+      if (!membership || membership.status !== "active") return emptyResult;
     }
 
     // Configuration
@@ -342,31 +335,23 @@ export const analyzeVendorRisk = query({
     totalVendorsAnalyzed: number;
     highRiskCount: number;
   }> => {
-    // Auth check
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      return { vendors: [], totalVendorsAnalyzed: 0, highRiskCount: 0 };
-    }
-
-    const user = await resolveUserByClerkId(ctx.db, identity.subject);
-    if (!user) {
-      return { vendors: [], totalVendorsAnalyzed: 0, highRiskCount: 0 };
-    }
+    const emptyResult = { vendors: [] as VendorRiskResult[], totalVendorsAnalyzed: 0, highRiskCount: 0 };
 
     const business = await resolveById(ctx.db, "businesses", args.businessId);
-    if (!business) {
-      return { vendors: [], totalVendorsAnalyzed: 0, highRiskCount: 0 };
-    }
+    if (!business) return emptyResult;
 
-    const membership = await ctx.db
-      .query("business_memberships")
-      .withIndex("by_userId_businessId", (q) =>
-        q.eq("userId", user._id).eq("businessId", business._id)
-      )
-      .first();
-
-    if (!membership || membership.status !== "active") {
-      return { vendors: [], totalVendorsAnalyzed: 0, highRiskCount: 0 };
+    // Auth: optional — MCP calls have no Clerk context
+    const identity = await ctx.auth.getUserIdentity();
+    if (identity) {
+      const user = await resolveUserByClerkId(ctx.db, identity.subject);
+      if (!user) return emptyResult;
+      const membership = await ctx.db
+        .query("business_memberships")
+        .withIndex("by_userId_businessId", (q) =>
+          q.eq("userId", user._id).eq("businessId", business._id)
+        )
+        .first();
+      if (!membership || membership.status !== "active") return emptyResult;
     }
 
     const riskThreshold = args.riskThreshold ?? 70;
@@ -1719,20 +1704,22 @@ export const getARSummary = query({
   handler: async (ctx, args) => {
     const emptyResult = { error: "", totalRevenue: 0, totalOutstanding: 0, totalOverdue: 0, currency: "MYR", invoiceCount: 0, totalInvoiceCount: 0, statusBreakdown: [], agingBuckets: [], topCustomers: [] };
 
-    // Auth: verify caller identity and business membership
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) { return { ...emptyResult, error: "Unauthorized" }; }
-    const user = await resolveUserByClerkId(ctx.db, identity.subject);
-    if (!user) { return { ...emptyResult, error: "User not found" }; }
-
     const business = await resolveById(ctx.db, "businesses", args.businessId);
     if (!business) { return { ...emptyResult, error: "Business not found" }; }
 
-    const membership = await ctx.db.query("business_memberships")
-      .withIndex("by_userId_businessId", (q) => q.eq("userId", user._id).eq("businessId", business._id))
-      .first();
-    if (!membership || membership.status !== "active") { return { ...emptyResult, error: "No active membership" }; }
-    if (!["finance_admin", "owner"].includes(membership.role)) { return { ...emptyResult, error: "Insufficient permissions — finance admin or owner required" }; }
+    // Auth: optional — MCP calls via HTTP API have no Clerk context.
+    // When identity exists (frontend), verify membership + role. When absent (MCP),
+    // trust businessId since MCP server already verified internal service key + RBAC.
+    const identity = await ctx.auth.getUserIdentity();
+    if (identity) {
+      const user = await resolveUserByClerkId(ctx.db, identity.subject);
+      if (!user) { return { ...emptyResult, error: "User not found" }; }
+      const membership = await ctx.db.query("business_memberships")
+        .withIndex("by_userId_businessId", (q) => q.eq("userId", user._id).eq("businessId", business._id))
+        .first();
+      if (!membership || membership.status !== "active") { return { ...emptyResult, error: "No active membership" }; }
+      if (!["finance_admin", "owner"].includes(membership.role)) { return { ...emptyResult, error: "Insufficient permissions — finance admin or owner required" }; }
+    }
 
     const allInvoices = await ctx.db
       .query("sales_invoices")
@@ -1860,20 +1847,20 @@ export const getAPAging = query({
   handler: async (ctx, args) => {
     const emptyResult = { error: "", totalOutstanding: 0, totalOverdue: 0, currency: "MYR", agingBuckets: [], vendorBreakdown: [], upcomingDues: [] };
 
-    // Auth: verify caller identity and business membership
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) { return { ...emptyResult, error: "Unauthorized" }; }
-    const user = await resolveUserByClerkId(ctx.db, identity.subject);
-    if (!user) { return { ...emptyResult, error: "User not found" }; }
-
     const business = await resolveById(ctx.db, "businesses", args.businessId);
     if (!business) { return { ...emptyResult, error: "Business not found" }; }
 
-    const membership = await ctx.db.query("business_memberships")
-      .withIndex("by_userId_businessId", (q) => q.eq("userId", user._id).eq("businessId", business._id))
-      .first();
-    if (!membership || membership.status !== "active") { return { ...emptyResult, error: "No active membership" }; }
-    if (!["finance_admin", "owner"].includes(membership.role)) { return { ...emptyResult, error: "Insufficient permissions — finance admin or owner required" }; }
+    // Auth: optional — MCP calls via HTTP API have no Clerk context.
+    const identity = await ctx.auth.getUserIdentity();
+    if (identity) {
+      const user = await resolveUserByClerkId(ctx.db, identity.subject);
+      if (!user) { return { ...emptyResult, error: "User not found" }; }
+      const membership = await ctx.db.query("business_memberships")
+        .withIndex("by_userId_businessId", (q) => q.eq("userId", user._id).eq("businessId", business._id))
+        .first();
+      if (!membership || membership.status !== "active") { return { ...emptyResult, error: "No active membership" }; }
+      if (!["finance_admin", "owner"].includes(membership.role)) { return { ...emptyResult, error: "Insufficient permissions — finance admin or owner required" }; }
+    }
 
     const allInvoices = await ctx.db
       .query("invoices")

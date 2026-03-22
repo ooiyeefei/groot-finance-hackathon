@@ -1348,16 +1348,19 @@ export const updateLeaveEntitlements = mutation({
  */
 export const resolveEmployeeByName = query({
   args: {
-    businessId: v.id("businesses"),
-    requestingUserId: v.id("users"),
+    businessId: v.string(), // v.string() for MCP HTTP API compatibility
+    requestingUserId: v.string(), // v.string() for MCP HTTP API compatibility
     nameQuery: v.string(),
   },
   handler: async (ctx, args) => {
+    const bizId = args.businessId as any;
+    const reqUserId = args.requestingUserId as any;
+
     // Verify requesting user's membership and role
     const requesterMembership = await ctx.db
       .query("business_memberships")
       .withIndex("by_userId_businessId", (q) =>
-        q.eq("userId", args.requestingUserId).eq("businessId", args.businessId)
+        q.eq("userId", reqUserId).eq("businessId", bizId)
       )
       .first();
 
@@ -1371,7 +1374,7 @@ export const resolveEmployeeByName = query({
     // Get candidate memberships based on role
     const allMemberships = await ctx.db
       .query("business_memberships")
-      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .withIndex("by_businessId", (q) => q.eq("businessId", bizId))
       .collect();
 
     const activeMemberships = allMemberships.filter((m) => m.status === "active");
@@ -1381,12 +1384,12 @@ export const resolveEmployeeByName = query({
     if (isAdminOrOwner) {
       // Admin/Owner: all active members except themselves
       candidateMemberships = activeMemberships.filter(
-        (m) => m.userId !== args.requestingUserId
+        (m) => m.userId !== reqUserId
       );
     } else if (role === "manager") {
       // Manager: only direct reports
       candidateMemberships = activeMemberships.filter(
-        (m) => m.managerId === args.requestingUserId
+        (m) => m.managerId === reqUserId
       );
     } else {
       // Employee: no access
@@ -1436,10 +1439,10 @@ export const resolveEmployeeByName = query({
 
     // Self-match: check if the query matches the requesting user themselves
     // (e.g. a finance_admin asking "how much did I spend?" or using their own name)
-    const selfUser = await ctx.db.get(args.requestingUserId);
+    const selfUser = await ctx.db.get(reqUserId) as any;
     if (selfUser) {
-      const selfFullName = (selfUser.fullName || "").toLowerCase();
-      const selfEmail = (selfUser.email || "").toLowerCase();
+      const selfFullName = ((selfUser as any).fullName || "").toLowerCase();
+      const selfEmail = ((selfUser as any).email || "").toLowerCase();
       const selfEmailPrefix = selfEmail.split("@")[0];
       if (
         selfFullName === query ||
