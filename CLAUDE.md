@@ -554,6 +554,8 @@ const arBalance = arLines.reduce((sum, line) =>
 - Convex (report_schedules, report_runs, bank_recon_runs tables) (031-chat-sched-report-bank-recon)
 - TypeScript 5.9.3 (Next.js 15.5.7, Node.js 20 Lambda) + LangGraph 0.4.5, Convex 1.31.3, AWS SES, Capacitor 8.1.0, Web Speech API (031-chat-cross-biz-voice)
 - Convex (3 new tables: `email_send_logs`, `benchmarking_opt_ins`, `benchmarking_aggregates`) (031-chat-cross-biz-voice)
+- TypeScript 5.9.3 (Next.js 15.5.7, Convex 1.31.3, Node.js 20 Lambda) + Convex (DB + real-time), LHDN API (e-invoice), AWS Lambda (digital signature), React 19.1.2 (032-credit-debit-note)
+- Convex (`sales_invoices`, `invoices`, `journal_entries`, `journal_entry_lines` tables) (032-credit-debit-note)
 
 
 ## Recent Changes
