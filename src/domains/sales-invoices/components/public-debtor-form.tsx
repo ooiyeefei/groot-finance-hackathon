@@ -58,9 +58,9 @@ const TIN_REGEX = /^(C|IG)\d+$/
 // ---------------------------------------------------------------------------
 
 export function PublicDebtorForm({ token, locale }: PublicDebtorFormProps) {
-  const result = useQuery(api.functions.debtorSelfService.getFormData, { token })
-  const submitMutation = useMutation(api.functions.debtorSelfService.submitUpdate)
-  const logAccessMutation = useMutation(api.functions.debtorSelfService.logFormAccess)
+  const result = useQuery((api as any).functions.debtorSelfService.getFormData, { token })
+  const submitMutation = useMutation((api as any).functions.debtorSelfService.submitUpdate)
+  const logAccessMutation = useMutation((api as any).functions.debtorSelfService.logFormAccess)
   const hasLoggedAccess = useRef(false)
 
   const [formData, setFormData] = useState<FormData | null>(null)
@@ -228,7 +228,8 @@ export function PublicDebtorForm({ token, locale }: PublicDebtorFormProps) {
       },
     }
 
-    const content = errorContent[result.error ?? 'invalid']
+    const errorKey = (result.error ?? 'invalid') as keyof typeof errorContent
+    const content = errorContent[errorKey]
 
     return (
       <Card className="bg-card border-border">

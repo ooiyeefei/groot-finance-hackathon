@@ -65,14 +65,15 @@ export default function SalesInvoiceDetailPage() {
   const [lhdnQrDataUrl, setLhdnQrDataUrl] = useState<string | undefined>(undefined)
   const [debtorUpdateQrDataUrl, setDebtorUpdateQrDataUrl] = useState<string | undefined>(undefined)
 
-  // Debtor self-service QR: check if toggle is enabled and token exists
+  // Debtor self-service QR: check if toggle enabled and token exists
+  // Cast api access through `any` — types generated after `npx convex deploy` in build pipeline
   const enableDebtorQr = (invoiceDefaults as any)?.enableDebtorSelfServiceQr !== false
   const debtorTokenStatus = useQuery(
-    api.functions.debtorSelfService.getTokenStatus,
+    (api as any).functions.debtorSelfService.getTokenStatus,
     enableDebtorQr && invoice?.customerId && invoice?.businessId
       ? { businessId: invoice.businessId as string, customerId: invoice.customerId as string }
       : "skip"
-  )
+  ) as { isActive?: boolean; token?: string } | null | undefined
 
   useEffect(() => {
     if (!invoice?.lhdnLongId) return

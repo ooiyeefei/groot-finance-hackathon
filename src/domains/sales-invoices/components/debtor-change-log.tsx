@@ -16,8 +16,14 @@ interface DebtorChangeLogProps {
 }
 
 export function DebtorChangeLog({ businessId, customerId, userId }: DebtorChangeLogProps) {
-  const entries = useQuery(api.functions.debtorSelfService.getChangeLog, { businessId, customerId })
-  const revertMutation = useMutation(api.functions.debtorSelfService.revertChange)
+  const entries: Array<{
+    _id: string
+    changedFields: Array<{ fieldName: string; oldValue: any; newValue: any }>
+    submittedAt: number
+    source: string
+    isReverted?: boolean
+  }> | undefined = useQuery((api as any).functions.debtorSelfService.getChangeLog, { businessId, customerId })
+  const revertMutation = useMutation((api as any).functions.debtorSelfService.revertChange)
   const [revertingId, setRevertingId] = useState<string | null>(null)
 
   if (entries === undefined) {

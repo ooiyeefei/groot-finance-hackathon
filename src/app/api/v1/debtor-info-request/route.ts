@@ -95,7 +95,7 @@ async function handleSingle(body: { businessId: string; customerId: string }) {
   }
 
   // Get token status (or it will be created during QR gen / email send)
-  const tokenStatus = await convex.query(api.functions.debtorSelfService.getTokenStatus, {
+  const tokenStatus = await convex.query((api as any).functions.debtorSelfService.getTokenStatus, {
     businessId,
     customerId,
   })
@@ -108,7 +108,7 @@ async function handleSingle(body: { businessId: string; customerId: string }) {
     expiresAt = tokenStatus.expiresAt!
   } else {
     // Create new token via regenerate (which also revokes old)
-    const result = await convex.mutation(api.functions.debtorSelfService.regenerateToken, {
+    const result = await convex.mutation((api as any).functions.debtorSelfService.regenerateToken, {
       businessId,
       customerId,
     })
@@ -117,7 +117,7 @@ async function handleSingle(body: { businessId: string; customerId: string }) {
   }
 
   // Fetch customer for email
-  const formData = await convex.query(api.functions.debtorSelfService.getFormData, { token })
+  const formData = await convex.query((api as any).functions.debtorSelfService.getFormData, { token })
   if (!formData?.valid || !formData.customer?.email) {
     return NextResponse.json(
       { success: false, error: 'Customer has no email address' },
@@ -136,7 +136,7 @@ async function handleSingle(body: { businessId: string; customerId: string }) {
   })
 
   // Mark email sent
-  await convex.mutation(api.functions.debtorSelfService.markEmailSent, {
+  await convex.mutation((api as any).functions.debtorSelfService.markEmailSent, {
     businessId,
     customerId,
   })
@@ -180,7 +180,7 @@ async function handleBulk(body: { businessId: string; customerIds: string[] }) {
 
 async function handleSingleInternal(businessId: string, customerId: string): Promise<'sent' | 'skipped' | 'error'> {
   // Get or create token
-  let tokenStatus = await convex.query(api.functions.debtorSelfService.getTokenStatus, {
+  let tokenStatus = await convex.query((api as any).functions.debtorSelfService.getTokenStatus, {
     businessId,
     customerId,
   })
@@ -192,7 +192,7 @@ async function handleSingleInternal(businessId: string, customerId: string): Pro
     token = tokenStatus.token
     expiresAt = tokenStatus.expiresAt!
   } else {
-    const result = await convex.mutation(api.functions.debtorSelfService.regenerateToken, {
+    const result = await convex.mutation((api as any).functions.debtorSelfService.regenerateToken, {
       businessId,
       customerId,
     })
@@ -200,7 +200,7 @@ async function handleSingleInternal(businessId: string, customerId: string): Pro
     expiresAt = Date.now() + 30 * 24 * 60 * 60 * 1000
   }
 
-  const formData = await convex.query(api.functions.debtorSelfService.getFormData, { token })
+  const formData = await convex.query((api as any).functions.debtorSelfService.getFormData, { token })
   if (!formData?.valid || !formData.customer?.email) {
     return 'skipped'
   }
@@ -215,7 +215,7 @@ async function handleSingleInternal(businessId: string, customerId: string): Pro
     textBody: `${formData.businessName} is requesting you update your business details. Visit: ${selfServiceUrl}`,
   })
 
-  await convex.mutation(api.functions.debtorSelfService.markEmailSent, {
+  await convex.mutation((api as any).functions.debtorSelfService.markEmailSent, {
     businessId,
     customerId,
   })

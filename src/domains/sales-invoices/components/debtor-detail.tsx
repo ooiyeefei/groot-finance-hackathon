@@ -77,7 +77,7 @@ export default function DebtorDetail({ customerId, onBack }: DebtorDetailProps) 
   const [selfServiceOpen, setSelfServiceOpen] = useState(false)
   const [isSendingEmailRequest, setIsSendingEmailRequest] = useState(false)
   const tokenStatusForEmail = useQuery(
-    api.functions.debtorSelfService.getTokenStatus,
+    (api as any).functions.debtorSelfService.getTokenStatus,
     businessId ? { businessId, customerId } : "skip"
   )
   const [isEditing, setIsEditing] = useState(false)
@@ -717,8 +717,8 @@ export default function DebtorDetail({ customerId, onBack }: DebtorDetailProps) 
 
 // Token management sub-component
 function TokenManagement({ businessId, customerId }: { businessId: string; customerId: string }) {
-  const tokenStatus = useQuery(api.functions.debtorSelfService.getTokenStatus, { businessId, customerId })
-  const regenerate = useMutation(api.functions.debtorSelfService.regenerateToken)
+  const tokenStatus = useQuery((api as any).functions.debtorSelfService.getTokenStatus, { businessId, customerId })
+  const regenerate = useMutation((api as any).functions.debtorSelfService.regenerateToken)
   const [isRegenerating, setIsRegenerating] = useState(false)
   const [copied, setCopied] = useState(false)
 
