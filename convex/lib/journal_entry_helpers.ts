@@ -193,6 +193,138 @@ export function createPaymentJournalEntry(params: {
 }
 
 /**
+ * Reclassify expense to inventory asset on stock-in (IAS 2)
+ *
+ * When AP invoice is posted, it debits 5200 Operating Expenses.
+ * Stock-in reclassifies that cost to inventory asset.
+ * - Debit: 1500 Inventory Asset
+ * - Credit: 5200 Operating Expenses
+ */
+export function createInventoryStockInJournalEntry(params: {
+  amount: number;
+  inventoryAccountId: Id<"chart_of_accounts">;
+  inventoryAccountCode?: string;
+  inventoryAccountName?: string;
+  expenseAccountId: Id<"chart_of_accounts">;
+  expenseAccountCode?: string;
+  expenseAccountName?: string;
+  description: string;
+}): JournalEntryLineInput[] {
+  return [
+    {
+      accountId: params.inventoryAccountId,
+      accountCode: params.inventoryAccountCode || "1500",
+      accountName: params.inventoryAccountName || "Inventory Asset",
+      debitAmount: params.amount,
+      creditAmount: 0,
+      lineDescription: params.description,
+    },
+    {
+      accountId: params.expenseAccountId,
+      accountCode: params.expenseAccountCode || "5200",
+      accountName: params.expenseAccountName || "Operating Expenses",
+      debitAmount: 0,
+      creditAmount: params.amount,
+      lineDescription: `Reclassify to inventory - ${params.description}`,
+    },
+  ];
+}
+
+/**
+ * Record COGS on stock-out from sales (IAS 2)
+ *
+ * - Debit: 5100 Cost of Goods Sold
+ * - Credit: 1500 Inventory Asset
+ */
+export function createInventoryStockOutJournalEntry(params: {
+  amount: number;
+  cogsAccountId: Id<"chart_of_accounts">;
+  cogsAccountCode?: string;
+  cogsAccountName?: string;
+  inventoryAccountId: Id<"chart_of_accounts">;
+  inventoryAccountCode?: string;
+  inventoryAccountName?: string;
+  description: string;
+}): JournalEntryLineInput[] {
+  return [
+    {
+      accountId: params.cogsAccountId,
+      accountCode: params.cogsAccountCode || "5100",
+      accountName: params.cogsAccountName || "Cost of Goods Sold",
+      debitAmount: params.amount,
+      creditAmount: 0,
+      lineDescription: params.description,
+    },
+    {
+      accountId: params.inventoryAccountId,
+      accountCode: params.inventoryAccountCode || "1500",
+      accountName: params.inventoryAccountName || "Inventory Asset",
+      debitAmount: 0,
+      creditAmount: params.amount,
+      lineDescription: `Stock out - ${params.description}`,
+    },
+  ];
+}
+
+/**
+ * Record inventory adjustment (gain or loss)
+ *
+ * Gain: Debit 1500 Inventory / Credit 6500 Inventory Adjustments
+ * Loss: Debit 6500 Inventory Adjustments / Credit 1500 Inventory
+ */
+export function createInventoryAdjustmentJournalEntry(params: {
+  amount: number;
+  isGain: boolean;
+  inventoryAccountId: Id<"chart_of_accounts">;
+  inventoryAccountCode?: string;
+  inventoryAccountName?: string;
+  adjustmentAccountId: Id<"chart_of_accounts">;
+  adjustmentAccountCode?: string;
+  adjustmentAccountName?: string;
+  description: string;
+}): JournalEntryLineInput[] {
+  if (params.isGain) {
+    return [
+      {
+        accountId: params.inventoryAccountId,
+        accountCode: params.inventoryAccountCode || "1500",
+        accountName: params.inventoryAccountName || "Inventory Asset",
+        debitAmount: params.amount,
+        creditAmount: 0,
+        lineDescription: params.description,
+      },
+      {
+        accountId: params.adjustmentAccountId,
+        accountCode: params.adjustmentAccountCode || "6500",
+        accountName: params.adjustmentAccountName || "Inventory Adjustments",
+        debitAmount: 0,
+        creditAmount: params.amount,
+        lineDescription: `Adjustment gain - ${params.description}`,
+      },
+    ];
+  } else {
+    return [
+      {
+        accountId: params.adjustmentAccountId,
+        accountCode: params.adjustmentAccountCode || "6500",
+        accountName: params.adjustmentAccountName || "Inventory Adjustments",
+        debitAmount: params.amount,
+        creditAmount: 0,
+        lineDescription: `Adjustment loss - ${params.description}`,
+      },
+      {
+        accountId: params.inventoryAccountId,
+        accountCode: params.inventoryAccountCode || "1500",
+        accountName: params.inventoryAccountName || "Inventory Asset",
+        debitAmount: 0,
+        creditAmount: params.amount,
+        lineDescription: params.description,
+      },
+    ];
+  }
+}
+
+/**
  * Validate that journal entry lines are balanced
  */
 export function validateBalancedEntry(lines: JournalEntryLineInput[]): {

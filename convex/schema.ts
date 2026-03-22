@@ -912,6 +912,9 @@ export default defineSchema({
       v.literal("voided")
     )),
 
+    // Inventory tracking (001-inv-stock-management)
+    inventoryReceivedAt: v.optional(v.number()),
+
     // AP Subledger: Payment tracking (invoices = AP subledger)
     paidAmount: v.optional(v.number()),
     paymentStatus: v.optional(v.union(
@@ -1954,6 +1957,8 @@ export default defineSchema({
       supplyDateStart: v.optional(v.string()),
       supplyDateEnd: v.optional(v.string()),
       isDiscountable: v.optional(v.boolean()),
+      // Inventory tracking (001-inv-stock-management)
+      sourceLocationId: v.optional(v.string()),
     })),
 
     // Financial Totals
@@ -2205,6 +2210,9 @@ export default defineSchema({
     billingInterval: v.optional(v.string()), // "monthly" | "yearly" | "weekly" | "daily" | "one_time"
     lastSyncedAt: v.optional(v.number()),
     locallyDeactivated: v.optional(v.boolean()),
+
+    // Inventory tracking (001-inv-stock-management)
+    trackInventory: v.optional(v.boolean()),
 
     // Soft Delete & Timestamps
     deletedAt: v.optional(v.number()),
@@ -3713,5 +3721,68 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_industry_metric", ["industryGroup", "metric", "period"]),
+
+  // ============================================
+  // INVENTORY MANAGEMENT (001-inv-stock-management)
+  // ============================================
+
+  inventory_locations: defineTable({
+    businessId: v.id("businesses"),
+    name: v.string(),
+    address: v.optional(v.string()),
+    type: v.union(
+      v.literal("warehouse"),
+      v.literal("office"),
+      v.literal("retail"),
+      v.literal("other")
+    ),
+    isDefault: v.boolean(),
+    status: v.union(v.literal("active"), v.literal("inactive")),
+    deletedAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_status", ["businessId", "status"])
+    .index("by_businessId_isDefault", ["businessId", "isDefault"]),
+
+  inventory_stock: defineTable({
+    businessId: v.id("businesses"),
+    catalogItemId: v.id("catalog_items"),
+    locationId: v.id("inventory_locations"),
+    quantityOnHand: v.number(),
+    reorderLevel: v.optional(v.number()),
+    weightedAvgCostHome: v.optional(v.number()),
+    lastMovementAt: v.optional(v.number()),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_catalogItem_location", ["catalogItemId", "locationId"])
+    .index("by_locationId", ["locationId"]),
+
+  inventory_movements: defineTable({
+    businessId: v.id("businesses"),
+    catalogItemId: v.id("catalog_items"),
+    locationId: v.id("inventory_locations"),
+    movementType: v.union(
+      v.literal("stock_in"),
+      v.literal("stock_out"),
+      v.literal("transfer"),
+      v.literal("adjustment")
+    ),
+    quantity: v.number(),
+    unitCostOriginal: v.optional(v.number()),
+    unitCostOriginalCurrency: v.optional(v.string()),
+    unitCostHome: v.optional(v.number()),
+    sourceType: v.string(),
+    sourceId: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    createdBy: v.string(),
+    date: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_businessId", ["businessId"])
+    .index("by_businessId_date", ["businessId", "date"])
+    .index("by_catalogItem", ["catalogItemId"])
+    .index("by_locationId", ["locationId"])
+    .index("by_sourceType_sourceId", ["sourceType", "sourceId"]),
 
 });

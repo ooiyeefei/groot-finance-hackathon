@@ -19,6 +19,7 @@ import {
   CalendarDays,
   FileSpreadsheet,
   Inbox,
+  Package,
 } from 'lucide-react'
 
 export interface NavItem {
@@ -58,6 +59,7 @@ export function getNavigationGroups(userRole: UserRole): NavGroup[] {
           { icon: FileText, label: 'invoices', path: '/invoices' },
           { icon: CreditCard, label: 'transactions', path: '/accounting' },
           { icon: Inbox, label: 'documentsInbox', path: '/documents-inbox' },
+          { icon: Package, label: 'inventory', path: '/inventory' },
         ]
       : [],
   }

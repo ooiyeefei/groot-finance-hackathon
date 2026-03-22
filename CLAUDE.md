@@ -558,6 +558,8 @@ const arBalance = arLines.reduce((sum, line) =>
 - Convex (`sales_invoices`, `invoices`, `journal_entries`, `journal_entry_lines` tables) (032-credit-debit-note)
 - TypeScript 5.9.3, Next.js 15.5.7 + Convex 1.31.3, @react-pdf/renderer, qrcode (existing), Clerk 6.30.0 (auth bypass for public form), SES (email) (032-self-service-debtors-info-update)
 - Convex (2 new tables: `debtor_update_tokens`, `debtor_change_log`) (032-self-service-debtors-info-update)
+- TypeScript 5.9.3 (Next.js 15.5.7, Convex 1.31.3) + Convex (DB + real-time), React 19.1.2, Radix UI, Tailwind CSS, lucide-react (001-inv-stock-management)
+- Convex (3 new tables + 2 modified tables) (001-inv-stock-management)
 
 
 ## Recent Changes
