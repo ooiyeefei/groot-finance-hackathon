@@ -134,6 +134,11 @@ export default function PriceComparisonTab({ catalogItemId, currency }: PriceCom
         </Card>
       </div>
 
+      {/* Currency conversion note */}
+      {margin.currencyNote && (
+        <p className="text-muted-foreground text-xs italic">{margin.currencyNote}</p>
+      )}
+
       {/* Missing data guidance */}
       {!hasPurchaseData && hasSellingData && !margin.hasMappings && (
         <Card className="bg-yellow-500/5 border-yellow-500/20">

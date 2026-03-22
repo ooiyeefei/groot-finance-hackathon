@@ -19,6 +19,7 @@ export function useMarginSummary(
     marginPercent: number | null;
     homeCurrency: string;
     marginWarning: string | null;
+    currencyNote: string | null;
     hasMappings: boolean;
     mappingCount: number;
   } | null>(null);

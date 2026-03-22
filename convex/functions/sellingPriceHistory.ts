@@ -344,21 +344,87 @@ export const getMarginSummary = action({
         }
       : null;
 
-    // Calculate margin
+    // Currency conversion — convert both prices to homeCurrency
+    let convertedSP: number | null = latestSellingPrice?.unitPrice ?? null;
+    let convertedCP: number | null = latestPurchaseCost?.unitPrice ?? null;
+    let currencyNote: string | null = null;
+
+    if (latestSellingPrice && latestSellingPrice.currency !== homeCurrency) {
+      const rate = await ctx.runQuery(
+        internal.functions.sellingPriceHistory._getExchangeRate,
+        { businessId: args.businessId, fromCurrency: latestSellingPrice.currency, toCurrency: homeCurrency }
+      );
+      if (rate) {
+        convertedSP = Math.round(latestSellingPrice.unitPrice * rate.rate * 100) / 100;
+        currencyNote = `Selling price converted from ${latestSellingPrice.currency} to ${homeCurrency}`;
+      } else {
+        currencyNote = `No exchange rate configured for ${latestSellingPrice.currency} → ${homeCurrency}`;
+      }
+    }
+
+    if (latestPurchaseCost && latestPurchaseCost.currency !== homeCurrency) {
+      const rate = await ctx.runQuery(
+        internal.functions.sellingPriceHistory._getExchangeRate,
+        { businessId: args.businessId, fromCurrency: latestPurchaseCost.currency, toCurrency: homeCurrency }
+      );
+      if (rate) {
+        convertedCP = Math.round(latestPurchaseCost.unitPrice * rate.rate * 100) / 100;
+        const note = `Purchase cost converted from ${latestPurchaseCost.currency} to ${homeCurrency}`;
+        currencyNote = currencyNote ? `${currencyNote}. ${note}` : note;
+      } else {
+        const note = `No exchange rate configured for ${latestPurchaseCost.currency} → ${homeCurrency}`;
+        currencyNote = currencyNote ? `${currencyNote}. ${note}` : note;
+        convertedCP = null; // Can't calculate margin without conversion
+      }
+    }
+
+    // Calculate margin using converted prices
     let marginPercent: number | null = null;
     let marginWarning: string | null = null;
 
-    if (latestSellingPrice && latestPurchaseCost) {
-      const sp = latestSellingPrice.unitPrice;
-      const cp = latestPurchaseCost.unitPrice;
-      // TODO: currency conversion if different currencies
-      if (sp > 0) {
-        marginPercent = ((sp - cp) / sp) * 100;
-        marginPercent = Math.round(marginPercent * 10) / 10;
-      }
+    if (convertedSP !== null && convertedCP !== null && convertedSP > 0) {
+      marginPercent = ((convertedSP - convertedCP) / convertedSP) * 100;
+      marginPercent = Math.round(marginPercent * 10) / 10;
 
-      if (marginPercent !== null && marginPercent < 0) {
+      if (marginPercent < 0) {
         marginWarning = `Selling below cost — losing ${Math.abs(marginPercent)}% per unit`;
+      }
+    }
+
+    // Detect margin erosion: cost increased but selling price unchanged
+    if (latestPurchaseCost && mappings.length > 0 && marginWarning === null) {
+      const previousCost = await ctx.runQuery(
+        internal.functions.sellingPriceHistory._getPreviousPurchaseCost,
+        {
+          businessId: args.businessId,
+          mappings: mappings.map((m: any) => ({
+            vendorId: m.vendorId,
+            vendorItemIdentifier: m.vendorItemIdentifier,
+          })),
+        }
+      );
+
+      if (previousCost && latestPurchaseCost.unitPrice > previousCost.unitPrice) {
+        const costIncrease = ((latestPurchaseCost.unitPrice - previousCost.unitPrice) / previousCost.unitPrice) * 100;
+        const costIncreaseRounded = Math.round(costIncrease * 10) / 10;
+
+        // Check if selling price has stayed the same (or decreased)
+        if (costIncreaseRounded >= 5) {
+          // Get previous selling price to compare
+          const salesHistory = await ctx.runQuery(
+            internal.functions.sellingPriceHistory._getSalesHistory,
+            { businessId: args.businessId, catalogItemId: args.catalogItemId, limit: 2 }
+          );
+
+          const sellingPrices = salesHistory.records.map((r: any) => r.unitPrice);
+          const sellingUnchanged = sellingPrices.length >= 2
+            ? Math.abs(sellingPrices[0] - sellingPrices[1]) / sellingPrices[1] < 0.02 // <2% change = "unchanged"
+            : sellingPrices.length === 1; // Only one price = hasn't been adjusted
+
+          if (sellingUnchanged) {
+            marginWarning = `Margin decreased — cost increased by ${costIncreaseRounded}% but selling price hasn't changed`;
+          }
+        }
       }
     }
 
@@ -367,9 +433,10 @@ export const getMarginSummary = action({
       latestPurchaseCost,
       marginPercent,
       homeCurrency,
-      convertedSellingPrice: latestSellingPrice?.unitPrice ?? null,
-      convertedPurchaseCost: latestPurchaseCost?.unitPrice ?? null,
+      convertedSellingPrice: convertedSP,
+      convertedPurchaseCost: convertedCP,
       marginWarning,
+      currencyNote,
       hasMappings: mappings.length > 0,
       mappingCount: mappings.length,
     };
@@ -484,6 +551,94 @@ export const _getLatestPurchaseCost = internalQuery({
     }
 
     return latestRecord;
+  },
+});
+
+/**
+ * Get the previous purchase cost (second-latest) for margin erosion detection.
+ */
+export const _getPreviousPurchaseCost = internalQuery({
+  args: {
+    businessId: v.id("businesses"),
+    mappings: v.array(
+      v.object({
+        vendorId: v.id("vendors"),
+        vendorItemIdentifier: v.string(),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    // Collect all purchase records across mappings, sorted by date desc
+    const allRecords: Array<{ unitPrice: number; date: string }> = [];
+
+    for (const mapping of args.mappings) {
+      const records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_vendor_item", (q) =>
+          q.eq("vendorId", mapping.vendorId)
+        )
+        .filter((q) => q.eq(q.field("itemIdentifier"), mapping.vendorItemIdentifier))
+        .order("desc")
+        .take(5);
+
+      for (const r of records) {
+        if (!r.archivedFlag) {
+          allRecords.push({
+            unitPrice: r.unitPrice,
+            date: r.observedAt || r.invoiceDate || "",
+          });
+        }
+      }
+    }
+
+    // Sort by date desc
+    allRecords.sort((a, b) => b.date.localeCompare(a.date));
+
+    // Return second record (previous cost)
+    return allRecords.length >= 2 ? allRecords[1] : null;
+  },
+});
+
+/**
+ * Get exchange rate for currency conversion.
+ * Returns rate to convert `from` → `to`. Returns null if no rate found.
+ */
+export const _getExchangeRate = internalQuery({
+  args: {
+    businessId: v.id("businesses"),
+    fromCurrency: v.string(),
+    toCurrency: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (args.fromCurrency === args.toCurrency) return { rate: 1 };
+
+    // Try direct rate
+    const direct = await ctx.db
+      .query("manual_exchange_rates")
+      .withIndex("by_business_currencies", (q) =>
+        q.eq("businessId", args.businessId)
+          .eq("fromCurrency", args.fromCurrency)
+          .eq("toCurrency", args.toCurrency)
+      )
+      .order("desc")
+      .first();
+
+    if (direct) return { rate: direct.rate };
+
+    // Try inverse rate
+    const inverse = await ctx.db
+      .query("manual_exchange_rates")
+      .withIndex("by_business_currencies", (q) =>
+        q.eq("businessId", args.businessId)
+          .eq("fromCurrency", args.toCurrency)
+          .eq("toCurrency", args.fromCurrency)
+      )
+      .order("desc")
+      .first();
+
+    if (inverse && inverse.rate > 0) return { rate: 1 / inverse.rate };
+
+    return null;
   },
 });
 
