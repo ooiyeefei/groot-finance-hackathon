@@ -26,7 +26,7 @@ export const receiveFromInvoice = action({
     ),
     createdBy: v.string(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<any> => {
     // Calculate total cost in home currency for JE
     const totalCostHome = args.items.reduce(
       (sum, item) => sum + item.quantity * item.unitCostHome,
