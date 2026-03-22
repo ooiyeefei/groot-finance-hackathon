@@ -9,6 +9,7 @@
  */
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
+import { callMCPToolFromAgent } from './mcp-tool-wrapper'
 
 export class GetInsightTool extends BaseTool {
   getToolName(modelType?: ModelType): string {
@@ -50,61 +51,10 @@ The insight ID is provided when users click "Ask AI" on an insight card.`
   }
 
   protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
-    if (!this.convex || !userContext.businessId) {
-      return {
-        success: false,
-        error: 'Missing authenticated Convex client or business context'
-      }
-    }
-
-    try {
-      console.log(`[GetInsightTool] Looking up insight ${parameters.insight_id}`)
-
-      // Call the Action Center insights query
-      // Note: insightId is typed as v.id("actionCenterInsights") in Convex
-      const insight = await this.convex.query(
-        this.convexApi.functions.actionCenterInsights.getById,
-        {
-          insightId: parameters.insight_id as any, // Cast to any since we're passing a string that represents the ID
-        }
-      )
-
-      if (!insight) {
-        return {
-          success: false,
-          error: `Insight not found with ID: ${parameters.insight_id}`
-        }
-      }
-
-      console.log(`[GetInsightTool] Found insight: ${insight.title} (${insight.category}/${insight.priority})`)
-
-      return {
-        success: true,
-        data: {
-          id: insight._id,
-          title: insight.title,
-          description: insight.description,
-          category: insight.category,
-          priority: insight.priority,
-          status: insight.status,
-          recommendedAction: insight.recommendedAction,
-          affectedEntities: insight.affectedEntities,
-          detectedAt: new Date(insight.detectedAt).toISOString(),
-          metadata: insight.metadata,
-        },
-        metadata: {
-          insightId: insight._id.toString(),
-          category: insight.category,
-          priority: insight.priority,
-        }
-      }
-    } catch (error) {
-      console.error('[GetInsightTool] Error:', error)
-      return {
-        success: false,
-        error: `Failed to retrieve insight: ${error instanceof Error ? error.message : 'Unknown error'}`
-      }
-    }
+    // 032-mcp-first: Delegate to MCP server (single source of truth)
+    return callMCPToolFromAgent('get_action_center_insight', {
+      insight_id: parameters.insight_id,
+    }, userContext)
   }
 
   protected formatResultData(data: any[]): string {

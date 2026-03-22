@@ -5,6 +5,7 @@
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool';
 import { aiServiceFactory } from '@/lib/ai/ai-services/ai-service-factory';
+import { callMCPToolFromAgent } from './mcp-tool-wrapper';
 
 interface RegulatorySearchParameters {
   query: string;
@@ -57,136 +58,10 @@ export class RegulatoryKnowledgeTool extends BaseTool {
 
   protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
     const params = parameters as RegulatorySearchParameters;
-    const query = params.query.trim();
-    const limit = params.limit || 5;
-
-    try {
-      console.log(`[RegulatoryKnowledgeTool] Answering question for user ${userContext.userId}: "${query}"`);
-
-      // Check for advisory/optimization questions — decline with professional referral
-      if (this.isAdvisoryQuestion(query)) {
-        return {
-          success: true,
-          data: "I can provide factual tax reference information (rates, deadlines, thresholds), but I'm not able to provide tax optimization advice or strategy recommendations. For questions about how to structure expenses, reduce tax liability, or optimize your tax position, please consult a qualified tax professional.\n\n*This is factual reference information only. Please consult a qualified tax professional for advice specific to your situation.*"
-        };
-      }
-
-      // 1. Generate an embedding for the user's query
-      const queryEmbedding = await this.embeddingService.generateEmbedding(query, 'RETRIEVAL_QUERY');
-
-      // 2. Search the regulatory KB using the new service method
-      const searchResults = await this.vectorService.searchRegulatoryKb(queryEmbedding, limit);
-
-      if (!searchResults || searchResults.length === 0) {
-        return {
-          success: true,
-          data: "I could not find any specific regulations matching your query in the knowledge base. You could try rephrasing your question."
-        };
-      }
-
-      // 3. Check if country clarification is needed
-      const countryAnalysis = this.analyzeCountryAmbiguity(query, searchResults);
-      
-      if (countryAnalysis.needsClarification) {
-        return {
-          success: true,
-          data: `I found regulations for ${countryAnalysis.detectedCountries.join(' and ')}. Which country are you asking about? Please specify the country so I can provide the most accurate information.`
-        };
-      }
-
-      // 4. Generate structured citations array
-      const citations = searchResults.map((result: any, index) => {
-        const metadata = result.payload?.metadata || {};
-        
-        // DEBUG: Log what we're getting from Qdrant
-        console.log(`[RegulatoryKnowledgeTool] Processing search result ${index + 1}:`, {
-          result_id: result.id,
-          metadata_keys: Object.keys(metadata),
-          metadata_url: metadata.url,
-          metadata_source_name: metadata.source_name,
-          full_metadata: metadata
-        });
-        
-        // Map the 'url' field to appropriate type based on file extension
-        const sourceUrl = metadata.url;
-        let pdf_url: string | undefined;
-        let official_url: string | undefined;
-        
-        if (sourceUrl) {
-          console.log(`[RegulatoryKnowledgeTool] Processing URL: "${sourceUrl}"`);
-          if (sourceUrl.toLowerCase().includes('.pdf')) {
-            pdf_url = sourceUrl;
-            console.log(`[RegulatoryKnowledgeTool] Mapped as PDF URL: ${pdf_url}`);
-          } else {
-            official_url = sourceUrl;
-            console.log(`[RegulatoryKnowledgeTool] Mapped as Official URL: ${official_url}`);
-          }
-        } else {
-          console.log(`[RegulatoryKnowledgeTool] No URL found in metadata for result ${index + 1}`);
-        }
-        
-        const rawText = result.payload?.text || '';
-        const cleanedText = this.cleanContentText(rawText);
-        
-        const citationData = {
-          id: result.id || `citation_${index + 1}`,
-          index: index + 1,
-          source_name: metadata.source_name || 'Unknown Source',
-          country: metadata.country || 'N/A',
-          section: metadata.section,
-          pdf_url: pdf_url,
-          page_number: metadata.page_number,
-          text_coordinates: metadata.text_coordinates ? {
-            x1: metadata.text_coordinates.x1,
-            y1: metadata.text_coordinates.y1,
-            x2: metadata.text_coordinates.x2,
-            y2: metadata.text_coordinates.y2
-          } : undefined,
-          content_snippet: cleanedText.substring(0, 200) || '',
-          confidence_score: result.score || 0,
-          official_url: official_url
-        };
-        
-        console.log(`[RegulatoryKnowledgeTool] Generated citation ${index + 1}:`, citationData);
-        return citationData;
-      });
-
-      // 5. Format the results with citation markers for LLM synthesis
-      const formattedResults = this.formatResultDataWithCitations(searchResults);
-
-      // Embed citations in the data string for extraction by chat API
-      const citationsData = JSON.stringify(citations);
-      
-      // Check if query or results are tax-related — add disclaimer
-      // Uses query keywords as primary signal (most reliable), then checks result payloads
-      const taxKeywords = ['tax', 'gst', 'sst', 'filing', 'corporate tax', 'income tax', 'withholding']
-      const queryLower = query.toLowerCase()
-      const queryIsTax = taxKeywords.some(k => queryLower.includes(k))
-
-      const hasTaxContent = queryIsTax || searchResults.some((r: any) => {
-        const p = r.payload || {};
-        const m = p.metadata || {};
-        return p.category === 'tax_reference' ||
-          m.tax_type?.includes('tax') ||
-          (Array.isArray(m.topics) && m.topics.some((t: string) => t.toLowerCase().includes('tax')));
-      });
-      const disclaimer = hasTaxContent
-        ? '\n\n*This is factual reference information only. Please consult a qualified tax professional for advice specific to your situation.*'
-        : '';
-
-      return {
-        success: true,
-        data: `${formattedResults}${disclaimer}\n\n<!--CITATIONS_DATA:${citationsData}:END_CITATIONS-->`,
-        citations: citations
-      };
-
-    } catch (error) {
-      console.error('[RegulatoryKnowledgeTool] Execution failed:', error);
-      return {
-        success: false,
-        error: `Failed to search the regulatory knowledge base: ${error instanceof Error ? error.message : 'Unknown error'}`
-      };
-    }
+    return callMCPToolFromAgent('search_regulatory_knowledge_base', {
+      query: params.query.trim(),
+      limit: params.limit || 5,
+    }, userContext);
   }
 
   /**

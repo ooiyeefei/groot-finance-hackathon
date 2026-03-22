@@ -9,6 +9,7 @@
  */
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
+import { callMCPToolFromAgent } from './mcp-tool-wrapper'
 
 interface BudgetStatusParameters {
   category?: string
@@ -68,124 +69,11 @@ export class BudgetStatusTool extends BaseTool {
   }
 
   protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
-    const params = parameters as BudgetStatusParameters
-
-    try {
-      if (!userContext.businessId || !userContext.convexUserId) {
-        return { success: false, error: 'Missing business context. Please ensure you are logged into a business account.' }
-      }
-
-      // Default period to current month
-      const period = params.period || new Date().toISOString().slice(0, 7)
-
-      console.log(`[BudgetStatusTool] Checking budget status for period: ${period}, category: ${params.category || 'all'}`)
-
-      // Query Convex for budget status
-      const result = await this.convex!.action(
-        this.convexApi.functions.budgetTracking.getBudgetStatus,
-        {
-          businessId: userContext.businessId as any,
-          category: params.category,
-          period,
-        }
-      )
-
-      if (!result || !result.categories || result.categories.length === 0) {
-        let noDataMessage = 'No budgeted expense categories found.'
-        if (params.category) {
-          noDataMessage = `No budget found for category "${params.category}".`
-        }
-        noDataMessage += ' You can set budgets using the set_budget command (e.g., "Set Travel budget to RM 5000").'
-
-        return {
-          success: true,
-          data: noDataMessage,
-          metadata: { resultsCount: 0, period }
-        }
-      }
-
-      // Format text response with category-by-category breakdown
-      let dataText = `Budget Status for ${period}:\n\n`
-
-      let totalBudget = 0
-      let totalSpent = 0
-
-      const categoryBreakdown = result.categories.map((cat: any) => {
-        totalBudget += cat.budgetLimit
-        totalSpent += cat.currentSpend
-
-        return {
-          categoryId: cat.categoryId,
-          categoryName: cat.categoryName,
-          budgetLimit: cat.budgetLimit,
-          currentSpend: cat.currentSpend,
-          remaining: cat.remaining,
-          percentUsed: cat.percentUsed,
-          status: cat.status, // 'on_track' | 'warning' | 'overspent'
-        }
-      })
-
-      // Overall summary
-      const overallUtilization = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0
-      dataText += `Overall: ${totalSpent.toFixed(2)} / ${totalBudget.toFixed(2)} ${result.currency} (${overallUtilization}% utilized)\n\n`
-
-      // Per-category breakdown
-      categoryBreakdown.forEach((cat: any, i: number) => {
-        const bar = this.renderUtilizationBar(cat.percentUsed)
-        const statusLabel = cat.status === 'overspent' ? 'OVER BUDGET' : cat.status === 'warning' ? 'WARNING' : 'ON TRACK'
-        dataText += `${i + 1}. ${cat.categoryName} [${statusLabel}]\n`
-        dataText += `   ${bar} ${cat.percentUsed}%\n`
-        dataText += `   Spent: ${cat.currentSpend.toFixed(2)} / ${cat.budgetLimit.toFixed(2)} ${result.currency}`
-        dataText += ` | Remaining: ${cat.remaining.toFixed(2)} ${result.currency}`
-        dataText += '\n\n'
-      })
-
-      // Highlight over-budget categories
-      const overBudget = categoryBreakdown.filter((c: any) => c.percentUsed >= 100)
-      const warnings = categoryBreakdown.filter((c: any) => c.percentUsed >= 80 && c.percentUsed < 100)
-
-      if (overBudget.length > 0) {
-        dataText += `Attention: ${overBudget.length} category/categories over budget: ${overBudget.map((c: any) => c.categoryName).join(', ')}\n`
-      }
-      if (warnings.length > 0) {
-        dataText += `Warning: ${warnings.length} category/categories nearing budget (>80%): ${warnings.map((c: any) => c.categoryName).join(', ')}\n`
-      }
-
-      // Audit log
-      console.log(JSON.stringify({
-        event: 'budget_status_check',
-        userId: userContext.convexUserId,
-        toolName: 'check_budget_status',
-        period,
-        categoryFilter: params.category || 'all',
-        categoriesReturned: categoryBreakdown.length,
-        overBudgetCount: overBudget.length,
-        timestamp: new Date().toISOString(),
-      }))
-
-      return {
-        success: true,
-        data: dataText,
-        metadata: {
-          structured: {
-            period,
-            currency: result.currency,
-            totalBudget,
-            totalSpend: totalSpent,
-            overallStatus: result.overallStatus,
-            categories: categoryBreakdown,
-          },
-          resultsCount: categoryBreakdown.length,
-        }
-      }
-
-    } catch (error) {
-      console.error('[BudgetStatusTool] Execution error:', error)
-      return {
-        success: false,
-        error: `Budget status check failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      }
-    }
+    // 032-mcp-first: Delegate to MCP server (single source of truth)
+    return callMCPToolFromAgent('check_budget_status', {
+      category: parameters.category,
+      period: parameters.period,
+    }, userContext)
   }
 
   /**

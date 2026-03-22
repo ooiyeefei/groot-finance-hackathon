@@ -6,6 +6,7 @@
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
 import { EmbeddingService } from '@/lib/ai/ai-services/embedding-service'
 import { VectorStorageService } from '@/lib/ai/ai-services/vector-storage-service'
+import { callMCPToolFromAgent } from './mcp-tool-wrapper'
 
 interface DocumentSearchParameters {
   query: string
@@ -124,89 +125,11 @@ export class DocumentSearchTool extends BaseTool {
 
   protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
     const params = parameters as DocumentSearchParameters
-    const query = params.query.trim()
-    const limit = params.limit || 5
-    const threshold = params.similarityThreshold || 0.7
-
-    try {
-      console.log(`[DocumentSearchTool] Processing secure query for user ${userContext.userId}: ${query}`)
-
-      // Generate embedding for the user's query with timeout and retry
-      let queryEmbedding: number[]
-      try {
-        console.log(`[DocumentSearchTool] Generating embedding for query: "${query}"`)
-        queryEmbedding = await this.embeddingService.generateEmbedding(query, 'RETRIEVAL_QUERY')
-      } catch (embeddingError) {
-        console.error('[DocumentSearchTool] Embedding generation failed:', embeddingError)
-        
-        // Fallback: Return helpful message about network issues
-        return {
-          success: false,
-          error: 'Document search temporarily unavailable due to network issues. Please try again in a moment, or use the transaction lookup tool for financial data queries.'
-        }
-      }
-
-      // SECURITY FIX: Use secure similarity search with user_id and business_id filtering at Qdrant level
-      // This prevents data leakage and improves performance by filtering at the database
-      let searchResults: any[]
-      try {
-        // SECURITY: Validate business context for document access
-        if (!userContext.businessId) {
-          console.error('[DocumentSearchTool] Missing business context - document search denied')
-          return {
-            success: false,
-            error: 'Missing business context for document search. Please ensure you are logged into a business account.'
-          }
-        }
-
-        console.log(`[DocumentSearchTool] Performing vector similarity search with business context`)
-        searchResults = await this.vectorService.similaritySearchSecure(
-          queryEmbedding,
-          userContext.userId,
-          userContext.businessId,
-          limit,
-          threshold
-        )
-      } catch (vectorError) {
-        console.error('[DocumentSearchTool] Vector search failed:', vectorError)
-        
-        // Fallback: Return helpful message about search issues
-        return {
-          success: false,
-          error: 'Document search service temporarily unavailable. Please try again later, or use the transaction lookup tool for financial queries.'
-        }
-      }
-
-      if (!searchResults || searchResults.length === 0) {
-        return {
-          success: true,
-          data: 'No relevant documents found for your query. Try using different keywords or check if your documents have been processed.'
-        }
-      }
-
-      // Note: No longer need application-level filtering since Qdrant filters by user_id
-      // All results are guaranteed to belong to the authenticated user
-      const filteredResults = searchResults
-
-      const formattedResults = this.formatResultData(filteredResults)
-
-      return {
-        success: true,
-        data: `Found ${filteredResults.length} relevant document(s) in your files:\n\n${formattedResults}`,
-        metadata: {
-          queryProcessed: query,
-          resultsCount: filteredResults.length,
-          userId: userContext.userId
-        }
-      }
-
-    } catch (error) {
-      console.error('[DocumentSearchTool] Execution error:', error)
-      return {
-        success: false,
-        error: `Document search failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      }
-    }
+    return callMCPToolFromAgent('search_documents', {
+      query: params.query.trim(),
+      limit: params.limit || 5,
+      similarity_threshold: params.similarityThreshold || 0.7,
+    }, userContext)
   }
 
   protected formatResultData(data: any[]): string {

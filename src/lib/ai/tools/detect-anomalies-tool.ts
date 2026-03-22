@@ -9,6 +9,7 @@
  */
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
+import { callMCPToolFromAgent } from './mcp-tool-wrapper'
 
 export class DetectAnomaliesTool extends BaseTool {
   getToolName(modelType?: ModelType): string {
@@ -67,52 +68,11 @@ Use this when users ask about unusual expenses, outliers, or suspicious transact
   }
 
   protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
-    if (!this.convex || !userContext.businessId) {
-      return {
-        success: false,
-        error: 'Missing authenticated Convex client or business context'
-      }
-    }
-
-    try {
-      console.log(`[DetectAnomaliesTool] Running anomaly detection for business ${userContext.businessId}`)
-
-      // Call the Category 3 intelligence query
-      const result = await this.convex.query(
-        this.convexApi.functions.financialIntelligence.detectAnomalies,
-        {
-          businessId: userContext.businessId,
-          dateRangeDays: parameters.date_range_days,
-          sensitivity: parameters.sensitivity,
-        }
-      )
-
-      if (!result) {
-        return {
-          success: false,
-          error: 'Failed to run anomaly detection'
-        }
-      }
-
-      console.log(`[DetectAnomaliesTool] Found ${result.anomalies.length} anomalies in ${result.analyzedTransactions} transactions`)
-
-      return {
-        success: true,
-        data: result,
-        metadata: {
-          anomalyCount: result.anomalies.length,
-          analyzedTransactions: result.analyzedTransactions,
-          categoriesAnalyzed: result.categoriesAnalyzed,
-          periodDays: result.periodDays,
-        }
-      }
-    } catch (error) {
-      console.error('[DetectAnomaliesTool] Error:', error)
-      return {
-        success: false,
-        error: `Anomaly detection failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      }
-    }
+    // 032-mcp-first: Delegate to MCP server (single source of truth)
+    return callMCPToolFromAgent('detect_anomalies', {
+      date_range_days: parameters.date_range_days,
+      sensitivity: parameters.sensitivity,
+    }, userContext)
   }
 
   protected formatResultData(data: any[]): string {

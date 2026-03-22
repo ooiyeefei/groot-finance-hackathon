@@ -9,6 +9,7 @@
  */
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
+import { callMCPToolFromAgent } from './mcp-tool-wrapper'
 
 interface LateApprovalsParameters {
   threshold_days?: number
@@ -86,129 +87,9 @@ export class LateApprovalsTool extends BaseTool {
   protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
     const params = parameters as LateApprovalsParameters
 
-    try {
-      if (!userContext.businessId || !userContext.convexUserId) {
-        return { success: false, error: 'Missing business context. Please ensure you are logged into a business account.' }
-      }
-
-      const thresholdDays = params.threshold_days || 3
-      const now = new Date()
-
-      console.log(`[LateApprovalsTool] Checking for submissions overdue by >${thresholdDays} business days`)
-
-      // Query pending submissions assigned to this manager
-      const submissions = await this.convex!.query(
-        this.convexApi.functions.expenseSubmissions.getPendingApprovals,
-        {
-          businessId: userContext.businessId as any,
-        }
-      )
-
-      if (!submissions || submissions.length === 0) {
-        return {
-          success: true,
-          data: 'No pending expense submissions found. All submissions have been processed.',
-          metadata: { resultsCount: 0, thresholdDays }
-        }
-      }
-
-      // Filter submissions that exceed the threshold
-      const homeCurrency = userContext.homeCurrency || 'MYR'
-      const lateSubmissions = submissions
-        .map((sub: any) => {
-          const submittedAt = new Date(sub.submittedAt)
-          const waitingDays = countBusinessDays(submittedAt, now)
-
-          // Sum totals across currencies (use first currency or home)
-          const totals = sub.totalsByCurrency || []
-          const totalAmount = totals.reduce((sum: number, t: any) => sum + (t.total || 0), 0)
-          const currency = totals.length > 0 ? totals[0].currency : homeCurrency
-
-          return {
-            submissionId: sub._id,
-            submitterName: sub.submitterName || 'Unknown',
-            title: sub.title || 'Expense Submission',
-            submittedAt: submittedAt.toISOString().split('T')[0],
-            waitingDays,
-            totalAmount,
-            currency,
-            claimCount: sub.claimCount || 0,
-          }
-        })
-        .filter((sub: any) => sub.waitingDays > thresholdDays)
-        .sort((a: any, b: any) => b.waitingDays - a.waitingDays) // Most overdue first
-
-      if (lateSubmissions.length === 0) {
-        const totalPending = submissions.length
-        return {
-          success: true,
-          data: `No late approvals found. There ${totalPending === 1 ? 'is' : 'are'} ${totalPending} pending submission(s), all within the ${thresholdDays}-day threshold.`,
-          metadata: {
-            resultsCount: 0,
-            totalPending,
-            thresholdDays,
-          }
-        }
-      }
-
-      // Format text response
-      let dataText = `Late Approvals (>${thresholdDays} business days):\n\n`
-      dataText += `Found ${lateSubmissions.length} overdue submission(s) out of ${submissions.length} total pending:\n\n`
-
-      lateSubmissions.forEach((sub: any, i: number) => {
-        const urgency = sub.waitingDays >= thresholdDays * 2 ? 'CRITICAL' : 'OVERDUE'
-        dataText += `${i + 1}. [${urgency}] ${sub.submitterName}\n`
-        dataText += `   Submitted: ${sub.submittedAt} (${sub.waitingDays} business days ago)\n`
-        dataText += `   Amount: ${sub.totalAmount.toFixed(2)} ${sub.currency}`
-        if (sub.claimCount > 0) {
-          dataText += ` | ${sub.claimCount} claim(s)`
-        }
-        dataText += '\n'
-        dataText += `   Title: ${sub.title}\n\n`
-      })
-
-      // Summary stats
-      const totalOverdueAmount = lateSubmissions.reduce((sum: number, s: any) => sum + s.totalAmount, 0)
-      const maxWaiting = lateSubmissions[0].waitingDays
-      const criticalCount = lateSubmissions.filter((s: any) => s.waitingDays >= thresholdDays * 2).length
-
-      dataText += `Summary: ${totalOverdueAmount.toFixed(2)} ${lateSubmissions[0].currency} in overdue approvals`
-      dataText += ` | Longest wait: ${maxWaiting} business days`
-      if (criticalCount > 0) {
-        dataText += ` | ${criticalCount} critical (>${thresholdDays * 2} days)`
-      }
-
-      // Audit log
-      console.log(JSON.stringify({
-        event: 'late_approvals_check',
-        userId: userContext.convexUserId,
-        toolName: 'get_late_approvals',
-        thresholdDays,
-        totalPending: submissions.length,
-        lateCount: lateSubmissions.length,
-        timestamp: new Date().toISOString(),
-      }))
-
-      return {
-        success: true,
-        data: dataText,
-        metadata: {
-          structured: {
-            lateSubmissions,
-            totalLate: lateSubmissions.length,
-            oldestWaitingDays: maxWaiting,
-          },
-          resultsCount: lateSubmissions.length,
-        }
-      }
-
-    } catch (error) {
-      console.error('[LateApprovalsTool] Execution error:', error)
-      return {
-        success: false,
-        error: `Late approvals check failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      }
-    }
+    return callMCPToolFromAgent('get_late_approvals', {
+      threshold_days: params.threshold_days,
+    }, userContext)
   }
 
   protected formatResultData(data: any[]): string {

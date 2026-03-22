@@ -2,6 +2,10 @@ import * as cdk from 'aws-cdk-lib';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction, OutputFormat } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import * as actions from 'aws-cdk-lib/aws-cloudwatch-actions';
+import * as sns from 'aws-cdk-lib/aws-sns';
+import * as snsSubscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
@@ -162,8 +166,73 @@ export class MCPServerStack extends cdk.Stack {
     });
 
     // ========================================================================
+    // CloudWatch Alarms (032-mcp-first observability)
+    // ========================================================================
+    const alarmEmail = 'dev@hellogroot.com';
+
+    const mcpAlarmTopic = new sns.Topic(this, 'MCPServerAlarmTopic', {
+      topicName: 'finanseal-mcp-server-alarms',
+      displayName: 'Groot Finance MCP Server Alarms',
+    });
+
+    mcpAlarmTopic.addSubscription(
+      new snsSubscriptions.EmailSubscription(alarmEmail)
+    );
+
+    // Lambda error alarm: 3+ errors in 5 minutes
+    const mcpErrorAlarm = new cloudwatch.Alarm(this, 'MCPServerErrorAlarm', {
+      metric: this.mcpServerFunction.metricErrors({
+        period: cdk.Duration.minutes(5),
+        statistic: 'Sum',
+      }),
+      threshold: 3,
+      evaluationPeriods: 1,
+      alarmDescription: 'MCP Server Lambda: 3+ errors in 5 minutes',
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
+    mcpErrorAlarm.addAlarmAction(new actions.SnsAction(mcpAlarmTopic));
+
+    // P99 latency alarm: >10s (Lambda timeout is 30s)
+    const mcpLatencyAlarm = new cloudwatch.Alarm(this, 'MCPServerLatencyAlarm', {
+      metric: this.mcpServerFunction.metricDuration({
+        period: cdk.Duration.minutes(5),
+        statistic: 'p99',
+      }),
+      threshold: 10_000, // 10 seconds in milliseconds
+      evaluationPeriods: 2,
+      alarmDescription: 'MCP Server Lambda: P99 latency >10s for 10 minutes',
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
+    mcpLatencyAlarm.addAlarmAction(new actions.SnsAction(mcpAlarmTopic));
+
+    // API Gateway 5XX alarm: 5+ server errors in 5 minutes
+    const api5xxAlarm = new cloudwatch.Alarm(this, 'MCPServerAPI5xxAlarm', {
+      metric: new cloudwatch.Metric({
+        namespace: 'AWS/ApiGateway',
+        metricName: '5XXError',
+        dimensionsMap: { ApiName: 'Groot Finance MCP Server' },
+        period: cdk.Duration.minutes(5),
+        statistic: 'Sum',
+      }),
+      threshold: 5,
+      evaluationPeriods: 1,
+      alarmDescription: 'MCP Server API Gateway: 5+ 5XX errors in 5 minutes',
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
+    api5xxAlarm.addAlarmAction(new actions.SnsAction(mcpAlarmTopic));
+
+    // ========================================================================
     // Outputs
     // ========================================================================
+    new cdk.CfnOutput(this, 'MCPAlarmTopicArn', {
+      value: mcpAlarmTopic.topicArn,
+      description: 'SNS Topic ARN for MCP Server CloudWatch Alarms',
+      exportName: `${id}-MCPAlarmTopicArn`,
+    });
+
     new cdk.CfnOutput(this, 'MCPServerEndpoint', {
       value: this.mcpApiEndpoint,
       description: 'MCP Server API endpoint URL',

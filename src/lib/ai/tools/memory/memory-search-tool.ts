@@ -7,7 +7,7 @@
  */
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from '../base-tool'
-import { mem0Service, Memory } from '../../agent/memory/mem0-service'
+import { callMCPToolFromAgent } from '../mcp-tool-wrapper'
 
 interface MemorySearchParameters {
   /** Search query for semantic matching */
@@ -87,96 +87,18 @@ export class MemorySearchTool extends BaseTool {
 
   protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
     const params = parameters as MemorySearchParameters
-    const query = params.query.trim()
-    const limit = params.limit || 5
 
-    try {
-      console.log(`[MemorySearchTool] Searching memories for user ${userContext.userId}: "${query}"`)
-
-      // Check if memory service is available
-      const isAvailable = await mem0Service.isAvailable()
-      if (!isAvailable) {
-        console.warn('[MemorySearchTool] Memory service not available')
-        return {
-          success: true,
-          data: 'No matching memories found. Memory service is currently unavailable.',
-          metadata: { memoriesFound: 0 }
-        }
-      }
-
-      // Validate business context
-      if (!userContext.businessId) {
-        console.error('[MemorySearchTool] Missing business context')
-        return {
-          success: false,
-          error: 'Missing business context for memory search. Please ensure you are logged into a business account.'
-        }
-      }
-
-      // Perform semantic search
-      const memories = await mem0Service.searchMemories(
-        query,
-        userContext.userId,
-        userContext.businessId,
-        limit
-      )
-
-      if (!memories || memories.length === 0) {
-        return {
-          success: true,
-          data: `No memories found matching "${query}". The user may not have shared relevant information yet.`,
-          metadata: { memoriesFound: 0, query }
-        }
-      }
-
-      // Format search results with relevance scores
-      const formattedResults = this.formatSearchResults(memories, query)
-      console.log(`[MemorySearchTool] Found ${memories.length} matching memories for user ${userContext.userId}`)
-
-      return {
-        success: true,
-        data: `Found ${memories.length} relevant memories for "${query}":\n\n${formattedResults}`,
-        metadata: {
-          memoriesFound: memories.length,
-          query,
-          userId: userContext.userId
-        }
-      }
-
-    } catch (error) {
-      console.error('[MemorySearchTool] Execution error:', error)
-      return {
-        success: false,
-        error: `Memory search failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      }
-    }
-  }
-
-  /**
-   * Format search results with relevance scores
-   */
-  private formatSearchResults(memories: Memory[], query: string): string {
-    return memories.map((memory, index) => {
-      const category = (memory.metadata?.category as string) || 'general'
-      const tags = memory.metadata?.tags as string[] | undefined
-      const score = memory.score !== undefined ? ` (relevance: ${(memory.score * 100).toFixed(0)}%)` : ''
-      const date = memory.created_at ? new Date(memory.created_at).toLocaleDateString() : 'Unknown date'
-
-      let formatted = `${index + 1}. [${category.toUpperCase()}]${score} ${memory.memory}`
-      if (tags && tags.length > 0) {
-        formatted += `\n   Tags: ${tags.join(', ')}`
-      }
-      formatted += `\n   Stored: ${date}`
-
-      return formatted
-    }).join('\n\n')
+    return callMCPToolFromAgent('memory_search', {
+      query: params.query,
+      limit: params.limit,
+    }, userContext)
   }
 
   /**
    * Format result data for display (required abstract method)
    */
   protected formatResultData(data: any[]): string {
-    return this.formatSearchResults(data, '')
+    return data.map((item, index) => `${index + 1}. ${item.content || item.memory || item}`).join('\n')
   }
 
   /**

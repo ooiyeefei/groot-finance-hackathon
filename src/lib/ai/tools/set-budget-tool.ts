@@ -8,6 +8,7 @@
  */
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
+import { callMCPToolFromAgent } from './mcp-tool-wrapper'
 
 interface SetBudgetParameters {
   category_name: string
@@ -85,116 +86,12 @@ export class SetBudgetTool extends BaseTool {
   }
 
   protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
-    const params = parameters as SetBudgetParameters
-
-    try {
-      if (!userContext.businessId || !userContext.convexUserId) {
-        return { success: false, error: 'Missing business context. Please ensure you are logged into a business account.' }
-      }
-
-      // Step 1: Get all expense categories for the business
-      console.log(`[SetBudgetTool] Fetching categories for business: ${userContext.businessId}`)
-
-      const categories = await this.convex!.query(
-        this.convexApi.functions.businesses.getExpenseCategories,
-        { businessId: userContext.businessId as any }
-      )
-
-      if (!categories || categories.length === 0) {
-        return {
-          success: true,
-          data: 'No expense categories found for your business. Please set up expense categories first before configuring budgets.',
-          metadata: { resultsCount: 0 }
-        }
-      }
-
-      // Step 2: Find category by name (case-insensitive)
-      const searchName = params.category_name.trim().toLowerCase()
-      const matchedCategory = categories.find(
-        (cat: any) => cat.category_name.toLowerCase() === searchName
-      )
-
-      if (!matchedCategory) {
-        const availableNames = categories.map((cat: any) => cat.category_name).join(', ')
-        return {
-          success: true,
-          data: `Category "${params.category_name}" not found. Available categories: ${availableNames}`,
-          metadata: { resultsCount: 0, availableCategories: categories.map((cat: any) => cat.category_name) }
-        }
-      }
-
-      // Step 3: Determine the action and capture previous limit
-      const previousLimit = (matchedCategory as any).budgetLimit || null
-      const isRemoving = params.monthly_limit === 0
-      const currency = params.currency || userContext.homeCurrency || (matchedCategory as any).budgetCurrency || 'MYR'
-
-      console.log(`[SetBudgetTool] ${isRemoving ? 'Removing' : 'Setting'} budget for "${matchedCategory.category_name}": ${previousLimit} → ${isRemoving ? 'none' : params.monthly_limit}`)
-
-      // Step 4: Update the category budget
-      await this.convex!.mutation(
-        this.convexApi.functions.businesses.updateExpenseCategory,
-        {
-          businessId: userContext.businessId as any,
-          categoryId: matchedCategory.id,
-          budgetLimit: isRemoving ? 0 : params.monthly_limit,
-          budgetCurrency: isRemoving ? '' : currency,
-        }
-      )
-
-      // Step 5: Build response
-      let action: string
-      let dataText: string
-
-      if (isRemoving) {
-        action = 'removed'
-        dataText = `Budget limit removed for "${matchedCategory.category_name}".`
-        if (previousLimit) {
-          dataText += ` Previous limit was ${previousLimit.toFixed(2)} ${(matchedCategory as any).budgetCurrency || currency}.`
-        }
-      } else if (previousLimit) {
-        action = 'updated'
-        dataText = `Budget for "${matchedCategory.category_name}" updated from ${previousLimit.toFixed(2)} to ${params.monthly_limit.toFixed(2)} ${currency}/month.`
-      } else {
-        action = 'created'
-        dataText = `Budget limit set for "${matchedCategory.category_name}": ${params.monthly_limit.toFixed(2)} ${currency}/month.`
-      }
-
-      // Audit log
-      console.log(JSON.stringify({
-        event: 'budget_update',
-        userId: userContext.convexUserId,
-        toolName: 'set_budget',
-        categoryName: matchedCategory.category_name,
-        action,
-        previousLimit,
-        newLimit: isRemoving ? null : params.monthly_limit,
-        currency,
-        timestamp: new Date().toISOString(),
-      }))
-
-      return {
-        success: true,
-        data: dataText,
-        metadata: {
-          structured: {
-            action,
-            categoryName: matchedCategory.category_name,
-            categoryId: matchedCategory.id,
-            previousLimit,
-            newLimit: isRemoving ? null : params.monthly_limit,
-            currency,
-          },
-          resultsCount: 1,
-        }
-      }
-
-    } catch (error) {
-      console.error('[SetBudgetTool] Execution error:', error)
-      return {
-        success: false,
-        error: `Budget update failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      }
-    }
+    // 032-mcp-first: Delegate to MCP server (single source of truth)
+    return callMCPToolFromAgent('set_budget', {
+      category_name: parameters.category_name,
+      monthly_limit: parameters.monthly_limit,
+      currency: parameters.currency,
+    }, userContext)
   }
 
   protected formatResultData(data: any[]): string {

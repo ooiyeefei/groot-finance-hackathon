@@ -7,6 +7,7 @@ import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, Mo
 import { aiConfig } from '@/lib/ai/config/ai-config'
 import { resolveDateRange } from '@/lib/ai/utils/date-range-resolver'
 import { Id } from '@/convex/_generated/dataModel'
+import { callMCPToolFromAgent } from './mcp-tool-wrapper'
 
 interface TransactionLookupParameters {
   query?: string
@@ -768,6 +769,26 @@ export class TransactionLookupTool extends BaseTool {
   }
 
   protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
+    const params = parameters as TransactionLookupParameters
+
+    // Resolve date range before delegating to MCP
+    const dateRange = this._calculateDateRange(params)
+
+    return callMCPToolFromAgent('get_transactions', {
+      query: params.query,
+      start_date: dateRange.startDate,
+      end_date: dateRange.endDate,
+      category: params.category,
+      min_amount: params.minAmount,
+      max_amount: params.maxAmount,
+      transaction_type: params.transactionType,
+      source_document_type: params._sourceDocumentType,
+      limit: params.limit || 10,
+    }, userContext)
+  }
+
+  /** @deprecated Kept for backward compatibility - original executeInternal logic */
+  private async _executeInternalLegacy(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
     const params = parameters as TransactionLookupParameters
 
     // CRITICAL FIX 2: Detect analysis queries BEFORE sanitization to preserve analytical terms like "largest"

@@ -36,6 +36,32 @@ import { showReconStatus } from './tools/show-recon-status.js';
 import { sendEmailReport } from './tools/send-email-report.js';
 import { compareToIndustry } from './tools/compare-to-industry.js';
 import { toggleBenchmarking } from './tools/toggle-benchmarking.js';
+// Finance/AP/AR batch (032-mcp-first)
+import { getInvoices } from './tools/get-invoices.js';
+import { getSalesInvoices } from './tools/get-sales-invoices.js';
+import { getTransactions } from './tools/get-transactions.js';
+import { getVendors } from './tools/get-vendors.js';
+import { searchDocuments } from './tools/search-documents.js';
+import { searchRegulatoryKB } from './tools/search-regulatory-kb.js';
+import { getARSummary } from './tools/get-ar-summary.js';
+import { getAPAging } from './tools/get-ap-aging.js';
+import { getBusinessTransactions } from './tools/get-business-transactions.js';
+// Team/Manager batch (032-mcp-first)
+import { getEmployeeExpenses } from './tools/get-employee-expenses.js';
+import { getTeamSummary } from './tools/get-team-summary.js';
+import { getLateApprovals } from './tools/get-late-approvals.js';
+import { compareTeamSpending } from './tools/compare-team-spending.js';
+// Memory batch (032-mcp-first)
+import { memoryStore } from './tools/memory-store.js';
+import { memorySearch } from './tools/memory-search.js';
+import { memoryRecall } from './tools/memory-recall.js';
+import { memoryForget } from './tools/memory-forget.js';
+// Misc batch (032-mcp-first)
+import { createExpenseFromReceipt } from './tools/create-expense-from-receipt.js';
+import { getActionCenterInsight } from './tools/get-action-center-insight.js';
+import { analyzeTrends } from './tools/analyze-trends.js';
+import { setBudget } from './tools/set-budget.js';
+import { checkBudgetStatus } from './tools/check-budget-status.js';
 import {
   authenticateApiKey,
   authenticateInternalService,
@@ -69,6 +95,32 @@ const TOOL_IMPLEMENTATIONS: Record<string, (args: Record<string, unknown>, authC
   // Cross-business benchmarking (031-chat-cross-biz-voice)
   compare_to_industry: compareToIndustry,
   toggle_benchmarking: toggleBenchmarking,
+  // Finance/AP/AR batch (032-mcp-first)
+  get_invoices: getInvoices,
+  get_sales_invoices: getSalesInvoices,
+  get_transactions: getTransactions,
+  get_vendors: getVendors,
+  search_documents: searchDocuments,
+  search_regulatory_knowledge_base: searchRegulatoryKB,
+  get_ar_summary: getARSummary,
+  get_ap_aging: getAPAging,
+  get_business_transactions: getBusinessTransactions,
+  // Team/Manager batch (032-mcp-first)
+  get_employee_expenses: getEmployeeExpenses,
+  get_team_summary: getTeamSummary,
+  get_late_approvals: getLateApprovals,
+  compare_team_spending: compareTeamSpending,
+  // Memory batch (032-mcp-first)
+  memory_store: memoryStore,
+  memory_search: memorySearch,
+  memory_recall: memoryRecall,
+  memory_forget: memoryForget,
+  // Misc batch (032-mcp-first)
+  create_expense_from_receipt: createExpenseFromReceipt,
+  get_action_center_insight: getActionCenterInsight,
+  analyze_trends: analyzeTrends,
+  set_budget: setBudget,
+  check_budget_status: checkBudgetStatus,
 };
 
 // CORS headers for all responses

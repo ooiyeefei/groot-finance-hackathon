@@ -10,6 +10,7 @@
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
 import { resolveDateRange } from '@/lib/ai/utils/date-range-resolver'
 import { mapCategoryTerm } from '@/lib/ai/utils/category-mapper'
+import { callMCPToolFromAgent } from './mcp-tool-wrapper'
 import { z } from 'zod'
 
 interface EmployeeExpenseParameters {
@@ -137,196 +138,31 @@ export class EmployeeExpenseTool extends BaseTool {
   protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
     const params = parameters as EmployeeExpenseParameters
 
-    try {
-      if (!userContext.businessId || !userContext.convexUserId) {
-        return { success: false, error: 'Missing business context. Please ensure you are logged into a business account.' }
-      }
-
-      // Step 1: Resolve employee name to user ID
-      console.log(`[EmployeeExpenseTool] Resolving employee name: "${params.employee_name}"`)
-
-      const nameResult = await this.convex!.query(
-        this.convexApi.functions.memberships.resolveEmployeeByName,
-        {
-          businessId: userContext.businessId as any,
-          requestingUserId: userContext.convexUserId as any,
-          nameQuery: params.employee_name.trim(),
-        }
-      )
-
-      if (!nameResult.matches || nameResult.matches.length === 0) {
-        // No match - list direct reports
-        return {
-          success: true,
-          data: `I couldn't find an employee named "${params.employee_name}" in your team. You have ${nameResult.totalDirectReports} direct report(s). Please check the name and try again.`,
-          metadata: { queryProcessed: params.employee_name, resultsCount: 0 }
-        }
-      }
-
-      // Check for ambiguous match
-      if (nameResult.matches.length > 1 && nameResult.matches[0].confidence !== 'exact') {
-        const matchList = nameResult.matches
-          .map((m: { fullName: string; email: string }) => `• ${m.fullName} (${m.email})`)
-          .join('\n')
-        return {
-          success: true,
-          data: `Multiple matches found for "${params.employee_name}":\n${matchList}\n\nPlease specify which employee you mean.`,
-          metadata: { queryProcessed: params.employee_name, ambiguousMatches: nameResult.matches.length }
-        }
-      }
-
-      const targetEmployee = nameResult.matches[0]
-      console.log(`[EmployeeExpenseTool] Resolved to: ${targetEmployee.fullName} (${targetEmployee.userId})`)
-
-      // Step 2: Resolve date range
-      let startDate = params.start_date
-      let endDate = params.end_date
-
-      if (params.date_range && !startDate && !endDate) {
-        const dateResult = resolveDateRange(params.date_range)
-        startDate = dateResult.startDate
-        endDate = dateResult.endDate
-        console.log(`[EmployeeExpenseTool] Date range resolved: ${params.date_range} → ${startDate} to ${endDate}`)
-      }
-
-      // Step 3: Map category if provided
-      let categoryId: string | undefined
-      let categoryNote: string | undefined
-      if (params.category) {
-        const categoryMatch = mapCategoryTerm(params.category)
-        if (categoryMatch) {
-          categoryId = categoryMatch.categoryId
-          categoryNote = `Category "${params.category}" mapped to "${categoryMatch.categoryName}" (${categoryMatch.confidence} match)`
-          console.log(`[EmployeeExpenseTool] ${categoryNote}`)
-        } else {
-          console.log(`[EmployeeExpenseTool] No category mapping for "${params.category}", using as-is`)
-          categoryId = params.category
-        }
-      }
-
-      // Step 4: Query Convex for employee expenses
-      const result = await this.convex!.query(
-        this.convexApi.functions.financialIntelligence.getEmployeeExpensesForManager,
-        {
-          businessId: userContext.businessId,
-          requestingUserId: userContext.convexUserId,
-          targetEmployeeId: targetEmployee.userId,
-          filters: {
-            vendorName: params.vendor,
-            category: categoryId,
-            startDate,
-            endDate,
-            transactionType: params.transaction_type,
-            limit: params.limit || 50,
-          },
-        }
-      )
-
-      if (!result.authorized) {
-        return {
-          success: true,
-          data: result.error || 'You can only view data for your direct reports.',
-          metadata: { authorized: false }
-        }
-      }
-
-      // Step 5: Format structured response
-      const response = {
-        summary: {
-          total_amount: result.totalAmount,
-          currency: result.currency,
-          record_count: result.totalCount,
-          date_range: {
-            start: startDate || 'all time',
-            end: endDate || 'present',
-          },
-        },
-        employee: {
-          name: result.employeeName,
-          id: targetEmployee.userId,
-        },
-        items: result.entries.map((e: any) => ({
-          date: e.transactionDate,
-          description: e.description,
-          vendor_name: e.vendorName,
-          amount: e.homeCurrencyAmount,
-          currency: e.homeCurrency,
-          category: e.category,
-          transaction_type: e.transactionType,
-        })),
-        truncated: result.totalCount > result.entries.length,
-        truncated_count: Math.max(0, result.totalCount - result.entries.length),
-      }
-
-      // Validate output against Zod schema
-      const parsed = EmployeeExpenseResponseSchema.safeParse(response)
-      if (!parsed.success) {
-        console.warn(`[EmployeeExpenseTool] Output schema validation warning:`, parsed.error.issues)
-      }
-
-      // Derive actual display currency from entries (homeCurrency on entries may differ from business.homeCurrency)
-      const displayCurrency = result.entries.length > 0
-        ? (result.entries[0].homeCurrency || result.currency)
-        : result.currency
-
-      // Format for LLM consumption
-      let dataText = `Employee Expenses for ${result.employeeName}:\n\n`
-      dataText += `Summary: ${result.totalCount} transaction(s) totaling ${result.totalAmount.toFixed(2)} ${displayCurrency}`
-      if (startDate && endDate) {
-        dataText += ` (${startDate} to ${endDate})`
-      }
-      if (categoryNote) {
-        dataText += `\nNote: ${categoryNote}`
-      }
-      dataText += '\n'
-
-      if (result.entries.length > 0) {
-        dataText += '\nTransactions:\n'
-        result.entries.forEach((e: any, i: number) => {
-          dataText += `${i + 1}. ${e.transactionDate} | ${e.vendorName || 'Unknown vendor'}\n`
-          // Show original currency amount; also show home currency if different
-          const origStr = `${e.originalAmount?.toFixed(2) ?? e.homeCurrencyAmount.toFixed(2)} ${e.originalCurrency || e.homeCurrency}`
-          const homeStr = `${e.homeCurrencyAmount.toFixed(2)} ${e.homeCurrency}`
-          const amountStr = (e.originalCurrency && e.originalCurrency !== e.homeCurrency)
-            ? `${origStr} (≈ ${homeStr})`
-            : homeStr
-          dataText += `   Amount: ${amountStr}\n`
-          dataText += `   Description: ${e.description || '—'} | Category: ${e.category || 'Uncategorized'}\n`
-        })
-      }
-
-      if (response.truncated) {
-        dataText += `\n(Showing ${result.entries.length} of ${result.totalCount} total transactions)`
-      }
-
-      // Audit log
-      console.log(JSON.stringify({
-        event: 'cross_employee_query',
-        managerId: userContext.convexUserId,
-        targetEmployeeId: targetEmployee.userId,
-        toolName: 'get_employee_expenses',
-        queryParams: { vendor: params.vendor, category: categoryId, startDate, endDate },
-        resultCount: result.totalCount,
-        timestamp: new Date().toISOString(),
-      }))
-
-      return {
-        success: true,
-        data: dataText,
-        metadata: {
-          structured: response,
-          queryProcessed: params.employee_name,
-          resultsCount: result.totalCount,
-        }
-      }
-
-    } catch (error) {
-      console.error('[EmployeeExpenseTool] Execution error:', error)
-      return {
-        success: false,
-        error: `Employee expense lookup failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      }
+    // Resolve date range before delegating to MCP
+    let startDate = params.start_date
+    let endDate = params.end_date
+    if (params.date_range && !startDate && !endDate) {
+      const dateResult = resolveDateRange(params.date_range)
+      startDate = dateResult.startDate
+      endDate = dateResult.endDate
     }
+
+    // Map category if provided
+    let categoryId: string | undefined
+    if (params.category) {
+      const categoryMatch = mapCategoryTerm(params.category)
+      categoryId = categoryMatch ? categoryMatch.categoryId : params.category
+    }
+
+    return callMCPToolFromAgent('get_employee_expenses', {
+      employee_name: params.employee_name,
+      vendor: params.vendor,
+      category: categoryId,
+      start_date: startDate,
+      end_date: endDate,
+      transaction_type: params.transaction_type,
+      limit: params.limit,
+    }, userContext)
   }
 
   protected formatResultData(data: any[]): string {

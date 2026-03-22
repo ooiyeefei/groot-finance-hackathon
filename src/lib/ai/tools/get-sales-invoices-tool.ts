@@ -7,6 +7,7 @@
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
 import type { Id } from '@/convex/_generated/dataModel'
+import { callMCPToolFromAgent } from './mcp-tool-wrapper'
 
 export class GetSalesInvoicesTool extends BaseTool {
   getToolName(modelType?: ModelType): string {
@@ -60,86 +61,10 @@ This queries the sales_invoices table, NOT incoming/purchase invoices.`
   }
 
   protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
-    if (!this.convex || !userContext.businessId) {
-      return {
-        success: false,
-        error: 'Missing authenticated Convex client or business context'
-      }
-    }
-
-    const maxRetries = 2
-    let lastError: unknown
-
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        console.log(`[GetSalesInvoicesTool] Fetching sales invoices for business ${userContext.businessId} (attempt ${attempt + 1})`)
-
-        const result = await this.convex.query(
-          this.convexApi.functions.salesInvoices.list,
-          {
-            businessId: userContext.businessId as Id<'businesses'>,
-            status: parameters.status as string | undefined,
-            limit: parameters.limit as number | undefined,
-          }
-        )
-
-        if (!result || !result.invoices || result.invoices.length === 0) {
-          return {
-            success: true,
-            data: `No sales invoices found${parameters.status ? ` with status "${parameters.status}"` : ''}. Sales invoices appear here when you create and send invoices to customers.`,
-            metadata: { resultsCount: 0, summary: result?.summary }
-          }
-        }
-
-        console.log(`[GetSalesInvoicesTool] Found ${result.invoices.length} sales invoice(s), summary: ${JSON.stringify(result.summary)}`)
-
-        const invoices = result.invoices
-        const summary = result.summary
-
-        // Summary header
-        let dataText = `**Sales Invoices (AR) — ${invoices.length} invoice(s)**\n\n`
-        if (summary) {
-          dataText += `**Summary**\n`
-          dataText += `- Total outstanding: ${summary.totalOutstanding?.toFixed(2) ?? '0.00'}\n`
-          dataText += `- Total overdue: ${summary.totalOverdue?.toFixed(2) ?? '0.00'}\n\n`
-        }
-
-        invoices.forEach((inv: any, i: number) => {
-          const statusEmoji: Record<string, string> = {
-            paid: '✓ Paid', sent: '📤 Sent', overdue: '⚠️ Overdue',
-            draft: '📝 Draft', partially_paid: '🔵 Partially Paid', void: '🚫 Void'
-          }
-          const statusLabel = statusEmoji[inv.status] ?? inv.status
-          dataText += `### ${i + 1}. ${inv.clientName || inv.client_name || 'Customer'}\n`
-          dataText += `- **Invoice #**: ${inv.invoiceNumber || inv.invoice_number || '—'}\n`
-          dataText += `- **Amount**: ${inv.total?.toFixed(2) ?? inv.amount?.toFixed(2) ?? '—'} ${inv.currency ?? ''}\n`
-          dataText += `- **Status**: ${statusLabel}\n`
-          if (inv.dueDate || inv.due_date) dataText += `- **Due**: ${inv.dueDate ?? inv.due_date}\n`
-          if (inv.invoiceDate || inv.invoice_date) dataText += `- **Date**: ${inv.invoiceDate ?? inv.invoice_date}\n`
-          dataText += '\n'
-        })
-
-        return {
-          success: true,
-          data: dataText,
-          metadata: { resultsCount: invoices.length, totalCount: result.totalCount, summary }
-        }
-      } catch (error) {
-        lastError = error
-        console.error(`[GetSalesInvoicesTool] Attempt ${attempt + 1} failed:`, error)
-        if (attempt < maxRetries) {
-          const delayMs = 1000 * (attempt + 1)
-          console.log(`[GetSalesInvoicesTool] Retrying in ${delayMs}ms...`)
-          await new Promise(resolve => setTimeout(resolve, delayMs))
-        }
-      }
-    }
-
-    const errorMsg = lastError instanceof Error ? lastError.message : 'Unknown error'
-    return {
-      success: false,
-      error: `Failed to fetch sales invoices after ${maxRetries + 1} attempts: ${errorMsg}. This may be a temporary server issue — please try again.`
-    }
+    return callMCPToolFromAgent('get_sales_invoices', {
+      status: parameters.status,
+      limit: parameters.limit,
+    }, userContext)
   }
 
   protected formatResultData(data: any[]): string {

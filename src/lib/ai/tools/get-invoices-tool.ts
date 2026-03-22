@@ -8,6 +8,7 @@
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
 import { resolveDateRange } from '@/lib/ai/utils/date-range-resolver'
+import { callMCPToolFromAgent } from './mcp-tool-wrapper'
 
 export class GetInvoicesTool extends BaseTool {
   getToolName(modelType?: ModelType): string {
@@ -86,14 +87,7 @@ Use for: "invoices from ABC Supplier", "purchase invoices this quarter", "line i
   }
 
   protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
-    if (!this.convex || !userContext.businessId) {
-      return {
-        success: false,
-        error: 'Missing authenticated Convex client or business context'
-      }
-    }
-
-    // Resolve date range
+    // Resolve date range before delegating to MCP
     let startDate = parameters.start_date as string | undefined
     let endDate = parameters.end_date as string | undefined
     if (parameters.date_range && !startDate && !endDate) {
@@ -102,79 +96,15 @@ Use for: "invoices from ABC Supplier", "purchase invoices this quarter", "line i
       endDate = dateResult.endDate
     }
 
-    const hasFilters = parameters.vendor_name || parameters.invoice_number || startDate || endDate || parameters.min_amount !== undefined || parameters.max_amount !== undefined
-
-    try {
-      console.log(`[GetInvoicesTool] Searching invoices for business ${userContext.businessId}`, {
-        vendor: parameters.vendor_name, invoiceNumber: parameters.invoice_number,
-        dateRange: startDate ? `${startDate} to ${endDate}` : 'all',
-      })
-
-      // Use searchForAI if filters are provided, otherwise fall back to getCompletedForAI
-      const result = hasFilters
-        ? await this.convex.query(
-            this.convexApi.functions.invoices.searchForAI,
-            {
-              businessId: userContext.businessId,
-              vendorName: parameters.vendor_name as string | undefined,
-              invoiceNumber: parameters.invoice_number as string | undefined,
-              startDate,
-              endDate,
-              minAmount: parameters.min_amount as number | undefined,
-              maxAmount: parameters.max_amount as number | undefined,
-              limit: parameters.limit as number | undefined,
-            }
-          )
-        : await this.convex.query(
-            this.convexApi.functions.invoices.getCompletedForAI,
-            {
-              businessId: userContext.businessId,
-              limit: parameters.limit,
-            }
-          )
-
-      if (!result || !result.invoices || result.invoices.length === 0) {
-        const filterDesc = parameters.vendor_name ? ` from "${parameters.vendor_name}"` : ''
-        const dateDesc = startDate ? ` between ${startDate} and ${endDate}` : ''
-        return {
-          success: true,
-          data: `No invoices found${filterDesc}${dateDesc}. Invoices appear here after OCR processing completes.`,
-          metadata: { resultsCount: 0 }
-        }
-      }
-
-      console.log(`[GetInvoicesTool] Found ${result.invoices.length} invoice(s)`)
-
-      const invoices = result.invoices.map((inv: any) => ({
-        _id: inv._id,
-        vendorName: inv.vendorName,
-        invoiceNumber: inv.invoiceNumber || null,
-        invoiceDate: inv.invoiceDate || null,
-        amount: inv.amount,
-        currency: inv.currency,
-        isPosted: inv.isPosted,
-        paymentStatus: inv.paymentStatus || (inv.isPosted ? 'posted' : 'pending'),
-        confidenceScore: inv.confidenceScore ?? 0,
-        lineItems: (inv.lineItems || []).map((item: any) => ({
-          description: item.description ?? item.item_description ?? 'Item',
-          quantity: item.quantity ?? 1,
-          unitPrice: item.unitPrice ?? item.unit_price ?? 0,
-          totalAmount: item.totalAmount ?? item.total_amount ?? Math.round((item.unit_price ?? 0) * (item.quantity ?? 1) * 100) / 100,
-        })),
-      }))
-
-      return {
-        success: true,
-        data: JSON.stringify({ invoices, totalCount: (result as any).totalCount || invoices.length, summary: (result as any).summary }),
-        metadata: { resultsCount: invoices.length }
-      }
-    } catch (error) {
-      console.error('[GetInvoicesTool] Error:', error)
-      return {
-        success: false,
-        error: `Failed to fetch invoices: ${error instanceof Error ? error.message : 'Unknown error'}`
-      }
-    }
+    return callMCPToolFromAgent('get_invoices', {
+      vendor_name: parameters.vendor_name,
+      invoice_number: parameters.invoice_number,
+      start_date: startDate,
+      end_date: endDate,
+      min_amount: parameters.min_amount,
+      max_amount: parameters.max_amount,
+      limit: parameters.limit,
+    }, userContext)
   }
 
   protected formatResultData(data: any[]): string {

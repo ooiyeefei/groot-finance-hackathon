@@ -11,6 +11,7 @@
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
 import { resolveDateRange } from '@/lib/ai/utils/date-range-resolver'
 import { mapCategoryTerm } from '@/lib/ai/utils/category-mapper'
+import { callMCPToolFromAgent } from './mcp-tool-wrapper'
 import { z } from 'zod'
 
 interface TeamSummaryParameters {
@@ -118,156 +119,29 @@ export class TeamSummaryTool extends BaseTool {
   protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
     const params = parameters as TeamSummaryParameters
 
-    try {
-      if (!userContext.businessId || !userContext.convexUserId) {
-        return { success: false, error: 'Missing business context. Please ensure you are logged into a business account.' }
-      }
-
-      // Step 1: Resolve date range
-      let startDate = params.start_date
-      let endDate = params.end_date
-
-      if (params.date_range && !startDate && !endDate) {
-        const dateResult = resolveDateRange(params.date_range)
-        startDate = dateResult.startDate
-        endDate = dateResult.endDate
-        console.log(`[TeamSummaryTool] Date range resolved: ${params.date_range} → ${startDate} to ${endDate}`)
-      }
-
-      // Step 2: Map category if provided
-      let categoryId: string | undefined
-      let categoryNote: string | undefined
-      if (params.category) {
-        const categoryMatch = mapCategoryTerm(params.category)
-        if (categoryMatch) {
-          categoryId = categoryMatch.categoryId
-          categoryNote = `Category "${params.category}" mapped to "${categoryMatch.categoryName}" (${categoryMatch.confidence} match)`
-          console.log(`[TeamSummaryTool] ${categoryNote}`)
-        } else {
-          categoryId = params.category
-        }
-      }
-
-      // Step 3: Query Convex for team summary
-      const result = await this.convex!.query(
-        this.convexApi.functions.financialIntelligence.getTeamExpenseSummary,
-        {
-          businessId: userContext.businessId,
-          requestingUserId: userContext.convexUserId,
-          filters: {
-            startDate,
-            endDate,
-            category: categoryId,
-            vendorName: params.vendor,
-            groupBy: params.group_by || 'employee',
-          },
-        }
-      )
-
-      if (!result.authorized) {
-        if (result.error === 'Employees cannot access team data') {
-          return {
-            success: true,
-            data: "Per your organization's access policy, team spending data is only available to Managers, Finance Admins, and Business Owners. Please contact your admin if you need access.",
-            metadata: { authorized: false }
-          }
-        }
-        return {
-          success: true,
-          data: result.error || "You don't have any direct reports assigned. Please contact your administrator.",
-          metadata: { authorized: false }
-        }
-      }
-
-      // Step 4: Format structured response
-      const response = {
-        summary: {
-          total_amount: result.summary.totalAmount,
-          currency: result.summary.currency,
-          employee_count: result.summary.employeeCount,
-          record_count: result.summary.recordCount,
-          date_range: {
-            start: startDate || 'all time',
-            end: endDate || 'present',
-          },
-        },
-        breakdown: result.breakdown.map((b: any) => ({
-          group_key: b.groupKey,
-          total_amount: b.totalAmount,
-          record_count: b.recordCount,
-          percentage: b.percentage,
-        })),
-        top_categories: result.topCategories.map((c: any) => ({
-          category: c.categoryName,
-          total_amount: c.totalAmount,
-          percentage: c.percentage,
-        })),
-      }
-
-      // Validate output against Zod schema
-      const parsed = TeamSummaryResponseSchema.safeParse(response)
-      if (!parsed.success) {
-        console.warn(`[TeamSummaryTool] Output schema validation warning:`, parsed.error.issues)
-      }
-
-      // Format for LLM consumption
-      const groupByLabel = params.group_by || 'employee'
-      let dataText = `Team Spending Summary:\n\n`
-      dataText += `Total: ${result.summary.totalAmount.toFixed(2)} ${result.summary.currency}`
-      dataText += ` | ${result.summary.employeeCount} employee(s) | ${result.summary.recordCount} transaction(s)`
-      if (startDate && endDate) {
-        dataText += `\nPeriod: ${startDate} to ${endDate}`
-      }
-      if (categoryNote) {
-        dataText += `\nNote: ${categoryNote}`
-      }
-      dataText += '\n'
-
-      if (result.breakdown.length > 0) {
-        dataText += `\nBreakdown by ${groupByLabel}:\n`
-        result.breakdown.forEach((b: any, i: number) => {
-          dataText += `${i + 1}. ${b.groupKey}: ${b.totalAmount.toFixed(2)} ${result.summary.currency} (${b.percentage}%) - ${b.recordCount} transaction(s)\n`
-        })
-      }
-
-      if (result.topCategories.length > 0) {
-        dataText += `\nTop Categories:\n`
-        result.topCategories.forEach((c: any, i: number) => {
-          dataText += `${i + 1}. ${c.categoryName}: ${c.totalAmount.toFixed(2)} ${result.summary.currency} (${c.percentage}%)\n`
-        })
-      }
-
-      if (result.summary.recordCount === 0) {
-        dataText = `No team spending data found for the selected period. Your team has ${result.summary.employeeCount} employee(s) but no transactions match the current filters.`
-      }
-
-      // Audit log
-      console.log(JSON.stringify({
-        event: 'cross_employee_query',
-        managerId: userContext.convexUserId,
-        targetEmployeeId: 'team_aggregate',
-        toolName: 'get_team_summary',
-        queryParams: { category: categoryId, startDate, endDate, groupBy: params.group_by },
-        resultCount: result.summary.recordCount,
-        timestamp: new Date().toISOString(),
-      }))
-
-      return {
-        success: true,
-        data: dataText,
-        metadata: {
-          structured: response,
-          resultsCount: result.summary.recordCount,
-        }
-      }
-
-    } catch (error) {
-      console.error('[TeamSummaryTool] Execution error:', error)
-      return {
-        success: false,
-        error: `Team summary lookup failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      }
+    // Resolve date range before delegating to MCP
+    let startDate = params.start_date
+    let endDate = params.end_date
+    if (params.date_range && !startDate && !endDate) {
+      const dateResult = resolveDateRange(params.date_range)
+      startDate = dateResult.startDate
+      endDate = dateResult.endDate
     }
+
+    // Map category if provided
+    let categoryId: string | undefined
+    if (params.category) {
+      const categoryMatch = mapCategoryTerm(params.category)
+      categoryId = categoryMatch ? categoryMatch.categoryId : params.category
+    }
+
+    return callMCPToolFromAgent('get_team_summary', {
+      start_date: startDate,
+      end_date: endDate,
+      category: categoryId,
+      vendor: params.vendor,
+      group_by: params.group_by,
+    }, userContext)
   }
 
   protected formatResultData(data: any[]): string {

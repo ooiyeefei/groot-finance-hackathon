@@ -9,6 +9,7 @@
  */
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
+import { callMCPToolFromAgent } from './mcp-tool-wrapper'
 import { invokeDocumentProcessor } from '@/lib/lambda-invoker'
 import { getAuthenticatedConvex } from '@/lib/convex'
 
@@ -93,102 +94,11 @@ export class ReceiptClaimTool extends BaseTool {
     parameters: ToolParameters,
     userContext: UserContext
   ): Promise<ToolResult> {
-    const { attachments, businessPurpose } = parameters as {
-      attachments: ReceiptAttachment[]
-      businessPurpose?: string
-    }
-
-    const results: ReceiptClaimResult[] = []
-    const errors: string[] = []
-
-    // Per-conversation batch grouping: all receipts from the same chat
-    // conversation go into ONE submission (whether sent in 1 message or 10).
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-explicit-any
-    const { api } = require('@/convex/_generated/api') as any
-    const { client } = await getAuthenticatedConvex()
-    if (!client) throw new Error('Could not connect to database')
-
-    const conversationId = userContext.conversationId
-
-    // Try to find an existing draft submission for this conversation
-    let sharedSubmissionId: string | null = null
-    if (conversationId) {
-      sharedSubmissionId = await client.query(api.functions.expenseSubmissions.findByConversation, {
-        conversationId,
-      } as any)
-    }
-
-    // If no existing submission, create one
-    if (!sharedSubmissionId) {
-      const batchTitle = attachments.length > 1
-        ? `Chat: ${attachments.length} receipts`
-        : `Chat: ${attachments[0].filename}`
-      sharedSubmissionId = await client.mutation(api.functions.expenseSubmissions.create, {
-        businessId: userContext.businessId,
-        title: batchTitle,
-        conversationId,
-      } as any)
-    }
-
-    for (const attachment of attachments) {
-      try {
-        const result = await this.processOneReceipt(attachment, userContext, businessPurpose, sharedSubmissionId!)
-        results.push(result)
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Unknown error processing receipt'
-        errors.push(`${attachment.filename}: ${msg}`)
-      }
-    }
-
-    // Update submission title to reflect content
-    try {
-      // Count total claims in the submission (including previously added ones)
-      const allClaims = await client.query(api.functions.expenseClaims.listBySubmission, {
-        submissionId: sharedSubmissionId,
-      } as any)
-      const claimCount = Array.isArray(allClaims) ? allClaims.length : results.length
-
-      let newTitle: string
-      if (claimCount === 1 && results.length === 1 && results[0].merchant && results[0].merchant !== 'Processing...') {
-        newTitle = `Chat: ${results[0].merchant}`
-      } else {
-        newTitle = `Chat: ${claimCount} receipts`
-      }
-      await client.mutation(api.functions.expenseSubmissions.update, {
-        id: sharedSubmissionId,
-        title: newTitle,
-      } as any)
-    } catch { /* non-fatal */ }
-
-    if (results.length === 0 && errors.length > 0) {
-      return {
-        success: false,
-        error: `Failed to process receipts: ${errors.join('; ')}`,
-      }
-    }
-
-    // Return text for the LLM + structured action card data as JSON block
-    // The action card JSON is embedded in the text since metadata is lost
-    // in the LangGraph tool node → ToolMessage pipeline.
-    // The copilotkit-adapter's autoGenerateActionsFromToolResults() parses it.
-    if (results.length === 1) {
-      const r = results[0]
-      // Emit as JSON so autoGenerateActionsFromToolResults can parse it
-      return {
-        success: true,
-        data: JSON.stringify(r),
-      }
-    }
-
-    // Multiple receipts: return batch summary as JSON
-    return {
-      success: true,
-      data: JSON.stringify({
-        batch: true,
-        claims: results,
-        errors,
-      }),
-    }
+    // 032-mcp-first: Delegate to MCP server (single source of truth)
+    return callMCPToolFromAgent('create_expense_from_receipt', {
+      attachments: parameters.attachments,
+      businessPurpose: parameters.businessPurpose,
+    }, userContext)
   }
 
   private async processOneReceipt(

@@ -278,14 +278,66 @@ export function authenticateInternalService(
 }
 
 /**
- * Check if user has permission for a specific tool
+ * Tools requiring manager+ role (mirrors tool-factory MANAGER_TOOLS)
+ * 032-mcp-first: RBAC enforcement at MCP level for internal service calls
+ */
+const MANAGER_ROLE_TOOLS = new Set([
+  'get_employee_expenses',
+  'get_team_summary',
+  'get_late_approvals',
+  'compare_team_spending',
+  'analyze_cash_flow',
+  'forecast_cash_flow',
+  'analyze_team_spending',
+  'generate_report_pdf',
+  'check_budget_status',
+]);
+
+/**
+ * Tools requiring finance_admin+ role (mirrors tool-factory FINANCE_TOOLS)
+ */
+const FINANCE_ROLE_TOOLS = new Set([
+  'get_invoices',
+  'get_sales_invoices',
+  'get_transactions',
+  'get_vendors',
+  'get_ar_summary',
+  'get_ap_aging',
+  'get_business_transactions',
+  'detect_anomalies',
+  'analyze_vendor_risk',
+  'run_bank_reconciliation',
+  'accept_recon_match',
+  'show_recon_status',
+  'set_budget',
+  'analyze_trends',
+]);
+
+/**
+ * Check if user has permission for a specific tool.
+ *
+ * For API key auth: checks permissions array from the API key.
+ * For internal service auth (wildcard permissions): checks _userRole against
+ * role-based tool access rules (defense-in-depth with tool-factory filtering).
  */
 export function hasPermission(context: AuthContext, toolName: string): boolean {
-  // Wildcard permission grants access to all tools
-  if (context.permissions.includes('*')) {
-    return true;
+  // API key auth: check explicit permissions
+  if (!context.permissions.includes('*')) {
+    return context.permissions.includes(toolName);
   }
-  return context.permissions.includes(toolName);
+
+  // Internal service auth (wildcard): check role-based access if userRole is provided
+  if (context.userRole) {
+    const role = context.userRole.toLowerCase();
+    if (FINANCE_ROLE_TOOLS.has(toolName) && !['finance_admin', 'owner'].includes(role)) {
+      return false;
+    }
+    if (MANAGER_ROLE_TOOLS.has(toolName) && !['manager', 'finance_admin', 'owner'].includes(role)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /**

@@ -14,6 +14,7 @@
  */
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
+import { callMCPToolFromAgent } from './mcp-tool-wrapper'
 import { resolveDateRange } from '@/lib/ai/utils/date-range-resolver'
 import { convertForDisplay } from './currency-display-helper'
 import { formatCurrency } from '@/lib/utils/format-number'
@@ -111,30 +112,16 @@ Supports optional currency conversion: "Show revenue in USD", "Compare Q1 vs Q2 
   }
 
   protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
-    if (!this.convex || !userContext.businessId) {
-      return { success: false, error: 'Missing authenticated Convex client or business context' }
-    }
-
-    const mode = parameters.mode as string
-    const metric = parameters.metric as string
-    const displayCurrency = parameters.display_currency as string | undefined
-    const homeCurrency = userContext.homeCurrency || 'MYR'
-
-    try {
-      if (mode === 'compare') {
-        return await this.executeCompare(parameters, userContext, homeCurrency, displayCurrency)
-      } else if (mode === 'trend') {
-        return await this.executeTrend(parameters, userContext, homeCurrency, displayCurrency)
-      } else {
-        return await this.executeGrowth(parameters, userContext, homeCurrency, displayCurrency)
-      }
-    } catch (error) {
-      console.error(`[AnalyzeTrendsTool] Error in ${mode} mode:`, error)
-      return {
-        success: false,
-        error: `Trend analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      }
-    }
+    // 032-mcp-first: Delegate to MCP server (single source of truth)
+    return callMCPToolFromAgent('analyze_trends', {
+      mode: parameters.mode,
+      metric: parameters.metric,
+      period_a: parameters.period_a,
+      period_b: parameters.period_b,
+      date_range: parameters.date_range,
+      granularity: parameters.granularity,
+      display_currency: parameters.display_currency,
+    }, userContext)
   }
 
   private async executeCompare(

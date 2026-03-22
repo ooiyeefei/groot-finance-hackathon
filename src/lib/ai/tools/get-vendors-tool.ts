@@ -7,6 +7,7 @@
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
 import { Id } from '@/convex/_generated/dataModel'
+import { callMCPToolFromAgent } from './mcp-tool-wrapper'
 
 export class GetVendorsTool extends BaseTool {
   getToolName(_modelType: ModelType = 'openai'): string {
@@ -43,77 +44,9 @@ export class GetVendorsTool extends BaseTool {
   }
 
   protected async executeInternal(_parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
-    try {
-      console.log(`[GetVendorsTool] Getting unique vendors for user ${userContext.userId} via Convex`)
-
-      // CRITICAL: Ensure authenticated Convex client is available
-      if (!this.convex) {
-        throw new Error('Convex client not initialized - authentication may have failed')
-      }
-
-      if (!userContext.businessId) {
-        return {
-          success: false,
-          error: 'Missing business context'
-        }
-      }
-
-      // ✅ MIGRATED: Use journal entries instead of accounting entries
-      // Default to "invoice" sourceDocumentType — vendors are AP suppliers (incoming invoices),
-      // NOT expense claim merchants (99 Speed Mart, Grab, etc.)
-      const result = await this.convex.query(
-        this.convexApi.functions.journalEntries.getUniqueVendors,
-        { businessId: userContext.businessId as Id<"businesses">, sourceDocumentType: 'invoice' }
-      )
-
-      if (!result || result.totalCount === 0) {
-        return {
-          success: true,
-          data: "I couldn't find any vendors in your transaction history. This might be because you haven't added any transactions yet, or your transactions don't have vendor information.",
-          metadata: {
-            vendorCount: 0,
-            userId: userContext.userId
-          }
-        }
-      }
-
-      const uniqueVendorNames = result.vendors
-
-      if (uniqueVendorNames.length === 0) {
-        return {
-          success: true,
-          data: "I found transactions but none of them have vendor information specified.",
-          metadata: {
-            vendorCount: 0,
-            userId: userContext.userId
-          }
-        }
-      }
-
-      // Format the response
-      const vendorList = uniqueVendorNames.map((vendor: string, index: number) => `${index + 1}. ${vendor}`).join('\n')
-
-      const response = `Here are all the unique vendors from your transaction history:\n\n${vendorList}\n\nTotal: ${uniqueVendorNames.length} unique vendors found.`
-
-      console.log(`[GetVendorsTool] ✅ Found ${uniqueVendorNames.length} unique vendors via Convex`)
-
-      return {
-        success: true,
-        data: response,
-        metadata: {
-          vendorCount: uniqueVendorNames.length,
-          vendors: uniqueVendorNames,
-          userId: userContext.userId
-        }
-      }
-
-    } catch (error) {
-      console.error('[GetVendorsTool] Execution error:', error)
-      return {
-        success: false,
-        error: `Vendor lookup failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      }
-    }
+    return callMCPToolFromAgent('get_vendors', {
+      source_document_type: 'invoice',
+    }, userContext)
   }
 
   protected formatResultData(data: any[]): string {

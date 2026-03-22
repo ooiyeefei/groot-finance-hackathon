@@ -16,20 +16,7 @@
  */
 
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from '../base-tool'
-import { mem0Service } from '../../agent/memory/mem0-service'
-import { ConvexHttpClient } from 'convex/browser'
-
-// Lazy-initialize Convex client to avoid build-time errors
-let convexClient: ConvexHttpClient | null = null
-function getConvexClient(): ConvexHttpClient {
-  if (!convexClient) {
-    if (!process.env.NEXT_PUBLIC_CONVEX_URL) {
-      throw new Error('NEXT_PUBLIC_CONVEX_URL environment variable is not set')
-    }
-    convexClient = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL)
-  }
-  return convexClient
-}
+import { callMCPToolFromAgent } from '../mcp-tool-wrapper'
 
 interface MemoryStoreParameters {
   /** The fact or preference to store */
@@ -38,22 +25,6 @@ interface MemoryStoreParameters {
   category: 'preference' | 'fact' | 'context' | 'instruction'
   /** Optional metadata tags for retrieval */
   tags?: string[]
-}
-
-/**
- * Conflict response from Convex storeMemory mutation (T025)
- */
-interface ConflictResponse {
-  topic: string
-  existingMemory: {
-    id: string
-    content: string
-    createdAt: number
-  }
-  options: Array<{
-    action: 'replace' | 'keep_both' | 'cancel'
-    label: string
-  }>
 }
 
 export class MemoryStoreTool extends BaseTool {
@@ -144,106 +115,12 @@ export class MemoryStoreTool extends BaseTool {
 
   protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
     const params = parameters as MemoryStoreParameters
-    const content = params.content.trim()
-    const category = params.category
-    const tags = params.tags || []
 
-    try {
-      console.log(`[MemoryStoreTool] Storing memory for user ${userContext.userId}: ${category}`)
-
-      // Check if memory service is available
-      const isAvailable = await mem0Service.isAvailable()
-      if (!isAvailable) {
-        console.warn('[MemoryStoreTool] Memory service not available')
-        return {
-          success: false,
-          error: 'Memory service is currently unavailable. The information was noted but could not be persisted.'
-        }
-      }
-
-      // Validate business context
-      if (!userContext.businessId) {
-        console.error('[MemoryStoreTool] Missing business context')
-        return {
-          success: false,
-          error: 'Missing business context for memory storage. Please ensure you are logged into a business account.'
-        }
-      }
-
-      // Step 1: Generate embeddings for contradiction detection
-      console.log('[MemoryStoreTool] Generating embeddings...')
-      const embeddings = await mem0Service.generateEmbedding(content)
-
-      if (!embeddings) {
-        console.error('[MemoryStoreTool] Failed to generate embeddings')
-        return {
-          success: false,
-          error: 'Failed to generate embeddings for memory storage. Please try again.'
-        }
-      }
-
-      // Step 2: Call Convex storeMemory mutation with contradiction detection
-      console.log('[MemoryStoreTool] Calling Convex storeMemory mutation...')
-
-      const convex = getConvexClient()
-      const result = await convex.mutation(
-        'functions/memoryTools:storeMemory' as any,
-        {
-          content,
-          businessId: userContext.businessId,
-          userId: userContext.userId,
-          memoryType: category,
-          source: 'explicit_store',
-          sourceConversationId: userContext.conversationId,
-          embeddings: embeddings as number[],
-          topicTags: tags,
-        }
-      )
-
-      // Step 3: Check for conflicts (T025 - Contradiction Detection)
-      if (result.conflict) {
-        const conflict = result.conflict as ConflictResponse
-        console.log(`[MemoryStoreTool] Contradiction detected: ${conflict.topic}`)
-
-        // Return conflict data to frontend for user resolution
-        return {
-          success: false,
-          error: 'CONTRADICTION_DETECTED', // Special error code for frontend to recognize
-          metadata: {
-            conflict: {
-              topic: conflict.topic,
-              existingMemory: conflict.existingMemory,
-              newMemory: content,
-              options: conflict.options,
-            },
-            category,
-            tags,
-          }
-        }
-      }
-
-      // Step 4: Success - memory stored without conflict
-      console.log(`[MemoryStoreTool] Memory stored successfully: ${result.memoryId}`)
-
-      return {
-        success: true,
-        data: `I've remembered this ${category}: "${content}"${tags.length > 0 ? ` (tagged: ${tags.join(', ')})` : ''}. I'll use this information to provide better assistance in future conversations.`,
-        metadata: {
-          memoryId: result.memoryId,
-          category,
-          tags,
-          userId: userContext.userId,
-          hasContradiction: false,
-        }
-      }
-
-    } catch (error) {
-      console.error('[MemoryStoreTool] Execution error:', error)
-      return {
-        success: false,
-        error: `Memory storage failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      }
-    }
+    return callMCPToolFromAgent('memory_store', {
+      content: params.content,
+      category: params.category,
+      tags: params.tags,
+    }, userContext)
   }
 
   /**

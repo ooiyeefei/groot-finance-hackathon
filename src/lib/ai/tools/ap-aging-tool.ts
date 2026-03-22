@@ -9,6 +9,7 @@
 import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, ModelType } from './base-tool'
 import { convertForDisplay } from './currency-display-helper'
 import { resolveDateRange } from '@/lib/ai/utils/date-range-resolver'
+import { callMCPToolFromAgent } from './mcp-tool-wrapper'
 
 export class APAgingTool extends BaseTool {
   getToolName(_modelType?: ModelType): string {
@@ -63,10 +64,7 @@ Use for: "how much do we owe suppliers", "AP aging", "vendor balances", "what's 
   }
 
   protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
-    if (!this.convex || !userContext.businessId) {
-      return { success: false, error: 'Missing authenticated Convex client or business context' }
-    }
-
+    // Resolve date range before delegating to MCP
     let startDate = parameters.start_date as string | undefined
     let endDate = parameters.end_date as string | undefined
     if (parameters.date_range && !startDate && !endDate) {
@@ -75,63 +73,10 @@ Use for: "how much do we owe suppliers", "AP aging", "vendor balances", "what's 
       endDate = dateResult.endDate
     }
 
-    try {
-      const result = await this.convex.query(
-        this.convexApi.functions.financialIntelligence.getAPAging,
-        { businessId: userContext.businessId, startDate, endDate }
-      )
-
-      if ('error' in result && result.error) {
-        return { success: false, error: result.error as string }
-      }
-
-      // Currency conversion if requested
-      const displayCurrency = parameters.display_currency as string | undefined
-      const homeCurrency = result.currency || userContext.homeCurrency || 'MYR'
-      const conversion = displayCurrency ? await convertForDisplay(1, homeCurrency, displayCurrency) : null
-      const rate = conversion?.exchangeRate || 1
-      const convertSuffix = (amount: number) =>
-        conversion ? ` (~ ${displayCurrency} ${(amount * rate).toFixed(2)})` : ''
-
-      let dataText = `**Accounts Payable Aging**\n\n`
-      dataText += `Total Outstanding: ${result.totalOutstanding.toFixed(2)} ${result.currency}${convertSuffix(result.totalOutstanding)}\n`
-      dataText += `Total Overdue: ${result.totalOverdue.toFixed(2)} ${result.currency}${convertSuffix(result.totalOverdue)}\n`
-
-      if (result.agingBuckets.some((b: any) => b.amount > 0)) {
-        dataText += `\nAging Breakdown:\n`
-        for (const b of result.agingBuckets) {
-          if (b.amount > 0) {
-            dataText += `- ${b.bucket} days: ${b.amount.toFixed(2)} ${result.currency} (${b.count} invoice(s))\n`
-          }
-        }
-      }
-
-      if (result.vendorBreakdown.length > 0) {
-        dataText += `\nTop Vendors (outstanding):\n`
-        for (const v of result.vendorBreakdown.slice(0, 5)) {
-          dataText += `- ${v.vendorName}: ${v.outstanding.toFixed(2)} ${result.currency}\n`
-        }
-      }
-
-      if (result.upcomingDues.length > 0) {
-        dataText += `\nUpcoming Dues (next 14 days):\n`
-        for (const d of result.upcomingDues.slice(0, 5)) {
-          dataText += `- ${d.vendorName} (${d.invoiceNumber}): ${d.amount.toFixed(2)} ${result.currency} — due ${d.dueDate}\n`
-        }
-      }
-
-      return {
-        success: true,
-        data: dataText,
-        metadata: {
-          structured: result,
-          resultsCount: result.vendorBreakdown.length,
-        }
-      }
-    } catch (error) {
-      console.error('[APAgingTool] Error:', error)
-      return { success: false, error: `AP aging failed: ${error instanceof Error ? error.message : 'Unknown error'}` }
-    }
+    return callMCPToolFromAgent('get_ap_aging', {
+      start_date: startDate,
+      end_date: endDate,
+    }, userContext)
   }
 
   protected formatResultData(data: any[]): string {

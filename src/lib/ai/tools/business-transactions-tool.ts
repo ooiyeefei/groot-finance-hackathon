@@ -11,6 +11,7 @@ import { BaseTool, UserContext, ToolParameters, ToolResult, OpenAIToolSchema, Mo
 import { convertForDisplay } from './currency-display-helper'
 import { resolveDateRange } from '@/lib/ai/utils/date-range-resolver'
 import { mapCategoryTerm } from '@/lib/ai/utils/category-mapper'
+import { callMCPToolFromAgent } from './mcp-tool-wrapper'
 
 export class BusinessTransactionsTool extends BaseTool {
   getToolName(_modelType?: ModelType): string {
@@ -83,10 +84,7 @@ This differs from get_transactions which only returns the current user's own dat
   }
 
   protected async executeInternal(parameters: ToolParameters, userContext: UserContext): Promise<ToolResult> {
-    if (!this.convex || !userContext.businessId) {
-      return { success: false, error: 'Missing authenticated Convex client or business context' }
-    }
-
+    // Resolve date range before delegating to MCP
     let startDate = parameters.start_date as string | undefined
     let endDate = parameters.end_date as string | undefined
     if (parameters.date_range && !startDate && !endDate) {
@@ -95,79 +93,21 @@ This differs from get_transactions which only returns the current user's own dat
       endDate = dateResult.endDate
     }
 
+    // Map category term to category ID if needed
     let categoryId: string | undefined
     if (parameters.category) {
       const categoryMatch = mapCategoryTerm(parameters.category as string)
       categoryId = categoryMatch ? categoryMatch.categoryId : (parameters.category as string)
     }
 
-    try {
-      const result = await this.convex.query(
-        this.convexApi.functions.financialIntelligence.getBusinessTransactions,
-        {
-          businessId: userContext.businessId,
-          query: parameters.query as string | undefined,
-          category: categoryId,
-          transactionType: parameters.transaction_type as string | undefined,
-          startDate,
-          endDate,
-          limit: parameters.limit as number | undefined,
-        }
-      )
-
-      if ('error' in result && result.error) {
-        return { success: false, error: result.error as string }
-      }
-
-      const transactions = result.transactions as Array<{
-        transactionDate: string; vendorName: string; amount: number; currency: string;
-        category: string; description: string; transactionType: string; employeeName?: string;
-      }>
-
-      if (transactions.length === 0) {
-        return {
-          success: true,
-          data: `No business transactions found for the selected criteria.`,
-          metadata: { resultsCount: 0 }
-        }
-      }
-
-      // Currency conversion if requested
-      const displayCurrency = parameters.display_currency as string | undefined
-      const homeCurrency = result.currency || userContext.homeCurrency || 'MYR'
-      const conversion = displayCurrency ? await convertForDisplay(1, homeCurrency, displayCurrency) : null
-      const rate = conversion?.exchangeRate || 1
-      const convertSuffix = (amount: number) =>
-        conversion ? ` (~ ${displayCurrency} ${(amount * rate).toFixed(2)})` : ''
-
-      let dataText = `**Business-Wide Transactions** (${result.totalCount} total, showing ${transactions.length})\n\n`
-      dataText += `Total: ${result.totalAmount.toFixed(2)} ${result.currency}${convertSuffix(result.totalAmount)}\n\n`
-
-      dataText += `Transactions:\n`
-      for (let i = 0; i < transactions.length; i++) {
-        const t = transactions[i]
-        const employeeTag = t.employeeName ? ` [${t.employeeName}]` : ''
-        dataText += `${i + 1}. ${t.transactionDate} | ${t.vendorName}${employeeTag}\n`
-        dataText += `   ${t.amount.toFixed(2)} ${t.currency} — ${t.category || 'Uncategorized'}\n`
-        if (t.description) dataText += `   ${t.description}\n`
-      }
-
-      if (result.totalCount > transactions.length) {
-        dataText += `\n(Showing ${transactions.length} of ${result.totalCount} total transactions)`
-      }
-
-      return {
-        success: true,
-        data: dataText,
-        metadata: {
-          structured: result,
-          resultsCount: result.totalCount,
-        }
-      }
-    } catch (error) {
-      console.error('[BusinessTransactionsTool] Error:', error)
-      return { success: false, error: `Business transaction query failed: ${error instanceof Error ? error.message : 'Unknown error'}` }
-    }
+    return callMCPToolFromAgent('get_business_transactions', {
+      query: parameters.query,
+      category: categoryId,
+      transaction_type: parameters.transaction_type,
+      start_date: startDate,
+      end_date: endDate,
+      limit: parameters.limit,
+    }, userContext)
   }
 
   protected formatResultData(data: any[]): string {
