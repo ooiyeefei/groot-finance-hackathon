@@ -6,6 +6,9 @@ import { X, Languages, Eye, FileText, DollarSign, List, Copy, Loader2, ImageIcon
 import { Button } from '@/components/ui/button'
 import DocumentPreviewWithAnnotations from './document-preview-with-annotations'
 import LhdnInvoiceSection from './lhdn-invoice-section'
+import { APAdjustmentsSection } from './ap-adjustments-section'
+import { APCreditNoteForm } from './ap-credit-note-form'
+import { APDebitNoteForm } from './ap-debit-note-form'
 import { formatNumber } from '@/lib/utils/format-number'
 import { useInvoiceRealtime } from '../hooks/use-invoices-realtime'
 import { useJournalEntry } from '@/domains/accounting/hooks/use-journal-entries'
@@ -247,6 +250,9 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
   const [hoveredEntity, setHoveredEntity] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [showMobilePreview, setShowMobilePreview] = useState(false)
+  // 032-credit-debit-note: AP credit/debit note form toggles
+  const [showAPCreditNoteForm, setShowAPCreditNoteForm] = useState(false)
+  const [showAPDebitNoteForm, setShowAPDebitNoteForm] = useState(false)
 
   // Refs for scroll-based page tracking
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -1595,6 +1601,65 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
                           // Will be wired to einvoice-reject-dialog in future
                         }}
                       />
+                    </div>
+                  )
+                })()}
+
+                {/* 032-credit-debit-note: AP Adjustments (Credit/Debit Notes) */}
+                {(() => {
+                  const doc = document as any
+                  const isCompleted = ['completed', 'paid', 'partially_paid'].includes(document.status)
+                  const isAdjustment = doc.einvoiceType === 'credit_note' || doc.einvoiceType === 'debit_note'
+                  if (!isCompleted || isAdjustment) return null
+
+                  const extracted = document.extracted_data as any
+                  const totalAmount = extracted?.totalAmount ?? extracted?.total ?? extracted?.total_amount ?? 0
+                  const currency = extracted?.currency ?? 'MYR'
+
+                  return (
+                    <div className="mb-6 space-y-3">
+                      <APAdjustmentsSection
+                        invoiceId={document.id}
+                        currency={currency}
+                      />
+
+                      {showAPCreditNoteForm ? (
+                        <APCreditNoteForm
+                          invoiceId={document.id}
+                          businessId={doc.businessId ?? ''}
+                          currency={currency}
+                          maxAmount={totalAmount}
+                          onClose={() => setShowAPCreditNoteForm(false)}
+                          onSuccess={() => setShowAPCreditNoteForm(false)}
+                        />
+                      ) : showAPDebitNoteForm ? (
+                        <APDebitNoteForm
+                          invoiceId={document.id}
+                          businessId={doc.businessId ?? ''}
+                          currency={currency}
+                          onClose={() => setShowAPDebitNoteForm(false)}
+                          onSuccess={() => setShowAPDebitNoteForm(false)}
+                        />
+                      ) : (
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowAPCreditNoteForm(true)}
+                            className="flex-1"
+                          >
+                            Create Credit Note
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowAPDebitNoteForm(true)}
+                            className="flex-1"
+                          >
+                            Create Debit Note
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )
                 })()}

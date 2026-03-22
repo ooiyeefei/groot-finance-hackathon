@@ -2906,3 +2906,62 @@ export const getNetPayableAmount = query({
     };
   },
 });
+
+/**
+ * 032-credit-debit-note: Void (soft-delete) an AP credit/debit note.
+ * Creates a reversal journal entry and marks the note as deleted.
+ */
+export const voidAPAdjustmentNote = mutation({
+  args: {
+    invoiceId: v.id("invoices"),
+    businessId: v.id("businesses"),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireFinanceAdminForInvoices(ctx, args.businessId);
+
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice || invoice.businessId !== args.businessId || invoice.deletedAt) {
+      throw new Error("Invoice not found");
+    }
+
+    if (!invoice.einvoiceType || invoice.einvoiceType === "invoice") {
+      throw new Error("Can only void credit/debit notes, not regular invoices");
+    }
+
+    // Soft delete the note
+    await ctx.db.patch(args.invoiceId, {
+      deletedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    // Create reversal journal entry
+    const extracted = invoice.extractedData as any;
+    const totalAmount = extracted?.totalAmount ?? 0;
+    const isCredit = invoice.einvoiceType === "credit_note" || invoice.einvoiceType === "refund_note";
+
+    if (totalAmount > 0) {
+      // Reverse the original journal entry
+      // Credit note original: Dr. AP 2100, Cr. Expense → reversal: Dr. Expense, Cr. AP 2100
+      // Debit note original: Dr. Expense, Cr. AP 2100 → reversal: Dr. AP 2100, Cr. Expense
+      await ctx.runMutation(internal.functions.journalEntries.createInternal, {
+        businessId: args.businessId,
+        transactionDate: new Date().toISOString().split("T")[0],
+        description: `VOID: AP ${isCredit ? "Credit" : "Debit"} Note ${extracted?.invoiceNumber ?? ""}${args.reason ? ` — ${args.reason}` : ""}`,
+        sourceType: "vendor_invoice" as const,
+        sourceId: invoice.originalInvoiceId ? (invoice.originalInvoiceId as string) : (args.invoiceId as string),
+        lines: isCredit
+          ? [
+              { accountCode: "5100", debitAmount: totalAmount, creditAmount: 0, lineDescription: "Void AP credit note reversal" },
+              { accountCode: "2100", debitAmount: 0, creditAmount: totalAmount, lineDescription: "Void AP credit note reversal - restore payable" },
+            ]
+          : [
+              { accountCode: "2100", debitAmount: totalAmount, creditAmount: 0, lineDescription: "Void AP debit note reversal - reduce payable" },
+              { accountCode: "5100", debitAmount: 0, creditAmount: totalAmount, lineDescription: "Void AP debit note reversal" },
+            ],
+      });
+    }
+
+    return args.invoiceId;
+  },
+});

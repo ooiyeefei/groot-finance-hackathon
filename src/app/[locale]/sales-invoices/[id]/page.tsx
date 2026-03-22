@@ -28,6 +28,7 @@ import { generateLhdnQrDataUrl } from '@/domains/sales-invoices/components/lhdn-
 import { PeppolTransmissionPanel } from '@/domains/sales-invoices/components/peppol-transmission-panel'
 import { CreditNoteList } from '@/domains/sales-invoices/components/credit-note-list'
 import { CreditNoteForm } from '@/domains/sales-invoices/components/credit-note-form'
+import { DebitNoteForm } from '@/domains/sales-invoices/components/debit-note-form'
 import { useNetOutstandingAmount } from '@/domains/sales-invoices/hooks/use-sales-invoices'
 import { useToast } from '@/components/ui/toast'
 
@@ -49,6 +50,7 @@ export default function SalesInvoiceDetailPage() {
   const lhdnPdfUrl = useLhdnPdfUrl(invoiceId)
 
   const [showCreditNoteForm, setShowCreditNoteForm] = useState(false)
+  const [showDebitNoteForm, setShowDebitNoteForm] = useState(false)
   const netOutstanding = useNetOutstandingAmount(invoiceId)
 
   const [isSending, setIsSending] = useState(false)
@@ -603,8 +605,8 @@ export default function SalesInvoiceDetailPage() {
           {/* Peppol InvoiceNow — Coming Soon */}
           <PeppolTransmissionPanel />
 
-          {/* Credit Notes section */}
-          {!isDraft && !isVoid && invoice.einvoiceType !== 'credit_note' && (
+          {/* Adjustments section (Credit/Debit Notes) — 032-credit-debit-note */}
+          {!isDraft && !isVoid && !invoice.einvoiceType && (
             <>
               <CreditNoteList
                 invoiceId={invoice._id}
@@ -623,15 +625,35 @@ export default function SalesInvoiceDetailPage() {
                     addToast({ type: 'success', title: 'Credit note created', description: 'Credit note saved as draft' })
                   }}
                 />
+              ) : showDebitNoteForm ? (
+                <DebitNoteForm
+                  invoiceId={invoice._id}
+                  businessId={invoice.businessId as string}
+                  currency={invoice.currency}
+                  onClose={() => setShowDebitNoteForm(false)}
+                  onSuccess={() => {
+                    addToast({ type: 'success', title: 'Debit note created', description: 'Debit note saved as draft' })
+                  }}
+                />
               ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowCreditNoteForm(true)}
-                  className="w-full"
-                >
-                  Create Credit Note
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCreditNoteForm(true)}
+                    className="flex-1"
+                  >
+                    Create Credit Note
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowDebitNoteForm(true)}
+                    className="flex-1"
+                  >
+                    Create Debit Note
+                  </Button>
+                </div>
               )}
             </>
           )}

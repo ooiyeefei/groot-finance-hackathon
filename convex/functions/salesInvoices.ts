@@ -2206,7 +2206,7 @@ export const getNetOutstandingAmount = query({
       )
       .collect();
 
-    const active = adjustments.filter((a) => !a.deletedAt);
+    const active = adjustments.filter((a) => !a.deletedAt && a.status !== "void");
 
     const totalCredited = active
       .filter((a) => a.einvoiceType === "credit_note" || a.einvoiceType === "refund_note")
@@ -2377,7 +2377,12 @@ export const initiateLhdnSubmission = mutation({
       throw new Error("Invoice not found");
     }
 
-    if (invoice.status !== "sent" && invoice.status !== "paid" && invoice.status !== "overdue" && invoice.status !== "partially_paid") {
+    // 032-credit-debit-note: Allow draft credit/debit notes to submit to LHDN
+    const isAdjustmentNote = invoice.einvoiceType === "credit_note" || invoice.einvoiceType === "debit_note" || invoice.einvoiceType === "refund_note";
+    const allowedStatuses = isAdjustmentNote
+      ? ["draft", "sent", "paid", "overdue", "partially_paid"]
+      : ["sent", "paid", "overdue", "partially_paid"];
+    if (!allowedStatuses.includes(invoice.status)) {
       throw new Error("Invoice must be sent before submitting to LHDN");
     }
 

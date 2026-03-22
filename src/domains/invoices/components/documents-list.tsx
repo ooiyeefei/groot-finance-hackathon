@@ -496,7 +496,19 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
                     status={document.status}
                     errorMessage={document.error_message}
                   />
-                  
+
+                  {/* 032-credit-debit-note: CN/DN badge */}
+                  {(document as any).einvoiceType === 'credit_note' && (
+                    <span className="inline-flex items-center rounded-full bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30 px-2 py-0.5 text-[10px] font-medium">
+                      CN
+                    </span>
+                  )}
+                  {(document as any).einvoiceType === 'debit_note' && (
+                    <span className="inline-flex items-center rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 px-2 py-0.5 text-[10px] font-medium">
+                      DN
+                    </span>
+                  )}
+
                   {/* AP Accounting Status Tag */}
                   {document.accountingStatus === 'posted' ? (
                     <button
