@@ -7,7 +7,7 @@
  */
 
 import type { LhdnUblDocument, LhdnUblInvoiceBody } from "./types"
-import { UBL_NAMESPACES, LHDN_DOCUMENT_TYPES, GENERAL_INDIVIDUAL_TIN } from "./constants"
+import { UBL_NAMESPACES, LHDN_DOCUMENT_TYPES, GENERAL_INDIVIDUAL_TIN, mapEinvoiceTypeToDocumentType } from "./constants"
 import { formatLhdnDecimal, formatLhdnTaxRate, formatLhdnQuantity } from "./decimal"
 
 // ============================================
@@ -35,6 +35,9 @@ export interface SelfBillData {
   totalTax: number
   totalAmount: number
   notes?: string
+  // 032-credit-debit-note: Support self-billed credit/debit notes (Types 12, 13, 14)
+  einvoiceType?: string // "credit_note" | "debit_note" | "refund_note" — defaults to invoice
+  originalInvoiceLhdnUuid?: string // LHDN UUID of original self-billed invoice for BillingReference
 }
 
 export interface SelfBillBuyerData {
@@ -176,11 +179,16 @@ export function mapToSelfBilledInvoice(
     }],
   }))
 
+  // 032-credit-debit-note: Determine document type code based on einvoiceType
+  const documentTypeCode = data.einvoiceType
+    ? mapEinvoiceTypeToDocumentType(data.einvoiceType, true)
+    : LHDN_DOCUMENT_TYPES.SELF_BILLED_INVOICE
+
   const invoiceBody: LhdnUblInvoiceBody = {
     ID: data.referenceNumber,
     IssueDate: data.date,
     IssueTime: issueTime,
-    InvoiceTypeCode: LHDN_DOCUMENT_TYPES.SELF_BILLED_INVOICE,
+    InvoiceTypeCode: documentTypeCode,
     DocumentCurrencyCode: data.currency,
     AccountingSupplierParty: supplierParty,
     AccountingCustomerParty: customerParty,
@@ -199,6 +207,15 @@ export function mapToSelfBilledInvoice(
 
   if (data.notes) {
     invoiceBody.InvoicePeriod = [{ Description: data.notes }]
+  }
+
+  // 032-credit-debit-note: Add BillingReference for credit/debit notes
+  if (data.originalInvoiceLhdnUuid && data.einvoiceType && data.einvoiceType !== "invoice") {
+    invoiceBody.BillingReference = [{
+      AdditionalDocumentReference: [{
+        ID: data.originalInvoiceLhdnUuid,
+      }],
+    }]
   }
 
   return {

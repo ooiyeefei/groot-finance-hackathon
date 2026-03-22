@@ -205,13 +205,28 @@ export async function POST(
     })
 
     // 4. Map to UBL 2.1 JSON
+    // 032-credit-debit-note: Handle credit/debit/refund notes — get original invoice for BillingReference
     let originalInvoiceNumber: string | undefined
-    if (invoice.einvoiceType === "credit_note" && invoice.originalInvoiceId) {
+    let originalInvoiceLhdnUuid: string | undefined
+    const isAdjustmentNote = invoice.einvoiceType && invoice.einvoiceType !== "invoice"
+    if (isAdjustmentNote && invoice.originalInvoiceId) {
       const original = await convex.query(api.functions.salesInvoices.getById, {
         id: invoice.originalInvoiceId as string,
         businessId,
       })
       originalInvoiceNumber = original?.invoiceNumber
+      originalInvoiceLhdnUuid = original?.lhdnDocumentUuid ?? undefined
+
+      // FR-015: Block submission if original has no LHDN UUID
+      if (!originalInvoiceLhdnUuid) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Original invoice must be validated by LHDN before submitting a credit/debit note. Please submit the original invoice first.",
+          },
+          { status: 400 }
+        )
+      }
     }
 
     const biz = business as Record<string, unknown>
@@ -258,6 +273,7 @@ export async function POST(
         notes: invoice.notes,
         einvoiceType: invoice.einvoiceType,
         originalInvoiceNumber,
+        originalInvoiceLhdnUuid,
       },
       supplierData,
       buyerData,

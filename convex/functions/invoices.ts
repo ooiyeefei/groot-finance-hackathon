@@ -2564,3 +2564,345 @@ export const updateLhdnRejection = mutation({
     return args.invoiceId;
   },
 });
+
+// ============================================
+// 032-CREDIT-DEBIT-NOTE: AP Credit/Debit Notes
+// ============================================
+
+/**
+ * Create an AP credit note against a supplier invoice.
+ * Reduces the amount payable. Journal: Dr. AP 2100, Cr. Expense (original account).
+ */
+export const createAPCreditNote = mutation({
+  args: {
+    originalInvoiceId: v.id("invoices"),
+    businessId: v.id("businesses"),
+    lineItems: v.array(v.object({
+      lineOrder: v.number(),
+      description: v.string(),
+      quantity: v.number(),
+      unitPrice: v.number(),
+      totalAmount: v.number(),
+      taxRate: v.optional(v.number()),
+      taxAmount: v.optional(v.number()),
+      currency: v.string(),
+    })),
+    creditNoteReason: v.string(),
+    expenseAccountCode: v.optional(v.string()),
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireFinanceAdminForInvoices(ctx, args.businessId);
+
+    const originalInvoice = await ctx.db.get(args.originalInvoiceId);
+    if (!originalInvoice || originalInvoice.businessId !== args.businessId || originalInvoice.deletedAt) {
+      throw new Error("Original invoice not found");
+    }
+
+    const validStatuses = ["completed", "paid", "partially_paid"];
+    if (!validStatuses.includes(originalInvoice.status)) {
+      throw new Error("Can only create credit notes for completed, paid, or partially paid invoices");
+    }
+
+    if (args.lineItems.length === 0) {
+      throw new Error("At least one line item is required");
+    }
+
+    const subtotal = args.lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+    const totalTax = args.lineItems.reduce((sum, item) => sum + (item.taxAmount ?? 0), 0);
+    const totalAmount = args.lineItems.reduce((sum, item) => sum + item.totalAmount, 0);
+
+    if (totalAmount <= 0) {
+      throw new Error("Credit note total must be greater than 0");
+    }
+
+    // Check total credited doesn't exceed original invoice
+    const existingAdjustments = await ctx.db
+      .query("invoices")
+      .withIndex("by_originalInvoiceId", (q) =>
+        q.eq("originalInvoiceId", args.originalInvoiceId)
+      )
+      .collect();
+
+    const totalExistingCredit = existingAdjustments
+      .filter((a) => !a.deletedAt && (a.einvoiceType === "credit_note" || a.einvoiceType === "refund_note"))
+      .reduce((sum, a) => {
+        const extracted = a.extractedData as any;
+        const amt = extracted?.totalAmount ?? extracted?.total ?? 0;
+        return sum + amt;
+      }, 0);
+
+    // Get original invoice amount from extractedData
+    const origExtracted = originalInvoice.extractedData as any;
+    const origTotal = origExtracted?.totalAmount ?? origExtracted?.total ?? 0;
+
+    if (origTotal > 0 && totalExistingCredit + totalAmount > origTotal) {
+      throw new Error(
+        `Credit note total (${totalAmount}) plus existing credits (${totalExistingCredit}) exceeds original invoice total (${origTotal})`
+      );
+    }
+
+    // Generate credit note number
+    const existingCreditNotes = existingAdjustments.filter((a) => !a.deletedAt && a.einvoiceType === "credit_note");
+    const sequence = existingCreditNotes.length + 1;
+    const origInvoiceNumber = origExtracted?.invoiceNumber ?? `AP-${args.originalInvoiceId.slice(-6)}`;
+    const creditNoteNumber = `CN-${origInvoiceNumber}-${sequence}`;
+
+    // Create reversal journal entry: Dr. AP 2100, Cr. Expense
+    const expenseCode = args.expenseAccountCode ?? "5100";
+    await ctx.runMutation(internal.functions.journalEntries.createInternal, {
+      businessId: args.businessId,
+      transactionDate: new Date().toISOString().split("T")[0],
+      description: `AP Credit Note ${creditNoteNumber} - ${args.creditNoteReason}`,
+      sourceType: "vendor_invoice" as const,
+      sourceId: args.originalInvoiceId,
+      lines: [
+        {
+          accountCode: "2100",
+          debitAmount: totalAmount,
+          creditAmount: 0,
+          lineDescription: `AP credit note - reduce payable`,
+        },
+        {
+          accountCode: expenseCode,
+          debitAmount: 0,
+          creditAmount: totalAmount,
+          lineDescription: `AP credit note reversal - ${args.creditNoteReason}`,
+        },
+      ],
+    });
+
+    // Create credit note document in invoices table
+    const creditNoteId = await ctx.db.insert("invoices", {
+      businessId: args.businessId,
+      userId: user._id,
+      fileName: `${creditNoteNumber}.json`,
+      fileType: "application/json",
+      fileSize: 0,
+      storagePath: "",
+      documentDomain: "invoices",
+      status: "completed",
+      extractedData: {
+        invoiceNumber: creditNoteNumber,
+        totalAmount,
+        subtotal: Math.round(subtotal * 100) / 100,
+        totalTax: Math.round(totalTax * 100) / 100,
+        lineItems: args.lineItems,
+        currency: args.lineItems[0]?.currency ?? "MYR",
+      },
+      einvoiceType: "credit_note",
+      originalInvoiceId: args.originalInvoiceId,
+      creditNoteReason: args.creditNoteReason,
+      updatedAt: Date.now(),
+    });
+
+    return { creditNoteId };
+  },
+});
+
+/**
+ * Create an AP debit note against a supplier invoice.
+ * Increases the amount payable (additional charges). Journal: Dr. Expense, Cr. AP 2100.
+ */
+export const createAPDebitNote = mutation({
+  args: {
+    originalInvoiceId: v.id("invoices"),
+    businessId: v.id("businesses"),
+    lineItems: v.array(v.object({
+      lineOrder: v.number(),
+      description: v.string(),
+      quantity: v.number(),
+      unitPrice: v.number(),
+      totalAmount: v.number(),
+      taxRate: v.optional(v.number()),
+      taxAmount: v.optional(v.number()),
+      currency: v.string(),
+    })),
+    debitNoteReason: v.string(),
+    expenseAccountCode: v.optional(v.string()),
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireFinanceAdminForInvoices(ctx, args.businessId);
+
+    const originalInvoice = await ctx.db.get(args.originalInvoiceId);
+    if (!originalInvoice || originalInvoice.businessId !== args.businessId || originalInvoice.deletedAt) {
+      throw new Error("Original invoice not found");
+    }
+
+    const validStatuses = ["completed", "paid", "partially_paid"];
+    if (!validStatuses.includes(originalInvoice.status)) {
+      throw new Error("Can only create debit notes for completed, paid, or partially paid invoices");
+    }
+
+    if (args.lineItems.length === 0) {
+      throw new Error("At least one line item is required");
+    }
+
+    const subtotal = args.lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+    const totalTax = args.lineItems.reduce((sum, item) => sum + (item.taxAmount ?? 0), 0);
+    const totalAmount = args.lineItems.reduce((sum, item) => sum + item.totalAmount, 0);
+
+    if (totalAmount <= 0) {
+      throw new Error("Debit note total must be greater than 0");
+    }
+
+    // Generate debit note number
+    const existingAdjustments = await ctx.db
+      .query("invoices")
+      .withIndex("by_originalInvoiceId", (q) =>
+        q.eq("originalInvoiceId", args.originalInvoiceId)
+      )
+      .collect();
+
+    const existingDebitNotes = existingAdjustments.filter((a) => !a.deletedAt && a.einvoiceType === "debit_note");
+    const sequence = existingDebitNotes.length + 1;
+    const origExtracted = originalInvoice.extractedData as any;
+    const origInvoiceNumber = origExtracted?.invoiceNumber ?? `AP-${args.originalInvoiceId.slice(-6)}`;
+    const debitNoteNumber = `DN-${origInvoiceNumber}-${sequence}`;
+
+    // Create journal entry: Dr. Expense, Cr. AP 2100 (increases payable)
+    const expenseCode = args.expenseAccountCode ?? "5100";
+    await ctx.runMutation(internal.functions.journalEntries.createInternal, {
+      businessId: args.businessId,
+      transactionDate: new Date().toISOString().split("T")[0],
+      description: `AP Debit Note ${debitNoteNumber} - ${args.debitNoteReason}`,
+      sourceType: "vendor_invoice" as const,
+      sourceId: args.originalInvoiceId,
+      lines: [
+        {
+          accountCode: expenseCode,
+          debitAmount: totalAmount,
+          creditAmount: 0,
+          lineDescription: `AP debit note - additional expense`,
+        },
+        {
+          accountCode: "2100",
+          debitAmount: 0,
+          creditAmount: totalAmount,
+          lineDescription: `AP debit note - increase payable`,
+        },
+      ],
+    });
+
+    const debitNoteId = await ctx.db.insert("invoices", {
+      businessId: args.businessId,
+      userId: user._id,
+      fileName: `${debitNoteNumber}.json`,
+      fileType: "application/json",
+      fileSize: 0,
+      storagePath: "",
+      documentDomain: "invoices",
+      status: "completed",
+      extractedData: {
+        invoiceNumber: debitNoteNumber,
+        totalAmount,
+        subtotal: Math.round(subtotal * 100) / 100,
+        totalTax: Math.round(totalTax * 100) / 100,
+        lineItems: args.lineItems,
+        currency: args.lineItems[0]?.currency ?? "MYR",
+      },
+      einvoiceType: "debit_note",
+      originalInvoiceId: args.originalInvoiceId,
+      creditNoteReason: args.debitNoteReason,
+      updatedAt: Date.now(),
+    });
+
+    return { debitNoteId };
+  },
+});
+
+/**
+ * Get all adjustment documents (credit/debit notes) for an AP invoice.
+ */
+export const getAPAdjustmentsForInvoice = query({
+  args: {
+    invoiceId: v.id("invoices"),
+    businessId: v.id("businesses"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) return [];
+
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
+      )
+      .first();
+
+    if (!membership || membership.status !== "active") return [];
+
+    const adjustments = await ctx.db
+      .query("invoices")
+      .withIndex("by_originalInvoiceId", (q) =>
+        q.eq("originalInvoiceId", args.invoiceId)
+      )
+      .collect();
+
+    return adjustments
+      .filter((a) => !a.deletedAt)
+      .map((a) => {
+        const extracted = a.extractedData as any;
+        return {
+          _id: a._id,
+          invoiceNumber: extracted?.invoiceNumber ?? "",
+          einvoiceType: a.einvoiceType,
+          totalAmount: extracted?.totalAmount ?? 0,
+          status: a.status,
+          lhdnStatus: a.lhdnStatus,
+          creditNoteReason: a.creditNoteReason,
+          _creationTime: a._creationTime,
+        };
+      });
+  },
+});
+
+/**
+ * Get net payable amount for an AP invoice (original - credits + debits).
+ */
+export const getNetPayableAmount = query({
+  args: {
+    invoiceId: v.id("invoices"),
+  },
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice) return null;
+
+    const origExtracted = invoice.extractedData as any;
+    const originalAmount = origExtracted?.totalAmount ?? origExtracted?.total ?? 0;
+
+    const adjustments = await ctx.db
+      .query("invoices")
+      .withIndex("by_originalInvoiceId", (q) =>
+        q.eq("originalInvoiceId", args.invoiceId)
+      )
+      .collect();
+
+    const active = adjustments.filter((a) => !a.deletedAt);
+
+    const totalCredited = active
+      .filter((a) => a.einvoiceType === "credit_note" || a.einvoiceType === "refund_note")
+      .reduce((sum, a) => {
+        const ext = a.extractedData as any;
+        return sum + (ext?.totalAmount ?? 0);
+      }, 0);
+
+    const totalDebited = active
+      .filter((a) => a.einvoiceType === "debit_note")
+      .reduce((sum, a) => {
+        const ext = a.extractedData as any;
+        return sum + (ext?.totalAmount ?? 0);
+      }, 0);
+
+    return {
+      originalAmount,
+      totalCredited: Math.round(totalCredited * 100) / 100,
+      totalDebited: Math.round(totalDebited * 100) / 100,
+      netPayable: Math.round((originalAmount - totalCredited + totalDebited) * 100) / 100,
+    };
+  },
+});

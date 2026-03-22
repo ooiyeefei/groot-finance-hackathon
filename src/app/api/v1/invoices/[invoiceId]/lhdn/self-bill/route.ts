@@ -236,6 +236,29 @@ export async function POST(
     const invoiceDate = (extracted.invoice_date as string) ??
       (extracted.invoiceDate as string) ?? new Date().toISOString().split("T")[0]
 
+    // 032-credit-debit-note: Detect credit/debit note and get original invoice UUID
+    const einvoiceType = inv.einvoiceType as string | undefined
+    const originalInvoiceId = inv.originalInvoiceId as string | undefined
+    let originalInvoiceLhdnUuid: string | undefined
+
+    if (einvoiceType && einvoiceType !== "invoice" && originalInvoiceId) {
+      const originalInvoice = await convex.query(api.functions.invoices.getById, {
+        id: originalInvoiceId,
+      })
+      originalInvoiceLhdnUuid = (originalInvoice as Record<string, unknown> | null)?.lhdnDocumentUuid as string | undefined
+
+      // FR-015: Block submission if original has no LHDN UUID
+      if (!originalInvoiceLhdnUuid) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Original self-billed invoice must be validated by LHDN before submitting a credit/debit note.",
+          },
+          { status: 400 }
+        )
+      }
+    }
+
     const selfBillData: SelfBillData = {
       referenceNumber: `SB-INV-${invoiceId.slice(-8)}`,
       date: invoiceDate,
@@ -260,6 +283,9 @@ export async function POST(
       subtotal: totalAmount,
       totalTax: 0,
       totalAmount: totalAmount,
+      // 032-credit-debit-note: Pass einvoiceType and original UUID for Types 12/13/14
+      einvoiceType,
+      originalInvoiceLhdnUuid,
     }
 
     const ublDocument = mapToSelfBilledInvoice(selfBillData, buyerData, sellerData)

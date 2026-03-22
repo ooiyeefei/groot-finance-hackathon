@@ -2010,9 +2010,135 @@ export const createCreditNote = mutation({
 });
 
 /**
- * Get all credit notes linked to a parent invoice.
+ * 032-credit-debit-note: Create a debit note against a sales invoice.
+ * Debit notes increase the amount receivable (additional charges, price increases).
+ * Journal entry: Dr. AR 1200, Cr. Revenue 4100
  */
-export const getCreditNotesForInvoice = query({
+export const createDebitNote = mutation({
+  args: {
+    originalInvoiceId: v.id("sales_invoices"),
+    businessId: v.id("businesses"),
+    lineItems: v.array(v.object({
+      lineOrder: v.number(),
+      description: v.string(),
+      quantity: v.number(),
+      unitPrice: v.number(),
+      totalAmount: v.number(),
+      taxRate: v.optional(v.number()),
+      taxAmount: v.optional(v.number()),
+      currency: v.string(),
+    })),
+    debitNoteReason: v.string(),
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireFinanceAdmin(ctx, args.businessId);
+
+    const originalInvoice = await ctx.db.get(args.originalInvoiceId);
+    if (!originalInvoice || originalInvoice.businessId !== args.businessId || originalInvoice.deletedAt) {
+      throw new Error("Original invoice not found");
+    }
+
+    if (!["sent", "paid", "overdue", "partially_paid"].includes(originalInvoice.status)) {
+      throw new Error("Can only create debit notes for sent, paid, or overdue invoices");
+    }
+
+    if (args.lineItems.length === 0) {
+      throw new Error("At least one line item is required");
+    }
+
+    const subtotal = args.lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+    const totalTax = args.lineItems.reduce((sum, item) => sum + (item.taxAmount ?? 0), 0);
+    const totalAmount = args.lineItems.reduce((sum, item) => sum + item.totalAmount, 0);
+
+    if (totalAmount <= 0) {
+      throw new Error("Debit note total must be greater than 0");
+    }
+
+    // Generate debit note number: DN-{originalInvoiceNumber}-{sequence}
+    const existingAdjustments = await ctx.db
+      .query("sales_invoices")
+      .withIndex("by_originalInvoiceId", (q) =>
+        q.eq("originalInvoiceId", args.originalInvoiceId)
+      )
+      .collect();
+
+    const existingDebitNotes = existingAdjustments.filter((a) => !a.deletedAt && a.einvoiceType === "debit_note");
+    const sequence = existingDebitNotes.length + 1;
+    const debitNoteNumber = `DN-${originalInvoice.invoiceNumber}-${sequence}`;
+
+    // Create journal entry: Dr. AR 1200, Cr. Revenue 4100 (increases receivable)
+    const arAccount = await ctx.db
+      .query("chart_of_accounts")
+      .withIndex("by_business_code", (q: any) => q.eq("businessId", args.businessId).eq("accountCode", "1200"))
+      .first();
+    const revenueAccount = await ctx.db
+      .query("chart_of_accounts")
+      .withIndex("by_business_code", (q: any) => q.eq("businessId", args.businessId).eq("accountCode", "4100"))
+      .first();
+
+    if (arAccount && revenueAccount) {
+      await ctx.runMutation(internal.functions.journalEntries.createInternal, {
+        businessId: args.businessId,
+        transactionDate: new Date().toISOString().split("T")[0],
+        description: `Debit Note ${debitNoteNumber} - ${args.debitNoteReason}`,
+        sourceType: "sales_invoice" as const,
+        sourceId: args.originalInvoiceId,
+        lines: [
+          {
+            accountCode: "1200",
+            debitAmount: totalAmount,
+            creditAmount: 0,
+            lineDescription: `Debit note - increase AR for additional charges`,
+          },
+          {
+            accountCode: "4100",
+            debitAmount: 0,
+            creditAmount: totalAmount,
+            lineDescription: `Debit note - additional revenue`,
+          },
+        ],
+      });
+    }
+
+    const debitNoteId = await ctx.db.insert("sales_invoices", {
+      businessId: args.businessId,
+      userId: user._id,
+      invoiceNumber: debitNoteNumber,
+      customerId: originalInvoice.customerId,
+      customerSnapshot: originalInvoice.customerSnapshot,
+      lineItems: args.lineItems.map((item) => ({
+        ...item,
+        discountType: undefined,
+        discountValue: undefined,
+        discountAmount: undefined,
+      })),
+      subtotal: Math.round(subtotal * 100) / 100,
+      totalTax: Math.round(totalTax * 100) / 100,
+      totalAmount: Math.round(totalAmount * 100) / 100,
+      balanceDue: Math.round(totalAmount * 100) / 100,
+      currency: originalInvoice.currency,
+      taxMode: originalInvoice.taxMode,
+      invoiceDate: new Date().toISOString().split("T")[0],
+      dueDate: new Date().toISOString().split("T")[0],
+      paymentTerms: "due_on_receipt",
+      status: "draft",
+      notes: args.notes,
+      einvoiceType: "debit_note",
+      originalInvoiceId: args.originalInvoiceId,
+      creditNoteReason: args.debitNoteReason,
+      updatedAt: Date.now(),
+    });
+
+    return { debitNoteId };
+  },
+});
+
+/**
+ * Get all adjustment documents (credit notes + debit notes) linked to a parent invoice.
+ * 032-credit-debit-note: Updated to return both types with einvoiceType field.
+ */
+export const getAdjustmentsForInvoice = query({
   args: {
     invoiceId: v.id("sales_invoices"),
     businessId: v.id("businesses"),
@@ -2033,29 +2159,37 @@ export const getCreditNotesForInvoice = query({
 
     if (!membership || membership.status !== "active") return [];
 
-    const creditNotes = await ctx.db
+    const adjustments = await ctx.db
       .query("sales_invoices")
       .withIndex("by_originalInvoiceId", (q) =>
         q.eq("originalInvoiceId", args.invoiceId)
       )
       .collect();
 
-    return creditNotes
-      .filter((cn) => !cn.deletedAt)
-      .map((cn) => ({
-        _id: cn._id,
-        invoiceNumber: cn.invoiceNumber,
-        totalAmount: cn.totalAmount,
-        status: cn.status,
-        peppolStatus: cn.peppolStatus,
-        creditNoteReason: cn.creditNoteReason,
-        _creationTime: cn._creationTime,
+    return adjustments
+      .filter((a) => !a.deletedAt)
+      .map((a) => ({
+        _id: a._id,
+        invoiceNumber: a.invoiceNumber,
+        einvoiceType: a.einvoiceType,
+        totalAmount: a.totalAmount,
+        status: a.status,
+        lhdnStatus: a.lhdnStatus,
+        peppolStatus: a.peppolStatus,
+        creditNoteReason: a.creditNoteReason,
+        _creationTime: a._creationTime,
       }));
   },
 });
 
 /**
- * Get net outstanding amount for an invoice (original - total credited).
+ * Backward-compatible alias for getAdjustmentsForInvoice.
+ */
+export const getCreditNotesForInvoice = getAdjustmentsForInvoice;
+
+/**
+ * Get net outstanding amount for an invoice (original - credits + debits).
+ * 032-credit-debit-note: Updated to include debit notes in calculation.
  */
 export const getNetOutstandingAmount = query({
   args: {
@@ -2065,21 +2199,28 @@ export const getNetOutstandingAmount = query({
     const invoice = await ctx.db.get(args.invoiceId);
     if (!invoice) return null;
 
-    const creditNotes = await ctx.db
+    const adjustments = await ctx.db
       .query("sales_invoices")
       .withIndex("by_originalInvoiceId", (q) =>
         q.eq("originalInvoiceId", args.invoiceId)
       )
       .collect();
 
-    const totalCredited = creditNotes
-      .filter((cn) => !cn.deletedAt)
-      .reduce((sum, cn) => sum + cn.totalAmount, 0);
+    const active = adjustments.filter((a) => !a.deletedAt);
+
+    const totalCredited = active
+      .filter((a) => a.einvoiceType === "credit_note" || a.einvoiceType === "refund_note")
+      .reduce((sum, a) => sum + a.totalAmount, 0);
+
+    const totalDebited = active
+      .filter((a) => a.einvoiceType === "debit_note")
+      .reduce((sum, a) => sum + a.totalAmount, 0);
 
     return {
       originalAmount: invoice.totalAmount,
       totalCredited: Math.round(totalCredited * 100) / 100,
-      netOutstanding: Math.round((invoice.totalAmount - totalCredited) * 100) / 100,
+      totalDebited: Math.round(totalDebited * 100) / 100,
+      netOutstanding: Math.round((invoice.totalAmount - totalCredited + totalDebited) * 100) / 100,
     };
   },
 });

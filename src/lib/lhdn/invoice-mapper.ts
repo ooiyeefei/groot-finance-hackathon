@@ -36,6 +36,7 @@ export interface InvoiceData {
   notes?: string
   einvoiceType?: string
   originalInvoiceNumber?: string
+  originalInvoiceLhdnUuid?: string // 032-credit-debit-note: LHDN UUID for BillingReference
 }
 
 export interface SupplierData {
@@ -240,10 +241,12 @@ export function mapInvoiceToLhdn(
   }
 
   // Add billing reference for credit/debit notes
-  if (invoice.originalInvoiceNumber && invoice.einvoiceType !== "invoice") {
+  // 032-credit-debit-note: Prefer LHDN UUID for BillingReference, fall back to invoice number
+  const billingRefId = invoice.originalInvoiceLhdnUuid ?? invoice.originalInvoiceNumber
+  if (billingRefId && invoice.einvoiceType !== "invoice") {
     invoiceBody.BillingReference = [{
       AdditionalDocumentReference: [{
-        ID: invoice.originalInvoiceNumber,
+        ID: billingRefId,
       }],
     }]
   }

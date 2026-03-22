@@ -965,6 +965,11 @@ export default defineSchema({
     lhdnRejectedAt: v.optional(v.number()),
     lhdnRejectionReason: v.optional(v.string()),
 
+    // 032-credit-debit-note: AP credit/debit note support
+    einvoiceType: v.optional(einvoiceTypeValidator),
+    originalInvoiceId: v.optional(v.id("invoices")),
+    creditNoteReason: v.optional(v.string()),
+
     deletedAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),
   })
@@ -975,7 +980,9 @@ export default defineSchema({
     // LHDN self-bill index
     .index("by_businessId_lhdnStatus", ["businessId", "lhdnStatus"])
     // AP subledger: payment status queries
-    .index("by_business_payment_status", ["businessId", "paymentStatus"]),
+    .index("by_business_payment_status", ["businessId", "paymentStatus"])
+    // 032-credit-debit-note: credit/debit note lookup by parent invoice
+    .index("by_originalInvoiceId", ["originalInvoiceId"]),
 
   // ============================================
   // DOCUMENT INBOX (001-doc-email-forward)

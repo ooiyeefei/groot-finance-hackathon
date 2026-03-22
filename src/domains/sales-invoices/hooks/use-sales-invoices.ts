@@ -169,6 +169,24 @@ export function useCreditNoteMutations() {
 }
 
 /**
+ * 032-credit-debit-note: Hook for debit note mutations
+ */
+export function useDebitNoteMutations() {
+  const createDebitNote = useMutation(api.functions.salesInvoices.createDebitNote)
+  return { createDebitNote }
+}
+
+/**
+ * 032-credit-debit-note: Hook for adjustment queries (credit + debit notes)
+ */
+export function useAdjustmentsForInvoice(invoiceId: string, businessId: string) {
+  return useQuery(api.functions.salesInvoices.getAdjustmentsForInvoice, {
+    invoiceId: invoiceId as any,
+    businessId: businessId as any,
+  })
+}
+
+/**
  * Hook for getting a stored invoice PDF URL
  */
 export function useInvoicePdfUrl(invoiceId: string | undefined) {
