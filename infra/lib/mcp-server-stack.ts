@@ -58,10 +58,9 @@ export class MCPServerStack extends cdk.Stack {
       // Convex production URL
       NEXT_PUBLIC_CONVEX_URL: props?.convexUrl || process.env.NEXT_PUBLIC_CONVEX_URL || 'https://kindhearted-lynx-129.convex.cloud',
       // Internal service key for Layer 2 service-to-service calls (Convex → MCP)
-      // Allows Convex actions to call MCP tools without per-business API keys
-      // Note: Key stored as SecureString in SSM. Set directly on Lambda via CLI since
-      // CDK valueFromLookup doesn't support SecureString. See: aws lambda update-function-configuration
-      // SSM path: /finanseal/mcp/internal-service-key
+      // Read from MCP_INTERNAL_SERVICE_KEY env var at synth time.
+      // Set before deploy: export MCP_INTERNAL_SERVICE_KEY=$(aws ssm get-parameter --name /finanseal/mcp/internal-service-key --with-decryption --query Parameter.Value --output text --profile groot-finanseal --region us-west-2)
+      ...(process.env.MCP_INTERNAL_SERVICE_KEY ? { MCP_INTERNAL_SERVICE_KEY: process.env.MCP_INTERNAL_SERVICE_KEY } : {}),
       // Sentry error tracking
       SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN || '',
       SENTRY_ENVIRONMENT: 'production',
