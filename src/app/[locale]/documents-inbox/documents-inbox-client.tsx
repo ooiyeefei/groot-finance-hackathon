@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -41,6 +41,7 @@ import {
   Check,
   ArrowRight,
   Inbox,
+  Layers,
 } from "lucide-react";
 import { formatDistance } from "date-fns";
 import { toast } from "sonner";
@@ -86,41 +87,63 @@ export default function DocumentsInboxClient() {
     api.functions.documentInbox.deleteInboxEntry
   );
 
+  // Group documents by email messageId so multi-attachment emails are visually grouped
+  const groupedDocuments = useMemo(() => {
+    if (!inboxDocuments?.documents) return [];
+
+    const groups = new Map<string, typeof inboxDocuments.documents>();
+    for (const doc of inboxDocuments.documents) {
+      const key = doc.emailMetadata.messageId;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(doc);
+    }
+
+    // Convert to array sorted by earliest doc in group (newest first)
+    return Array.from(groups.entries())
+      .map(([messageId, docs]) => ({ messageId, docs }))
+      .sort((a, b) => b.docs[0]._creationTime - a.docs[0]._creationTime);
+  }, [inboxDocuments?.documents]);
+
+  const [batchClassifying, setBatchClassifying] = useState(false);
+
   const handleClassifyClick = (documentId: Id<"document_inbox_entries">) => {
     setSelectedDocument(documentId);
     setSelectedType("receipt");
     setClassifyModalOpen(true);
   };
 
+  // Classify a single document and trigger OCR
+  const classifySingleDocument = useCallback(async (
+    docId: Id<"document_inbox_entries">,
+    type: "receipt" | "invoice" | "e_invoice"
+  ) => {
+    const result = await manuallyClassifyDocument({
+      inboxEntryId: docId,
+      classifiedType: type,
+      classifiedBy: undefined,
+    });
+
+    // Trigger OCR for receipts (fire-and-forget)
+    if (type === "receipt" && result?.destinationRecordId) {
+      fetch(`/api/v1/document-inbox/${docId}/process-receipt`, {
+        method: "POST",
+      }).catch(() => {
+        console.log("[DocInbox] OCR trigger failed (non-fatal)");
+      });
+    }
+
+    return result;
+  }, [manuallyClassifyDocument]);
+
   const handleClassifyConfirm = async () => {
     if (!selectedDocument || !selectedType) return;
 
     try {
-      const result = await manuallyClassifyDocument({
-        inboxEntryId: selectedDocument,
-        classifiedType: selectedType,
-        classifiedBy: undefined,
-      });
+      await classifySingleDocument(selectedDocument, selectedType);
 
       toast.success("Document classified", {
         description: `Routed as ${selectedType === "receipt" ? "Expense Receipt" : selectedType === "invoice" ? "AP Invoice" : "E-Invoice"}`,
       });
-
-      // Trigger OCR extraction for receipts (fire-and-forget)
-      if (selectedType === "receipt" && result?.destinationRecordId) {
-        fetch(`/api/v1/document-inbox/${selectedDocument}/process-receipt`, {
-          method: "POST",
-        }).then((res) => {
-          if (res.ok) {
-            toast.success("OCR extraction started", {
-              description: "Receipt data will be extracted automatically",
-            });
-          }
-        }).catch(() => {
-          // Non-blocking — OCR failure doesn't affect classification
-          console.log("[DocInbox] OCR trigger failed (non-fatal)");
-        });
-      }
 
       setClassifyModalOpen(false);
       setSelectedDocument(null);
@@ -130,6 +153,37 @@ export default function DocumentsInboxClient() {
         description:
           error instanceof Error ? error.message : "Failed to classify",
       });
+    }
+  };
+
+  // Batch classify all documents in an email group as the same type
+  const handleBatchClassify = async (
+    docs: NonNullable<typeof inboxDocuments>["documents"],
+    type: "receipt" | "invoice" | "e_invoice"
+  ) => {
+    setBatchClassifying(true);
+    let successCount = 0;
+
+    try {
+      // Classify sequentially so each one sees the draft created by the previous
+      for (const doc of docs) {
+        try {
+          await classifySingleDocument(doc._id, type);
+          successCount++;
+        } catch (err) {
+          console.log(`[DocInbox] Batch classify failed for ${doc._id}: ${err}`);
+        }
+      }
+
+      toast.success(`${successCount} document${successCount !== 1 ? "s" : ""} classified`, {
+        description: `All routed as ${type === "receipt" ? "Expense Receipt" : type === "invoice" ? "AP Invoice" : "E-Invoice"} into one submission`,
+      });
+    } catch (error) {
+      toast.error("Batch classification failed", {
+        description: error instanceof Error ? error.message : "Failed to classify",
+      });
+    } finally {
+      setBatchClassifying(false);
     }
   };
 
@@ -265,78 +319,115 @@ export default function DocumentsInboxClient() {
               </tr>
             </thead>
             <tbody>
-              {inboxDocuments.documents.map((doc) => (
-                <tr key={doc._id} className="border-t hover:bg-muted/50">
-                  <td className="p-4">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium">{doc.originalFilename}</span>
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Mail className="h-4 w-4" />
-                      {doc.emailMetadata.from}
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    {doc.aiDetectedType ? (
-                      <Badge variant="outline">
-                        {doc.aiDetectedType === "receipt"
-                          ? "Receipt"
-                          : doc.aiDetectedType === "invoice"
-                            ? "AP Invoice"
-                            : doc.aiDetectedType === "e_invoice"
-                              ? "E-Invoice"
-                              : "Unknown"}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground text-sm">--</span>
-                    )}
-                  </td>
-                  <td className="p-4">
-                    {doc.aiConfidence !== undefined ? (
-                      <Badge
-                        variant={
-                          doc.aiConfidence >= 0.85
-                            ? "default"
-                            : doc.aiConfidence >= 0.7
-                              ? "secondary"
-                              : "destructive"
-                        }
-                      >
-                        {Math.round(doc.aiConfidence * 100)}%
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground text-sm">--</span>
-                    )}
-                  </td>
-                  <td className="p-4">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Calendar className="h-4 w-4" />
-                      {formatDistance(new Date(doc._creationTime), new Date(), {
-                        addSuffix: true,
-                      })}
-                    </div>
-                  </td>
-                  <td className="p-4 text-right space-x-2">
-                    <Button
-                      size="sm"
-                      onClick={() => handleClassifyClick(doc._id)}
-                      className="bg-primary hover:bg-primary/90 text-primary-foreground"
-                    >
-                      Classify
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleDelete(doc._id)}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      Delete
-                    </Button>
-                  </td>
-                </tr>
+              {groupedDocuments.map((group) => (
+                <>
+                  {/* Email group header — only shown for multi-attachment emails */}
+                  {group.docs.length > 1 && (
+                    <tr key={`group-${group.messageId}`} className="border-t bg-muted/30">
+                      <td colSpan={4} className="px-4 py-2">
+                        <div className="flex items-center gap-2 text-sm">
+                          <Layers className="h-4 w-4 text-primary" />
+                          <span className="font-medium text-foreground">
+                            {group.docs.length} attachments from same email
+                          </span>
+                          <span className="text-muted-foreground">
+                            — {group.docs[0].emailMetadata.subject || "No subject"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2" />
+                      <td className="px-4 py-2 text-right">
+                        <Button
+                          size="sm"
+                          onClick={() => handleBatchClassify(group.docs, "receipt")}
+                          disabled={batchClassifying}
+                          className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                        >
+                          {batchClassifying ? (
+                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          ) : null}
+                          Classify All as Receipt
+                        </Button>
+                      </td>
+                    </tr>
+                  )}
+                  {group.docs.map((doc) => (
+                    <tr key={doc._id} className="border-t hover:bg-muted/50">
+                      <td className="p-4">
+                        <div className="flex items-center gap-2">
+                          {group.docs.length > 1 && (
+                            <span className="w-4 border-l-2 border-primary/30 h-4 ml-1" />
+                          )}
+                          <FileText className="h-4 w-4 text-muted-foreground" />
+                          <span className="font-medium">{doc.originalFilename}</span>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Mail className="h-4 w-4" />
+                          {doc.emailMetadata.from}
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        {doc.aiDetectedType ? (
+                          <Badge variant="outline">
+                            {doc.aiDetectedType === "receipt"
+                              ? "Receipt"
+                              : doc.aiDetectedType === "invoice"
+                                ? "AP Invoice"
+                                : doc.aiDetectedType === "e_invoice"
+                                  ? "E-Invoice"
+                                  : "Unknown"}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">--</span>
+                        )}
+                      </td>
+                      <td className="p-4">
+                        {doc.aiConfidence !== undefined ? (
+                          <Badge
+                            variant={
+                              doc.aiConfidence >= 0.85
+                                ? "default"
+                                : doc.aiConfidence >= 0.7
+                                  ? "secondary"
+                                  : "destructive"
+                            }
+                          >
+                            {Math.round(doc.aiConfidence * 100)}%
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">--</span>
+                        )}
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Calendar className="h-4 w-4" />
+                          {formatDistance(new Date(doc._creationTime), new Date(), {
+                            addSuffix: true,
+                          })}
+                        </div>
+                      </td>
+                      <td className="p-4 text-right space-x-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleClassifyClick(doc._id)}
+                          className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                        >
+                          Classify
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleDelete(doc._id)}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          Delete
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </>
               ))}
             </tbody>
           </table>
