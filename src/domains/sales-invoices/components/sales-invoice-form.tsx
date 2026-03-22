@@ -33,7 +33,6 @@ import {
   type CustomerSnapshot,
   type InvoiceTemplateItem,
 } from '../types'
-import type { Id } from '../../../../convex/_generated/dataModel'
 
 type FormMode = 'edit' | 'preview'
 

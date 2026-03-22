@@ -2030,7 +2030,7 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
             lineTotal: parseFloat(li.line_total?.value ?? li.line_total ?? '0') || 0,
             itemCode: li.item_code?.value ?? li.item_code ?? undefined,
           }))}
-          invoiceCurrency={(document.extracted_data?.currency?.value ?? document.extracted_data?.currency ?? 'MYR') as string}
+          invoiceCurrency={((document.extracted_data?.currency as any)?.value ?? document.extracted_data?.currency ?? 'MYR') as string}
           userId={businessId}
           onClose={() => setShowReceiveInventory(false)}
           onComplete={() => setShowReceiveInventory(false)}
