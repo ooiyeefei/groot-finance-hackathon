@@ -2599,9 +2599,11 @@ export const createAPCreditNote = mutation({
       throw new Error("Original invoice not found");
     }
 
+    // AP invoices may remain "pending" status even after JE is posted — allow both
     const validStatuses = ["completed", "paid", "partially_paid"];
-    if (!validStatuses.includes(originalInvoice.status)) {
-      throw new Error("Can only create credit notes for completed, paid, or partially paid invoices");
+    const isPosted = originalInvoice.accountingStatus === "posted";
+    if (!validStatuses.includes(originalInvoice.status) && !isPosted) {
+      throw new Error("Can only create credit notes for completed, paid, or posted invoices");
     }
 
     if (args.lineItems.length === 0) {
@@ -2730,9 +2732,11 @@ export const createAPDebitNote = mutation({
       throw new Error("Original invoice not found");
     }
 
+    // AP invoices may remain "pending" status even after JE is posted — allow both
     const validStatuses = ["completed", "paid", "partially_paid"];
-    if (!validStatuses.includes(originalInvoice.status)) {
-      throw new Error("Can only create debit notes for completed, paid, or partially paid invoices");
+    const isPosted = originalInvoice.accountingStatus === "posted";
+    if (!validStatuses.includes(originalInvoice.status) && !isPosted) {
+      throw new Error("Can only create debit notes for completed, paid, or posted invoices");
     }
 
     if (args.lineItems.length === 0) {
