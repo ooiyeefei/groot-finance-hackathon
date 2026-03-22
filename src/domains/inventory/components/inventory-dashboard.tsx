@@ -22,7 +22,7 @@ export function InventoryDashboard() {
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo, setFilterDateTo] = useState('')
 
-  const getDashboardSummary = useAction(api.functions.inventoryStock.getDashboardSummary)
+  const getDashboardSummary: (args: { businessId: any }) => Promise<DashboardSummary> = useAction(api.functions.inventoryStock.getDashboardSummary)
 
   useEffect(() => {
     if (!businessId) return
