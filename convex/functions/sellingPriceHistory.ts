@@ -486,3 +486,202 @@ export const _getLatestPurchaseCost = internalQuery({
     return latestRecord;
   },
 });
+
+// ---------------------------------------------------------------------------
+// Purchase History via Mappings (for Purchase History tab)
+// ---------------------------------------------------------------------------
+
+export const _getPurchaseHistoryByMappings = internalQuery({
+  args: {
+    businessId: v.id("businesses"),
+    catalogItemId: v.id("catalog_items"),
+    vendorId: v.optional(v.id("vendors")),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const maxResults = args.limit ?? 100;
+
+    // Get confirmed mappings for this catalog item
+    const mappings = await ctx.db
+      .query("catalog_vendor_item_mappings")
+      .withIndex("by_catalogItem", (q) =>
+        q.eq("catalogItemId", args.catalogItemId).eq("businessId", args.businessId)
+      )
+      .collect();
+
+    const activeMappings = mappings.filter(
+      (m) => !m.rejectedAt && m.matchSource !== "fuzzy-suggested"
+    );
+
+    if (activeMappings.length === 0) {
+      return { records: [], totalCount: 0, vendors: [] };
+    }
+
+    // Optionally filter by specific vendor
+    const filteredMappings = args.vendorId
+      ? activeMappings.filter((m) => m.vendorId === args.vendorId)
+      : activeMappings;
+
+    // Query vendor_price_history for each mapping
+    const allRecords: Array<{
+      _id: string;
+      vendorId: string;
+      vendorName: string;
+      itemDescription: string;
+      unitPrice: number;
+      quantity: number;
+      currency: string;
+      totalAmount: number;
+      invoiceDate: string;
+      invoiceNumber: string;
+    }> = [];
+
+    // Collect unique vendors for filter dropdown
+    const vendorMap: Record<string, string> = {};
+
+    for (const mapping of filteredMappings) {
+      const vendor = await ctx.db.get(mapping.vendorId) as any;
+      const vendorName = vendor?.name || "Unknown vendor";
+      vendorMap[mapping.vendorId] = vendorName;
+
+      const records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_vendor_item", (q) =>
+          q.eq("vendorId", mapping.vendorId)
+        )
+        .filter((q) => q.eq(q.field("itemIdentifier"), mapping.vendorItemIdentifier))
+        .take(200);
+
+      for (const r of records) {
+        if (r.archivedFlag) continue;
+        const recordDate = r.observedAt || r.invoiceDate || "";
+
+        // Apply date filters
+        if (args.startDate && recordDate < args.startDate) continue;
+        if (args.endDate && recordDate > args.endDate) continue;
+
+        // Resolve invoice number
+        let invoiceNumber = "—";
+        if (r.invoiceId) {
+          const inv = await ctx.db.get(r.invoiceId) as any;
+          if (inv) invoiceNumber = inv.invoiceNumber || inv.referenceNumber || String(r.invoiceId);
+        }
+
+        allRecords.push({
+          _id: r._id,
+          vendorId: String(mapping.vendorId),
+          vendorName,
+          itemDescription: r.itemDescription,
+          unitPrice: r.unitPrice,
+          quantity: r.quantity,
+          currency: r.currency,
+          totalAmount: r.unitPrice * r.quantity,
+          invoiceDate: recordDate,
+          invoiceNumber,
+        });
+      }
+    }
+
+    // Sort by date desc
+    allRecords.sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate));
+
+    const vendors = Object.entries(vendorMap).map(([id, name]) => ({ id, name }));
+
+    return {
+      records: allRecords.slice(0, maxResults),
+      totalCount: allRecords.length,
+      vendors,
+    };
+  },
+});
+
+export const getPurchaseHistoryByMappings = action({
+  args: {
+    businessId: v.id("businesses"),
+    catalogItemId: v.id("catalog_items"),
+    vendorId: v.optional(v.id("vendors")),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    return await ctx.runQuery(
+      internal.functions.sellingPriceHistory._getPurchaseHistoryByMappings,
+      args
+    );
+  },
+});
+
+export const _getPurchasePriceTrend = internalQuery({
+  args: {
+    businessId: v.id("businesses"),
+    catalogItemId: v.id("catalog_items"),
+    vendorId: v.optional(v.id("vendors")),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // Get confirmed mappings
+    const mappings = await ctx.db
+      .query("catalog_vendor_item_mappings")
+      .withIndex("by_catalogItem", (q) =>
+        q.eq("catalogItemId", args.catalogItemId).eq("businessId", args.businessId)
+      )
+      .collect();
+
+    const activeMappings = mappings.filter(
+      (m) => !m.rejectedAt && m.matchSource !== "fuzzy-suggested"
+    );
+
+    const filteredMappings = args.vendorId
+      ? activeMappings.filter((m) => m.vendorId === args.vendorId)
+      : activeMappings;
+
+    const dataPoints: Array<{ date: string; unitPrice: number; currency: string }> = [];
+
+    for (const mapping of filteredMappings) {
+      const records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_vendor_item", (q) =>
+          q.eq("vendorId", mapping.vendorId)
+        )
+        .filter((q) => q.eq(q.field("itemIdentifier"), mapping.vendorItemIdentifier))
+        .take(200);
+
+      for (const r of records) {
+        if (r.archivedFlag) continue;
+        const recordDate = r.observedAt || r.invoiceDate || "";
+        if (args.startDate && recordDate < args.startDate) continue;
+        if (args.endDate && recordDate > args.endDate) continue;
+
+        dataPoints.push({
+          date: recordDate,
+          unitPrice: r.unitPrice,
+          currency: r.currency,
+        });
+      }
+    }
+
+    // Sort chronologically
+    dataPoints.sort((a, b) => a.date.localeCompare(b.date));
+
+    return { dataPoints };
+  },
+});
+
+export const getPurchasePriceTrend = action({
+  args: {
+    businessId: v.id("businesses"),
+    catalogItemId: v.id("catalog_items"),
+    vendorId: v.optional(v.id("vendors")),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    return await ctx.runQuery(
+      internal.functions.sellingPriceHistory._getPurchasePriceTrend,
+      args
+    );
+  },
+});

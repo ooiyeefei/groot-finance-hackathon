@@ -2,11 +2,11 @@
 
 import { useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Loader2, TrendingDown, TrendingUp, AlertTriangle } from 'lucide-react'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { useMarginSummary } from '../hooks/use-margin-summary'
 import { useSellingPriceHistory } from '../hooks/use-selling-price-history'
+import { usePurchaseHistory } from '../hooks/use-purchase-history'
 import PriceComparisonChart from './price-comparison-chart'
 import { formatCurrency } from '@/lib/utils/format-number'
 import type { Id } from '../../../../convex/_generated/dataModel'
@@ -19,12 +19,14 @@ interface PriceComparisonTabProps {
 export default function PriceComparisonTab({ catalogItemId, currency }: PriceComparisonTabProps) {
   const { businessId } = useActiveBusiness()
   const { data: margin, isLoading: isMarginLoading, loadMargin } = useMarginSummary(businessId, catalogItemId)
-  const { trendData, isTrendLoading, loadTrend } = useSellingPriceHistory(businessId, catalogItemId)
+  const { trendData: sellingTrend, isTrendLoading: isSellingTrendLoading, loadTrend: loadSellingTrend } = useSellingPriceHistory(businessId, catalogItemId)
+  const { trendData: purchaseTrend, isTrendLoading: isPurchaseTrendLoading, loadTrend: loadPurchaseTrend } = usePurchaseHistory(businessId, catalogItemId)
 
   useEffect(() => {
     loadMargin()
-    loadTrend()
-  }, [loadMargin, loadTrend])
+    loadSellingTrend()
+    loadPurchaseTrend()
+  }, [loadMargin, loadSellingTrend, loadPurchaseTrend])
 
   if (isMarginLoading) {
     return (
@@ -44,10 +46,11 @@ export default function PriceComparisonTab({ catalogItemId, currency }: PriceCom
 
   const hasSellingData = margin.latestSellingPrice !== null
   const hasPurchaseData = margin.latestPurchaseCost !== null
+  const isTrendLoading = isSellingTrendLoading || isPurchaseTrendLoading
 
   return (
     <div className="space-y-6">
-      {/* Margin Indicator Card */}
+      {/* Margin Indicator Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Latest Cost */}
         <Card className="bg-card border-border">
@@ -158,8 +161,8 @@ export default function PriceComparisonTab({ catalogItemId, currency }: PriceCom
         </Card>
       )}
 
-      {/* Price Comparison Chart */}
-      {(hasSellingData || hasPurchaseData) && trendData.length > 0 && (
+      {/* Price Comparison Chart — dual line with real data */}
+      {(sellingTrend.length > 0 || purchaseTrend.length > 0) && (
         <Card className="bg-card border-border">
           <CardHeader>
             <CardTitle className="text-foreground text-base">Price Comparison Over Time</CardTitle>
@@ -171,8 +174,8 @@ export default function PriceComparisonTab({ catalogItemId, currency }: PriceCom
               </div>
             ) : (
               <PriceComparisonChart
-                sellingData={trendData.map((d: any) => ({ date: d.date, unitPrice: d.unitPrice }))}
-                purchaseData={[]} // TODO: load purchase trend data from vendor_price_history via mappings
+                sellingData={sellingTrend.map((d: any) => ({ date: d.date, unitPrice: d.unitPrice }))}
+                purchaseData={purchaseTrend.map((d: any) => ({ date: d.date, unitPrice: d.unitPrice }))}
                 currency={currency}
               />
             )}
