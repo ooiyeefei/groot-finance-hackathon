@@ -594,7 +594,6 @@ export default defineSchema({
     // Identity
     businessId: v.id("businesses"),
     userId: v.id("users"),                          // Submitter/owner
-    conversationId: v.optional(v.id("conversations")),  // Chat-created submissions
 
     // Submission Details
     title: v.string(),                               // Display name (auto-generated or custom)
