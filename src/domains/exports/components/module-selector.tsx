@@ -51,7 +51,7 @@ const MODULES: { id: ExportModule; name: string; description: string; icon: type
 
 export function ModuleSelector({ value, onChange, disabled }: ModuleSelectorProps) {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {MODULES.map((module) => {
         const Icon = module.icon;
         const isSelected = value === module.id;
