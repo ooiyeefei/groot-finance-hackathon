@@ -2000,20 +2000,20 @@ export const getBusinessTransactions = query({
   handler: async (ctx, args) => {
     const emptyResult = { error: "", transactions: [] as unknown[], totalAmount: 0, totalCount: 0, currency: "MYR" };
 
-    // Auth: verify caller identity and business membership
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) { return { ...emptyResult, error: "Unauthorized" }; }
-    const user = await resolveUserByClerkId(ctx.db, identity.subject);
-    if (!user) { return { ...emptyResult, error: "User not found" }; }
-
     const business = await resolveById(ctx.db, "businesses", args.businessId);
     if (!business) { return { ...emptyResult, error: "Business not found" }; }
 
-    const membership = await ctx.db.query("business_memberships")
-      .withIndex("by_userId_businessId", (q) => q.eq("userId", user._id).eq("businessId", business._id))
-      .first();
-    if (!membership || membership.status !== "active") { return { ...emptyResult, error: "No active membership" }; }
-    if (!["finance_admin", "owner"].includes(membership.role)) { return { ...emptyResult, error: "Insufficient permissions — finance admin or owner required" }; }
+    // Auth: optional — MCP calls via HTTP API have no Clerk context
+    const identity = await ctx.auth.getUserIdentity();
+    if (identity) {
+      const user = await resolveUserByClerkId(ctx.db, identity.subject);
+      if (!user) { return { ...emptyResult, error: "User not found" }; }
+      const membership = await ctx.db.query("business_memberships")
+        .withIndex("by_userId_businessId", (q) => q.eq("userId", user._id).eq("businessId", business._id))
+        .first();
+      if (!membership || membership.status !== "active") { return { ...emptyResult, error: "No active membership" }; }
+      if (!["finance_admin", "owner"].includes(membership.role)) { return { ...emptyResult, error: "Insufficient permissions — finance admin or owner required" }; }
+    }
 
     const limit = Math.min(args.limit || 50, 100);
     const currency = business.homeCurrency || "MYR";
