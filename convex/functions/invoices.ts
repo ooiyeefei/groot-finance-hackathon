@@ -2610,6 +2610,15 @@ export const createAPCreditNote = mutation({
       throw new Error("At least one line item is required");
     }
 
+    // FR-017: Enforce same currency as original invoice
+    const origCurrency = (originalInvoice.extractedData as any)?.currency;
+    if (origCurrency) {
+      const mismatch = args.lineItems.find((item) => item.currency !== origCurrency);
+      if (mismatch) {
+        throw new Error(`Currency mismatch: original invoice is ${origCurrency}, but line item uses ${mismatch.currency}`);
+      }
+    }
+
     const subtotal = args.lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
     const totalTax = args.lineItems.reduce((sum, item) => sum + (item.taxAmount ?? 0), 0);
     const totalAmount = args.lineItems.reduce((sum, item) => sum + item.totalAmount, 0);
@@ -2741,6 +2750,15 @@ export const createAPDebitNote = mutation({
 
     if (args.lineItems.length === 0) {
       throw new Error("At least one line item is required");
+    }
+
+    // FR-017: Enforce same currency as original invoice
+    const origCurrency = (originalInvoice.extractedData as any)?.currency;
+    if (origCurrency) {
+      const mismatch = args.lineItems.find((item) => item.currency !== origCurrency);
+      if (mismatch) {
+        throw new Error(`Currency mismatch: original invoice is ${origCurrency}, but line item uses ${mismatch.currency}`);
+      }
     }
 
     const subtotal = args.lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);

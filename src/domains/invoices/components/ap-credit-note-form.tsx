@@ -15,6 +15,14 @@ interface APCreditNoteFormProps {
   businessId: string
   currency: string
   maxAmount: number
+  originalLineItems?: Array<{
+    description: string
+    quantity: number
+    unitPrice: number
+    totalAmount: number
+    taxRate?: number
+    taxAmount?: number
+  }>
   onClose: () => void
   onSuccess?: () => void
 }
@@ -33,6 +41,7 @@ export function APCreditNoteForm({
   businessId,
   currency,
   maxAmount,
+  originalLineItems,
   onClose,
   onSuccess,
 }: APCreditNoteFormProps) {
@@ -41,9 +50,19 @@ export function APCreditNoteForm({
   const [error, setError] = useState<string | null>(null)
   const [reason, setReason] = useState('')
   const [notes, setNotes] = useState('')
-  const [lineItems, setLineItems] = useState<LineItem[]>([
-    { description: '', quantity: 1, unitPrice: 0, taxRate: 0, taxAmount: 0, totalAmount: 0 },
-  ])
+  // FR-019: Pre-populate from original invoice line items if available
+  const [lineItems, setLineItems] = useState<LineItem[]>(
+    originalLineItems && originalLineItems.length > 0
+      ? originalLineItems.map((item) => ({
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          taxRate: item.taxRate ?? 0,
+          taxAmount: item.taxAmount ?? 0,
+          totalAmount: item.totalAmount,
+        }))
+      : [{ description: '', quantity: 1, unitPrice: 0, taxRate: 0, taxAmount: 0, totalAmount: 0 }]
+  )
 
   const totalAmount = lineItems.reduce((sum, item) => sum + item.totalAmount, 0)
 

@@ -1617,6 +1617,21 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
                   const totalAmount = extracted?.totalAmount ?? extracted?.total ?? extracted?.total_amount ?? 0
                   const currency = extracted?.currency ?? 'MYR'
 
+                  // FR-019: Extract original line items for pre-population
+                  const rawLines = (extracted?.line_items ?? extracted?.lineItems ?? []) as Array<{
+                    item_description?: string; description?: string
+                    quantity?: number; unit_price?: number; total_amount?: number; totalAmount?: number
+                    tax_rate?: number; taxRate?: number; tax_amount?: number; taxAmount?: number
+                  }>
+                  const originalLineItems = rawLines.map((item) => ({
+                    description: item.item_description || item.description || '',
+                    quantity: item.quantity ?? 1,
+                    unitPrice: item.unit_price ?? 0,
+                    totalAmount: item.total_amount ?? item.totalAmount ?? 0,
+                    taxRate: item.tax_rate ?? item.taxRate,
+                    taxAmount: item.tax_amount ?? item.taxAmount,
+                  }))
+
                   return (
                     <div className="mb-6 space-y-3">
                       <APAdjustmentsSection
@@ -1630,6 +1645,7 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
                           businessId={doc.businessId ?? ''}
                           currency={currency}
                           maxAmount={totalAmount}
+                          originalLineItems={originalLineItems}
                           onClose={() => setShowAPCreditNoteForm(false)}
                           onSuccess={() => setShowAPCreditNoteForm(false)}
                         />
