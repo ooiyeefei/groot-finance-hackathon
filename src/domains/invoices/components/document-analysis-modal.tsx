@@ -1608,7 +1608,8 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
                 {/* 032-credit-debit-note: AP Adjustments (Credit/Debit Notes) */}
                 {(() => {
                   const doc = document as any
-                  const isCompleted = ['completed', 'paid', 'partially_paid'].includes(document.status)
+                  // AP invoices may remain "pending" status even after JE is posted — check both
+                  const isCompleted = ['completed', 'paid', 'partially_paid'].includes(document.status) || doc.accountingStatus === 'posted'
                   const isAdjustment = doc.einvoiceType === 'credit_note' || doc.einvoiceType === 'debit_note'
                   if (!isCompleted || isAdjustment) return null
 
