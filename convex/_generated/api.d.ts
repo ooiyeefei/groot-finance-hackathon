@@ -45,6 +45,7 @@ import type * as functions_creditPacks from "../functions/creditPacks.js";
 import type * as functions_crossVendorItemGroups from "../functions/crossVendorItemGroups.js";
 import type * as functions_csvImportTemplates from "../functions/csvImportTemplates.js";
 import type * as functions_customers from "../functions/customers.js";
+import type * as functions_debtorSelfService from "../functions/debtorSelfService.js";
 import type * as functions_documentInbox from "../functions/documentInbox.js";
 import type * as functions_documentInboxCrons from "../functions/documentInboxCrons.js";
 import type * as functions_documentInboxInternal from "../functions/documentInboxInternal.js";
@@ -78,6 +79,10 @@ import type * as functions_goodsReceivedNotes from "../functions/goodsReceivedNo
 import type * as functions_integrations_arReconciliationIntegration from "../functions/integrations/arReconciliationIntegration.js";
 import type * as functions_integrations_expenseClaimIntegration from "../functions/integrations/expenseClaimIntegration.js";
 import type * as functions_integrations_salesInvoiceIntegration from "../functions/integrations/salesInvoiceIntegration.js";
+import type * as functions_inventoryActions from "../functions/inventoryActions.js";
+import type * as functions_inventoryLocations from "../functions/inventoryLocations.js";
+import type * as functions_inventoryMovements from "../functions/inventoryMovements.js";
+import type * as functions_inventoryStock from "../functions/inventoryStock.js";
 import type * as functions_invoices from "../functions/invoices.js";
 import type * as functions_journalEntries from "../functions/journalEntries.js";
 import type * as functions_leaveBalances from "../functions/leaveBalances.js";
@@ -201,6 +206,7 @@ declare const fullApi: ApiFromModules<{
   "functions/crossVendorItemGroups": typeof functions_crossVendorItemGroups;
   "functions/csvImportTemplates": typeof functions_csvImportTemplates;
   "functions/customers": typeof functions_customers;
+  "functions/debtorSelfService": typeof functions_debtorSelfService;
   "functions/documentInbox": typeof functions_documentInbox;
   "functions/documentInboxCrons": typeof functions_documentInboxCrons;
   "functions/documentInboxInternal": typeof functions_documentInboxInternal;
@@ -234,6 +240,10 @@ declare const fullApi: ApiFromModules<{
   "functions/integrations/arReconciliationIntegration": typeof functions_integrations_arReconciliationIntegration;
   "functions/integrations/expenseClaimIntegration": typeof functions_integrations_expenseClaimIntegration;
   "functions/integrations/salesInvoiceIntegration": typeof functions_integrations_salesInvoiceIntegration;
+  "functions/inventoryActions": typeof functions_inventoryActions;
+  "functions/inventoryLocations": typeof functions_inventoryLocations;
+  "functions/inventoryMovements": typeof functions_inventoryMovements;
+  "functions/inventoryStock": typeof functions_inventoryStock;
   "functions/invoices": typeof functions_invoices;
   "functions/journalEntries": typeof functions_journalEntries;
   "functions/leaveBalances": typeof functions_leaveBalances;

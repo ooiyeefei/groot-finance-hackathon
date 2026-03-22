@@ -27,7 +27,7 @@ export function LocationManagement() {
 
   const handleDeactivate = async (id: Id<"inventory_locations">, confirm?: boolean) => {
     if (!businessId) return
-    const result = await deactivate({ id, businessId, confirmWithStock: confirm }) as any
+    const result = await deactivate({ id, businessId: businessId as any, confirmWithStock: confirm }) as any
     if (result && !result.success && result.error?.includes('item(s) with stock')) {
       setConfirmDeactivate(id)
     } else {
@@ -171,7 +171,7 @@ export function LocationManagement() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => businessId && reactivate({ id: location._id, businessId })}
+                            onClick={() => businessId && reactivate({ id: location._id, businessId: businessId as any })}
                           >
                             <Power className="w-4 h-4" />
                           </Button>
