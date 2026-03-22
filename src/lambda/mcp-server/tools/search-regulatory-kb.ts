@@ -54,7 +54,7 @@ export async function searchRegulatoryKB(
     const convex = getConvexClient();
 
     // Use a Convex action that handles embedding generation + Qdrant KB search
-    const result = await convex.query<any>('functions/financialIntelligence:searchRegulatoryKBForMCP', {
+    const result = await convex.action<any>('functions/financialIntelligence:searchRegulatoryKBForMCP', {
       query,
       limit: input.limit || 5,
     });

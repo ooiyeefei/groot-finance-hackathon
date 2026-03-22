@@ -44,7 +44,7 @@ export async function searchDocuments(
 
     // Use a Convex action that handles embedding generation + Qdrant search server-side
     // This avoids needing Qdrant/embedding credentials in the MCP Lambda
-    const result = await convex.query<any>('functions/financialIntelligence:searchDocumentsForMCP', {
+    const result = await convex.action<any>('functions/financialIntelligence:searchDocumentsForMCP', {
       businessId,
       userId,
       query: input.query.trim(),

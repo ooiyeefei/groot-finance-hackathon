@@ -12,7 +12,7 @@
  */
 
 import { v } from "convex/values";
-import { query, mutation } from "../_generated/server";
+import { query, mutation, action } from "../_generated/server";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 
 // ============================================
@@ -2134,6 +2134,179 @@ export const getBusinessTransactions = query({
       totalAmount: parseFloat(totalAmount.toFixed(2)),
       totalCount,
       currency,
+    };
+  },
+});
+
+// ============================================
+// MCP WRAPPER ACTIONS - Embedding + Qdrant Vector Search
+// ============================================
+// These actions are called by the MCP Lambda server to perform
+// embedding generation (Gemini) + vector similarity search (Qdrant).
+// They exist here so that Qdrant/Gemini credentials stay in Convex env
+// and don't need to be duplicated in the MCP Lambda.
+
+/**
+ * Generate embedding via Gemini API
+ */
+async function generateEmbedding(text: string, taskType: string = "RETRIEVAL_QUERY"): Promise<number[]> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY not configured in Convex env");
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content: { parts: [{ text: text.trim() }] },
+        taskType,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Gemini embedding failed: ${response.status} - ${errorText.slice(0, 200)}`);
+  }
+
+  const result = await response.json();
+  return result.embedding?.values || [];
+}
+
+/**
+ * Search Qdrant collection with optional RLS filter
+ */
+async function searchQdrant(
+  embedding: number[],
+  collectionName: string,
+  limit: number,
+  scoreThreshold: number,
+  filter?: Record<string, unknown>
+): Promise<Array<{ id: string; score: number; payload?: Record<string, unknown> }>> {
+  const qdrantUrl = process.env.QDRANT_URL;
+  const qdrantApiKey = process.env.QDRANT_API_KEY;
+  if (!qdrantUrl || !qdrantApiKey) throw new Error("QDRANT_URL/QDRANT_API_KEY not configured in Convex env");
+
+  const body: Record<string, unknown> = {
+    vector: embedding,
+    limit,
+    with_payload: true,
+    score_threshold: scoreThreshold,
+  };
+  if (filter) body.filter = filter;
+
+  const response = await fetch(
+    `${qdrantUrl}/collections/${collectionName}/points/search`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "api-key": qdrantApiKey,
+      },
+      body: JSON.stringify(body),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Qdrant search failed: ${response.status} - ${errorText.slice(0, 200)}`);
+  }
+
+  const result = await response.json();
+  return (result.result || []).map((r: any) => ({
+    id: typeof r.id === "string" ? r.id : String(r.id),
+    score: r.score,
+    payload: r.payload,
+  }));
+}
+
+/**
+ * Search uploaded financial documents by text content using vector similarity.
+ * Uses row-level security (user_id + business_id filter on Qdrant).
+ * Called by MCP Lambda: src/lambda/mcp-server/tools/search-documents.ts
+ */
+export const searchDocumentsForMCP = action({
+  args: {
+    businessId: v.string(),
+    userId: v.string(),
+    query: v.string(),
+    limit: v.optional(v.number()),
+    similarityThreshold: v.optional(v.number()),
+  },
+  handler: async (_ctx, args) => {
+    const limit = args.limit || 5;
+    const threshold = args.similarityThreshold || 0.7;
+    const collectionName = process.env.QDRANT_COLLECTION_NAME || "financial_documents";
+
+    // 1. Generate embedding for the search query
+    const embedding = await generateEmbedding(args.query, "RETRIEVAL_QUERY");
+
+    // 2. Search Qdrant with row-level security filter
+    const results = await searchQdrant(
+      embedding,
+      collectionName,
+      limit,
+      threshold,
+      {
+        must: [
+          { key: "user_id", match: { value: args.userId } },
+          { key: "business_id", match: { value: args.businessId } },
+        ],
+      }
+    );
+
+    // 3. Format results for MCP tool
+    return {
+      documents: results.map((r) => ({
+        document_id: r.payload?.document_id || r.id,
+        content_snippet: ((r.payload?.text as string) || "").substring(0, 200),
+        relevance_score: r.score,
+        upload_date: r.payload?.upload_date || r.payload?.created_at || "Unknown",
+      })),
+    };
+  },
+});
+
+/**
+ * Search regulatory knowledge base (tax laws, compliance, regulations).
+ * Public collection — no RLS filter needed.
+ * Called by MCP Lambda: src/lambda/mcp-server/tools/search-regulatory-kb.ts
+ */
+export const searchRegulatoryKBForMCP = action({
+  args: {
+    query: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (_ctx, args) => {
+    const limit = args.limit || 5;
+
+    // 1. Generate embedding for the search query
+    const embedding = await generateEmbedding(args.query, "RETRIEVAL_QUERY");
+
+    // 2. Search regulatory_kb collection (public, no RLS)
+    const results = await searchQdrant(
+      embedding,
+      "regulatory_kb",
+      limit,
+      0.3 // Lower threshold for regulatory content
+    );
+
+    // 3. Format results for MCP tool
+    return {
+      results: results.map((r) => {
+        const meta = (r.payload?.metadata as Record<string, unknown>) || {};
+        return {
+          source_name: meta.source_name || "Unknown Source",
+          country: meta.country || "N/A",
+          content_snippet: ((r.payload?.text as string) || "").substring(0, 400),
+          confidence_score: r.score,
+          section: meta.section,
+          official_url: meta.official_url,
+          pdf_url: meta.pdf_url,
+          category: meta.category,
+        };
+      }),
     };
   },
 });
