@@ -185,7 +185,7 @@ export const getDashboardSummary = action({
   args: {
     businessId: v.id("businesses"),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<any> => {
     return await ctx.runQuery(internal.functions.inventoryStock.getDashboardData, {
       businessId: args.businessId,
     });
