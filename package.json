@@ -13,7 +13,7 @@
     "convex:deploy": "npx convex deploy",
     "prebuild": "npm run setup:python && npm run lint:translations && npm run convex:deploy:ci",
     "convex:deploy:ci": "if [ \"$VERCEL_ENV\" = \"production\" ]; then npx convex deploy --yes --typecheck disable; else echo 'Skipping Convex deploy (not production)'; fi",
-    "build": "next build",
+    "build": "NODE_OPTIONS='--max-old-space-size=4096' next build",
     "build:analyze": "ANALYZE=true npm run build",
     "start": "next start",
     "test": "vitest run",
