@@ -167,6 +167,9 @@ function mapConvexInvoice(invoice: ConvexInvoice): Invoice {
     // Accounting status
     accountingStatus: invoice.accountingStatus,
     journalEntryId: invoice.journalEntryId,
+    // 032-credit-debit-note: Pass through for AP credit/debit note forms
+    businessId: invoice.businessId,
+    einvoiceType: invoice.einvoiceType,
     // Map linked transaction from Convex query join
     linked_transaction: invoice.linkedTransaction
       ? {
