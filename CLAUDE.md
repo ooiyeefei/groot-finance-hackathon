@@ -560,6 +560,8 @@ const arBalance = arLines.reduce((sum, line) =>
 - Convex (2 new tables: `debtor_update_tokens`, `debtor_change_log`) (032-self-service-debtors-info-update)
 - TypeScript 5.9.3 (Next.js 15.5.7, Convex 1.31.3) + Convex (DB + real-time), React 19.1.2, Radix UI, Tailwind CSS, lucide-react (001-inv-stock-management)
 - Convex (3 new tables + 2 modified tables) (001-inv-stock-management)
+- TypeScript 5.9.3 (Next.js 15.5.7 + Convex 1.31.3) + Convex (DB + real-time), Recharts (charts), Radix UI (tabs/dialogs), Tailwind CSS (032-price-history-tracking)
+- Convex (2 new tables: `selling_price_history`, `catalog_vendor_item_mappings`; 1 modified: `businesses`) (032-price-history-tracking)
 
 
 ## Recent Changes
