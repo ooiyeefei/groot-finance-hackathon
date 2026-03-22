@@ -27,6 +27,7 @@ def handler(event: dict, context=None) -> dict:
     results = {
         "troubleshooter": {"optimized": False, "reason": "not_run"},
         "recon": {"optimized": False, "reason": "not_run"},
+        "doc_classification": {"optimized": False, "reason": "not_run"},
         "evaluation": {},
     }
 
@@ -34,10 +35,11 @@ def handler(event: dict, context=None) -> dict:
         from optimization.data_collector import (
             collect_hint_effectiveness_pairs,
             collect_recon_success_pairs,
+            collect_doc_classification_corrections,
             save_optimization_timestamp,
             _get_last_optimized_timestamp,
         )
-        from optimization.optimizer import optimize_troubleshooter, optimize_recon
+        from optimization.optimizer import optimize_troubleshooter, optimize_recon, optimize_doc_classifier
         from optimization.evaluator import run_evaluation
         from optimization.quality_gate import run_quality_gate, serialize_quality_gate_result
 
@@ -50,14 +52,17 @@ def handler(event: dict, context=None) -> dict:
         # ── Step 1: Collect training data (incremental + anchor-prioritized) ──
         hint_pairs, hint_metadata = collect_hint_effectiveness_pairs(since_timestamp=last_ts)
         recon_pairs, recon_metadata = collect_recon_success_pairs(since_timestamp=last_ts)
+        doc_corrections, doc_metadata = collect_doc_classification_corrections(since_timestamp=last_ts)
 
         # Check if there's actually new data to optimize on
         new_hint_count = hint_metadata.get("new_count", 0)
         new_recon_count = recon_metadata.get("new_count", 0)
-        if new_hint_count == 0 and new_recon_count == 0 and last_ts > 0:
+        new_doc_count = doc_metadata.get("new_count", 0)
+        if new_hint_count == 0 and new_recon_count == 0 and new_doc_count == 0 and last_ts > 0:
             print(f"[Optimizer] No new corrections since last optimization — skipping redundant run")
             results["troubleshooter"] = {"optimized": False, "reason": "no_new_data"}
             results["recon"] = {"optimized": False, "reason": "no_new_data"}
+            results["doc_classification"] = {"optimized": False, "reason": "no_new_data"}
             # Still run evaluation for latest metrics
             results["evaluation"] = run_evaluation(min_attempts=3)
             dur = int((time.time() - start) * 1000)
@@ -77,12 +82,19 @@ def handler(event: dict, context=None) -> dict:
             results["recon"] = {"optimized": False, "reason": "no_training_data"}
             print("[Optimizer] No recon-success pairs yet — recon optimization skipped")
 
+        # ── Step 2b: Run doc classification optimization ──
+        if doc_corrections and (new_doc_count > 0 or last_ts == 0):
+            results["doc_classification"] = optimize_doc_classifier(doc_corrections, metadata=doc_metadata)
+        else:
+            results["doc_classification"] = {"optimized": False, "reason": "no_training_data"}
+            print("[Optimizer] No doc classification corrections yet — optimization skipped")
+
         # ── Step 3: Run evaluation (now includes failure category analysis) ──
         results["evaluation"] = run_evaluation(min_attempts=3)
 
         # ── Step 4: Save optimization timestamp (Refinement 5) ──
         # Only update if optimization actually ran (not skipped)
-        if hint_pairs or recon_pairs:
+        if hint_pairs or recon_pairs or doc_corrections:
             save_optimization_timestamp(current_ts)
             print(f"[Optimizer] Updated optimization checkpoint to {current_ts}")
 

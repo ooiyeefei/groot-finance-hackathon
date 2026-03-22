@@ -714,6 +714,39 @@ export const deleteInboxEntry = mutation({
 /**
  * Get inbox statistics for dashboard
  */
+/**
+ * Get classification corrections for DSPy training
+ * Called by: DSPy optimizer Lambda (no auth — system-level query)
+ */
+export const getClassificationCorrections = query({
+  args: {
+    sinceTimestamp: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const sinceTimestamp = args.sinceTimestamp || 0;
+
+    const corrections = await ctx.db
+      .query("document_classification_corrections")
+      .withIndex("by_correctedAt")
+      .filter((q) => q.gte(q.field("correctedAt"), sinceTimestamp))
+      .collect();
+
+    return {
+      corrections: corrections.map((c) => ({
+        originalType: c.originalType,
+        correctedType: c.correctedType,
+        aiConfidence: c.aiConfidence,
+        aiReasoning: c.aiReasoning,
+        fileHash: c.fileHash,
+        mimeType: c.mimeType,
+        correctedAt: c.correctedAt,
+        consumed: c.consumed,
+      })),
+      totalCount: corrections.length,
+    };
+  },
+});
+
 export const getInboxStats = query({
   args: {
     businessId: v.id("businesses"),

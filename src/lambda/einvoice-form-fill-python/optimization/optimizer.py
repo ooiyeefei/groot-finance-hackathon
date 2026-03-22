@@ -324,10 +324,153 @@ def optimize_recon(training_data: list, metadata: dict = None) -> dict:
             "qualityGateResult": quality_gate_dict,
         }
     else:
+        return {"optimized": False, "reason": "no_improvement",
+                "score": optimized_score, "baseline_score": baseline_score}
+
+
+MIN_DOC_CLASSIFICATION_EXAMPLES = 20  # Need at least 20 corrections before training
+
+
+def optimize_doc_classifier(training_data: list, metadata: dict = None) -> dict:
+    """Run BootstrapFewShot optimization on the document classifier.
+
+    Uses corrections to learn few-shot demonstrations that improve
+    receipt vs invoice classification accuracy.
+
+    The optimized module state is saved to S3 as JSON. The Node.js email
+    processor Lambda reads this JSON to enhance its Gemini classification prompt.
+    """
+    if len(training_data) < MIN_DOC_CLASSIFICATION_EXAMPLES:
+        print(f"[Optimizer] Insufficient doc classification data "
+              f"({len(training_data)}/{MIN_DOC_CLASSIFICATION_EXAMPLES}), skipping")
+        return {"optimized": False, "reason": "insufficient_data", "count": len(training_data)}
+
+    import dspy
+    from dspy_modules.doc_classifier import DocumentClassifier, classification_metric
+
+    # Configure DSPy with Gemini Flash-Lite
+    lm = dspy.LM("gemini/gemini-3.1-flash-lite-preview", api_key=GEMINI_KEY,
+                  max_tokens=512, temperature=0.0)
+    dspy.settings.configure(lm=lm, adapter=dspy.JSONAdapter())
+
+    # Build training examples from corrections
+    # Each correction: user said "this is NOT a {original_type}, it's a {corrected_type}"
+    trainset = []
+    for item in training_data:
+        example = dspy.Example(
+            document_description=item["document_description"],
+            filename=item["filename"],
+            email_subject=item.get("email_subject", ""),
+            doc_type=item["corrected_type"],  # Ground truth = what user corrected to
+        ).with_inputs("document_description", "filename", "email_subject")
+        trainset.append(example)
+
+    # Split: 80% train, 20% validation
+    split_idx = max(1, int(len(trainset) * 0.8))
+    train_split = trainset[:split_idx]
+    val_split = trainset[split_idx:]
+
+    # Baseline evaluation
+    baseline = DocumentClassifier()
+    if val_split:
+        evaluate = dspy.Evaluate(devset=val_split, metric=classification_metric, num_threads=2)
+        baseline_score = evaluate(baseline)
+    else:
+        baseline_score = 0.0
+
+    print(f"[Optimizer] Doc classifier baseline score: {baseline_score:.2f} "
+          f"(train={len(train_split)}, val={len(val_split)})")
+
+    # Optimize with BootstrapFewShot (always — doc classification doesn't have
+    # anchor merchants, so no MIPROv2 diversity gate needed)
+    optimizer = dspy.BootstrapFewShot(
+        metric=classification_metric,
+        max_bootstrapped_demos=4,
+        max_labeled_demos=8,
+    )
+    optimized = optimizer.compile(baseline, trainset=train_split)
+
+    if val_split:
+        optimized_score = evaluate(optimized)
+    else:
+        optimized_score = 1.0  # No validation set, assume improvement
+
+    print(f"[Optimizer] Doc classifier optimized: {optimized_score:.2f} "
+          f"(baseline={baseline_score:.2f})")
+
+    # Deploy if improved (or first time)
+    if optimized_score >= baseline_score:
+        import tempfile
+        tmp_path = tempfile.mktemp(suffix=".json")
+        optimized.save(tmp_path)
+        with open(tmp_path, "r") as f:
+            state_dict = json.load(f)
+        os.unlink(tmp_path)
+
+        # Also export few-shot examples as a simple JSON format
+        # that the Node.js email processor can read
+        few_shot_examples = _extract_few_shot_examples(state_dict)
+        _upload_few_shot_examples(few_shot_examples)
+
+        _upload_module_to_s3("doc_classifier", state_dict, optimized_score)
+        return {
+            "optimized": True,
+            "strategy": "bootstrap_fewshot",
+            "score": optimized_score,
+            "baseline_score": baseline_score,
+            "examples_count": len(trainset),
+            "few_shot_count": len(few_shot_examples),
+        }
+    else:
+        print(f"[Optimizer] No improvement, retaining baseline")
         return {
             "optimized": False,
             "reason": "no_improvement",
             "score": optimized_score,
             "baseline_score": baseline_score,
-            "qualityGateResult": quality_gate_dict,
         }
+
+
+def _extract_few_shot_examples(state_dict: dict) -> list:
+    """Extract few-shot demonstrations from DSPy optimized state.
+
+    Converts DSPy's internal state format into a simple JSON list that
+    the Node.js email processor can use to enhance Gemini prompts.
+    """
+    examples = []
+    try:
+        # DSPy saves demos under the module path
+        for key, value in state_dict.items():
+            if "demos" in key and isinstance(value, list):
+                for demo in value:
+                    if isinstance(demo, dict):
+                        examples.append({
+                            "description": demo.get("document_description", ""),
+                            "filename": demo.get("filename", ""),
+                            "email_subject": demo.get("email_subject", ""),
+                            "type": demo.get("doc_type", ""),
+                            "reasoning": demo.get("rationale", demo.get("reasoning", "")),
+                        })
+    except Exception as e:
+        print(f"[Optimizer] Failed to extract few-shot examples: {e}")
+
+    return examples
+
+
+def _upload_few_shot_examples(examples: list):
+    """Upload few-shot examples for Node.js Lambda consumption."""
+    import boto3
+    s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-west-2"))
+
+    body = json.dumps({
+        "version": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "examples": examples,
+    }, indent=2)
+
+    s3.put_object(
+        Bucket=S3_BUCKET,
+        Key=f"{S3_PREFIX}/doc_classifier/few_shot_examples.json",
+        Body=body,
+        ContentType="application/json",
+    )
+    print(f"[Optimizer] Uploaded {len(examples)} few-shot examples for Node.js Lambda")

@@ -187,3 +187,56 @@ def collect_recon_success_pairs(since_timestamp: float = 0) -> Tuple[List[dict],
     except Exception as e:
         print(f"[Optimizer] Failed to collect recon pairs: {e}")
         return [], {"unique_merchants": set(), "anchor_count": 0, "new_count": 0, "total_count": 0}
+
+
+def collect_doc_classification_corrections(since_timestamp: float = 0) -> Tuple[List[dict], dict]:
+    """Extract document classification corrections for DSPy training.
+
+    Each correction represents a case where AI classified a document wrong
+    (e.g., called a receipt an invoice) and the user corrected it.
+
+    Returns:
+        Tuple of (corrections, metadata) for optimizer consumption.
+    """
+    try:
+        data = _convex_query(
+            "functions/documentInbox:getClassificationCorrections",
+            {"sinceTimestamp": since_timestamp}
+        )
+        raw_corrections = data.get("corrections", []) if data else []
+
+        training_pairs = []
+        new_count = 0
+
+        for correction in raw_corrections:
+            corrected_at = correction.get("correctedAt", 0)
+            is_new = corrected_at > since_timestamp or since_timestamp == 0
+            if is_new:
+                new_count += 1
+
+            # The AI reasoning from Gemini serves as the "document description"
+            # This is what the vision model saw — the DSPy module learns to
+            # re-classify based on these descriptions
+            ai_reasoning = correction.get("aiReasoning", "")
+
+            training_pairs.append({
+                "document_description": ai_reasoning,
+                "filename": correction.get("fileHash", "unknown"),
+                "email_subject": "",  # Not stored in corrections yet
+                "original_type": correction["originalType"],
+                "corrected_type": correction["correctedType"],
+                "ai_confidence": correction.get("aiConfidence", 0),
+            })
+
+        metadata = {
+            "total_count": len(training_pairs),
+            "new_count": new_count,
+        }
+
+        print(f"[Optimizer] Doc classification corrections: {new_count} new, "
+              f"{len(training_pairs)} total")
+        return training_pairs, metadata
+
+    except Exception as e:
+        print(f"[Optimizer] Failed to collect doc classification corrections: {e}")
+        return [], {"total_count": 0, "new_count": 0}

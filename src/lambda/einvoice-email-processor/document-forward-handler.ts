@@ -31,6 +31,45 @@ const SYSTEM_EMAIL = "noreply@notifications.hellogroot.com";
 
 const AUTO_ROUTE_THRESHOLD = 0.90; // Auto-route if confidence >= 90%
 
+// ── DSPy few-shot cache (loaded once per cold start) ──
+interface FewShotExample {
+  description: string;
+  filename: string;
+  type: string;
+  reasoning: string;
+}
+let cachedFewShotExamples: FewShotExample[] | null = null;
+
+/**
+ * Load DSPy-optimized few-shot examples from S3.
+ * Cached across invocations. Returns empty array if no trained model exists yet.
+ */
+async function loadFewShotExamples(): Promise<FewShotExample[]> {
+  if (cachedFewShotExamples !== null) return cachedFewShotExamples;
+
+  try {
+    const resp = await s3.send(new GetObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: "dspy-modules/doc_classifier/few_shot_examples.json",
+    }));
+    const body = await resp.Body?.transformToString();
+    if (body) {
+      const data = JSON.parse(body);
+      cachedFewShotExamples = data.examples || [];
+      console.log(`[DocForward] Loaded ${cachedFewShotExamples!.length} DSPy few-shot examples (v${data.version})`);
+      return cachedFewShotExamples!;
+    }
+  } catch (err: any) {
+    if (err?.name === "NoSuchKey") {
+      console.log("[DocForward] No DSPy model yet — using base prompt");
+    } else {
+      console.log(`[DocForward] Failed to load DSPy examples: ${err}`);
+    }
+  }
+  cachedFewShotExamples = [];
+  return [];
+}
+
 interface DocumentAttachment {
   filename: string;
   contentType: string;
@@ -215,6 +254,19 @@ async function classifyDocument(
   }
 
   try {
+    // Load DSPy-learned few-shot examples (if trained model exists)
+    const fewShotExamples = await loadFewShotExamples();
+
+    // Build prompt — enhanced with learned examples when available
+    let fewShotSection = "";
+    if (fewShotExamples.length > 0) {
+      const exampleLines = fewShotExamples
+        .slice(0, 5) // Cap at 5 examples to stay within token limits
+        .map((ex, i) => `Example ${i + 1}: "${ex.description}" → ${ex.type} (${ex.reasoning})`)
+        .join("\n");
+      fewShotSection = `\n\nHere are examples from past corrections to guide your classification:\n${exampleLines}\n`;
+    }
+
     const prompt = `Classify this document image. Determine if it is:
 - "receipt": A receipt from a merchant/vendor (proof of purchase for expense claims)
 - "invoice": An AP supplier invoice (bill from vendor requesting payment)
@@ -223,7 +275,7 @@ async function classifyDocument(
 Consider:
 - Receipts: typically show itemized purchases, merchant name, transaction date, payment method
 - Invoices: show invoice number, payment terms, due date, "Invoice" header, billing/shipping addresses
-
+${fewShotSection}
 Respond in JSON only:
 {"type":"receipt|invoice|unknown","confidence":0.0-1.0,"reasoning":"brief explanation"}`;
 
