@@ -53,7 +53,8 @@
     "leaveManagement": "Leave & Timesheet",
     "personalSettings": "Personal Settings",
     "reporting": "Reporting & Exports",
-    "documentsInbox": "Documents Inbox"
+    "documentsInbox": "Documents Inbox",
+    "inventory": "Inventory"
   },
   "dashboard": {
     "title": "Dashboard",

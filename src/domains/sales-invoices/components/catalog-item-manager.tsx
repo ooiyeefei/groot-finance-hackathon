@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import { Search, Plus, Pencil, Ban, RotateCcw, Package, Loader2, Undo2, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -45,6 +45,76 @@ function StockBadgeForItem({ catalogItemId, businessId }: { catalogItemId: strin
     <span className={`font-medium ${hasLow ? 'text-yellow-600 dark:text-yellow-400' : totalQty <= 0 ? 'text-red-600 dark:text-red-400' : 'text-foreground'}`}>
       {totalQty}
     </span>
+  )
+}
+
+function StockDetailRow({ catalogItemId, businessId }: { catalogItemId: string; businessId: string | null }) {
+  // @ts-ignore - api types generated after convex codegen on main
+  const stockData: any[] | undefined = useQuery(
+    (api.functions as any).inventoryStock?.getByProduct,
+    businessId && catalogItemId
+      ? { businessId: businessId as Id<'businesses'>, catalogItemId: catalogItemId as Id<'catalog_items'> }
+      : 'skip'
+  )
+  // @ts-ignore
+  const movements: any[] | undefined = useQuery(
+    (api.functions as any).inventoryMovements?.listByProduct,
+    businessId && catalogItemId
+      ? { businessId: businessId as Id<'businesses'>, catalogItemId: catalogItemId as Id<'catalog_items'>, limit: 5 }
+      : 'skip'
+  )
+
+  if (!stockData) return <p className="text-xs text-muted-foreground">Loading...</p>
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Per-location stock */}
+      <div>
+        <h4 className="text-xs font-medium text-foreground mb-2">Stock by Location</h4>
+        {stockData.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No stock data</p>
+        ) : (
+          <div className="space-y-1">
+            {stockData.map((s: any) => (
+              <div key={s.stock._id} className="flex items-center justify-between text-xs">
+                <span className="text-foreground">{s.location.name}</span>
+                <span className={`font-medium ${
+                  s.stock.reorderLevel !== undefined && s.stock.quantityOnHand <= s.stock.reorderLevel
+                    ? 'text-yellow-600 dark:text-yellow-400'
+                    : s.stock.quantityOnHand <= 0
+                    ? 'text-red-600 dark:text-red-400'
+                    : 'text-foreground'
+                }`}>
+                  {s.stock.quantityOnHand}
+                  {s.stock.reorderLevel !== undefined && s.stock.quantityOnHand <= s.stock.reorderLevel && (
+                    <Badge className="ml-1 text-[10px] bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30">Low</Badge>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Recent movements */}
+      <div>
+        <h4 className="text-xs font-medium text-foreground mb-2">Recent Movements</h4>
+        {!movements || movements.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No movements yet</p>
+        ) : (
+          <div className="space-y-1">
+            {movements.map((m: any) => (
+              <div key={m._id} className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">{m.date}</span>
+                <span className={`font-medium ${m.quantity > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {m.quantity > 0 ? '+' : ''}{m.quantity}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -139,6 +209,17 @@ export default function CatalogItemManager() {
 
   // Track which product groups are expanded
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+
+  // Track which items have stock detail expanded
+  const [expandedStockItems, setExpandedStockItems] = useState<Set<string>>(new Set())
+  const toggleStockExpand = useCallback((itemId: string) => {
+    setExpandedStockItems((prev) => {
+      const next = new Set(prev)
+      if (next.has(itemId)) next.delete(itemId)
+      else next.add(itemId)
+      return next
+    })
+  }, [])
 
   const toggleGroup = useCallback((stripeProductId: string) => {
     setExpandedGroups((prev) => {
@@ -417,8 +498,8 @@ export default function CatalogItemManager() {
                         )
                       }
 
-                      return (
-                        <tr key={item._id} className="border-b border-border hover:bg-muted/50 transition-colors">
+                      return (<React.Fragment key={item._id}>
+                        <tr className="border-b border-border hover:bg-muted/50 transition-colors">
                           <td className="px-4 py-3">
                             <div>
                               <div className="flex items-center gap-1.5">
@@ -448,7 +529,16 @@ export default function CatalogItemManager() {
                           <td className="px-4 py-3 text-sm text-muted-foreground text-right">{item.taxRate != null ? `${(item.taxRate * 100).toFixed(1)}%` : '--'}</td>
                           <td className="px-4 py-3 text-sm text-right">
                             {(item as any).trackInventory ? (
-                              <StockBadgeForItem catalogItemId={item._id} businessId={businessId} />
+                              <button
+                                onClick={() => toggleStockExpand(item._id)}
+                                className="inline-flex items-center gap-1 hover:underline cursor-pointer"
+                              >
+                                <StockBadgeForItem catalogItemId={item._id} businessId={businessId} />
+                                {expandedStockItems.has(item._id)
+                                  ? <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                                  : <ChevronRight className="w-3 h-3 text-muted-foreground" />
+                                }
+                              </button>
                             ) : (
                               <span className="text-muted-foreground">--</span>
                             )}
@@ -467,6 +557,15 @@ export default function CatalogItemManager() {
                             </div>
                           </td>
                         </tr>
+                        {/* Stock detail row (expanded) */}
+                        {expandedStockItems.has(item._id) && (item as any).trackInventory && (
+                          <tr>
+                            <td colSpan={9} className="px-4 py-3 bg-muted/30">
+                              <StockDetailRow catalogItemId={item._id} businessId={businessId} />
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                       )
                     }
 

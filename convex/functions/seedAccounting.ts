@@ -177,6 +177,14 @@ export const seedDefaultAccounts = mutation({
         description:
           "Non-primary expenses (interest, forex losses, discounts given, write-offs).",
       },
+      {
+        accountCode: "6500",
+        accountName: "Inventory Adjustments",
+        accountType: "Expense" as const,
+        accountSubtype: "Operating Expense",
+        normalBalance: "debit" as const,
+        description: "Gains/losses from inventory adjustments (stocktake, damage, etc.).",
+      },
     ];
 
     // Insert all default accounts
@@ -412,6 +420,14 @@ export const seedDefaultAccountsForFirstBusiness = mutation({
         description:
           "Non-primary expenses (interest, forex losses, discounts given, write-offs).",
       },
+      {
+        accountCode: "6500",
+        accountName: "Inventory Adjustments",
+        accountType: "Expense" as const,
+        accountSubtype: "Operating Expense",
+        normalBalance: "debit" as const,
+        description: "Gains/losses from inventory adjustments (stocktake, damage, etc.).",
+      },
     ];
 
     // Insert all default accounts
@@ -540,5 +556,6 @@ function getDefaultAccounts() {
     { accountCode: "5200", accountName: "Operating Expenses", accountType: "Expense" as const, accountSubtype: "Operating Expense", normalBalance: "debit" as const, description: "General business expenses." },
     { accountCode: "5800", accountName: "Platform Fees", accountType: "Expense" as const, accountSubtype: "Operating Expense", normalBalance: "debit" as const, description: "Fees charged by e-commerce platforms." },
     { accountCode: "5900", accountName: "Other Expenses", accountType: "Expense" as const, accountSubtype: "Non-Operating Expense", normalBalance: "debit" as const, description: "Non-primary expenses." },
+    { accountCode: "6500", accountName: "Inventory Adjustments", accountType: "Expense" as const, accountSubtype: "Operating Expense", normalBalance: "debit" as const, description: "Gains/losses from inventory adjustments (stocktake, damage, etc.)." },
   ];
 }

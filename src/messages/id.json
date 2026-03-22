@@ -53,7 +53,8 @@
     "leaveManagement": "Cuti & Absensi",
     "personalSettings": "Pengaturan Pribadi",
     "reporting": "Laporan & Ekspor",
-    "documentsInbox": "Kotak Masuk Dokumen"
+    "documentsInbox": "Kotak Masuk Dokumen",
+    "inventory": "Inventaris"
   },
   "dashboard": {
     "title": "Dashboard",

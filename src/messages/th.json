@@ -53,7 +53,8 @@
     "leaveManagement": "ลางาน & ไทม์ชีท",
     "personalSettings": "ตั้งค่าส่วนตัว",
     "reporting": "รายงานและส่งออก",
-    "documentsInbox": "กล่องเอกสาร"
+    "documentsInbox": "กล่องเอกสาร",
+    "inventory": "สินค้าคงคลัง"
   },
   "dashboard": {
     "title": "แดชบอร์ด",

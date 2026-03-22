@@ -6,6 +6,8 @@ import { api } from '../../../../convex/_generated/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Package, MapPin, AlertTriangle, ArrowDownRight, ArrowUpRight, Info } from 'lucide-react'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { HowItWorksDrawer } from './how-it-works-drawer'
@@ -16,6 +18,9 @@ export function InventoryDashboard() {
   const [data, setData] = useState<DashboardSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [showHowItWorks, setShowHowItWorks] = useState(false)
+  const [filterType, setFilterType] = useState<string>('all')
+  const [filterDateFrom, setFilterDateFrom] = useState('')
+  const [filterDateTo, setFilterDateTo] = useState('')
 
   const getDashboardSummary = useAction(api.functions.inventoryStock.getDashboardSummary)
 
@@ -179,9 +184,45 @@ export function InventoryDashboard() {
       {/* Recent Movements */}
       <Card className="bg-card border-border">
         <CardHeader className="border-b border-border">
-          <CardTitle className="text-foreground text-base">Recent Movements</CardTitle>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <CardTitle className="text-foreground text-base">Recent Movements</CardTitle>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Select value={filterType} onValueChange={setFilterType}>
+                <SelectTrigger className="bg-input border-border text-foreground text-sm h-8 w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All types</SelectItem>
+                  <SelectItem value="stock_in">Stock In</SelectItem>
+                  <SelectItem value="stock_out">Stock Out</SelectItem>
+                  <SelectItem value="adjustment">Adjustment</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
+                type="date"
+                value={filterDateFrom}
+                onChange={(e) => setFilterDateFrom(e.target.value)}
+                placeholder="From"
+                className="bg-input border-border text-foreground text-sm h-8 w-36"
+              />
+              <Input
+                type="date"
+                value={filterDateTo}
+                onChange={(e) => setFilterDateTo(e.target.value)}
+                placeholder="To"
+                className="bg-input border-border text-foreground text-sm h-8 w-36"
+              />
+            </div>
+          </div>
         </CardHeader>
-        {data && data.recentMovements.length > 0 ? (
+        {data && data.recentMovements.length > 0 ? (() => {
+          const filtered = data.recentMovements.filter((m) => {
+            if (filterType !== 'all' && m.movementType !== filterType) return false
+            if (filterDateFrom && m.date < filterDateFrom) return false
+            if (filterDateTo && m.date > filterDateTo) return false
+            return true
+          })
+          return filtered.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-muted">
@@ -194,7 +235,7 @@ export function InventoryDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {data.recentMovements.map((movement) => (
+                {filtered.map((movement) => (
                   <tr key={movement._id} className="border-b border-border hover:bg-muted/50">
                     <td className="px-4 py-3 text-foreground text-sm">{movement.date}</td>
                     <td className="px-4 py-3">
@@ -221,7 +262,12 @@ export function InventoryDashboard() {
               </tbody>
             </table>
           </div>
-        ) : (
+          ) : (
+            <CardContent className="p-8 text-center">
+              <p className="text-muted-foreground">No movements match the current filters.</p>
+            </CardContent>
+          )
+        })() : (
           <CardContent className="p-8 text-center">
             <p className="text-muted-foreground">No movements yet. Stock-in from an AP invoice to get started.</p>
           </CardContent>

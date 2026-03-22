@@ -702,6 +702,44 @@ export const send = mutation({
           createdBy: user._id,
         }
       );
+
+      // COGS journal entry: Dr. 5100 COGS / Cr. 1500 Inventory Asset
+      // Calculate total cost using WAC from inventory_stock
+      let totalCOGS = 0;
+      for (const item of stockOutItems) {
+        const stockRecord = await ctx.db
+          .query("inventory_stock")
+          .withIndex("by_catalogItem_location", (q: any) =>
+            q.eq("catalogItemId", item.catalogItemId).eq("locationId", item.locationId)
+          )
+          .first();
+        const wac = (stockRecord as any)?.weightedAvgCostHome || 0;
+        totalCOGS += item.quantity * wac;
+      }
+
+      if (totalCOGS > 0) {
+        await ctx.runMutation(internal.functions.journalEntries.createInternal, {
+          businessId: args.businessId,
+          transactionDate: invoice.invoiceDate,
+          description: `COGS - Sales Invoice ${invoice.invoiceNumber}`,
+          sourceType: "sales_invoice" as const,
+          sourceId: args.id,
+          lines: [
+            {
+              accountCode: "5100",
+              debitAmount: Math.round(totalCOGS * 100) / 100,
+              creditAmount: 0,
+              lineDescription: "Cost of Goods Sold",
+            },
+            {
+              accountCode: "1500",
+              debitAmount: 0,
+              creditAmount: Math.round(totalCOGS * 100) / 100,
+              lineDescription: "Inventory asset reduction",
+            },
+          ],
+        });
+      }
     }
 
     return args.id;
@@ -801,6 +839,54 @@ export const voidInvoice = mutation({
           createdBy: "system",
         }
       );
+
+      // Reverse COGS journal entry: Dr. 1500 Inventory / Cr. 5100 COGS
+      // Find original COGS movements to calculate reversal amount
+      const originalStockOutMovements = await ctx.db
+        .query("inventory_movements")
+        .withIndex("by_sourceType_sourceId", (q: any) =>
+          q.eq("sourceType", "sales_invoice").eq("sourceId", args.id)
+        )
+        .collect();
+
+      if (originalStockOutMovements.length > 0) {
+        // Calculate total COGS from the original WAC at time of sale
+        let reversalCOGS = 0;
+        for (const mov of originalStockOutMovements) {
+          const stockRecord = await ctx.db
+            .query("inventory_stock")
+            .withIndex("by_catalogItem_location", (q: any) =>
+              q.eq("catalogItemId", mov.catalogItemId).eq("locationId", mov.locationId)
+            )
+            .first();
+          const wac = (stockRecord as any)?.weightedAvgCostHome || 0;
+          reversalCOGS += Math.abs(mov.quantity) * wac;
+        }
+
+        if (reversalCOGS > 0) {
+          await ctx.runMutation(internal.functions.journalEntries.createInternal, {
+            businessId: args.businessId,
+            transactionDate: new Date().toISOString().split("T")[0],
+            description: `REVERSAL COGS - Void Invoice ${invoice.invoiceNumber}`,
+            sourceType: "sales_invoice" as const,
+            sourceId: args.id,
+            lines: [
+              {
+                accountCode: "1500",
+                debitAmount: Math.round(reversalCOGS * 100) / 100,
+                creditAmount: 0,
+                lineDescription: "Inventory asset restored",
+              },
+              {
+                accountCode: "5100",
+                debitAmount: 0,
+                creditAmount: Math.round(reversalCOGS * 100) / 100,
+                lineDescription: "COGS reversal",
+              },
+            ],
+          });
+        }
+      }
     }
 
     return args.id;

@@ -53,7 +53,8 @@
     "leaveManagement": "休假与考勤",
     "personalSettings": "个人设置",
     "reporting": "报告与导出",
-    "documentsInbox": "文件收件箱"
+    "documentsInbox": "文件收件箱",
+    "inventory": "库存管理"
   },
   "dashboard": {
     "title": "仪表板",
