@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { useCatalogItems, useCatalogItemMutations } from '../hooks/use-catalog-items'
-import { useMutation } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
 import CatalogItemForm from './catalog-item-form'
 import StripeSyncButton from './stripe-sync-button'
@@ -22,6 +22,31 @@ import type { Id } from '../../../../convex/_generated/dataModel'
 // ---------------------------------------------------------------------------
 
 type FormMode = { kind: 'closed' } | { kind: 'create' } | { kind: 'edit'; item: CatalogItem }
+
+// ---------------------------------------------------------------------------
+// Stock Badge (inline helper for catalog table)
+// ---------------------------------------------------------------------------
+
+function StockBadgeForItem({ catalogItemId, businessId }: { catalogItemId: string; businessId: string | null }) {
+  // @ts-ignore - api types generated after convex codegen on main
+  const stockData: any[] | undefined = useQuery(
+    (api.functions as any).inventoryStock?.getByProduct,
+    businessId && catalogItemId
+      ? { businessId: businessId as Id<'businesses'>, catalogItemId: catalogItemId as Id<'catalog_items'> }
+      : 'skip'
+  )
+
+  if (!stockData || stockData.length === 0) return <span className="text-muted-foreground">0</span>
+
+  const totalQty = stockData.reduce((sum: number, s: any) => sum + s.stock.quantityOnHand, 0)
+  const hasLow = stockData.some((s: any) => s.stock.reorderLevel !== undefined && s.stock.quantityOnHand <= s.stock.reorderLevel)
+
+  return (
+    <span className={`font-medium ${hasLow ? 'text-yellow-600 dark:text-yellow-400' : totalQty <= 0 ? 'text-red-600 dark:text-red-400' : 'text-foreground'}`}>
+      {totalQty}
+    </span>
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -364,6 +389,9 @@ export default function CatalogItemManager() {
                     <th className="px-4 py-3 text-right text-sm font-medium text-foreground">
                       Tax Rate
                     </th>
+                    <th className="px-4 py-3 text-right text-sm font-medium text-foreground">
+                      Stock
+                    </th>
                     <th className="px-4 py-3 text-center text-sm font-medium text-foreground">
                       Status
                     </th>
@@ -418,6 +446,13 @@ export default function CatalogItemManager() {
                             )}
                           </td>
                           <td className="px-4 py-3 text-sm text-muted-foreground text-right">{item.taxRate != null ? `${(item.taxRate * 100).toFixed(1)}%` : '--'}</td>
+                          <td className="px-4 py-3 text-sm text-right">
+                            {(item as any).trackInventory ? (
+                              <StockBadgeForItem catalogItemId={item._id} businessId={businessId} />
+                            ) : (
+                              <span className="text-muted-foreground">--</span>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-center"><StatusBadge status={item.status} /></td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-1">

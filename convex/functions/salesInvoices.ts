@@ -671,6 +671,39 @@ export const send = mutation({
     await ctx.db.patch(args.id, {
       journalEntryId,
     });
+
+    // Inventory stock-out: deduct stock for tracked items with sourceLocationId
+    const stockOutItems: Array<{
+      catalogItemId: any;
+      locationId: any;
+      quantity: number;
+    }> = [];
+    for (const lineItem of invoice.lineItems) {
+      if (lineItem.catalogItemId && lineItem.sourceLocationId) {
+        const catalogItem = await ctx.db.get(lineItem.catalogItemId as any);
+        if (catalogItem && (catalogItem as any).trackInventory) {
+          stockOutItems.push({
+            catalogItemId: lineItem.catalogItemId,
+            locationId: lineItem.sourceLocationId,
+            quantity: lineItem.quantity,
+          });
+        }
+      }
+    }
+    if (stockOutItems.length > 0) {
+      await ctx.runMutation(
+        internal.functions.inventoryMovements.stockOut,
+        {
+          businessId: args.businessId,
+          items: stockOutItems,
+          sourceType: "sales_invoice",
+          sourceId: args.id,
+          date: invoice.invoiceDate,
+          createdBy: user._id,
+        }
+      );
+    }
+
     return args.id;
   },
 });
@@ -734,6 +767,40 @@ export const voidInvoice = mutation({
           } as any);
         }
       }
+    }
+
+    // Reverse inventory stock-out for tracked items
+    const reverseItems: Array<{
+      catalogItemId: any;
+      locationId: any;
+      quantity: number;
+    }> = [];
+    for (const lineItem of invoice.lineItems) {
+      if (lineItem.catalogItemId && lineItem.sourceLocationId) {
+        reverseItems.push({
+          catalogItemId: lineItem.catalogItemId,
+          locationId: lineItem.sourceLocationId,
+          quantity: lineItem.quantity,
+        });
+      }
+    }
+    if (reverseItems.length > 0) {
+      await ctx.runMutation(
+        internal.functions.inventoryMovements.stockIn,
+        {
+          businessId: args.businessId,
+          items: reverseItems.map((item) => ({
+            ...item,
+            unitCostOriginal: 0,
+            unitCostOriginalCurrency: "",
+            unitCostHome: 0,
+          })),
+          sourceType: "void_reversal",
+          sourceId: args.id,
+          date: new Date().toISOString().split("T")[0],
+          createdBy: "system",
+        }
+      );
     }
 
     return args.id;

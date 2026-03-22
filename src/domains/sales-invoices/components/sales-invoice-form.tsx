@@ -12,6 +12,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { Save, Eye, Send, ArrowLeft, Plus, Trash2, X } from 'lucide-react'
 import { useUser } from '@clerk/nextjs'
 import { useActiveBusiness, useBusinessProfile } from '@/contexts/business-context'
+import { useQuery } from 'convex/react'
+import { api } from '../../../../convex/_generated/api'
+import type { Id } from '../../../../convex/_generated/dataModel'
 import { useSalesInvoiceForm } from '../hooks/use-sales-invoice-form'
 import { useSalesInvoiceMutations, useNextInvoiceNumber, useInvoiceTemplateMutations, useCustomInvoiceTemplates } from '../hooks/use-sales-invoices'
 import { useInvoicePdf, type PdfRenderData } from '../hooks/use-invoice-pdf'
@@ -33,6 +36,58 @@ import {
 import type { Id } from '../../../../convex/_generated/dataModel'
 
 type FormMode = 'edit' | 'preview'
+
+function LocationCellForItem({
+  catalogItemId,
+  sourceLocationId,
+  businessId,
+  onLocationChange,
+  quantity,
+}: {
+  catalogItemId?: string
+  sourceLocationId?: string
+  businessId: string | null
+  onLocationChange: (locationId: string) => void
+  quantity: number
+}) {
+  // @ts-ignore - api types generated after convex codegen on main
+  const availableStock: any[] | undefined = useQuery(
+    (api.functions as any).inventoryStock?.getAvailableStock,
+    catalogItemId && businessId
+      ? { businessId: businessId as Id<'businesses'>, catalogItemId: catalogItemId as Id<'catalog_items'> }
+      : 'skip'
+  )
+
+  // Don't show location selector if no stock data or item not tracked
+  if (!availableStock || availableStock.length === 0) {
+    return <span className="text-muted-foreground text-xs">—</span>
+  }
+
+  const selectedStock = availableStock.find((s: any) => s.locationId === sourceLocationId)
+  const isInsufficient = selectedStock && quantity > selectedStock.quantityOnHand
+
+  return (
+    <div className="space-y-0.5">
+      <Select value={sourceLocationId || ''} onValueChange={onLocationChange}>
+        <SelectTrigger className="bg-input border-border text-foreground text-sm h-8">
+          <SelectValue placeholder="Select" />
+        </SelectTrigger>
+        <SelectContent>
+          {availableStock.map((s: any) => (
+            <SelectItem key={s.locationId} value={s.locationId}>
+              {s.locationName} ({s.quantityOnHand})
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {isInsufficient && (
+        <p className="text-xs text-yellow-600 dark:text-yellow-400">
+          Only {selectedStock.quantityOnHand} available
+        </p>
+      )}
+    </div>
+  )
+}
 
 export function SalesInvoiceForm() {
   const router = useRouter()
@@ -385,6 +440,7 @@ export function SalesInvoiceForm() {
                       <th className="text-left text-muted-foreground font-medium py-2 px-2 w-24">Item Code</th>
                       <th className="text-left text-muted-foreground font-medium py-2 px-2">Description</th>
                       <th className="text-right text-muted-foreground font-medium py-2 px-2 w-20">Qty</th>
+                      <th className="text-left text-muted-foreground font-medium py-2 px-2 w-32">Location</th>
                       <th className="text-right text-muted-foreground font-medium py-2 px-2 w-28">Unit Price</th>
                       <th className="text-right text-muted-foreground font-medium py-2 px-2 w-20">Tax %</th>
                       <th className="text-right text-muted-foreground font-medium py-2 px-2 w-28">Amount</th>
@@ -438,6 +494,15 @@ export function SalesInvoiceForm() {
                             value={item.quantity}
                             onChange={(e) => form.updateLineItem(index, { quantity: parseFloat(e.target.value) || 0 })}
                             className="bg-input border-border text-foreground text-sm h-8 text-right"
+                          />
+                        </td>
+                        <td className="py-2 px-2">
+                          <LocationCellForItem
+                            catalogItemId={item.catalogItemId}
+                            sourceLocationId={(item as any).sourceLocationId}
+                            businessId={businessId}
+                            onLocationChange={(locId) => form.updateLineItem(index, { sourceLocationId: locId } as any)}
+                            quantity={item.quantity}
                           />
                         </td>
                         <td className="py-2 px-2">

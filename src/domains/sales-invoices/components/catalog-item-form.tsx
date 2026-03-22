@@ -29,6 +29,7 @@ interface CatalogItemFormData {
   taxRate: string
   glCode: string
   category: string
+  reorderLevel: string
 }
 
 interface CatalogItemFormProps {
@@ -80,6 +81,7 @@ function getInitialFormData(initialData?: Partial<CatalogItem>): CatalogItemForm
         : '',
     glCode: initialData?.glCode ?? '',
     category: initialData?.category ?? '',
+    reorderLevel: (initialData as any)?.reorderLevel != null ? String((initialData as any).reorderLevel) : '',
   }
 }
 
@@ -182,7 +184,8 @@ export default function CatalogItemForm({
           taxRate: taxRateDecimal,
           glCode: formData.glCode.trim() || undefined,
           category: formData.category.trim() || undefined,
-        })
+          ...(formData.reorderLevel ? { reorderLevel: parseFloat(formData.reorderLevel) } : {}),
+        } as any)
       } finally {
         setIsSubmitting(false)
       }
@@ -273,6 +276,23 @@ export default function CatalogItemForm({
               />
               <p className="text-xs text-muted-foreground">
                 Product category code for stock item grouping in accounting export
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="catalog-reorder" className="text-foreground">
+                Reorder Level
+              </Label>
+              <Input
+                id="catalog-reorder"
+                type="number"
+                min="0"
+                step="1"
+                placeholder="e.g. 10"
+                value={formData.reorderLevel}
+                onChange={(e) => handleChange('reorderLevel', e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Low stock alert threshold (inventory tracking)
               </p>
             </div>
           </div>

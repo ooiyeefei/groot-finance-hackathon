@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Languages, Eye, FileText, DollarSign, List, Copy, Loader2, ImageIcon, BookOpen, CheckCircle2 } from 'lucide-react'
+import { X, Languages, Eye, FileText, DollarSign, List, Copy, Loader2, ImageIcon, BookOpen, CheckCircle2, Package } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import DocumentPreviewWithAnnotations from './document-preview-with-annotations'
 import LhdnInvoiceSection from './lhdn-invoice-section'
@@ -14,6 +14,8 @@ import { useInvoiceRealtime } from '../hooks/use-invoices-realtime'
 import { useJournalEntry } from '@/domains/accounting/hooks/use-journal-entries'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { formatBusinessDate } from '@/lib/utils'
+import { useActiveBusiness } from '@/contexts/business-context'
+import { ReceiveInventoryModal } from '@/domains/inventory/components/receive-inventory-modal'
 import type { Id } from '../../../../convex/_generated/dataModel'
 
 interface Document {
@@ -207,6 +209,7 @@ interface Document {
   // Accounting status
   accountingStatus?: 'draft' | 'posted' | 'voided'
   journalEntryId?: string
+  inventoryReceivedAt?: number
   linked_transaction?: {
     id: string
     description: string
@@ -253,6 +256,10 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
   // 032-credit-debit-note: AP credit/debit note form toggles
   const [showAPCreditNoteForm, setShowAPCreditNoteForm] = useState(false)
   const [showAPDebitNoteForm, setShowAPDebitNoteForm] = useState(false)
+  // 001-inv-stock-management: Receive to inventory
+  const [showReceiveInventory, setShowReceiveInventory] = useState(false)
+
+  const { businessId } = useActiveBusiness()
 
   // Refs for scroll-based page tracking
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -276,6 +283,7 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
       confidence_score: realtimeInvoice.confidence_score ?? initialDocument.confidence_score,
       accountingStatus: realtimeInvoice.accountingStatus as Document['accountingStatus'] ?? initialDocument.accountingStatus,
       journalEntryId: realtimeInvoice.journalEntryId ?? initialDocument.journalEntryId,
+      inventoryReceivedAt: (realtimeInvoice as any).inventoryReceivedAt ?? initialDocument.inventoryReceivedAt,
       linked_transaction: realtimeInvoice.linked_transaction ?? initialDocument.linked_transaction,
     }
   }, [initialDocument, realtimeInvoice])
@@ -1148,6 +1156,35 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
                   </div>
                 )}
 
+                {/* Inventory Receipt — shown for posted invoices with line items */}
+                {document.accountingStatus === 'posted' && document.extracted_data?.line_items && document.extracted_data.line_items.length > 0 && (
+                  <div className="mb-6">
+                    {document.inventoryReceivedAt ? (
+                      <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
+                        <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
+                          <Package className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                          Inventory Received
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30">
+                            <CheckCircle2 className="w-3 h-3" />
+                            Done
+                          </span>
+                        </h4>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Items from this invoice have been received into inventory.
+                        </p>
+                      </div>
+                    ) : (
+                      <Button
+                        className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                        onClick={() => setShowReceiveInventory(true)}
+                      >
+                        <Package className="w-4 h-4 mr-2" />
+                        Receive to Inventory
+                      </Button>
+                    )}
+                  </div>
+                )}
+
                 {/* Document Summary - AI Structure */}
                 {document.extracted_data && (
                   <div className="mb-6">
@@ -1981,6 +2018,24 @@ export default function DocumentAnalysisModal({ document: initialDocument, onClo
           </div>
         </div>
       </div>
+      {/* Receive to Inventory Modal */}
+      {showReceiveInventory && businessId && document.extracted_data?.line_items && (
+        <ReceiveInventoryModal
+          businessId={businessId as Id<'businesses'>}
+          invoiceId={document.id as Id<'invoices'>}
+          lineItems={(document.extracted_data.line_items || []).map((li: any) => ({
+            description: li.description?.value ?? li.description ?? '',
+            quantity: parseFloat(li.quantity?.value ?? li.quantity ?? '0') || 0,
+            unitPrice: parseFloat(li.unit_price?.value ?? li.unit_price ?? '0') || 0,
+            lineTotal: parseFloat(li.line_total?.value ?? li.line_total ?? '0') || 0,
+            itemCode: li.item_code?.value ?? li.item_code ?? undefined,
+          }))}
+          invoiceCurrency={(document.extracted_data?.currency?.value ?? document.extracted_data?.currency ?? 'MYR') as string}
+          userId={businessId}
+          onClose={() => setShowReceiveInventory(false)}
+          onComplete={() => setShowReceiveInventory(false)}
+        />
+      )}
     </div>,
     globalThis.document.body
   )
