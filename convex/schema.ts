@@ -615,9 +615,6 @@ export default defineSchema({
     approvedBy: v.optional(v.id("users")),           // Who approved
     approvalNotes: v.optional(v.string()),            // Manager's notes when approving
 
-    // Chat origin (for per-conversation batch grouping)
-    conversationId: v.optional(v.string()),          // Chat conversation ID — groups receipts from same chat
-
     // Timestamps
     submittedAt: v.optional(v.number()),
     approvedAt: v.optional(v.number()),
@@ -1063,10 +1060,6 @@ export default defineSchema({
       v.id("expense_claims"),
       v.id("invoices")
     )),
-
-    // S3 Keys (set by Lambda for downstream processing)
-    s3StagingKey: v.optional(v.string()),          // document-inbox-staging/{bizId}/...
-    s3ExpenseClaimsKey: v.optional(v.string()),    // {bizId}/{userId}/email-fwd/{hash}.{ext} (relative to expense_claims/ prefix)
 
     // Data Retention (PDPA 7-year compliance)
     archiveEligibleAt: v.optional(v.number()),  // 30 days after entry

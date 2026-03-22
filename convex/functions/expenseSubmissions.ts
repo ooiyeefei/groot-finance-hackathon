@@ -485,7 +485,7 @@ export const create = mutation({
   args: {
     businessId: v.string(),
     title: v.optional(v.string()),
-    conversationId: v.optional(v.string()),
+    conversationId: v.optional(v.id("conversations")),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -540,7 +540,7 @@ export const create = mutation({
  */
 export const findByConversation = query({
   args: {
-    conversationId: v.string(),
+    conversationId: v.id("conversations"),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();

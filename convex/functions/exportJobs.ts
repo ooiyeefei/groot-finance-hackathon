@@ -1212,12 +1212,23 @@ async function getAccountingRecords(
   // Filter to posted entries only
   entries = entries.filter((e: any) => e.status === "posted");
 
-  // Role-based filtering
+  // Role-based filtering: createdBy stores Clerk ID, so resolve via users table
   if (role === "employee") {
-    entries = entries.filter((e: any) => e.userId === userId);
+    // Get current user's Clerk ID to match against createdBy
+    const currentUser = await ctx.db.get(userId);
+    if (currentUser) {
+      entries = entries.filter((e: any) => e.createdBy === currentUser.clerkUserId);
+    }
   } else if (role === "manager") {
+    // Get all direct reports' Clerk IDs
     const reportIds = await getManagerReportIds(ctx, businessId, userId);
-    entries = entries.filter((e: any) => reportIds.has(e.userId));
+    const clerkIdSet = new Set<string>();
+    const reportIdArr = Array.from(reportIds);
+    for (let i = 0; i < reportIdArr.length; i++) {
+      const u = await ctx.db.get(reportIdArr[i] as Id<"users">);
+      if (u?.clerkUserId) clerkIdSet.add(u.clerkUserId);
+    }
+    entries = entries.filter((e: any) => clerkIdSet.has(e.createdBy));
   }
 
   // Date filter on transactionDate
@@ -1239,17 +1250,17 @@ async function getAccountingRecords(
     );
   }
 
-  // Transaction type filter (source document type)
+  // Transaction type filter (sourceType field in journal_entries)
   if (filters?.transactionTypeFilter && filters.transactionTypeFilter !== "all") {
     if (filters.transactionTypeFilter === "expense_claim") {
       entries = entries.filter(
-        (e: any) => e.sourceDocumentType === "expense_claim"
+        (e: any) => e.sourceType === "expense_claim"
       );
     } else if (filters.transactionTypeFilter === "invoice") {
       entries = entries.filter(
         (e: any) =>
-          e.sourceDocumentType === "invoice" ||
-          e.sourceDocumentType === "sales_invoice"
+          e.sourceType === "vendor_invoice" ||
+          e.sourceType === "sales_invoice"
       );
     }
   }
@@ -1258,11 +1269,7 @@ async function getAccountingRecords(
 }
 
 /**
- * Enrich accounting records with user data and derive journal lines (DR/CR).
- *
- * DR/CR derivation logic:
- * - Expense / Cost of Goods Sold: each line item → DEBIT, one balancing → CREDIT
- * - Income: each line item → CREDIT, one balancing → DEBIT
+ * Enrich journal entries with user data and actual journal_entry_lines.
  */
 async function enrichAccountingRecords(
   ctx: { db: any },
@@ -1270,71 +1277,42 @@ async function enrichAccountingRecords(
 ): Promise<Record<string, unknown>[]> {
   return Promise.all(
     records.map(async (entry: any) => {
-      // Fetch user
-      const user = await ctx.db.get(entry.userId);
+      // Resolve user from createdBy (Clerk ID)
+      const user = entry.createdBy
+        ? await ctx.db
+            .query("users")
+            .withIndex("by_clerkUserId", (q: any) => q.eq("clerkUserId", entry.createdBy))
+            .first()
+        : null;
 
-      // Fetch vendor if present
-      let vendorData = null;
-      if (entry.vendorId) {
-        vendorData = await ctx.db.get(entry.vendorId);
-      }
+      // Fetch actual journal entry lines from the DB
+      const lines = await ctx.db
+        .query("journal_entry_lines")
+        .withIndex("by_journal_entry", (q: any) => q.eq("journalEntryId", entry._id))
+        .collect();
 
-      const exchangeRate = entry.exchangeRate || 1.0;
-      const lineItems = entry.lineItems || [];
-      const isExpenseOrCogs =
-        entry.transactionType === "Expense" ||
-        entry.transactionType === "Cost of Goods Sold";
-
-      // Derive journal lines from line items
-      const journalLines: Record<string, unknown>[] = [];
-      let totalLineAmount = 0;
-
-      for (const item of lineItems) {
-        const amount = item.totalAmount || 0;
-        totalLineAmount += amount;
-
-        journalLines.push({
-          itemCode: item.itemCode || "",
-          description: item.itemDescription || "",
-          reference: entry.referenceNumber || "",
-          project: "",
-          debitAmount: isExpenseOrCogs ? amount : 0,
-          debitLocal: isExpenseOrCogs ? amount * exchangeRate : 0,
-          creditAmount: isExpenseOrCogs ? 0 : amount,
-          creditLocal: isExpenseOrCogs ? 0 : amount * exchangeRate,
-          taxCode: "",
-          taxAmount: item.taxAmount || 0,
-          taxInclusive: false,
-          taxRate: item.taxRate != null ? String(item.taxRate) : "",
-          currency: item.currency || entry.originalCurrency || "",
-        });
-      }
-
-      // Generate balancing entry (if there are line items)
-      if (journalLines.length > 0) {
-        journalLines.push({
-          itemCode: "",
-          description: "Balancing Entry",
-          reference: entry.referenceNumber || "",
-          project: "",
-          debitAmount: isExpenseOrCogs ? 0 : totalLineAmount,
-          debitLocal: isExpenseOrCogs ? 0 : totalLineAmount * exchangeRate,
-          creditAmount: isExpenseOrCogs ? totalLineAmount : 0,
-          creditLocal: isExpenseOrCogs ? totalLineAmount * exchangeRate : 0,
-          taxCode: "",
-          taxAmount: 0,
-          taxInclusive: false,
-          taxRate: "",
-          currency: entry.originalCurrency || "",
-        });
-      }
+      // Map real lines to export format
+      const journalLines: Record<string, unknown>[] = lines.map((line: any) => ({
+        accountCode: line.accountCode || "",
+        accountName: line.accountName || "",
+        description: line.lineDescription || "",
+        reference: entry.entryNumber || "",
+        project: "",
+        debitAmount: line.debitAmount || 0,
+        debitLocal: line.debitAmount > 0 ? Math.abs(line.homeCurrencyAmount) : 0,
+        creditAmount: line.creditAmount || 0,
+        creditLocal: line.creditAmount > 0 ? Math.abs(line.homeCurrencyAmount) : 0,
+        entityType: line.entityType || "",
+        entityName: line.entityName || "",
+        currency: entry.homeCurrency || "",
+      }));
 
       return {
         ...entry,
-        documentNumber: entry.referenceNumber || "",
-        cancelled: entry.status === "cancelled",
-        sourceType: entry.sourceDocumentType || "",
-        vendorName: entry.vendorName || vendorData?.companyName || "",
+        documentNumber: entry.entryNumber || "",
+        cancelled: entry.status === "voided",
+        sourceType: entry.sourceType || "",
+        vendorName: "",
         employee: user
           ? { name: user.fullName || user.email }
           : null,
