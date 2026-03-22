@@ -92,6 +92,8 @@ interface ConvexInvoice {
   // Accounting status
   accountingStatus?: 'draft' | 'posted' | 'voided'
   journalEntryId?: string
+  // 032-credit-debit-note
+  einvoiceType?: string
   // Joined from journal_entries via Convex query
   linkedTransaction?: ConvexLinkedTransaction | null
 }
@@ -117,6 +119,9 @@ export interface Invoice {
   // Accounting status
   accountingStatus?: 'draft' | 'posted' | 'voided'
   journalEntryId?: string
+  // 032-credit-debit-note: AP credit/debit note support
+  businessId?: string
+  einvoiceType?: string
   // Linked transaction data (joined from journal_entries)
   linked_transaction?: {
     id: string
