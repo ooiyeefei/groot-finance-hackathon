@@ -75,6 +75,33 @@ export async function POST(
       },
     })
 
+    // Fetch business details for e-invoice form fill (same as manual upload path)
+    let businessDetails: { name: string; tin: string; brn: string; address: string; phone?: string; [key: string]: any } | undefined
+    try {
+      const business = await client.query(api.functions.businesses.getBusinessProfileByStringId, {
+        businessId: String(doc.businessId),
+      })
+      if (business?.lhdn_tin) {
+        businessDetails = {
+          name: business.name,
+          userName: business.name,
+          tin: business.lhdn_tin,
+          brn: business.business_registration_number || business.lhdn_tin,
+          addressLine1: business.address_line1 || '',
+          addressLine2: business.address_line2 || '',
+          city: business.city || '',
+          stateCode: business.state_code || '',
+          postalCode: business.postal_code || '',
+          countryCode: business.country_code || 'MY',
+          address: [business.address_line1, business.address_line2, business.city, business.state_code].filter(Boolean).join(', '),
+          phone: business.contact_phone || '+60132201176',
+          contactEmail: business.contact_email || undefined,
+        }
+      }
+    } catch {
+      console.log('[DocInbox] Could not fetch business details for e-invoice (non-fatal)')
+    }
+
     // Trigger document processor Lambda (same flow as manual upload)
     const lambdaResult = await invokeDocumentProcessor({
       documentId: claimId,
@@ -85,6 +112,7 @@ export async function POST(
       businessId: String(doc.businessId),
       idempotencyKey: `email-fwd-${claimId}-${Date.now()}`,
       expectedDocumentType: 'receipt',
+      businessDetails,
     })
 
     console.log(`[DocInbox] Lambda invoked: ${lambdaResult.executionId}`)

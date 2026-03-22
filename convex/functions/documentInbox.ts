@@ -624,6 +624,17 @@ export const getBusinessByPrefix = query({
       emailForwardingEnabled: business.emailForwardingEnabled || false,
       emailForwardingAllowlist: business.emailForwardingAllowlist || [],
       businessName: business.name,
+      // E-invoice form fill fields (optional — only present if business has LHDN registration)
+      lhdnTin: business.lhdnTin || undefined,
+      brn: business.businessRegistrationNumber || undefined,
+      addressLine1: business.addressLine1 || undefined,
+      addressLine2: business.addressLine2 || undefined,
+      city: business.city || undefined,
+      stateCode: business.stateCode || undefined,
+      postalCode: business.postalCode || undefined,
+      countryCode: business.countryCode || "MY",
+      contactPhone: business.contactPhone || undefined,
+      contactEmail: business.contactEmail || undefined,
     };
   },
 });

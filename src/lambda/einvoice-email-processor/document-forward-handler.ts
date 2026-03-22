@@ -84,6 +84,17 @@ interface BusinessConfig {
   emailForwardingEnabled: boolean;
   emailForwardingAllowlist: string[];
   businessName: string;
+  // E-invoice form fill fields (optional)
+  lhdnTin?: string;
+  brn?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  stateCode?: string;
+  postalCode?: string;
+  countryCode?: string;
+  contactPhone?: string;
+  contactEmail?: string;
 }
 
 /**
@@ -769,6 +780,23 @@ export async function handleDocumentForwarding(
               const docProcessorArn = process.env.DOCUMENT_PROCESSOR_LAMBDA_ARN;
               if (docProcessorArn) {
                 try {
+                  // Build businessDetails for e-invoice form fill (if business has LHDN registration)
+                  const businessDetails = businessConfig.lhdnTin ? {
+                    name: businessConfig.businessName,
+                    userName: businessConfig.businessName,
+                    tin: businessConfig.lhdnTin,
+                    brn: businessConfig.brn || businessConfig.lhdnTin,
+                    addressLine1: businessConfig.addressLine1 || "",
+                    addressLine2: businessConfig.addressLine2 || "",
+                    city: businessConfig.city || "",
+                    stateCode: businessConfig.stateCode || "",
+                    postalCode: businessConfig.postalCode || "",
+                    countryCode: businessConfig.countryCode || "MY",
+                    address: [businessConfig.addressLine1, businessConfig.addressLine2, businessConfig.city, businessConfig.stateCode].filter(Boolean).join(", "),
+                    phone: businessConfig.contactPhone || "+60132201176",
+                    contactEmail: businessConfig.contactEmail || undefined,
+                  } : undefined;
+
                   await lambdaClient.send(new InvokeCommand({
                     FunctionName: docProcessorArn,
                     InvocationType: "Event", // Async — fire and forget
@@ -781,9 +809,10 @@ export async function handleDocumentForwarding(
                       businessId: businessConfig.businessId,
                       idempotencyKey: `email-fwd-auto-${result.inboxEntryId}-${Date.now()}`,
                       expectedDocumentType: "receipt",
+                      ...(businessDetails && { businessDetails }),
                     }),
                   }));
-                  console.log(`[DocForward] OCR Lambda triggered for auto-routed receipt`);
+                  console.log(`[DocForward] OCR Lambda triggered for auto-routed receipt (businessDetails: ${businessDetails ? 'yes' : 'no'})`);
                 } catch (ocrErr) {
                   console.log(`[DocForward] OCR trigger failed (non-fatal): ${ocrErr}`);
                 }
