@@ -572,6 +572,7 @@ export const getDebtorList = query({
       currency: string;
       oldestOverdueDays: number;
       aging: AgingBuckets;
+      hasEmail: boolean;
     }> = [];
 
     for (const [, data] of debtorMap) {
@@ -607,6 +608,13 @@ export const getDebtorList = query({
       if (args.overdueOnly && oldestOverdueDays === 0) continue;
       if (args.minOutstanding && totalOutstanding < args.minOutstanding) continue;
 
+      // 032: Look up customer email for bulk email feature
+      let hasEmail = false;
+      if (data.customerId) {
+        const cust = await ctx.db.get(data.customerId);
+        hasEmail = !!cust?.email;
+      }
+
       debtors.push({
         customerId: data.customerId,
         customerName: data.customerName,
@@ -615,6 +623,7 @@ export const getDebtorList = query({
         currency: data.currency,
         oldestOverdueDays,
         aging,
+        hasEmail,
       });
     }
 

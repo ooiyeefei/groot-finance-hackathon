@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { Users, ArrowUpDown, Loader2, BarChart3 } from 'lucide-react'
+import { Users, ArrowUpDown, Loader2, BarChart3, Send } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select'
 import { formatCurrency } from '@/lib/utils/format-number'
 import { useDebtorList } from '../hooks/use-debtor-management'
+import { useActiveBusiness } from '@/contexts/business-context'
 import DebtorDetail from './debtor-detail'
 
 interface AgingBuckets {
@@ -35,6 +36,7 @@ interface DebtorRow {
   currency: string
   oldestOverdueDays: number
   aging: AgingBuckets
+  hasEmail?: boolean
 }
 
 const AGING_LABELS: Record<string, string> = {
@@ -54,6 +56,9 @@ export default function DebtorList() {
   const [sortBy, setSortBy] = useState<'outstanding' | 'daysOverdue' | 'customerName'>('outstanding')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [selectedDebtorId, setSelectedDebtorId] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [isBulkSending, setIsBulkSending] = useState(false)
+  const { businessId } = useActiveBusiness()
 
   const { debtors, summary, isLoading } = useDebtorList({
     overdueOnly,
@@ -162,6 +167,59 @@ export default function DebtorList() {
         </div>
       </div>
 
+      {/* Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 px-4 py-3 bg-primary/5 border border-primary/20 rounded-lg">
+          <span className="text-sm text-foreground font-medium">
+            {selectedIds.size} selected
+          </span>
+          <Button
+            size="sm"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground"
+            disabled={isBulkSending}
+            onClick={async () => {
+              if (!businessId) return
+              const selectedDebtors = (debtors as DebtorRow[]).filter((d) => d.customerId && selectedIds.has(d.customerId))
+              const withEmail = selectedDebtors.filter((d) => d.hasEmail).length
+              const withoutEmail = selectedDebtors.length - withEmail
+              const confirmed = window.confirm(
+                `Will send to ${withEmail} debtor${withEmail !== 1 ? 's' : ''}${withoutEmail > 0 ? ` (${withoutEmail} skipped — no email)` : ''}. Proceed?`
+              )
+              if (!confirmed) return
+              setIsBulkSending(true)
+              try {
+                const res = await fetch('/api/v1/debtor-info-request?bulk=true', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ businessId, customerIds: Array.from(selectedIds) }),
+                })
+                const data = await res.json()
+                if (data.success) {
+                  alert(`Sent: ${data.data.sent}, Skipped (no email): ${data.data.skipped}, Errors: ${data.data.errors}`)
+                  setSelectedIds(new Set())
+                } else {
+                  alert('Failed to send bulk emails.')
+                }
+              } catch {
+                alert('Failed to send bulk emails.')
+              } finally {
+                setIsBulkSending(false)
+              }
+            }}
+          >
+            {isBulkSending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
+            Request Info Update
+          </Button>
+          <Button
+            size="sm"
+            className="bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+            onClick={() => setSelectedIds(new Set())}
+          >
+            Clear
+          </Button>
+        </div>
+      )}
+
       {/* Debtor Rows */}
       {debtors.length === 0 ? (
         <Card className="bg-card border-border">
@@ -183,7 +241,22 @@ export default function DebtorList() {
             >
               <CardContent className="py-4">
                 <div className="flex items-center justify-between">
-                  <div className="space-y-1">
+                  <div className="flex items-center gap-3">
+                    <Checkbox
+                      checked={selectedIds.has(debtor.customerId ?? '')}
+                      onCheckedChange={(checked) => {
+                        const id = debtor.customerId
+                        if (!id) return
+                        setSelectedIds((prev) => {
+                          const next = new Set(prev)
+                          if (checked) next.add(id)
+                          else next.delete(id)
+                          return next
+                        })
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-foreground">{debtor.customerName}</p>
                       {debtor.oldestOverdueDays > 0 && (
@@ -195,6 +268,7 @@ export default function DebtorList() {
                     <p className="text-xs text-muted-foreground">
                       {debtor.openInvoiceCount} open invoice{debtor.openInvoiceCount !== 1 ? 's' : ''} &bull; {debtor.currency}
                     </p>
+                  </div>
                   </div>
                   <div className="text-right">
                     <p className="font-semibold text-foreground">

@@ -556,6 +556,8 @@ const arBalance = arLines.reduce((sum, line) =>
 - Convex (3 new tables: `email_send_logs`, `benchmarking_opt_ins`, `benchmarking_aggregates`) (031-chat-cross-biz-voice)
 - TypeScript 5.9.3 (Next.js 15.5.7, Convex 1.31.3, Node.js 20 Lambda) + Convex (DB + real-time), LHDN API (e-invoice), AWS Lambda (digital signature), React 19.1.2 (032-credit-debit-note)
 - Convex (`sales_invoices`, `invoices`, `journal_entries`, `journal_entry_lines` tables) (032-credit-debit-note)
+- TypeScript 5.9.3, Next.js 15.5.7 + Convex 1.31.3, @react-pdf/renderer, qrcode (existing), Clerk 6.30.0 (auth bypass for public form), SES (email) (032-self-service-debtors-info-update)
+- Convex (2 new tables: `debtor_update_tokens`, `debtor_change_log`) (032-self-service-debtors-info-update)
 
 
 ## Recent Changes

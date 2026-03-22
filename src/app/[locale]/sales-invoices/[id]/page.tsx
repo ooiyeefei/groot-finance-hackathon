@@ -4,6 +4,8 @@
 export const dynamic = 'force-dynamic'
 
 import { useState, useEffect } from 'react'
+import { useQuery } from 'convex/react'
+import { api } from '@/convex/_generated/api'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { ArrowLeft, Pencil, Send, RotateCw, CreditCard, Ban, Download, Loader2, Trash2, AlertTriangle, ShieldCheck } from 'lucide-react'
@@ -25,6 +27,7 @@ import type { SalesInvoiceStatus } from '@/domains/sales-invoices/types'
 import { PaymentHistory } from '@/domains/sales-invoices/components/payment-history'
 import { LhdnDetailSection } from '@/domains/sales-invoices/components/lhdn-detail-section'
 import { generateLhdnQrDataUrl } from '@/domains/sales-invoices/components/lhdn-qr-code'
+import { generateDebtorUpdateQrDataUrl } from '@/domains/sales-invoices/components/debtor-qr-code'
 import { PeppolTransmissionPanel } from '@/domains/sales-invoices/components/peppol-transmission-panel'
 import { CreditNoteList } from '@/domains/sales-invoices/components/credit-note-list'
 import { CreditNoteForm } from '@/domains/sales-invoices/components/credit-note-form'
@@ -60,6 +63,16 @@ export default function SalesInvoiceDetailPage() {
   const [showVoidConfirm, setShowVoidConfirm] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [lhdnQrDataUrl, setLhdnQrDataUrl] = useState<string | undefined>(undefined)
+  const [debtorUpdateQrDataUrl, setDebtorUpdateQrDataUrl] = useState<string | undefined>(undefined)
+
+  // Debtor self-service QR: check if toggle is enabled and token exists
+  const enableDebtorQr = (invoiceDefaults as any)?.enableDebtorSelfServiceQr !== false
+  const debtorTokenStatus = useQuery(
+    api.functions.debtorSelfService.getTokenStatus,
+    enableDebtorQr && invoice?.customerId && invoice?.businessId
+      ? { businessId: invoice.businessId as string, customerId: invoice.customerId as string }
+      : "skip"
+  )
 
   useEffect(() => {
     if (!invoice?.lhdnLongId) return
@@ -67,6 +80,13 @@ export default function SalesInvoiceDetailPage() {
       .then(setLhdnQrDataUrl)
       .catch(() => console.error('Failed to generate LHDN QR for PDF'))
   }, [invoice?.lhdnLongId])
+
+  useEffect(() => {
+    if (!debtorTokenStatus?.isActive || !debtorTokenStatus.token) return
+    generateDebtorUpdateQrDataUrl(debtorTokenStatus.token, locale)
+      .then(setDebtorUpdateQrDataUrl)
+      .catch(() => console.error('Failed to generate debtor update QR'))
+  }, [debtorTokenStatus?.token, debtorTokenStatus?.isActive, locale])
 
   if (isLoading) {
     return (
@@ -281,6 +301,7 @@ export default function SalesInvoiceDetailPage() {
       lhdnDocumentUuid: invoice.lhdnDocumentUuid,
       lhdnValidatedAt: invoice.lhdnValidatedAt,
       lhdnStatus: invoice.lhdnStatus,
+      debtorUpdateQrDataUrl,
     },
     businessInfo,
     templateId: invoice.templateId,

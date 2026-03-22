@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { useMutation } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 import {
   ArrowLeft,
   ChevronDown,
@@ -11,6 +11,7 @@ import {
   Loader2,
   Pencil,
   Save,
+  Send,
   X,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -31,6 +32,8 @@ import { useDebtorDetail } from '../hooks/use-debtor-management'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { api } from '../../../../convex/_generated/api'
 import type { Id } from '../../../../convex/_generated/dataModel'
+import { DebtorChangeLog } from './debtor-change-log'
+import { useUser } from '@clerk/nextjs'
 
 interface DebtorDetailProps {
   customerId: string
@@ -68,8 +71,15 @@ export default function DebtorDetail({ customerId, onBack }: DebtorDetailProps) 
   const params = useParams()
   const locale = params?.locale as string ?? 'en'
   const { businessId } = useActiveBusiness()
+  const { user } = useUser()
   const { detail, isLoading } = useDebtorDetail(customerId)
   const [expandedInvoice, setExpandedInvoice] = useState<string | null>(null)
+  const [selfServiceOpen, setSelfServiceOpen] = useState(false)
+  const [isSendingEmailRequest, setIsSendingEmailRequest] = useState(false)
+  const tokenStatusForEmail = useQuery(
+    api.functions.debtorSelfService.getTokenStatus,
+    businessId ? { businessId, customerId } : "skip"
+  )
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const updateCustomer = useMutation(api.functions.customers.update)
@@ -194,10 +204,55 @@ export default function DebtorDetail({ customerId, onBack }: DebtorDetailProps) 
         </div>
         <div className="flex items-center gap-2">
           {!isEditing ? (
-            <Button variant="outline" size="sm" onClick={startEditing}>
-              <Pencil className="h-4 w-4 mr-2" />
-              Edit Details
-            </Button>
+            <>
+              <Button
+                size="sm"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                disabled={!customer.email || isSendingEmailRequest}
+                title={!customer.email ? 'No email address on file. Add an email first.' : 'Send email requesting debtor to update their info'}
+                onClick={async () => {
+                  if (!businessId) return
+                  // Check if email was sent within last 24 hours
+                  if (tokenStatusForEmail?.emailSentAt) {
+                    const hoursSince = Math.round((Date.now() - tokenStatusForEmail.emailSentAt) / (1000 * 60 * 60))
+                    if (hoursSince < 24) {
+                      const confirmed = window.confirm(
+                        `An email was sent ${hoursSince} hour${hoursSince !== 1 ? 's' : ''} ago. Send again?`
+                      )
+                      if (!confirmed) return
+                    }
+                  }
+                  setIsSendingEmailRequest(true)
+                  try {
+                    const res = await fetch('/api/v1/debtor-info-request', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ businessId, customerId }),
+                    })
+                    if (res.ok) {
+                      alert('Email sent successfully!')
+                    } else {
+                      alert('Failed to send email. Please try again.')
+                    }
+                  } catch {
+                    alert('Failed to send email.')
+                  } finally {
+                    setIsSendingEmailRequest(false)
+                  }
+                }}
+              >
+                {isSendingEmailRequest ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4 mr-1" />
+                )}
+                Request Info Update
+              </Button>
+              <Button variant="outline" size="sm" onClick={startEditing}>
+                <Pencil className="h-4 w-4 mr-2" />
+                Edit Details
+              </Button>
+            </>
           ) : (
             <>
               <Button variant="outline" size="sm" onClick={cancelEditing} disabled={isSaving}>
@@ -506,6 +561,37 @@ export default function DebtorDetail({ customerId, onBack }: DebtorDetailProps) 
         </Button>
       </div>
 
+      {/* Self-Service Updates & Token Management */}
+      <Card className="bg-card border-border">
+        <CardHeader className="cursor-pointer" onClick={() => setSelfServiceOpen(!selfServiceOpen)}>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-medium text-foreground">
+              Self-Service Updates
+            </CardTitle>
+            {selfServiceOpen ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )}
+          </div>
+        </CardHeader>
+        {selfServiceOpen && businessId && (
+          <CardContent className="space-y-6">
+            {/* Token Management */}
+            <TokenManagement businessId={businessId} customerId={customerId} />
+            {/* Change History */}
+            <div>
+              <h4 className="text-sm font-medium text-foreground mb-3">Change History</h4>
+              <DebtorChangeLog
+                businessId={businessId}
+                customerId={customerId}
+                userId={user?.id ?? ''}
+              />
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
       {/* Invoice Table */}
       <Card className="bg-card border-border">
         <CardHeader>
@@ -624,6 +710,82 @@ export default function DebtorDetail({ customerId, onBack }: DebtorDetailProps) 
             </div>
           </CardContent>
         </Card>
+      )}
+    </div>
+  )
+}
+
+// Token management sub-component
+function TokenManagement({ businessId, customerId }: { businessId: string; customerId: string }) {
+  const tokenStatus = useQuery(api.functions.debtorSelfService.getTokenStatus, { businessId, customerId })
+  const regenerate = useMutation(api.functions.debtorSelfService.regenerateToken)
+  const [isRegenerating, setIsRegenerating] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const handleRegenerate = async () => {
+    setIsRegenerating(true)
+    try {
+      await regenerate({ businessId, customerId })
+    } finally {
+      setIsRegenerating(false)
+    }
+  }
+
+  const selfServiceUrl = tokenStatus?.token
+    ? `https://finance.hellogroot.com/en/debtor-update/${tokenStatus.token}`
+    : null
+
+  const handleCopy = () => {
+    if (selfServiceUrl) {
+      navigator.clipboard.writeText(selfServiceUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  if (tokenStatus === undefined) {
+    return <div className="flex items-center gap-2 py-2"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /><span className="text-sm text-muted-foreground">Loading token...</span></div>
+  }
+
+  return (
+    <div className="space-y-3">
+      <h4 className="text-sm font-medium text-foreground">Self-Service Link</h4>
+      {tokenStatus ? (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Badge className={tokenStatus.isActive
+              ? 'bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/30'
+              : 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30'
+            }>
+              {tokenStatus.isActive ? 'Active' : 'Expired'}
+            </Badge>
+            <span className="text-xs text-muted-foreground">
+              Created {new Date(tokenStatus.createdAt!).toLocaleDateString()} &middot; Expires {new Date(tokenStatus.expiresAt!).toLocaleDateString()}
+            </span>
+          </div>
+          {selfServiceUrl && (
+            <div className="flex items-center gap-2">
+              <code className="text-xs bg-muted px-2 py-1 rounded truncate max-w-[400px]">{selfServiceUrl}</code>
+              <Button size="sm" className="bg-secondary hover:bg-secondary/80 text-secondary-foreground" onClick={handleCopy}>
+                {copied ? 'Copied!' : 'Copy'}
+              </Button>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={handleRegenerate} disabled={isRegenerating}>
+              {isRegenerating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+              Regenerate Link
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <p className="text-sm text-muted-foreground mb-2">No self-service link generated yet.</p>
+          <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={handleRegenerate} disabled={isRegenerating}>
+            {isRegenerating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+            Generate Link
+          </Button>
+        </div>
       )}
     </div>
   )

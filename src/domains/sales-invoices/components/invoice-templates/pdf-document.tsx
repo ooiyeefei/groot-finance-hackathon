@@ -79,6 +79,7 @@ export interface PdfInvoiceData {
   lhdnDocumentUuid?: string
   lhdnValidatedAt?: number
   lhdnStatus?: string
+  debtorUpdateQrDataUrl?: string
 }
 
 export interface PdfBusinessInfo {
@@ -457,6 +458,23 @@ export function InvoicePdfDocument({ invoice, businessInfo }: InvoicePdfDocument
                 )}
                 <Text style={{ fontSize: 7, color: C.muted }}>
                   {`https://myinvois.hasil.gov.my/${invoice.lhdnLongId}/share`}
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* ── Debtor Self-Service QR Code ── */}
+        {invoice.debtorUpdateQrDataUrl && (
+          <View style={[s.footerSection, { marginTop: 12, borderTopWidth: 0.5, borderTopColor: C.border, paddingTop: 10 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Image src={invoice.debtorUpdateQrDataUrl} style={{ width: 64, height: 64 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 8, color: C.muted, lineHeight: 1.4 }}>
+                  Scan to update your business details
+                </Text>
+                <Text style={{ fontSize: 8, color: C.muted, lineHeight: 1.4 }}>
+                  Imbas untuk kemaskini maklumat perniagaan anda
                 </Text>
               </View>
             </View>

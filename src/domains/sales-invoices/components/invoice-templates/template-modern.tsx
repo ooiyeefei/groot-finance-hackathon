@@ -73,6 +73,7 @@ interface InvoiceTemplateProps {
     footer?: string
     customFields?: Array<{ key: string; value: string }>
     showTaxId?: boolean
+    debtorUpdateQrDataUrl?: string
   }
   businessInfo?: {
     companyName?: string
@@ -434,6 +435,19 @@ export function ModernInvoiceTemplate({ invoice, businessInfo }: InvoiceTemplate
             ))}
           </div>
         </section>
+      )}
+
+      {/* ── Debtor Self-Service QR Code ── */}
+      {invoice.debtorUpdateQrDataUrl && (
+        <div className="border-t border-border pt-4 mt-4">
+          <div className="flex items-center gap-3">
+            <img src={invoice.debtorUpdateQrDataUrl} alt="Update business details" width={64} height={64} className="rounded" />
+            <div className="text-xs text-muted-foreground leading-relaxed">
+              <p>Scan to update your business details</p>
+              <p>Imbas untuk kemaskini maklumat perniagaan anda</p>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Footer ── */}

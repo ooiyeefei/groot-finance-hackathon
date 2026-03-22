@@ -208,6 +208,8 @@ export default defineSchema({
       }))),
       // BCC sender on outgoing invoice emails
       bccOutgoingEmails: v.optional(v.boolean()),
+      // 032-self-service-debtors-info-update: QR code toggle for debtor self-service
+      enableDebtorSelfServiceQr: v.optional(v.boolean()),
       // Customer fields visibility on invoice
       customerFieldsVisibility: v.optional(v.object({
         contactPerson: v.optional(v.boolean()),
@@ -2145,6 +2147,43 @@ export default defineSchema({
     .index("by_businessId_email", ["businessId", "email"])
     // 016-e-invoice-schema-change: TIN lookup index
     .index("by_businessId_tin", ["businessId", "tin"]),
+
+  // 032-self-service-debtors-info-update: Token-based public access for debtor info updates
+  debtor_update_tokens: defineTable({
+    businessId: v.id("businesses"),
+    customerId: v.id("customers"),
+    token: v.string(),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    usageCount: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    emailSentAt: v.optional(v.number()),
+    isRevoked: v.optional(v.boolean()),
+  })
+    .index("by_token", ["token"])
+    .index("by_businessId_customerId", ["businessId", "customerId"])
+    .index("by_businessId", ["businessId"]),
+
+  // 032-self-service-debtors-info-update: Audit trail for self-service updates
+  debtor_change_log: defineTable({
+    businessId: v.id("businesses"),
+    customerId: v.id("customers"),
+    tokenId: v.id("debtor_update_tokens"),
+    changedFields: v.array(v.object({
+      fieldName: v.string(),
+      oldValue: v.optional(v.any()),
+      newValue: v.optional(v.any()),
+    })),
+    oldSnapshot: v.any(),
+    newSnapshot: v.any(),
+    submittedAt: v.number(),
+    source: v.string(),
+    isReverted: v.optional(v.boolean()),
+    revertedAt: v.optional(v.number()),
+    revertedBy: v.optional(v.string()),
+  })
+    .index("by_businessId_customerId", ["businessId", "customerId"])
+    .index("by_businessId", ["businessId"]),
 
   catalog_items: defineTable({
     businessId: v.id("businesses"),

@@ -101,6 +101,7 @@ interface InvoiceSettingsState {
   defaultTemplateId: InvoiceTemplate
   paymentMethods: PaymentMethodState[]
   bccOutgoingEmails: boolean
+  enableDebtorSelfServiceQr: boolean
   customerFieldsVisibility: CustomerFieldsVisibility
   einvoiceAutoDelivery: boolean
   einvoiceBuyerNotifications: boolean
@@ -153,6 +154,7 @@ export default function InvoiceSettingsForm() {
     defaultTemplateId: 'modern',
     paymentMethods: buildInitialPaymentMethods(),
     bccOutgoingEmails: true,
+    enableDebtorSelfServiceQr: true,
     customerFieldsVisibility: { ...DEFAULT_CUSTOMER_FIELDS_VISIBILITY },
     einvoiceAutoDelivery: true,
     einvoiceBuyerNotifications: true,
@@ -175,6 +177,7 @@ export default function InvoiceSettingsForm() {
         defaultTemplateId: (invoiceDefaults.selectedTemplate as InvoiceTemplate) ?? 'modern',
         paymentMethods: buildInitialPaymentMethods(invoiceDefaults.paymentMethods as PaymentMethodConfig[] | undefined),
         bccOutgoingEmails: invoiceDefaults.bccOutgoingEmails ?? true,
+        enableDebtorSelfServiceQr: (invoiceDefaults as any).enableDebtorSelfServiceQr ?? true,
         customerFieldsVisibility: {
           ...DEFAULT_CUSTOMER_FIELDS_VISIBILITY,
           ...savedVisibility,
@@ -267,7 +270,7 @@ export default function InvoiceSettingsForm() {
         .filter((m) => m.enabled)
         .map((m) => m.id)
 
-      await updateDefaults({
+      await (updateDefaults as any)({
         businessId: businessId as Id<'businesses'>,
         invoiceNumberPrefix: settings.invoicePrefix || undefined,
         nextInvoiceNumber: settings.nextNumber,
@@ -279,6 +282,7 @@ export default function InvoiceSettingsForm() {
         defaultNotes: settings.defaultNotes || undefined,
         acceptedPaymentMethods,
         bccOutgoingEmails: settings.bccOutgoingEmails,
+        enableDebtorSelfServiceQr: settings.enableDebtorSelfServiceQr,
         paymentMethods: paymentMethodsToSave,
         customerFieldsVisibility: settings.customerFieldsVisibility,
         einvoiceAutoDelivery: settings.einvoiceAutoDelivery,
@@ -535,6 +539,22 @@ export default function InvoiceSettingsForm() {
                     {contactEmail
                       ? `A BCC copy will be sent to ${contactEmail}`
                       : 'Set a contact email in your business profile to receive copies'}
+                  </p>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 p-3 rounded-md border border-border hover:bg-muted/50 cursor-pointer transition-colors">
+                <Checkbox
+                  checked={settings.enableDebtorSelfServiceQr}
+                  onCheckedChange={(checked) => updateSetting('enableDebtorSelfServiceQr', !!checked)}
+                  className="mt-0.5"
+                />
+                <div>
+                  <span className="text-sm font-medium text-foreground">
+                    Show debtor self-service QR code on invoices
+                  </span>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Debtors can scan the QR code to update their business details for e-invoice compliance
                   </p>
                 </div>
               </label>
