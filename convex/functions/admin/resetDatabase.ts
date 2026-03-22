@@ -49,7 +49,8 @@ export const resetAllData = mutation({
     for (const tableName of tables) {
       let count = 0;
       // Get all documents from table
-      const docs = await ctx.db.query(tableName).collect();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const docs = await (ctx.db.query as any)(tableName).collect();
 
       // Delete each document
       for (const doc of docs) {

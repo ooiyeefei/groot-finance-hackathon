@@ -162,6 +162,50 @@ export const detectAnomalies = internalMutation({
       // Will be wired to vendorRecommendedActions.generate in T063
     }
 
+    // 032-price-history-tracking: Enrich anomalies with margin impact
+    if (anomaliesCreated.length > 0) {
+      // Check if this vendor item is mapped to a catalog item
+      const mappings = await ctx.db
+        .query("catalog_vendor_item_mappings")
+        .withIndex("by_vendor_item", (q) =>
+          q.eq("businessId", args.businessId).eq("vendorId", args.vendorId).eq("vendorItemIdentifier", args.itemIdentifier)
+        )
+        .filter((q) => q.not(q.field("rejectedAt")))
+        .first();
+
+      if (mappings) {
+        // Get latest selling price for this catalog item
+        const sellingRecords = await ctx.db
+          .query("selling_price_history")
+          .withIndex("by_catalogItem_business", (q) =>
+            q.eq("catalogItemId", mappings.catalogItemId).eq("businessId", args.businessId)
+          )
+          .filter((q) => q.not(q.field("archivedAt")))
+          .take(1);
+
+        if (sellingRecords.length > 0) {
+          const sellingPrice = sellingRecords[0].unitPrice;
+          const newMargin = sellingPrice > 0
+            ? Math.round(((sellingPrice - args.currentPrice) / sellingPrice) * 1000) / 10
+            : null;
+
+          // Update anomaly records with margin impact indicator
+          for (const anomalyId of anomaliesCreated) {
+            const anomaly = await ctx.db.get(anomalyId);
+            if (anomaly) {
+              const indicators = ((anomaly as any).potentialIndicators || []) as string[];
+              if (newMargin !== null && newMargin < 10) {
+                indicators.push("margin-impact-high");
+              }
+              await ctx.db.patch(anomalyId, {
+                potentialIndicators: indicators,
+              } as any);
+            }
+          }
+        }
+      }
+    }
+
     return { anomaliesCreated };
   },
 });

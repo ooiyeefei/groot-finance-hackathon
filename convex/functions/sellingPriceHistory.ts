@@ -1,0 +1,488 @@
+/**
+ * Selling Price History Functions (032-price-history-tracking)
+ *
+ * Captures and queries selling price observations from sales invoices.
+ * Uses action + internalQuery pattern for bandwidth-safe reads.
+ */
+
+import { v } from "convex/values";
+import { internalMutation, internalQuery, action } from "../_generated/server";
+import { internal } from "../_generated/api";
+
+// ---------------------------------------------------------------------------
+// Internal Mutations
+// ---------------------------------------------------------------------------
+
+/**
+ * Record selling price observations when a sales invoice is sent.
+ * Called by salesInvoices.send() via scheduler.
+ */
+export const recordFromSalesInvoice = internalMutation({
+  args: {
+    businessId: v.id("businesses"),
+    salesInvoiceId: v.id("sales_invoices"),
+    customerId: v.optional(v.id("customers")),
+    invoiceDate: v.string(),
+    lineItems: v.array(
+      v.object({
+        catalogItemId: v.id("catalog_items"),
+        unitPrice: v.number(),
+        quantity: v.number(),
+        currency: v.string(),
+        totalAmount: v.number(),
+        itemDescription: v.string(),
+        itemCode: v.optional(v.string()),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    let recordsCreated = 0;
+
+    for (const item of args.lineItems) {
+      // Dedup check: don't create duplicate records for same invoice + catalog item
+      const existing = await ctx.db
+        .query("selling_price_history")
+        .withIndex("by_invoice", (q) => q.eq("salesInvoiceId", args.salesInvoiceId))
+        .filter((q) => q.eq(q.field("catalogItemId"), item.catalogItemId))
+        .first();
+
+      if (existing) continue;
+
+      await ctx.db.insert("selling_price_history", {
+        businessId: args.businessId,
+        catalogItemId: item.catalogItemId,
+        customerId: args.customerId,
+        salesInvoiceId: args.salesInvoiceId,
+        unitPrice: item.unitPrice,
+        quantity: item.quantity,
+        currency: item.currency,
+        totalAmount: item.totalAmount,
+        invoiceDate: args.invoiceDate,
+        itemDescription: item.itemDescription,
+        itemCode: item.itemCode,
+        isZeroPrice: item.unitPrice === 0,
+        createdAt: Date.now(),
+      });
+      recordsCreated++;
+    }
+
+    return { recordsCreated };
+  },
+});
+
+/**
+ * Archive (soft-delete) selling price records when a sales invoice is voided.
+ * Called by salesInvoices.voidInvoice() via scheduler.
+ */
+export const archiveBySalesInvoice = internalMutation({
+  args: {
+    salesInvoiceId: v.id("sales_invoices"),
+  },
+  handler: async (ctx, args) => {
+    const records = await ctx.db
+      .query("selling_price_history")
+      .withIndex("by_invoice", (q) => q.eq("salesInvoiceId", args.salesInvoiceId))
+      .collect();
+
+    let recordsArchived = 0;
+    const now = Date.now();
+
+    for (const record of records) {
+      if (!record.archivedAt) {
+        await ctx.db.patch(record._id, { archivedAt: now });
+        recordsArchived++;
+      }
+    }
+
+    return { recordsArchived };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Internal Queries (called by actions for bandwidth safety)
+// ---------------------------------------------------------------------------
+
+export const _getSalesHistory = internalQuery({
+  args: {
+    businessId: v.id("businesses"),
+    catalogItemId: v.id("catalog_items"),
+    customerId: v.optional(v.id("customers")),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const maxResults = args.limit ?? 100;
+
+    let records = await ctx.db
+      .query("selling_price_history")
+      .withIndex("by_catalogItem_business", (q) =>
+        q.eq("catalogItemId", args.catalogItemId).eq("businessId", args.businessId)
+      )
+      .collect();
+
+    // Filter out archived records
+    records = records.filter((r) => !r.archivedAt);
+
+    // Apply customer filter
+    if (args.customerId) {
+      records = records.filter((r) => r.customerId === args.customerId);
+    }
+
+    // Apply date range filters
+    if (args.startDate) {
+      records = records.filter((r) => r.invoiceDate >= args.startDate!);
+    }
+    if (args.endDate) {
+      records = records.filter((r) => r.invoiceDate <= args.endDate!);
+    }
+
+    // Sort by invoiceDate desc, then createdAt desc (tiebreaker)
+    records.sort((a, b) => {
+      const dateCmp = b.invoiceDate.localeCompare(a.invoiceDate);
+      if (dateCmp !== 0) return dateCmp;
+      return b.createdAt - a.createdAt;
+    });
+
+    const totalCount = records.length;
+
+    // Apply limit
+    records = records.slice(0, maxResults);
+
+    // Resolve customer names
+    const customerIds = [...new Set(records.map((r) => r.customerId).filter(Boolean))];
+    const customerMap: Record<string, string> = {};
+    for (const cId of customerIds) {
+      if (cId) {
+        const customer = await ctx.db.get(cId);
+        if (customer) {
+          customerMap[cId] = customer.businessName;
+        }
+      }
+    }
+
+    // Resolve invoice numbers
+    const invoiceIds = [...new Set(records.map((r) => r.salesInvoiceId))];
+    const invoiceMap: Record<string, string> = {};
+    for (const invId of invoiceIds) {
+      const inv = await ctx.db.get(invId);
+      if (inv) {
+        invoiceMap[invId] = (inv as any).invoiceNumber || invId;
+      }
+    }
+
+    const enrichedRecords = records.map((r) => ({
+      _id: r._id,
+      unitPrice: r.unitPrice,
+      quantity: r.quantity,
+      currency: r.currency,
+      totalAmount: r.totalAmount,
+      invoiceDate: r.invoiceDate,
+      itemDescription: r.itemDescription,
+      itemCode: r.itemCode,
+      isZeroPrice: r.isZeroPrice,
+      customerName: r.customerId ? customerMap[r.customerId] || "Unknown" : "Unknown",
+      invoiceNumber: invoiceMap[r.salesInvoiceId] || "—",
+      customerId: r.customerId,
+      salesInvoiceId: r.salesInvoiceId,
+    }));
+
+    // Latest price (most recent by invoiceDate)
+    const latestPrice =
+      enrichedRecords.length > 0
+        ? {
+            unitPrice: enrichedRecords[0].unitPrice,
+            currency: enrichedRecords[0].currency,
+            date: enrichedRecords[0].invoiceDate,
+          }
+        : null;
+
+    return { records: enrichedRecords, totalCount, latestPrice };
+  },
+});
+
+export const _getSalesPriceTrend = internalQuery({
+  args: {
+    businessId: v.id("businesses"),
+    catalogItemId: v.id("catalog_items"),
+    customerId: v.optional(v.id("customers")),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    let records = await ctx.db
+      .query("selling_price_history")
+      .withIndex("by_catalogItem_business", (q) =>
+        q.eq("catalogItemId", args.catalogItemId).eq("businessId", args.businessId)
+      )
+      .collect();
+
+    records = records.filter((r) => !r.archivedAt);
+
+    if (args.customerId) {
+      records = records.filter((r) => r.customerId === args.customerId);
+    }
+    if (args.startDate) {
+      records = records.filter((r) => r.invoiceDate >= args.startDate!);
+    }
+    if (args.endDate) {
+      records = records.filter((r) => r.invoiceDate <= args.endDate!);
+    }
+
+    // Sort chronologically for chart
+    records.sort((a, b) => a.invoiceDate.localeCompare(b.invoiceDate));
+
+    // Resolve customer names for chart labels
+    const customerIds = [...new Set(records.map((r) => r.customerId).filter(Boolean))];
+    const customerMap: Record<string, string> = {};
+    for (const cId of customerIds) {
+      if (cId) {
+        const customer = await ctx.db.get(cId);
+        if (customer) {
+          customerMap[cId] = customer.businessName;
+        }
+      }
+    }
+
+    const dataPoints = records.map((r) => ({
+      date: r.invoiceDate,
+      unitPrice: r.unitPrice,
+      currency: r.currency,
+      customerName: r.customerId ? customerMap[r.customerId] || undefined : undefined,
+    }));
+
+    return { dataPoints };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Public Actions (bandwidth-safe — run once on demand, not reactive)
+// ---------------------------------------------------------------------------
+
+export const getSalesHistory = action({
+  args: {
+    businessId: v.id("businesses"),
+    catalogItemId: v.id("catalog_items"),
+    customerId: v.optional(v.id("customers")),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    return await ctx.runQuery(internal.functions.sellingPriceHistory._getSalesHistory, args);
+  },
+});
+
+export const getSalesPriceTrend = action({
+  args: {
+    businessId: v.id("businesses"),
+    catalogItemId: v.id("catalog_items"),
+    customerId: v.optional(v.id("customers")),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    return await ctx.runQuery(internal.functions.sellingPriceHistory._getSalesPriceTrend, args);
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Margin Summary (action — reads from both selling + purchase price tables)
+// ---------------------------------------------------------------------------
+
+export const getMarginSummary = action({
+  args: {
+    businessId: v.id("businesses"),
+    catalogItemId: v.id("catalog_items"),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    // Get latest selling price
+    const salesData = await ctx.runQuery(
+      internal.functions.sellingPriceHistory._getSalesHistory,
+      { businessId: args.businessId, catalogItemId: args.catalogItemId, limit: 1 }
+    );
+
+    // Get vendor mappings
+    const mappings = await ctx.runQuery(
+      internal.functions.catalogVendorMappings._getMappings,
+      { catalogItemId: args.catalogItemId, businessId: args.businessId }
+    );
+
+    // Get business home currency
+    const business = await ctx.runQuery(
+      internal.functions.sellingPriceHistory._getBusiness,
+      { businessId: args.businessId }
+    );
+    const homeCurrency = business?.homeCurrency || "MYR";
+
+    // Get latest purchase cost from vendor_price_history via mappings
+    let latestPurchaseCost: {
+      unitPrice: number;
+      currency: string;
+      date: string;
+      vendorName: string;
+    } | null = null;
+
+    if (mappings.length > 0) {
+      const purchaseData = await ctx.runQuery(
+        internal.functions.sellingPriceHistory._getLatestPurchaseCost,
+        {
+          businessId: args.businessId,
+          mappings: mappings.map((m: any) => ({
+            vendorId: m.vendorId,
+            vendorItemIdentifier: m.vendorItemIdentifier,
+          })),
+        }
+      );
+      latestPurchaseCost = purchaseData;
+    }
+
+    const latestSellingPrice = salesData.latestPrice
+      ? {
+          ...salesData.latestPrice,
+          customerName: salesData.records[0]?.customerName || "Unknown",
+        }
+      : null;
+
+    // Calculate margin
+    let marginPercent: number | null = null;
+    let marginWarning: string | null = null;
+
+    if (latestSellingPrice && latestPurchaseCost) {
+      const sp = latestSellingPrice.unitPrice;
+      const cp = latestPurchaseCost.unitPrice;
+      // TODO: currency conversion if different currencies
+      if (sp > 0) {
+        marginPercent = ((sp - cp) / sp) * 100;
+        marginPercent = Math.round(marginPercent * 10) / 10;
+      }
+
+      if (marginPercent !== null && marginPercent < 0) {
+        marginWarning = `Selling below cost — losing ${Math.abs(marginPercent)}% per unit`;
+      }
+    }
+
+    return {
+      latestSellingPrice,
+      latestPurchaseCost,
+      marginPercent,
+      homeCurrency,
+      convertedSellingPrice: latestSellingPrice?.unitPrice ?? null,
+      convertedPurchaseCost: latestPurchaseCost?.unitPrice ?? null,
+      marginWarning,
+      hasMappings: mappings.length > 0,
+      mappingCount: mappings.length,
+    };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// CSV Export
+// ---------------------------------------------------------------------------
+
+export const exportSalesHistoryCSV = action({
+  args: {
+    businessId: v.id("businesses"),
+    catalogItemId: v.id("catalog_items"),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<{ csv: string; filename: string }> => {
+    const data = await ctx.runQuery(
+      internal.functions.sellingPriceHistory._getSalesHistory,
+      { businessId: args.businessId, catalogItemId: args.catalogItemId, startDate: args.startDate, endDate: args.endDate, limit: 10000 }
+    );
+
+    const headers = "Date,Customer,Item Description,Item Code,Qty,Unit Price,Currency,Total,Invoice #";
+    const rows = data.records.map((r: any) =>
+      [
+        r.invoiceDate,
+        `"${(r.customerName || "").replace(/"/g, '""')}"`,
+        `"${(r.itemDescription || "").replace(/"/g, '""')}"`,
+        r.itemCode || "",
+        r.quantity,
+        r.unitPrice,
+        r.currency,
+        r.totalAmount,
+        r.invoiceNumber,
+      ].join(",")
+    );
+
+    const csv = [headers, ...rows].join("\n");
+    const catalogItem = await ctx.runQuery(
+      internal.functions.sellingPriceHistory._getCatalogItem,
+      { catalogItemId: args.catalogItemId }
+    );
+    const itemName = catalogItem?.name || "item";
+    const filename = `selling-price-history-${itemName.replace(/[^a-zA-Z0-9]/g, "-")}.csv`;
+
+    return { csv, filename };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Helper internal queries
+// ---------------------------------------------------------------------------
+
+export const _getBusiness = internalQuery({
+  args: { businessId: v.id("businesses") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.businessId);
+  },
+});
+
+export const _getCatalogItem = internalQuery({
+  args: { catalogItemId: v.id("catalog_items") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.catalogItemId);
+  },
+});
+
+export const _getLatestPurchaseCost = internalQuery({
+  args: {
+    businessId: v.id("businesses"),
+    mappings: v.array(
+      v.object({
+        vendorId: v.id("vendors"),
+        vendorItemIdentifier: v.string(),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    let latestRecord: {
+      unitPrice: number;
+      currency: string;
+      date: string;
+      vendorName: string;
+    } | null = null;
+    let latestDate = "";
+
+    for (const mapping of args.mappings) {
+      const records = await ctx.db
+        .query("vendor_price_history")
+        .withIndex("by_vendor_item", (q) =>
+          q.eq("vendorId", mapping.vendorId)
+        )
+        .filter((q) => q.eq(q.field("itemIdentifier"), mapping.vendorItemIdentifier))
+        .order("desc")
+        .take(1);
+
+      if (records.length > 0) {
+        const r = records[0];
+        const recordDate = r.observedAt || r.invoiceDate || "";
+        if (!latestRecord || recordDate > latestDate) {
+          const vendor = await ctx.db.get(mapping.vendorId);
+          latestRecord = {
+            unitPrice: r.unitPrice,
+            currency: r.currency,
+            date: recordDate,
+            vendorName: vendor?.name || "Unknown vendor",
+          };
+          latestDate = recordDate;
+        }
+      }
+    }
+
+    return latestRecord;
+  },
+});

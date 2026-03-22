@@ -277,6 +277,15 @@ export default defineSchema({
       milestone_95: v.optional(v.number()),  // Unix timestamp (ms) when 95% first achieved
       milestone_99: v.optional(v.number()),  // Unix timestamp (ms) when 99% first achieved
     })),
+
+    // 032-price-history-tracking: Margin alert configuration
+    marginAlertConfig: v.optional(v.object({
+      defaultThreshold: v.number(),  // e.g., 15 = alert when margin < 15%
+      categoryOverrides: v.optional(v.array(v.object({
+        category: v.string(),
+        threshold: v.number(),
+      }))),
+    })),
   })
     .index("by_legacyId", ["legacyId"])
     .index("by_stripeCustomerId", ["stripeCustomerId"])
@@ -3784,5 +3793,53 @@ export default defineSchema({
     .index("by_catalogItem", ["catalogItemId"])
     .index("by_locationId", ["locationId"])
     .index("by_sourceType_sourceId", ["sourceType", "sourceId"]),
+
+  // ============================================
+  // SELLING PRICE HISTORY — Point-in-time selling price observations (032-price-history-tracking)
+  // ============================================
+
+  selling_price_history: defineTable({
+    businessId: v.id("businesses"),
+    catalogItemId: v.id("catalog_items"),
+    customerId: v.optional(v.id("customers")),
+    salesInvoiceId: v.id("sales_invoices"),
+    unitPrice: v.number(),
+    quantity: v.number(),
+    currency: v.string(),
+    totalAmount: v.number(),
+    invoiceDate: v.string(),         // ISO date from the sales invoice
+    itemDescription: v.string(),
+    itemCode: v.optional(v.string()),
+    isZeroPrice: v.boolean(),        // Flag for $0 promotional items
+    archivedAt: v.optional(v.number()), // Soft-delete timestamp (set when invoice voided)
+    createdAt: v.number(),
+  })
+    .index("by_catalogItem_business", ["catalogItemId", "businessId"])
+    .index("by_invoice", ["salesInvoiceId"])
+    .index("by_customer", ["businessId", "customerId", "invoiceDate"])
+    .index("by_business_date", ["businessId", "invoiceDate"]),
+
+  // ============================================
+  // CATALOG VENDOR ITEM MAPPINGS — Links catalog items to vendor item identifiers (032-price-history-tracking)
+  // ============================================
+
+  catalog_vendor_item_mappings: defineTable({
+    businessId: v.id("businesses"),
+    catalogItemId: v.id("catalog_items"),
+    vendorId: v.id("vendors"),
+    vendorItemIdentifier: v.string(),   // Matches vendor_price_history.itemIdentifier
+    vendorItemDescription: v.string(),  // Human-readable vendor item name
+    matchSource: v.union(
+      v.literal("fuzzy-suggested"),
+      v.literal("user-confirmed"),
+      v.literal("user-created")
+    ),
+    confidenceScore: v.optional(v.number()), // 0-100, for fuzzy-suggested mappings
+    rejectedAt: v.optional(v.number()),      // Set if user rejected this suggestion
+    createdAt: v.number(),
+  })
+    .index("by_catalogItem", ["catalogItemId", "businessId"])
+    .index("by_vendor_item", ["businessId", "vendorId", "vendorItemIdentifier"])
+    .index("by_business_source", ["businessId", "matchSource"]),
 
 });

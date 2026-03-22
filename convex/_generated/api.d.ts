@@ -34,6 +34,7 @@ import type * as functions_benchmarking from "../functions/benchmarking.js";
 import type * as functions_budgetTracking from "../functions/budgetTracking.js";
 import type * as functions_businesses from "../functions/businesses.js";
 import type * as functions_catalogItems from "../functions/catalogItems.js";
+import type * as functions_catalogVendorMappings from "../functions/catalogVendorMappings.js";
 import type * as functions_chartOfAccounts from "../functions/chartOfAccounts.js";
 import type * as functions_chatCorrections from "../functions/chatCorrections.js";
 import type * as functions_chatOptimization from "../functions/chatOptimization.js";
@@ -104,6 +105,7 @@ import type * as functions_payrollAdjustments from "../functions/payrollAdjustme
 import type * as functions_poMatchOptimization from "../functions/poMatchOptimization.js";
 import type * as functions_poMatches from "../functions/poMatches.js";
 import type * as functions_poMatchingAI from "../functions/poMatchingAI.js";
+import type * as functions_priceHistoryMCP from "../functions/priceHistoryMCP.js";
 import type * as functions_proactiveAlerts from "../functions/proactiveAlerts.js";
 import type * as functions_publicHolidays from "../functions/publicHolidays.js";
 import type * as functions_purchaseOrders from "../functions/purchaseOrders.js";
@@ -118,6 +120,7 @@ import type * as functions_salesInvoices from "../functions/salesInvoices.js";
 import type * as functions_salesOrders from "../functions/salesOrders.js";
 import type * as functions_scheduledReportJobs from "../functions/scheduledReportJobs.js";
 import type * as functions_seedAccounting from "../functions/seedAccounting.js";
+import type * as functions_sellingPriceHistory from "../functions/sellingPriceHistory.js";
 import type * as functions_stripeEvents from "../functions/stripeEvents.js";
 import type * as functions_stripeIntegrations from "../functions/stripeIntegrations.js";
 import type * as functions_system from "../functions/system.js";
@@ -187,6 +190,7 @@ declare const fullApi: ApiFromModules<{
   "functions/budgetTracking": typeof functions_budgetTracking;
   "functions/businesses": typeof functions_businesses;
   "functions/catalogItems": typeof functions_catalogItems;
+  "functions/catalogVendorMappings": typeof functions_catalogVendorMappings;
   "functions/chartOfAccounts": typeof functions_chartOfAccounts;
   "functions/chatCorrections": typeof functions_chatCorrections;
   "functions/chatOptimization": typeof functions_chatOptimization;
@@ -257,6 +261,7 @@ declare const fullApi: ApiFromModules<{
   "functions/poMatchOptimization": typeof functions_poMatchOptimization;
   "functions/poMatches": typeof functions_poMatches;
   "functions/poMatchingAI": typeof functions_poMatchingAI;
+  "functions/priceHistoryMCP": typeof functions_priceHistoryMCP;
   "functions/proactiveAlerts": typeof functions_proactiveAlerts;
   "functions/publicHolidays": typeof functions_publicHolidays;
   "functions/purchaseOrders": typeof functions_purchaseOrders;
@@ -271,6 +276,7 @@ declare const fullApi: ApiFromModules<{
   "functions/salesOrders": typeof functions_salesOrders;
   "functions/scheduledReportJobs": typeof functions_scheduledReportJobs;
   "functions/seedAccounting": typeof functions_seedAccounting;
+  "functions/sellingPriceHistory": typeof functions_sellingPriceHistory;
   "functions/stripeEvents": typeof functions_stripeEvents;
   "functions/stripeIntegrations": typeof functions_stripeIntegrations;
   "functions/system": typeof functions_system;

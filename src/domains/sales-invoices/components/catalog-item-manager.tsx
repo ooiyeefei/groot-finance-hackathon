@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useState, useCallback, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
+import { useLocale } from 'next-intl'
 import { Search, Plus, Pencil, Ban, RotateCcw, Package, Loader2, Undo2, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -123,6 +125,8 @@ function StockDetailRow({ catalogItemId, businessId }: { catalogItemId: string; 
 // ---------------------------------------------------------------------------
 
 export default function CatalogItemManager() {
+  const router = useRouter()
+  const locale = useLocale()
   const { businessId } = useActiveBusiness()
   const [searchQuery, setSearchQuery] = useState('')
   const [sourceFilter, setSourceFilter] = useState<string>('all')
@@ -499,7 +503,7 @@ export default function CatalogItemManager() {
                       }
 
                       return (<React.Fragment key={item._id}>
-                        <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+                        <tr className="border-b border-border hover:bg-muted/50 transition-colors cursor-pointer" onClick={() => router.push(`/${locale}/sales-invoices/catalog/${item._id}`)}>
                           <td className="px-4 py-3">
                             <div>
                               <div className="flex items-center gap-1.5">

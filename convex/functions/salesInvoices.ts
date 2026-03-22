@@ -742,6 +742,29 @@ export const send = mutation({
       }
     }
 
+    // 032-price-history-tracking: Capture selling prices for catalog-linked line items
+    const catalogLinkedItems = invoice.lineItems
+      .filter((li: any) => li.catalogItemId)
+      .map((li: any) => ({
+        catalogItemId: li.catalogItemId,
+        unitPrice: li.unitPrice,
+        quantity: li.quantity,
+        currency: li.currency || invoice.currency || "MYR",
+        totalAmount: li.totalAmount || li.unitPrice * li.quantity,
+        itemDescription: li.description || li.itemName || "",
+        itemCode: li.itemCode,
+      }));
+
+    if (catalogLinkedItems.length > 0) {
+      await ctx.scheduler.runAfter(0, internal.functions.sellingPriceHistory.recordFromSalesInvoice, {
+        businessId: args.businessId,
+        salesInvoiceId: args.id,
+        customerId,
+        invoiceDate: invoice.invoiceDate,
+        lineItems: catalogLinkedItems,
+      });
+    }
+
     return args.id;
   },
 });
@@ -888,6 +911,11 @@ export const voidInvoice = mutation({
         }
       }
     }
+
+    // 032-price-history-tracking: Archive selling price records when invoice voided
+    await ctx.scheduler.runAfter(0, internal.functions.sellingPriceHistory.archiveBySalesInvoice, {
+      salesInvoiceId: args.id,
+    });
 
     return args.id;
   },
