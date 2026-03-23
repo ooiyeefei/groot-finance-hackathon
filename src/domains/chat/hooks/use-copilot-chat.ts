@@ -393,28 +393,17 @@ export function useCopilotBridge(
         // Only clear UI state if user is still viewing this conversation
         if (activeConversationIdRef.current === convId) {
           setStreamingStatus('')
-
-          // Wait for Convex real-time to deliver the persisted assistant message
-          // before clearing streaming state. Poll up to 5s (10 x 500ms) to avoid
-          // the race where the 1500ms timeout fires before Convex subscription delivers.
-          const msgCountBefore = convexMessagesRef.current.length
-          let cleared = false
-          for (let i = 0; i < 10; i++) {
-            await new Promise(r => setTimeout(r, 500))
-            // Check if a new stream started (user re-sent) — stop waiting
-            if (activeStreamsRef.current.has(convId)) { cleared = true; break }
-            // Check if Convex delivered new messages
-            if (convexMessagesRef.current.length > msgCountBefore) { cleared = true; break }
-            // Check if user switched conversations
-            if (activeConversationIdRef.current !== convId) { cleared = true; break }
-          }
-
-          // Only clear if still viewing this conversation and no new stream started
-          if (activeConversationIdRef.current === convId && !activeStreamsRef.current.has(convId)) {
-            setIsLoading(false)
-            setStreamingText('')
-            setStreamingActions([])
-          }
+          // Brief delay before clearing streaming state — gives Convex real-time
+          // a moment to deliver the persisted message. The displayMessages memo
+          // no longer hides persisted messages during streaming, so even if
+          // Convex is slow, the message won't vanish.
+          setTimeout(() => {
+            if (!activeStreamsRef.current.has(convId)) {
+              setIsLoading(false)
+              setStreamingText('')
+              setStreamingActions([])
+            }
+          }, 500)
         }
       }
     },

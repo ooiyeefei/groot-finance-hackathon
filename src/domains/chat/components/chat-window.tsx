@@ -438,14 +438,11 @@ User question: ${trimmed}`
       }
     })
 
-    // While streaming, if the last message is an assistant message that was just server-persisted
-    // mid-stream, hide it — the streaming overlay already shows this content.
-    if (isLoading && streamingText && msgs.length > 0) {
-      const lastMsg = msgs[msgs.length - 1]
-      if (lastMsg.role === 'assistant') {
-        return msgs.slice(0, -1)
-      }
-    }
+    // NOTE: Previously hid the last assistant message while streaming to avoid
+    // duplicate bubbles. Removed because it caused a race condition where the
+    // message would disappear if Convex delivery timing didn't align with the
+    // streaming state transition. A brief duplicate bubble is better than a
+    // vanishing message. The streaming bubble auto-hides when isLoading=false.
 
     return msgs
   }, [convexMessages, isLoading, streamingText])
