@@ -392,19 +392,29 @@ export function useCopilotBridge(
         activeStreamsRef.current.delete(convId)
         // Only clear UI state if user is still viewing this conversation
         if (activeConversationIdRef.current === convId) {
-          // Keep isLoading=true briefly so the streaming bubble stays visible
-          // while Convex real-time subscription delivers the persisted message.
-          // Without this delay, the bubble vanishes and there's a "flash of empty"
-          // before the message appears from the DB.
           setStreamingStatus('')
-          setTimeout(() => {
-            // Only clear if no NEW stream started for this conversation in the meantime
-            if (!activeStreamsRef.current.has(convId)) {
-              setIsLoading(false)
-              setStreamingText('')
-              setStreamingActions([])
-            }
-          }, 1500)
+
+          // Wait for Convex real-time to deliver the persisted assistant message
+          // before clearing streaming state. Poll up to 5s (10 x 500ms) to avoid
+          // the race where the 1500ms timeout fires before Convex subscription delivers.
+          const msgCountBefore = convexMessagesRef.current.length
+          let cleared = false
+          for (let i = 0; i < 10; i++) {
+            await new Promise(r => setTimeout(r, 500))
+            // Check if a new stream started (user re-sent) — stop waiting
+            if (activeStreamsRef.current.has(convId)) { cleared = true; break }
+            // Check if Convex delivered new messages
+            if (convexMessagesRef.current.length > msgCountBefore) { cleared = true; break }
+            // Check if user switched conversations
+            if (activeConversationIdRef.current !== convId) { cleared = true; break }
+          }
+
+          // Only clear if still viewing this conversation and no new stream started
+          if (activeConversationIdRef.current === convId && !activeStreamsRef.current.has(convId)) {
+            setIsLoading(false)
+            setStreamingText('')
+            setStreamingActions([])
+          }
         }
       }
     },
