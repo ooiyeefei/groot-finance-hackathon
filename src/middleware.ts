@@ -47,8 +47,7 @@ const isPublicRoute = createRouteMatcher([
   // 032-self-service-debtors-info-update: Public debtor self-service form
   '/:locale/debtor-update(.*)',
   '/debtor-update(.*)',
-  // 033-roi-calculator: Public ROI calculator for partner prospects
-  '/roi-calculator(.*)',
+  // Note: /roi-calculator is NOT listed here — it's token-gated via isPartnerPage check
 ])
 
 // Check if request is an API route
@@ -104,7 +103,7 @@ async function checkTrialExpiration(clerkUserId: string): Promise<{
 // Partner pages require a secret token in the URL to access
 const PARTNER_TOKEN = process.env.PARTNER_PAGE_TOKEN || 'groot2026'
 const isPartnerPage = (req: NextRequest) =>
-  req.nextUrl.pathname.startsWith('/reseller-program') || req.nextUrl.pathname.startsWith('/referral')
+  req.nextUrl.pathname.startsWith('/reseller-program') || req.nextUrl.pathname.startsWith('/referral') || req.nextUrl.pathname.startsWith('/roi-calculator')
 
 // Cookie-based cache for trial status to avoid Convex query on every request.
 // TTL: 5 minutes — trial/business status changes rarely, so this is safe.

@@ -139,6 +139,9 @@ export function ROICalculatorClient() {
     if (monthlySalary) params.set('salary', monthlySalary)
     params.set('currency', currency)
     if (partnerCode) params.set('partner', partnerCode)
+    // Preserve the access token so shared links pass the middleware gate
+    const token = searchParams.get('t')
+    if (token) params.set('t', token)
 
     const url = `${window.location.origin}/roi-calculator?${params.toString()}`
     navigator.clipboard.writeText(url)
@@ -152,6 +155,7 @@ export function ROICalculatorClient() {
     monthlySalary,
     currency,
     partnerCode,
+    searchParams,
   ])
 
   // Reset copied state when inputs change
