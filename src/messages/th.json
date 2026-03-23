@@ -55,7 +55,8 @@
     "reporting": "รายงานและส่งออก",
     "documentsInbox": "กล่องเอกสาร",
     "inventory": "สินค้าคงคลัง",
-    "financialStatements": "Financial Statements"
+    "financialStatements": "Financial Statements",
+    "reports": "รายงาน"
   },
   "dashboard": {
     "title": "แดชบอร์ด",

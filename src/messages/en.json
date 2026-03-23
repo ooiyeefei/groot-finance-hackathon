@@ -55,7 +55,8 @@
     "reporting": "Reporting & Exports",
     "documentsInbox": "Documents Inbox",
     "inventory": "Inventory",
-    "financialStatements": "Financial Statements"
+    "financialStatements": "Financial Statements",
+    "reports": "Reports"
   },
   "dashboard": {
     "title": "Dashboard",
