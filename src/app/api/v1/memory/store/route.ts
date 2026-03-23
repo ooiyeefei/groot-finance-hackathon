@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { ToolFactory } from '@/lib/ai/tools/tool-factory'
+import { executeTool } from '@/lib/ai/tools/mcp-tool-registry'
 import { getUserDataConvex } from '@/lib/convex'
 
 interface StoreMemoryRequest {
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
 
   // 4. Execute memory_store tool
   try {
-    const result = await ToolFactory.executeTool(
+    const result = await executeTool(
       'memory_store',
       { memory },
       {

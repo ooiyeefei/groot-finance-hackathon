@@ -1,13 +1,16 @@
 /**
  * Secure Tools Module Export
- * Centralized exports for the secure tool system
+ * All tool schemas and execution via MCP server (single source of truth)
  */
 
-export { BaseTool, type UserContext, type ToolParameters, type ToolResult } from './base-tool'
-export { ToolFactory, type ToolName } from './tool-factory'
-export { DocumentSearchTool } from './document-search-tool'
-export { TransactionLookupTool } from './transaction-lookup-tool'
-// CrossBorderTaxComplianceTool removed — deprecated accounting_entries dependency
+export {
+  type UserContext,
+  type ToolParameters,
+  type ToolResult,
+  getToolSchemasForRole,
+  executeTool,
+  validateTools,
+} from './mcp-tool-registry'
 
 // Re-export for backward compatibility and convenience
 export { createFinancialAgent, createAgentState, type AgentState } from '@/lib/ai/langgraph-agent'

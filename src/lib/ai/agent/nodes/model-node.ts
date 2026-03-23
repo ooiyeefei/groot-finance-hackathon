@@ -4,8 +4,7 @@
  */
 
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
-import { ToolFactory } from '../../tools/tool-factory';
-import { ModelType } from '../../tools/base-tool';
+import { getToolSchemasForRole } from '../../tools/mcp-tool-registry';
 import { detectModelType } from '../config/model-config';
 import { getSystemPrompt } from '../config/prompts';
 import { aiConfig } from '../../config/ai-config';
@@ -178,34 +177,17 @@ function buildMessagesForLLM(trimmedMessages: any[], systemPrompt: string): any[
 /**
  * Get validated tools for the LLM, filtered by user role
  */
-async function getValidatedTools(modelType: ModelType, userRole?: string): Promise<any[]> {
-  // Use role-based schemas to filter tool visibility by user role
-  const rawTools = ToolFactory.getToolSchemasForRole(modelType, userRole);
+async function getValidatedTools(_modelType: string, userRole?: string): Promise<any[]> {
+  // Fetch role-filtered schemas directly from MCP server (cached 5 min)
+  const tools = await getToolSchemasForRole(userRole);
 
   if (process.env.NODE_ENV === 'development') {
-    console.log(`[CallModel] DEBUG: ToolFactory returned ${rawTools.length} raw tools`);
-    console.log(`[CallModel] DEBUG: Available tool names: ${rawTools.map(t => t.function?.name).join(', ')}`);
-
-    // Check specifically for regulatory tool
-    const hasRegulatoryTool = rawTools.some(tool => tool.function?.name === 'searchRegulatoryKnowledgeBase');
-    console.log(`[CallModel] DEBUG: Regulatory tool present: ${hasRegulatoryTool}`);
+    console.log(`[CallModel] DEBUG: MCP registry returned ${tools.length} tools`);
+    console.log(`[CallModel] DEBUG: Available tool names: ${tools.map(t => t.function?.name).join(', ')}`);
   }
 
-  // ADDITIONAL VALIDATION: Ensure each tool has a function.name before sending to API
-  const tools = rawTools.filter(tool => {
-    const hasName = tool?.function?.name;
-    if (!hasName) {
-      console.error(`[CallModel] CRITICAL: Tool missing function.name:`, JSON.stringify(tool, null, 2));
-      return false;
-    }
-    return true;
-  });
-
-  // If no valid tools after filtering, proceed without tools
   if (tools.length === 0) {
     console.warn(`[CallModel] No valid tools available, proceeding without function calling`);
-  } else if (process.env.NODE_ENV === 'development') {
-    console.log(`[CallModel] DEBUG: ${tools.length} valid tools loaded for LLM`);
   }
 
   return tools;
@@ -401,12 +383,7 @@ async function handleOpenAIResponse(state: AgentState, messages: any[], tools: a
     const toolCall = assistantResponse.tool_calls[0];
     const toolName = toolCall.function?.name;
 
-    if (!ToolFactory.hasToolType(toolName)) {
-      console.error(`[CallModel] Unknown tool requested: ${toolName}`);
-      return {
-        messages: [...state.messages, new AIMessage('I apologize, but I cannot use the requested tool.')],
-      };
-    }
+    // Tool existence is validated by MCP server at execution time — no client-side check needed
 
     // Cross-border compliance tool removed — deprecated accounting_entries dependency
 

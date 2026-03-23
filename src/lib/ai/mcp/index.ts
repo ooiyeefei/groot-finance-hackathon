@@ -25,17 +25,6 @@ export {
   getMcpClient
 } from './mcp-client'
 
-// Tool Adapter
-export {
-  mcpToolToOpenAISchema,
-  parseMcpToolName,
-  McpToolWrapper,
-  createMcpToolWrappers,
-  getAllMcpToolSchemas,
-  getMcpToolWrapper,
-  isMcpTool
-} from './mcp-tool-adapter'
-
 // Logging (T071)
 export {
   type McpToolEvent,

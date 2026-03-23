@@ -7,8 +7,7 @@
 
 import { StateGraph } from "@langchain/langgraph";
 import { HumanMessage } from "@langchain/core/messages";
-import { ToolFactory } from './tools/tool-factory';
-import { UserContext } from './tools/base-tool';
+import { validateTools, type UserContext } from './tools/mcp-tool-registry';
 
 // Import from extracted modules
 import { AgentStateAnnotation, AgentState, UserIntent, IntentAnalysisResult } from './agent/types';
@@ -29,12 +28,12 @@ export type { AgentState, UserIntent, IntentAnalysisResult };
 export function createFinancialAgent() {
   console.log('[LangGraph] Creating financial agent...');
 
-  // Validate all tools before creating agent
-  ToolFactory.validateTools().then(validation => {
+  // Validate tools from MCP server (warm up schema cache)
+  validateTools().then(validation => {
     if (!validation.valid) {
-      console.error('[LangGraph] Tool validation failed:', validation.errors);
+      console.error('[LangGraph] MCP tool validation failed:', validation.errors);
     } else {
-      console.log('[LangGraph] All tools validated successfully');
+      console.log(`[LangGraph] ${validation.toolCount} MCP tools validated successfully`);
     }
   });
 

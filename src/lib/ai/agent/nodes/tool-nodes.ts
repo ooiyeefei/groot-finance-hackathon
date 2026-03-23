@@ -3,7 +3,7 @@
  */
 
 import { AIMessage, ToolMessage, HumanMessage } from "@langchain/core/messages";
-import { ToolFactory } from '../../tools/tool-factory';
+import { executeTool as mcpExecuteTool } from '../../tools/mcp-tool-registry';
 import { AgentState } from '../types';
 
 /**
@@ -55,29 +55,27 @@ export async function executeTool(state: AgentState): Promise<Partial<AgentState
     if (state.failureCount && state.failureCount >= 2 && state.lastFailedTool === toolName) {
       console.log(`[ExecuteTool] Attempting fallback tool after ${state.failureCount} failures with ${toolName}`);
       const fallbackTool = toolName === 'search_documents' ? 'get_transactions' : 'search_documents';
-      if (ToolFactory.hasToolType(fallbackTool)) {
-        console.log(`[ExecuteTool] Switching to fallback tool: ${fallbackTool}`);
-        const fallbackResult = await ToolFactory.executeTool(fallbackTool, parameters, state.userContext);
+      console.log(`[ExecuteTool] Switching to fallback tool: ${fallbackTool}`);
+      const fallbackResult = await mcpExecuteTool(fallbackTool, parameters, state.userContext);
 
-        if (fallbackResult.success) {
-          const fallbackCitations = fallbackResult.citations || [];
-          const toolMessage = new ToolMessage({
-            content: `[Automatic tool correction] ${fallbackResult.data}`,
-            tool_call_id: toolCall.id || 'fallback_exec',
-            name: fallbackTool
-          });
-          return {
-            messages: [...state.messages, toolMessage],
-            failureCount: 0,
-            lastFailedTool: null,
-            citations: fallbackCitations
-          };
-        }
+      if (fallbackResult.success) {
+        const fallbackCitations = fallbackResult.citations || [];
+        const toolMessage = new ToolMessage({
+          content: `[Automatic tool correction] ${fallbackResult.data}`,
+          tool_call_id: toolCall.id || 'fallback_exec',
+          name: fallbackTool
+        });
+        return {
+          messages: [...state.messages, toolMessage],
+          failureCount: 0,
+          lastFailedTool: null,
+          citations: fallbackCitations
+        };
       }
     }
 
-    // Execute tool through secure ToolFactory with user context
-    const result = await ToolFactory.executeTool(toolName, parameters, state.userContext);
+    // Execute tool via MCP (single source of truth)
+    const result = await mcpExecuteTool(toolName, parameters, state.userContext);
 
     console.log(`[ExecuteTool] Tool ${toolName} execution result:`, { success: result.success });
 
