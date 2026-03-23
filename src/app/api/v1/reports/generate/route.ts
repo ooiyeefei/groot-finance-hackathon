@@ -16,6 +16,7 @@ import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
 import type { Id } from '@/convex/_generated/dataModel'
 import { uploadFile, getPresignedDownloadUrl } from '@/lib/aws-s3'
+import { generateAgingInsights } from '@/lib/reports/ai-insights-generator'
 import { generateReport, generateDebtorStatement, generateVendorStatement } from '@/lib/reports/report-generator'
 import type { ArAgingReportData } from '@/lib/reports/templates/ar-aging-template'
 import type { ApAgingReportData } from '@/lib/reports/templates/ap-aging-template'
@@ -179,6 +180,68 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // FR-018: Generate AI insights (optional — fails gracefully)
+    let aiInsightsSummary: string | undefined
+    try {
+      if (reportType === 'ar_aging') {
+        const arData = reportData as ArAgingReportData
+        const insightDebtors = arData.customers.map((c) => ({
+          customerName: c.customerName,
+          current: c.current,
+          days1to30: c.days30,
+          days31to60: c.days60,
+          days61to90: c.days90,
+          days90plus: c.days120plus,
+          total: c.total,
+        }))
+        const insights = await generateAgingInsights({
+          reportType: 'ar_aging',
+          businessName,
+          currency,
+          asOfDate,
+          debtors: insightDebtors,
+          totals: {
+            current: arData.totals.current,
+            days1to30: arData.totals.days30,
+            days31to60: arData.totals.days60,
+            days61to90: arData.totals.days90,
+            days90plus: arData.totals.days120plus,
+            total: arData.totals.total,
+          },
+        })
+        if (insights) aiInsightsSummary = insights
+      } else {
+        const apData = reportData as ApAgingReportData
+        const insightVendors = apData.vendors.map((v) => ({
+          customerName: v.vendorName,
+          current: v.current,
+          days1to30: v.days30,
+          days31to60: v.days60,
+          days61to90: v.days90,
+          days90plus: v.days120plus,
+          total: v.total,
+        }))
+        const insights = await generateAgingInsights({
+          reportType: 'ap_aging',
+          businessName,
+          currency,
+          asOfDate,
+          debtors: insightVendors,
+          totals: {
+            current: apData.totals.current,
+            days1to30: apData.totals.days30,
+            days31to60: apData.totals.days60,
+            days61to90: apData.totals.days90,
+            days90plus: apData.totals.days120plus,
+            total: apData.totals.total,
+          },
+        })
+        if (insights) aiInsightsSummary = insights
+      }
+    } catch (err) {
+      console.warn('[Report Generate] AI insights generation failed, continuing without:', err)
+    }
+
     // Create report record in Convex
     const reportId = await client.mutation(api.functions.reports.createReportPublic, {
       businessId,
@@ -196,6 +259,7 @@ export async function POST(req: NextRequest) {
         : (reportData as ApAgingReportData).totals.total,
       currency,
       hasWarnings: false,
+      aiInsightsSummary,
     })
 
     // Get download URL — extract path from full key

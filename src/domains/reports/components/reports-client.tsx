@@ -158,6 +158,20 @@ export default function ReportsClient() {
         </Card>
       )}
 
+      {/* AI Insights from latest report */}
+      {reports && reports.length > 0 && reports[0].aiInsightsSummary && (
+        <Card className="border-blue-500/20 bg-blue-500/5">
+          <CardContent className="py-4 px-5">
+            <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
+              <span className="text-blue-500">✦</span> AI Insights — {reports[0].reportType === 'ar_aging' ? 'AR' : 'AP'} Aging ({reports[0].periodMonth})
+            </h3>
+            <p className="text-sm text-muted-foreground whitespace-pre-line">
+              {reports[0].aiInsightsSummary}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Report history */}
       <Card>
         <CardHeader>
@@ -217,6 +231,11 @@ export default function ReportsClient() {
                         {report.hasWarnings && (
                           <Badge variant="outline" className="text-xs ml-1 text-amber-600 border-amber-500/50">
                             Warnings
+                          </Badge>
+                        )}
+                        {report.aiInsightsSummary && (
+                          <Badge variant="outline" className="text-xs ml-1 text-blue-600 border-blue-500/50">
+                            AI Insights
                           </Badge>
                         )}
                       </td>
