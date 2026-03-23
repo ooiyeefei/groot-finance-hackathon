@@ -1791,7 +1791,7 @@ export default defineSchema({
   csv_import_templates: defineTable({
     businessId: v.id("businesses"),
     name: v.string(),
-    schemaType: v.union(v.literal("sales_statement"), v.literal("bank_statement"), v.literal("purchase_order"), v.literal("goods_received_note")),
+    schemaType: v.union(v.literal("sales_statement"), v.literal("bank_statement"), v.literal("purchase_order"), v.literal("goods_received_note"), v.literal("leave_balance")),
     columnMappings: v.array(v.object({
       sourceHeader: v.string(),
       targetField: v.string(),
