@@ -33,6 +33,7 @@ import {
   Receipt,
   ShoppingCart,
   ArrowRight,
+  Sparkles,
 } from 'lucide-react'
 import { formatCurrency, formatNumber } from '@/lib/utils/format-number'
 import {
@@ -174,18 +175,45 @@ export function ROICalculatorClient() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Scoped animations */}
+      <style jsx global>{`
+        @keyframes roi-fade-up {
+          from { opacity: 0; transform: translateY(12px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes roi-scale-in {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        @keyframes roi-count-up {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes roi-shimmer {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
+        }
+        .roi-fade-up { animation: roi-fade-up 0.5s ease-out both; }
+        .roi-scale-in { animation: roi-scale-in 0.4s ease-out both; }
+        .roi-count-up { animation: roi-count-up 0.35s ease-out both; }
+        .roi-stagger-1 { animation-delay: 0.05s; }
+        .roi-stagger-2 { animation-delay: 0.1s; }
+        .roi-stagger-3 { animation-delay: 0.15s; }
+        .roi-stagger-4 { animation-delay: 0.2s; }
+      `}</style>
+
       {/* Header */}
       <header className="border-b border-border bg-card">
-        <div className="mx-auto max-w-5xl px-4 py-4 sm:px-6 flex items-center justify-between">
+        <div className="mx-auto max-w-6xl px-4 py-4 sm:px-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-              <Calculator className="h-4 w-4 text-primary-foreground" />
+            <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center">
+              <Calculator className="h-[18px] w-[18px] text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-foreground">
+              <h1 className="text-[1.2rem] font-semibold text-foreground leading-tight">
                 Groot Finance
               </h1>
-              <p className="text-xs text-muted-foreground">ROI Calculator</p>
+              <p className="text-[0.7rem] text-muted-foreground">ROI Calculator</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -197,45 +225,46 @@ export function ROICalculatorClient() {
       {/* Partner banner */}
       {partner && (
         <div className="bg-primary/5 border-b border-primary/10">
-          <div className="mx-auto max-w-5xl px-4 py-2 sm:px-6">
-            <p className="text-sm text-primary text-center">
+          <div className="mx-auto max-w-6xl px-4 py-2.5 sm:px-6">
+            <p className="text-[0.82rem] text-primary text-center">
               Provided by{' '}
-              <span className="font-medium">{partner.name}</span>
+              <span className="font-semibold">{partner.name}</span>
             </p>
           </div>
         </div>
       )}
 
-      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-10">
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
         {/* Hero */}
-        <div className="text-center mb-8">
-          <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
+        <div className="text-center mb-8 roi-fade-up">
+          <h2 className="text-[1.7rem] sm:text-[2rem] font-bold text-foreground mb-2 tracking-tight">
             How much can your business save?
           </h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto">
+          <p className="text-[0.95rem] text-muted-foreground max-w-2xl mx-auto">
             Enter your current business metrics to see how much time and money
             you could save with AI-powered financial automation.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Input Section */}
-          <Card>
-            <CardHeader className="pb-4">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Users className="h-5 w-5 text-primary" />
+        {/* 40/60 split: inputs narrow, results prominent */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 lg:gap-8">
+          {/* Input Section — compact 2/5 width */}
+          <Card className="lg:col-span-2 roi-fade-up roi-stagger-1">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-[1.05rem] flex items-center gap-2">
+                <Users className="h-[18px] w-[18px] text-primary" />
                 Your Business Metrics
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-5">
+            <CardContent className="space-y-4">
               {/* Currency selector */}
-              <div className="space-y-1.5">
-                <Label htmlFor="currency">Currency</Label>
+              <div className="space-y-1">
+                <Label htmlFor="currency" className="text-[0.8rem]">Currency</Label>
                 <Select
                   value={currency}
                   onValueChange={(v) => setCurrency(v as SupportedCurrency)}
                 >
-                  <SelectTrigger id="currency">
+                  <SelectTrigger id="currency" className="h-9">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -249,10 +278,10 @@ export function ROICalculatorClient() {
               </div>
 
               {/* Document volumes */}
-              <div className="space-y-1.5">
-                <Label htmlFor="pi" className="flex items-center gap-1.5">
+              <div className="space-y-1">
+                <Label htmlFor="pi" className="text-[0.8rem] flex items-center gap-1.5">
                   <ShoppingCart className="h-3.5 w-3.5 text-muted-foreground" />
-                  Purchase invoices per month
+                  Purchase invoices / mo
                 </Label>
                 <Input
                   id="pi"
@@ -260,15 +289,16 @@ export function ROICalculatorClient() {
                   min={INPUT_LIMITS.minDocuments}
                   max={INPUT_LIMITS.maxDocuments}
                   placeholder="e.g. 50"
+                  className="h-9"
                   value={purchaseInvoices}
                   onChange={(e) => setPurchaseInvoices(e.target.value)}
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="si" className="flex items-center gap-1.5">
+              <div className="space-y-1">
+                <Label htmlFor="si" className="text-[0.8rem] flex items-center gap-1.5">
                   <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                  Sales invoices per month
+                  Sales invoices / mo
                 </Label>
                 <Input
                   id="si"
@@ -276,15 +306,16 @@ export function ROICalculatorClient() {
                   min={INPUT_LIMITS.minDocuments}
                   max={INPUT_LIMITS.maxDocuments}
                   placeholder="e.g. 30"
+                  className="h-9"
                   value={salesInvoices}
                   onChange={(e) => setSalesInvoices(e.target.value)}
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="er" className="flex items-center gap-1.5">
+              <div className="space-y-1">
+                <Label htmlFor="er" className="text-[0.8rem] flex items-center gap-1.5">
                   <Receipt className="h-3.5 w-3.5 text-muted-foreground" />
-                  Expense receipts per month
+                  Expense receipts / mo
                 </Label>
                 <Input
                   id="er"
@@ -292,15 +323,16 @@ export function ROICalculatorClient() {
                   min={INPUT_LIMITS.minDocuments}
                   max={INPUT_LIMITS.maxDocuments}
                   placeholder="e.g. 100"
+                  className="h-9"
                   value={expenseReceipts}
                   onChange={(e) => setExpenseReceipts(e.target.value)}
                 />
               </div>
 
               {/* Team info */}
-              <div className="border-t border-border pt-4 space-y-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="staff" className="flex items-center gap-1.5">
+              <div className="border-t border-border pt-3 space-y-3">
+                <div className="space-y-1">
+                  <Label htmlFor="staff" className="text-[0.8rem] flex items-center gap-1.5">
                     <Users className="h-3.5 w-3.5 text-muted-foreground" />
                     Finance / admin staff
                   </Label>
@@ -310,18 +342,19 @@ export function ROICalculatorClient() {
                     min={INPUT_LIMITS.minStaff}
                     max={INPUT_LIMITS.maxStaff}
                     placeholder="e.g. 3"
+                    className="h-9"
                     value={financeStaff}
                     onChange={(e) => setFinanceStaff(e.target.value)}
                   />
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-[0.7rem] text-muted-foreground">
                     Total headcount handling finance tasks
                   </p>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="salary" className="flex items-center gap-1.5">
+                <div className="space-y-1">
+                  <Label htmlFor="salary" className="text-[0.8rem] flex items-center gap-1.5">
                     <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
-                    Average monthly salary ({currency})
+                    Avg monthly salary ({currency})
                   </Label>
                   <Input
                     id="salary"
@@ -329,6 +362,7 @@ export function ROICalculatorClient() {
                     min={INPUT_LIMITS.minSalary}
                     max={INPUT_LIMITS.maxSalary}
                     placeholder={currency === 'MYR' ? 'e.g. 4000' : 'e.g. 3000'}
+                    className="h-9"
                     value={monthlySalary}
                     onChange={(e) => setMonthlySalary(e.target.value)}
                   />
@@ -337,26 +371,27 @@ export function ROICalculatorClient() {
             </CardContent>
           </Card>
 
-          {/* Results Section */}
-          <div className="space-y-4">
+          {/* Results Section — prominent 3/5 width */}
+          <div className="lg:col-span-3 space-y-5">
             {result.hasResults ? (
               <>
-                {/* Primary metrics */}
-                <Card className="border-primary/20 bg-primary/[0.02]">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <TrendingUp className="h-5 w-5 text-primary" />
+                {/* Primary metrics — hero numbers */}
+                <Card className="border-primary/20 bg-gradient-to-br from-primary/[0.03] to-primary/[0.07] roi-scale-in">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-[1.1rem] flex items-center gap-2">
+                      <Sparkles className="h-[18px] w-[18px] text-primary" />
                       Your Estimated Savings
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-4">
                       <MetricCard
                         icon={<Clock className="h-5 w-5" />}
                         label="Hours saved / month"
                         value={`${formatNumber(result.hoursSavedPerMonth, 1)} hrs`}
                         color="text-blue-600 dark:text-blue-400"
-                        bgColor="bg-blue-50 dark:bg-blue-950/30"
+                        bgColor="bg-blue-50/80 dark:bg-blue-950/30"
+                        className="roi-count-up roi-stagger-1"
                       />
                       <MetricCard
                         icon={<DollarSign className="h-5 w-5" />}
@@ -367,11 +402,13 @@ export function ROICalculatorClient() {
                           0
                         )}
                         color="text-green-600 dark:text-green-400"
-                        bgColor="bg-green-50 dark:bg-green-950/30"
+                        bgColor="bg-green-50/80 dark:bg-green-950/30"
+                        highlight
+                        className="roi-count-up roi-stagger-2"
                       />
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-4">
                       <MetricCard
                         icon={<TrendingUp className="h-5 w-5" />}
                         label="Payback period"
@@ -381,7 +418,8 @@ export function ROICalculatorClient() {
                             : `${result.paybackPeriodMonths} months`
                         }
                         color="text-purple-600 dark:text-purple-400"
-                        bgColor="bg-purple-50 dark:bg-purple-950/30"
+                        bgColor="bg-purple-50/80 dark:bg-purple-950/30"
+                        className="roi-count-up roi-stagger-3"
                       />
                       <MetricCard
                         icon={<Users className="h-5 w-5" />}
@@ -389,23 +427,24 @@ export function ROICalculatorClient() {
                         value={`${result.timeSpentPercent}%`}
                         subtitle="of your team's capacity"
                         color="text-orange-600 dark:text-orange-400"
-                        bgColor="bg-orange-50 dark:bg-orange-950/30"
+                        bgColor="bg-orange-50/80 dark:bg-orange-950/30"
+                        className="roi-count-up roi-stagger-4"
                       />
                     </div>
                   </CardContent>
                 </Card>
 
                 {/* Before/After comparison */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">
+                <Card className="roi-fade-up roi-stagger-2">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-[1.05rem]">
                       Before vs After Groot Finance
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div className="space-y-3">
-                        <p className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-3 rounded-lg bg-muted/40 p-4">
+                        <p className="font-semibold text-muted-foreground text-[0.7rem] uppercase tracking-wider">
                           Before
                         </p>
                         <ComparisonRow
@@ -428,8 +467,8 @@ export function ROICalculatorClient() {
                           variant="before"
                         />
                       </div>
-                      <div className="space-y-3">
-                        <p className="font-medium text-primary text-xs uppercase tracking-wider">
+                      <div className="space-y-3 rounded-lg bg-primary/[0.04] border border-primary/10 p-4">
+                        <p className="font-semibold text-primary text-[0.7rem] uppercase tracking-wider">
                           After
                         </p>
                         <ComparisonRow
@@ -453,9 +492,9 @@ export function ROICalculatorClient() {
                 </Card>
 
                 {/* CTAs */}
-                <div className="flex flex-col sm:flex-row gap-3">
+                <div className="flex flex-col sm:flex-row gap-3 roi-fade-up roi-stagger-3">
                   <Button
-                    className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
+                    className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground h-11 text-[0.95rem]"
                     onClick={() =>
                       window.open('https://finance.hellogroot.com/sign-up', '_blank')
                     }
@@ -466,7 +505,7 @@ export function ROICalculatorClient() {
 
                   {partner && (
                     <Button
-                      className="flex-1 bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+                      className="flex-1 bg-secondary hover:bg-secondary/80 text-secondary-foreground h-11 text-[0.95rem]"
                       onClick={() => window.open(partner.contactUrl, '_blank')}
                     >
                       Talk to {partner.name}
@@ -474,7 +513,7 @@ export function ROICalculatorClient() {
                   )}
 
                   <Button
-                    className="bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+                    className="bg-secondary hover:bg-secondary/80 text-secondary-foreground h-11"
                     onClick={generateShareLink}
                   >
                     {copied ? (
@@ -493,14 +532,16 @@ export function ROICalculatorClient() {
               </>
             ) : (
               /* Empty state */
-              <Card className="border-dashed">
-                <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                  <Calculator className="h-12 w-12 text-muted-foreground/40 mb-4" />
-                  <h3 className="text-lg font-medium text-foreground mb-1">
+              <Card className="border-dashed roi-fade-up roi-stagger-2">
+                <CardContent className="flex flex-col items-center justify-center py-20 text-center">
+                  <div className="h-16 w-16 rounded-2xl bg-primary/5 flex items-center justify-center mb-5">
+                    <Calculator className="h-8 w-8 text-primary/30" />
+                  </div>
+                  <h3 className="text-[1.15rem] font-medium text-foreground mb-1">
                     Enter your business metrics
                   </h3>
-                  <p className="text-sm text-muted-foreground max-w-sm">
-                    Fill in the form on the left to see how much time and money
+                  <p className="text-[0.9rem] text-muted-foreground max-w-sm">
+                    Fill in the form to see how much time and money
                     your business could save with Groot Finance.
                   </p>
                 </CardContent>
@@ -511,11 +552,11 @@ export function ROICalculatorClient() {
 
         {/* Footer */}
         <footer className="mt-12 pt-6 border-t border-border text-center">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[0.75rem] text-muted-foreground">
             Estimates based on average time savings from Groot Finance customers.
             Actual results may vary based on business complexity and volume.
           </p>
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-[0.75rem] text-muted-foreground mt-1">
             Groot Finance subscription starts at{' '}
             {formatCurrency(grootPrice, currency, 0)}/month.
           </p>
@@ -532,6 +573,8 @@ function MetricCard({
   subtitle,
   color,
   bgColor,
+  highlight,
+  className = '',
 }: {
   icon: React.ReactNode
   label: string
@@ -539,14 +582,16 @@ function MetricCard({
   subtitle?: string
   color: string
   bgColor: string
+  highlight?: boolean
+  className?: string
 }) {
   return (
-    <div className={`rounded-lg p-4 ${bgColor}`}>
+    <div className={`rounded-xl p-4 ${bgColor} ${highlight ? 'ring-1 ring-green-200 dark:ring-green-800/40' : ''} ${className}`}>
       <div className={`${color} mb-2`}>{icon}</div>
-      <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
-      <p className={`text-xl font-bold ${color}`}>{value}</p>
+      <p className="text-[0.75rem] text-muted-foreground mb-0.5">{label}</p>
+      <p className={`text-[1.4rem] font-bold tracking-tight ${color}`}>{value}</p>
       {subtitle && (
-        <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
+        <p className="text-[0.7rem] text-muted-foreground mt-0.5">{subtitle}</p>
       )}
     </div>
   )
@@ -563,9 +608,9 @@ function ComparisonRow({
 }) {
   return (
     <div>
-      <p className="text-muted-foreground text-xs">{label}</p>
+      <p className="text-muted-foreground text-[0.72rem]">{label}</p>
       <p
-        className={`font-medium ${variant === 'before' ? 'text-muted-foreground' : 'text-primary'}`}
+        className={`font-semibold text-[0.95rem] ${variant === 'before' ? 'text-muted-foreground' : 'text-primary'}`}
       >
         {value}
       </p>
