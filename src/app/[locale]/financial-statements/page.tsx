@@ -40,11 +40,7 @@ export default async function FinancialStatementsPage({ params }: FinancialState
 
           <main className="flex-1 overflow-auto p-4 sm:p-card-padding pb-24 sm:pb-4" style={{ contain: 'layout' }}>
             <div className="max-w-7xl mx-auto">
-              <FinancialStatementsClient
-                businessId=""
-                businessName=""
-                currency="MYR"
-              />
+              <FinancialStatementsClient />
             </div>
           </main>
         </div>

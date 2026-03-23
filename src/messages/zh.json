@@ -54,7 +54,8 @@
     "personalSettings": "个人设置",
     "reporting": "报告与导出",
     "documentsInbox": "文件收件箱",
-    "inventory": "库存管理"
+    "inventory": "库存管理",
+    "financialStatements": "Financial Statements"
   },
   "dashboard": {
     "title": "仪表板",

@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react'
 import { useAction } from 'convex/react'
 import { api } from '@/convex/_generated/api'
+import { useActiveBusiness } from '@/contexts/business-context'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PeriodSelector } from './period-selector'
 import { TrialBalanceView } from './trial-balance-view'
@@ -12,19 +13,11 @@ import { CashFlowView } from './cash-flow-view'
 import { ReportExportButtons } from './report-export-buttons'
 import { HowItWorksDrawer } from './how-it-works-drawer'
 
-interface FinancialStatementsClientProps {
-  businessId: string
-  businessName: string
-  currency: string
-}
-
 type ReportTab = 'trial_balance' | 'pnl' | 'balance_sheet' | 'cash_flow'
 
-export function FinancialStatementsClient({
-  businessId,
-  businessName,
-  currency,
-}: FinancialStatementsClientProps) {
+export function FinancialStatementsClient() {
+  const { businessId, businessName } = useActiveBusiness()
+  const currency = 'MYR' // TODO: get from business context when homeCurrency is available
   const [activeTab, setActiveTab] = useState<ReportTab>('trial_balance')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -46,7 +39,7 @@ export function FinancialStatementsClient({
   const getCashFlow = useAction(api.functions.financialStatements.getCashFlow)
 
   const generateReport = useCallback(async (tab: ReportTab, from: string, to: string) => {
-    if (!from || !to) return
+    if (!from || !to || !businessId) return
     setIsLoading(true)
     try {
       switch (tab) {

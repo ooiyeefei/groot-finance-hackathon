@@ -54,7 +54,8 @@
     "personalSettings": "Pengaturan Pribadi",
     "reporting": "Laporan & Ekspor",
     "documentsInbox": "Kotak Masuk Dokumen",
-    "inventory": "Inventaris"
+    "inventory": "Inventaris",
+    "financialStatements": "Financial Statements"
   },
   "dashboard": {
     "title": "Dashboard",

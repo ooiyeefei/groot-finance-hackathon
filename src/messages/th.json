@@ -54,7 +54,8 @@
     "personalSettings": "ตั้งค่าส่วนตัว",
     "reporting": "รายงานและส่งออก",
     "documentsInbox": "กล่องเอกสาร",
-    "inventory": "สินค้าคงคลัง"
+    "inventory": "สินค้าคงคลัง",
+    "financialStatements": "Financial Statements"
   },
   "dashboard": {
     "title": "แดชบอร์ด",
