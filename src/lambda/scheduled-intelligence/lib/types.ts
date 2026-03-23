@@ -30,7 +30,8 @@ export type JobModule =
   | 'dspy-bank-recon'
   | 'dspy-po-match'
   | 'dspy-ar-match'
-  | 'benchmarking-aggregation';
+  | 'benchmarking-aggregation'
+  | 'monthly-aging-reports';
 
 export interface ConvexHttpQuery {
   path: string;
@@ -46,7 +47,7 @@ export interface ConvexHttpMutation {
 
 export interface JobResult {
   module: JobModule;
-  status: 'success' | 'error' | 'skipped';
+  status: 'success' | 'error' | 'skipped' | 'partial';
   durationMs: number;
   documentsRead?: number;
   documentsWritten?: number;
