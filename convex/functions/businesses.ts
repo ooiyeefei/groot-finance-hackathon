@@ -2922,3 +2922,50 @@ export const updateNotificationSettings = mutation({
     return { success: true };
   },
 });
+
+/**
+ * 034-leave-enhance: Update leave year start month for a business.
+ * Admin/owner only. Value must be 1-12 (1=January, 12=December).
+ */
+export const updateLeaveYearStartMonth = mutation({
+  args: {
+    businessId: v.id("businesses"),
+    leaveYearStartMonth: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await resolveUserByClerkId(ctx.db, identity.subject);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Check admin/owner role
+    const membership = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_businessId_userId", (q) =>
+        q.eq("businessId", args.businessId).eq("userId", user._id)
+      )
+      .first();
+
+    if (!membership || !["owner", "finance_admin"].includes(membership.role)) {
+      throw new Error("Only admin or owner can configure leave year");
+    }
+
+    // Validate month range
+    const month = args.leaveYearStartMonth;
+    if (!Number.isInteger(month) || month < 1 || month > 12) {
+      throw new Error("Leave year start month must be an integer between 1 and 12");
+    }
+
+    await ctx.db.patch(args.businessId, {
+      leaveYearStartMonth: month,
+      updatedAt: Date.now(),
+    });
+
+    return { success: true };
+  },
+});

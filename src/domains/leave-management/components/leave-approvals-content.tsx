@@ -29,8 +29,12 @@ import { usePendingLeaveRequests, useApproveLeaveRequest, useRejectLeaveRequest 
 import { useLeaveTypes } from '../hooks/use-leave-types';
 import { useBusinessContext } from '@/contexts/business-context';
 import { useUser } from '@clerk/nextjs';
+import { useAction } from 'convex/react';
+import { api } from '@/../convex/_generated/api';
+import type { Id } from '@/../convex/_generated/dataModel';
+import OverlapWarningDialog from './overlap-warning-dialog';
 
-// Helper to send leave notification email
+// Helper to send leave notification email + push
 async function sendLeaveNotification(data: {
   notificationType: 'approved' | 'rejected';
   recipientEmail: string;
@@ -42,6 +46,10 @@ async function sendLeaveNotification(data: {
   approverName?: string;
   reason?: string;
   businessName: string;
+  // 034-leave-enhance: Push notification fields
+  recipientUserId?: string;
+  leaveRequestId?: string;
+  businessId?: string;
 }) {
   try {
     const response = await fetch('/api/v1/leave-management/notifications', {
@@ -81,6 +89,16 @@ export default function LeaveApprovalsContent({ onRefreshNeeded }: LeaveApproval
   const [notes, setNotes] = useState('');
   const [rejectReason, setRejectReason] = useState('');
 
+  // 034-leave-enhance: Overlap warning state
+  const [showOverlapWarning, setShowOverlapWarning] = useState(false);
+  const [overlapData, setOverlapData] = useState<{
+    hasOverlaps: boolean;
+    overlappingMembers: any[];
+    totalOverlapDays: number;
+  } | null>(null);
+  const [isCheckingOverlap, setIsCheckingOverlap] = useState(false);
+  const checkOverlapsAction = useAction(api.functions.leaveRequests.checkOverlapsForApproval);
+
   // Create leave type lookup map
   type LeaveTypeInfo = { _id: string; name: string; color?: string };
   const leaveTypeMap = React.useMemo((): Map<string, LeaveTypeInfo> => {
@@ -99,7 +117,7 @@ export default function LeaveApprovalsContent({ onRefreshNeeded }: LeaveApproval
     try {
       await approveLeaveRequest(selectedRequest, notes || undefined);
 
-      // Send email notification (non-blocking)
+      // Send email + push notification (non-blocking)
       if (request?.user?.email) {
         const leaveType = leaveTypeMap.get(request.leaveTypeId);
         sendLeaveNotification({
@@ -113,6 +131,9 @@ export default function LeaveApprovalsContent({ onRefreshNeeded }: LeaveApproval
           approverName,
           reason: notes || undefined,
           businessName,
+          recipientUserId: request.userId,
+          leaveRequestId: request._id,
+          businessId: businessId,
         });
       }
 
@@ -148,6 +169,9 @@ export default function LeaveApprovalsContent({ onRefreshNeeded }: LeaveApproval
           approverName,
           reason: rejectReason,
           businessName,
+          recipientUserId: request.userId,
+          leaveRequestId: request._id,
+          businessId: businessId,
         });
       }
 
@@ -160,11 +184,35 @@ export default function LeaveApprovalsContent({ onRefreshNeeded }: LeaveApproval
     }
   };
 
-  const openActionDialog = (requestId: string, action: 'approve' | 'reject') => {
-    setSelectedRequest(requestId);
-    setActionType(action);
-    setNotes('');
-    setRejectReason('');
+  const openActionDialog = async (requestId: string, dialogAction: 'approve' | 'reject') => {
+    if (dialogAction === 'approve') {
+      // 034-leave-enhance: Check overlaps on-demand via action (not reactive query)
+      setSelectedRequest(requestId);
+      setActionType(dialogAction);
+      setNotes('');
+
+      if (businessId) {
+        setIsCheckingOverlap(true);
+        try {
+          const result = await checkOverlapsAction({
+            businessId,
+            leaveRequestId: requestId as Id<"leave_requests">,
+          });
+          setOverlapData(result);
+          if (result.hasOverlaps) {
+            setShowOverlapWarning(true);
+          }
+        } catch (err) {
+          console.warn('[Overlap Check] Failed, proceeding without warning:', err);
+        } finally {
+          setIsCheckingOverlap(false);
+        }
+      }
+    } else {
+      setSelectedRequest(requestId);
+      setActionType(dialogAction);
+      setRejectReason('');
+    }
   };
 
   // Loading state
@@ -446,6 +494,25 @@ export default function LeaveApprovalsContent({ onRefreshNeeded }: LeaveApproval
           </div>
         </div>
       )}
+
+      {/* 034-leave-enhance: Overlap Warning Dialog */}
+      <OverlapWarningDialog
+        open={showOverlapWarning}
+        overlappingMembers={overlapData?.overlappingMembers ?? []}
+        totalOverlapDays={overlapData?.totalOverlapDays ?? 0}
+        isApproving={isApproving}
+        onApproveAnyway={async () => {
+          setShowOverlapWarning(false);
+          setOverlapData(null);
+          await handleApprove();
+        }}
+        onCancel={() => {
+          setShowOverlapWarning(false);
+          setOverlapData(null);
+          setSelectedRequest(null);
+          setActionType(null);
+        }}
+      />
     </div>
   );
 }

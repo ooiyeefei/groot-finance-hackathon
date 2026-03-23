@@ -1,6 +1,6 @@
 // CSV Auto-Parser Type Definitions
 
-export type SchemaType = "sales_statement" | "bank_statement" | "purchase_order" | "goods_received_note";
+export type SchemaType = "sales_statement" | "bank_statement" | "purchase_order" | "goods_received_note" | "leave_balance";
 
 export type ImportSessionStatus =
   | "parsing"

@@ -47,6 +47,12 @@ import { useBusinessContext } from '@/contexts/business-context';
 import { useAllLeaveTypes, useLeaveTypeOperations } from '../hooks/use-leave-types';
 import { useBusinessHolidays, useHolidayOperations } from '../hooks/use-public-holidays';
 import { useAllEmployeeBalances, useBalanceOperations, useUpdateLeaveEntitlements } from '../hooks/use-leave-balances';
+import { useMutation, useQuery, useAction } from 'convex/react';
+import { api } from '@/../convex/_generated/api';
+import type { Id } from '@/../convex/_generated/dataModel';
+import { CsvImportModal } from '@/lib/csv-parser/components/csv-import-modal';
+import { Upload } from 'lucide-react';
+import { toast } from 'sonner';
 
 // Predefined colors for leave types
 const LEAVE_TYPE_COLORS = [
@@ -130,6 +136,18 @@ export default function LeaveManagementSettings() {
   } | null>(null);
   const [entitlementForm, setEntitlementForm] = useState<Record<string, number>>({});
   const { updateLeaveEntitlements, isLoading: isUpdatingEntitlements } = useUpdateLeaveEntitlements();
+
+  // CSV import state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const importFromCsv = useAction(api.functions.leaveBalances.importFromCsv);
+
+  // Leave year configuration
+  const business = useQuery(api.functions.businesses.getById, businessId ? { id: businessId } : "skip");
+  const updateLeaveYearStartMonth = useMutation(api.functions.businesses.updateLeaveYearStartMonth);
+  const [leaveYearSaving, setLeaveYearSaving] = useState(false);
+  const [leaveYearConfirmDialog, setLeaveYearConfirmDialog] = useState(false);
+  const [pendingLeaveYearMonth, setPendingLeaveYearMonth] = useState<number | null>(null);
 
   // Bulk entitlement editing state
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
@@ -362,7 +380,7 @@ export default function LeaveManagementSettings() {
       </div>
 
       <Tabs value={activeSettingsTab} onValueChange={setActiveSettingsTab}>
-        <TabsList className="grid w-full grid-cols-3 bg-muted border border-border">
+        <TabsList className="grid w-full grid-cols-4 bg-muted border border-border">
           <TabsTrigger value="leave-types" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Calendar className="w-4 h-4 mr-2" />
             Leave Types
@@ -374,6 +392,10 @@ export default function LeaveManagementSettings() {
           <TabsTrigger value="balances" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Users className="w-4 h-4 mr-2" />
             Employee Balances
+          </TabsTrigger>
+          <TabsTrigger value="general" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <Settings className="w-4 h-4 mr-2" />
+            General
           </TabsTrigger>
         </TabsList>
 
@@ -609,6 +631,13 @@ export default function LeaveManagementSettings() {
               </Select>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                onClick={() => setShowImportModal(true)}
+                className="bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Import Balances
+              </Button>
               {selectedEmployees.length > 0 && (
                 <Button
                   variant="outline"
@@ -799,7 +828,127 @@ export default function LeaveManagementSettings() {
             </div>
           )}
         </TabsContent>
+
+        {/* General Settings Tab */}
+        <TabsContent value="general" className="space-y-4 mt-4">
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="text-foreground">Leave Year Configuration</CardTitle>
+              <CardDescription>
+                Configure when your business leave year starts. Default is January (calendar year).
+                Some SEA businesses use fiscal years like April-March.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="leave-year-start">Leave Year Start Month</Label>
+                <Select
+                  value={String(business?.leaveYearStartMonth ?? 1)}
+                  onValueChange={(val) => {
+                    const month = parseInt(val, 10);
+                    const currentMonth = business?.leaveYearStartMonth ?? 1;
+                    if (month === currentMonth) return;
+                    setPendingLeaveYearMonth(month);
+                    setLeaveYearConfirmDialog(true);
+                  }}
+                >
+                  <SelectTrigger id="leave-year-start" className="w-[240px] bg-input border-border">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[
+                      'January', 'February', 'March', 'April', 'May', 'June',
+                      'July', 'August', 'September', 'October', 'November', 'December',
+                    ].map((name, i) => (
+                      <SelectItem key={i + 1} value={String(i + 1)}>{name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  {business?.leaveYearStartMonth && business.leaveYearStartMonth !== 1
+                    ? `Current leave year: ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][business.leaveYearStartMonth - 1]} ${new Date().getFullYear()} - ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][(business.leaveYearStartMonth - 2 + 12) % 12]} ${new Date().getFullYear() + 1}`
+                    : 'Using calendar year (January - December)'}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+
+      {/* Leave Year Change Confirmation Dialog */}
+      {leaveYearConfirmDialog && pendingLeaveYearMonth !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 transition-opacity"
+            style={{
+              backgroundColor: 'rgba(0, 0, 0, 0.4)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)'
+            }}
+            onClick={() => {
+              setLeaveYearConfirmDialog(false);
+              setPendingLeaveYearMonth(null);
+            }}
+          />
+          <div className="relative transform overflow-hidden rounded-xl bg-card shadow-2xl w-full max-w-md border border-border">
+            <div className="p-6 space-y-4">
+              <div>
+                <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-yellow-500" />
+                  Change Leave Year Start
+                </h3>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Changing the leave year start month will affect how balances are calculated going forward.
+                  Existing balances for the current period may need manual adjustment.
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  The new boundary will take effect from the next leave year cycle.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 pt-2">
+                <Button
+                  onClick={() => {
+                    setLeaveYearConfirmDialog(false);
+                    setPendingLeaveYearMonth(null);
+                  }}
+                  className="flex-1 bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={async () => {
+                    if (!businessId || pendingLeaveYearMonth === null) return;
+                    setLeaveYearSaving(true);
+                    try {
+                      await updateLeaveYearStartMonth({
+                        businessId: businessId as Id<"businesses">,
+                        leaveYearStartMonth: pendingLeaveYearMonth,
+                      });
+                    } catch (err) {
+                      console.error('[LeaveSettings] Failed to update leave year:', err);
+                    } finally {
+                      setLeaveYearSaving(false);
+                      setLeaveYearConfirmDialog(false);
+                      setPendingLeaveYearMonth(null);
+                    }
+                  }}
+                  disabled={leaveYearSaving}
+                  className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
+                >
+                  {leaveYearSaving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Confirm Change'
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Leave Type Modal */}
       {leaveTypeDialog && (
@@ -1319,6 +1468,48 @@ export default function LeaveManagementSettings() {
           </div>
         </div>
       )}
+
+      {/* 034-leave-enhance: CSV Import Modal for Leave Balances */}
+      <CsvImportModal
+        open={showImportModal}
+        onOpenChange={setShowImportModal}
+        schemaType="leave_balance"
+        onComplete={async (result) => {
+          if (!businessId || !result.rows || result.rows.length === 0) {
+            setShowImportModal(false);
+            return;
+          }
+          setIsImporting(true);
+          try {
+            const importResult = await importFromCsv({
+              businessId,
+              rows: result.rows.map((row: any) => ({
+                employeeEmail: String(row.employeeEmail || ''),
+                leaveTypeCode: String(row.leaveTypeCode || ''),
+                year: Number(row.year || new Date().getFullYear()),
+                entitled: Number(row.entitled || 0),
+                used: row.used !== undefined ? Number(row.used) : undefined,
+                carryover: row.carryover !== undefined ? Number(row.carryover) : undefined,
+                adjustments: row.adjustments !== undefined ? Number(row.adjustments) : undefined,
+              })),
+            });
+            toast.success(
+              `Import complete: ${importResult.created} created, ${importResult.updated} updated, ${importResult.skipped} skipped`
+            );
+            if (importResult.errors.length > 0) {
+              console.log('[Leave Import] Errors:', importResult.errors);
+            }
+          } catch (error) {
+            console.error('[Leave Import] Failed:', error);
+            toast.error('Import failed. Check console for details.');
+          } finally {
+            setIsImporting(false);
+            setShowImportModal(false);
+          }
+        }}
+        onCancel={() => setShowImportModal(false)}
+        businessId={businessId}
+      />
     </div>
   );
 }

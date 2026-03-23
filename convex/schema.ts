@@ -278,6 +278,9 @@ export default defineSchema({
       milestone_99: v.optional(v.number()),  // Unix timestamp (ms) when 99% first achieved
     })),
 
+    // 034-leave-enhance: Configurable leave year start month (1=Jan, 4=Apr, etc.)
+    leaveYearStartMonth: v.optional(v.number()),  // 1-12, defaults to 1 (January)
+
     // 032-price-history-tracking: Margin alert configuration
     marginAlertConfig: v.optional(v.object({
       defaultThreshold: v.number(),  // e.g., 15 = alert when margin < 15%
@@ -1661,6 +1664,10 @@ export default defineSchema({
     used: v.number(),            // Days used (approved requests)
     adjustments: v.number(),     // Manual adjustments (+/-)
     carryover: v.optional(v.number()),  // Days carried from previous year
+
+    // 034-leave-enhance: Import tracking
+    importSource: v.optional(v.union(v.literal("manual"), v.literal("csv_import"))),
+    importedAt: v.optional(v.number()),
 
     // Timestamps
     lastUpdated: v.number(),

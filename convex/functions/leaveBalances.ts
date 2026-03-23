@@ -9,7 +9,8 @@
  */
 
 import { v } from "convex/values";
-import { query, mutation } from "../_generated/server";
+import { query, mutation, action, internalMutation, internalQuery } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 
 // ============================================
@@ -34,7 +35,16 @@ export const getMyBalances = query({
     const business = await resolveById(ctx.db, "businesses", args.businessId);
     if (!business) return [];
 
-    const year = args.year ?? new Date().getFullYear();
+    // 034-leave-enhance: Use configured leave year start month for default year
+    const startMonth = (business as any).leaveYearStartMonth ?? 1;
+    let defaultYear: number;
+    if (startMonth === 1) {
+      defaultYear = new Date().getFullYear();
+    } else {
+      const now = new Date();
+      defaultYear = now.getMonth() + 1 >= startMonth ? now.getFullYear() : now.getFullYear() - 1;
+    }
+    const year = args.year ?? defaultYear;
 
     // Get all balances for the user
     const balances = await ctx.db
@@ -1088,5 +1098,224 @@ export const reinitializeUserBalances = mutation({
 
     console.log(`[Leave Balances] Reinitialized for user: ${updated} updated, ${created} created`);
     return { updated, created };
+  },
+});
+
+// ============================================
+// 034-leave-enhance: BULK IMPORT
+// ============================================
+
+/**
+ * Internal mutation: bulk upsert leave balances from CSV import.
+ * Creates new records or updates existing ones.
+ */
+export const bulkUpsert = internalMutation({
+  args: {
+    businessId: v.id("businesses"),
+    balances: v.array(
+      v.object({
+        userId: v.id("users"),
+        leaveTypeId: v.id("leave_types"),
+        year: v.number(),
+        entitled: v.number(),
+        used: v.optional(v.number()),
+        carryover: v.optional(v.number()),
+        adjustments: v.optional(v.number()),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    let created = 0;
+    let updated = 0;
+
+    for (const balance of args.balances) {
+      // Check if balance already exists
+      const existing = await ctx.db
+        .query("leave_balances")
+        .withIndex("by_businessId_userId_leaveTypeId_year", (q) =>
+          q
+            .eq("businessId", args.businessId)
+            .eq("userId", balance.userId)
+            .eq("leaveTypeId", balance.leaveTypeId)
+            .eq("year", balance.year)
+        )
+        .first();
+
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          entitled: balance.entitled,
+          ...(balance.used !== undefined && { used: balance.used }),
+          ...(balance.carryover !== undefined && { carryover: balance.carryover }),
+          ...(balance.adjustments !== undefined && { adjustments: balance.adjustments }),
+          importSource: "csv_import" as const,
+          importedAt: Date.now(),
+          lastUpdated: Date.now(),
+        });
+        updated++;
+      } else {
+        await ctx.db.insert("leave_balances", {
+          businessId: args.businessId,
+          userId: balance.userId,
+          leaveTypeId: balance.leaveTypeId,
+          year: balance.year,
+          entitled: balance.entitled,
+          used: balance.used ?? 0,
+          adjustments: balance.adjustments ?? 0,
+          carryover: balance.carryover,
+          importSource: "csv_import" as const,
+          importedAt: Date.now(),
+          lastUpdated: Date.now(),
+        });
+        created++;
+      }
+    }
+
+    return { created, updated };
+  },
+});
+
+/**
+ * Public action: Import leave balances from parsed CSV data.
+ * Validates emails → userIds and codes → leaveTypeIds, then calls bulkUpsert.
+ */
+export const importFromCsv = action({
+  args: {
+    businessId: v.string(),
+    rows: v.array(
+      v.object({
+        employeeEmail: v.string(),
+        leaveTypeCode: v.string(),
+        year: v.number(),
+        entitled: v.number(),
+        used: v.optional(v.number()),
+        carryover: v.optional(v.number()),
+        adjustments: v.optional(v.number()),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    // Resolve business
+    const business = await ctx.runQuery(internal.functions.leaveBalances.resolveBusinessForImport, {
+      businessId: args.businessId,
+    });
+    if (!business) {
+      return { created: 0, updated: 0, skipped: args.rows.length, errors: [{ row: 0, reason: "Business not found" }] };
+    }
+
+    // Get all members and leave types for lookup
+    const lookups = await ctx.runQuery(internal.functions.leaveBalances.getImportLookups, {
+      businessId: business._id,
+    });
+
+    const emailToUserId = new Map<string, string>(
+      lookups.members.map((m: any) => [m.email?.toLowerCase(), m.userId])
+    );
+    const codeToLeaveTypeId = new Map<string, string>(
+      lookups.leaveTypes.map((lt: any) => [lt.code?.toUpperCase(), lt._id])
+    );
+
+    const validBalances: any[] = [];
+    const errors: Array<{ row: number; reason: string }> = [];
+
+    for (let i = 0; i < args.rows.length; i++) {
+      const row = args.rows[i];
+      const rowNum = i + 1;
+
+      // Resolve employee
+      const userId = emailToUserId.get(row.employeeEmail.toLowerCase());
+      if (!userId) {
+        errors.push({ row: rowNum, reason: `Employee email not found: ${row.employeeEmail}` });
+        continue;
+      }
+
+      // Resolve leave type
+      const leaveTypeId = codeToLeaveTypeId.get(row.leaveTypeCode.toUpperCase());
+      if (!leaveTypeId) {
+        errors.push({ row: rowNum, reason: `Leave type code not found: ${row.leaveTypeCode}` });
+        continue;
+      }
+
+      // Validate year
+      const currentYear = new Date().getFullYear();
+      if (row.year < currentYear - 5 || row.year > currentYear + 1) {
+        errors.push({ row: rowNum, reason: `Year out of range: ${row.year} (must be ${currentYear - 5}-${currentYear + 1})` });
+        continue;
+      }
+
+      validBalances.push({
+        userId,
+        leaveTypeId,
+        year: row.year,
+        entitled: row.entitled,
+        used: row.used,
+        carryover: row.carryover,
+        adjustments: row.adjustments,
+      });
+    }
+
+    // Bulk upsert valid balances
+    let created = 0;
+    let updated = 0;
+    if (validBalances.length > 0) {
+      const result = await ctx.runMutation(internal.functions.leaveBalances.bulkUpsert, {
+        businessId: business._id,
+        balances: validBalances,
+      });
+      created = result.created;
+      updated = result.updated;
+    }
+
+    return {
+      created,
+      updated,
+      skipped: errors.length,
+      errors,
+    };
+  },
+});
+
+/**
+ * Internal query: resolve business ID for import validation.
+ */
+export const resolveBusinessForImport = internalQuery({
+  args: { businessId: v.string() },
+  handler: async (ctx, args) => {
+    return await resolveById(ctx.db, "businesses", args.businessId);
+  },
+});
+
+/**
+ * Internal query: get member emails and leave type codes for import lookups.
+ */
+export const getImportLookups = internalQuery({
+  args: { businessId: v.id("businesses") },
+  handler: async (ctx, args) => {
+    // Get all active members
+    const memberships = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    const activeMembers = memberships.filter((m) => m.status === "active");
+
+    const members = await Promise.all(
+      activeMembers.map(async (m) => {
+        const user = await ctx.db.get(m.userId);
+        return { userId: m.userId.toString(), email: user?.email };
+      })
+    );
+
+    // Get all active leave types
+    const leaveTypes = await ctx.db
+      .query("leave_types")
+      .withIndex("by_businessId_isActive", (q) =>
+        q.eq("businessId", args.businessId).eq("isActive", true)
+      )
+      .collect();
+
+    return {
+      members: members.filter((m) => m.email),
+      leaveTypes: leaveTypes.map((lt) => ({ _id: lt._id.toString(), code: lt.code })),
+    };
   },
 });

@@ -568,6 +568,8 @@ const arBalance = arLines.reduce((sum, line) =>
 - Convex (data layer), S3 (artifacts), CloudWatch (logs/metrics) (032-mcp-first)
 - TypeScript 5.9.3, Next.js 15.5.7, React 19.1.2 + Existing UI components (card, input, select, button, sheet), `formatCurrency` utility, Tailwind CSS (033-roi-calculator)
 - N/A — no persistence. Inputs encoded in URL query params. Partner data as static config. (033-roi-calculator)
+- TypeScript 5.9.3 (Next.js 15.5.7 + Convex 1.31.3) + Convex (DB + real-time), Capacitor 8.1.0 (mobile), @react-pdf/renderer (PDF export), papaparse/xlsx (CSV parsing), Recharts (charts), Radix UI + Tailwind CSS (UI) (034-leave-enhance)
+- Convex (leave_requests, leave_balances, leave_types, push_subscriptions, businesses tables) (034-leave-enhance)
 
 
 ## Recent Changes

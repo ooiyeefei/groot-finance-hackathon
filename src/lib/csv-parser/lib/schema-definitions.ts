@@ -571,6 +571,105 @@ export const GRN_FIELDS: SchemaField[] = [
   },
 ];
 
+// 034-leave-enhance: Leave balance import schema
+export const LEAVE_BALANCE_FIELDS: SchemaField[] = [
+  {
+    name: "employeeEmail",
+    label: "Employee Email",
+    type: "string",
+    required: true,
+    aliases: [
+      "email",
+      "employee",
+      "staff email",
+      "emp email",
+      "employee email",
+      "e-mail",
+    ],
+  },
+  {
+    name: "leaveTypeCode",
+    label: "Leave Type Code",
+    type: "string",
+    required: true,
+    aliases: [
+      "leave type",
+      "type",
+      "code",
+      "leave code",
+      "leave category",
+      "al",
+      "ml",
+      "el",
+    ],
+  },
+  {
+    name: "year",
+    label: "Year",
+    type: "number",
+    required: true,
+    aliases: [
+      "year",
+      "period",
+      "fiscal year",
+      "leave year",
+      "calendar year",
+    ],
+  },
+  {
+    name: "entitled",
+    label: "Entitled Days",
+    type: "number",
+    required: true,
+    aliases: [
+      "entitled",
+      "allocation",
+      "total days",
+      "annual entitlement",
+      "entitled days",
+      "days allocated",
+    ],
+  },
+  {
+    name: "used",
+    label: "Used Days",
+    type: "number",
+    required: false,
+    aliases: [
+      "used",
+      "taken",
+      "consumed",
+      "days used",
+      "days taken",
+    ],
+  },
+  {
+    name: "carryover",
+    label: "Carry Over Days",
+    type: "number",
+    required: false,
+    aliases: [
+      "carryover",
+      "carry over",
+      "brought forward",
+      "bf",
+      "carry forward",
+    ],
+  },
+  {
+    name: "adjustments",
+    label: "Adjustments",
+    type: "number",
+    required: false,
+    aliases: [
+      "adjustment",
+      "adj",
+      "manual adjustment",
+      "adjustments",
+    ],
+  },
+];
+
 export function getSchemaFields(schemaType: SchemaType): SchemaField[] {
   switch (schemaType) {
     case "sales_statement":
@@ -581,6 +680,8 @@ export function getSchemaFields(schemaType: SchemaType): SchemaField[] {
       return PURCHASE_ORDER_FIELDS;
     case "goods_received_note":
       return GRN_FIELDS;
+    case "leave_balance":
+      return LEAVE_BALANCE_FIELDS;
     default:
       return BANK_STATEMENT_FIELDS;
   }

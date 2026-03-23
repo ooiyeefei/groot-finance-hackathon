@@ -10,7 +10,8 @@
  */
 
 import { v } from "convex/values";
-import { query, mutation } from "../_generated/server";
+import { query, mutation, action, internalQuery } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 import { Id } from "../_generated/dataModel";
 import { leaveRequestStatusValidator } from "../lib/validators";
@@ -549,6 +550,142 @@ export const submit = mutation({
     });
 
     return args.id;
+  },
+});
+
+/**
+ * 034-leave-enhance: Internal query for overlap detection data.
+ * Used by the checkOverlapsForApproval action (not exposed as reactive query).
+ */
+export const _getOverlapData = internalQuery({
+  args: {
+    businessId: v.string(),
+    leaveRequestId: v.id("leave_requests"),
+    clerkSubject: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const emptyResult = { hasOverlaps: false, overlappingMembers: [] as any[], totalOverlapDays: 0 };
+
+    const user = await resolveUserByClerkId(ctx.db, args.clerkSubject);
+    if (!user) return emptyResult;
+
+    const business = await resolveById(ctx.db, "businesses", args.businessId);
+    if (!business) return emptyResult;
+
+    const targetRequest = await ctx.db.get(args.leaveRequestId);
+    if (!targetRequest) return emptyResult;
+
+    const targetStart = targetRequest.startDate;
+    const targetEnd = targetRequest.endDate;
+
+    // Find direct reports of the approver
+    const allMemberships = await ctx.db
+      .query("business_memberships")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .collect();
+
+    const activeMemberships = allMemberships.filter((m) => m.status === "active");
+
+    const teamMemberIds = new Set<string>();
+    for (const m of activeMemberships) {
+      if (m.managerId && m.managerId.toString() === user._id.toString()) {
+        teamMemberIds.add(m.userId.toString());
+      }
+    }
+
+    // Exclude requesting employee and approver
+    teamMemberIds.delete(targetRequest.userId.toString());
+    teamMemberIds.delete(user._id.toString());
+
+    if (teamMemberIds.size === 0) return emptyResult;
+
+    // Query approved + submitted leave requests
+    const approvedRequests = await ctx.db
+      .query("leave_requests")
+      .withIndex("by_businessId_status", (q) =>
+        q.eq("businessId", business._id).eq("status", "approved")
+      )
+      .collect();
+
+    const submittedRequests = await ctx.db
+      .query("leave_requests")
+      .withIndex("by_businessId_status", (q) =>
+        q.eq("businessId", business._id).eq("status", "submitted")
+      )
+      .collect();
+
+    const allRelevantRequests = [...approvedRequests, ...submittedRequests].filter(
+      (r) =>
+        teamMemberIds.has(r.userId.toString()) &&
+        r._id.toString() !== args.leaveRequestId.toString() &&
+        r.startDate <= targetEnd &&
+        r.endDate >= targetStart
+    );
+
+    if (allRelevantRequests.length === 0) return emptyResult;
+
+    const overlappingMembers: Array<{
+      userId: string;
+      userName: string;
+      leaveTypeName: string;
+      leaveStatus: string;
+      overlapDates: string[];
+    }> = [];
+
+    const allOverlapDates = new Set<string>();
+
+    for (const req of allRelevantRequests) {
+      const overlapStart = req.startDate > targetStart ? req.startDate : targetStart;
+      const overlapEnd = req.endDate < targetEnd ? req.endDate : targetEnd;
+
+      const dates: string[] = [];
+      const current = new Date(overlapStart);
+      const end = new Date(overlapEnd);
+      while (current <= end) {
+        const dateStr = current.toISOString().split("T")[0];
+        dates.push(dateStr);
+        allOverlapDates.add(dateStr);
+        current.setDate(current.getDate() + 1);
+      }
+
+      const reqUser = await ctx.db.get(req.userId);
+      const leaveType = await ctx.db.get(req.leaveTypeId);
+
+      overlappingMembers.push({
+        userId: req.userId.toString(),
+        userName: reqUser?.fullName || reqUser?.email || "Unknown",
+        leaveTypeName: leaveType?.name || "Unknown",
+        leaveStatus: req.status,
+        overlapDates: dates,
+      });
+    }
+
+    return {
+      hasOverlaps: true,
+      overlappingMembers,
+      totalOverlapDays: allOverlapDates.size,
+    };
+  },
+});
+
+/**
+ * 034-leave-enhance: Check for overlapping team leave before approval.
+ * Action (not reactive query) to avoid bandwidth waste from subscriptions.
+ */
+export const checkOverlapsForApproval = action({
+  args: {
+    businessId: v.string(),
+    leaveRequestId: v.id("leave_requests"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { hasOverlaps: false, overlappingMembers: [], totalOverlapDays: 0 };
+
+    return await ctx.runQuery(internal.functions.leaveRequests._getOverlapData, {
+      businessId: args.businessId,
+      leaveRequestId: args.leaveRequestId,
+      clerkSubject: identity.subject,
+    });
   },
 });
 

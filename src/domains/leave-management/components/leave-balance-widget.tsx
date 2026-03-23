@@ -16,6 +16,9 @@ import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useMyBalances } from '../hooks/use-leave-balances';
+import { useQuery } from 'convex/react';
+import { api } from '@/../convex/_generated/api';
+import { formatLeaveYearLabel } from '../lib/leave-year-utils';
 
 interface LeaveBalanceWidgetProps {
   businessId: string;
@@ -28,8 +31,11 @@ export default function LeaveBalanceWidget({
   year,
   compact = false,
 }: LeaveBalanceWidgetProps) {
+  const business = useQuery(api.functions.businesses.getById, businessId ? { id: businessId } : "skip");
+  const startMonth = (business as any)?.leaveYearStartMonth ?? 1;
   const currentYear = year ?? new Date().getFullYear();
   const balances = useMyBalances(businessId, currentYear);
+  const yearLabel = formatLeaveYearLabel(startMonth, currentYear);
 
   // Loading state
   if (balances === undefined) {
@@ -112,7 +118,7 @@ export default function LeaveBalanceWidget({
                 <PieChart className="w-5 h-5" />
                 Leave Balance
               </CardTitle>
-              <CardDescription className="text-muted-foreground">{currentYear}</CardDescription>
+              <CardDescription className="text-muted-foreground">{yearLabel}</CardDescription>
             </div>
           </div>
         </CardHeader>

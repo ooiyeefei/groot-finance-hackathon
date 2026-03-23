@@ -10,6 +10,11 @@ The leave management module implements a complete leave request and approval wor
 - **Multi-Country Holidays**: Support for SEA countries (MY, SG, ID, PH, TH, VN)
 - **Team Calendar**: Organization-wide visibility of approved leave
 - **Balance Tracking**: Automatic deduction/restoration based on leave type
+- **Team Overlap Warnings** (034): Warning dialog when approving leave that conflicts with team members' approved/submitted leave
+- **Push Notifications** (034): APNs (iOS) + FCM (Android) push notifications for leave submit/approve/reject
+- **Bulk CSV Import** (034): CSV/XLSX import of leave balances with column mapping and validation
+- **Leave Reports** (034): Balance Summary, Utilization, and Absence Trends reports with CSV/PDF export
+- **Configurable Leave Year** (034): Leave year start month per business (e.g., Apr-Mar for fiscal year)
 
 ## Workflow State Machine
 
