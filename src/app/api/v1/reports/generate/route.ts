@@ -83,12 +83,12 @@ export async function POST(req: NextRequest) {
       const debtors = agingReport?.debtors || []
       const customerRows = debtors.map((d: any) => ({
         customerName: d.customerName || 'Unknown',
-        current: d.buckets?.current || 0,
-        days30: d.buckets?.days1to30 || 0,
-        days60: d.buckets?.days31to60 || 0,
-        days90: d.buckets?.days61to90 || 0,
-        days120plus: d.buckets?.days90plus || 0,
-        total: d.totalOutstanding || 0,
+        current: d.current || 0,
+        days30: d.days1to30 || 0,
+        days60: d.days31to60 || 0,
+        days90: d.days61to90 || 0,
+        days120plus: d.days90plus || 0,
+        total: d.total || 0,
       }))
 
       const totals = customerRows.reduce(
@@ -117,28 +117,34 @@ export async function POST(req: NextRequest) {
         businessId,
       })
 
+      // vendorBreakdown has { vendorName, outstanding } — no per-bucket breakdown
+      // Use agingBuckets for totals, and vendorBreakdown for vendor rows
       const vendorBreakdown = apData?.vendorBreakdown || []
       const vendors = vendorBreakdown.map((v: any) => ({
         vendorName: v.vendorName || 'Unknown',
-        current: v.current || 0,
-        days30: v.days30 || 0,
-        days60: v.days60 || 0,
-        days90: v.days90 || 0,
-        days120plus: v.days90plus || 0,
-        total: v.total || 0,
+        current: 0,
+        days30: 0,
+        days60: 0,
+        days90: 0,
+        days120plus: 0,
+        total: v.outstanding || 0,
       }))
 
-      const totals = vendors.reduce(
-        (acc: any, v: any) => ({
-          current: acc.current + v.current,
-          days30: acc.days30 + v.days30,
-          days60: acc.days60 + v.days60,
-          days90: acc.days90 + v.days90,
-          days120plus: acc.days120plus + v.days120plus,
-          total: acc.total + v.total,
-        }),
-        { current: 0, days30: 0, days60: 0, days90: 0, days120plus: 0, total: 0 }
-      )
+      // Build totals from agingBuckets array: [{ bucket, amount, count }]
+      const agingBuckets = apData?.agingBuckets || []
+      const bucketMap: Record<string, number> = {}
+      for (const b of agingBuckets) {
+        bucketMap[b.bucket] = b.amount
+      }
+
+      const totals = {
+        current: bucketMap['current'] || 0,
+        days30: bucketMap['1-30'] || 0,
+        days60: bucketMap['31-60'] || 0,
+        days90: bucketMap['61-90'] || 0,
+        days120plus: bucketMap['90+'] || 0,
+        total: apData?.totalOutstanding || 0,
+      }
 
       reportData = {
         businessName,
