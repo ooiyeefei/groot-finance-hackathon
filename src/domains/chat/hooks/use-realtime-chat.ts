@@ -192,7 +192,7 @@ export function useMessages(
   conversationId: string | undefined,
   options: { limit?: number } = {}
 ): MessagesResult {
-  const { limit = 100 } = options
+  const { limit = 500 } = options
 
   // Convex useQuery with realtime subscription
   const result = useQuery(
