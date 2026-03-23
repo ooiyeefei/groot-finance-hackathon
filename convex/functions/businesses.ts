@@ -2946,8 +2946,8 @@ export const updateLeaveYearStartMonth = mutation({
     // Check admin/owner role
     const membership = await ctx.db
       .query("business_memberships")
-      .withIndex("by_businessId_userId", (q) =>
-        q.eq("businessId", args.businessId).eq("userId", user._id)
+      .withIndex("by_userId_businessId", (q) =>
+        q.eq("userId", user._id).eq("businessId", args.businessId)
       )
       .first();
 
