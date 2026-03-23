@@ -15,6 +15,7 @@ import {
   Mail,
   AlertCircle,
   Settings,
+  ShieldCheck,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -38,6 +39,7 @@ export default function StatementsReviewClient() {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [isSending, setIsSending] = useState(false)
+  const [verifyingEmail, setVerifyingEmail] = useState<string | null>(null)
 
   const statements = useQuery(
     api.functions.reports.listStatementSends,
@@ -98,6 +100,24 @@ export default function StatementsReviewClient() {
       toast.error('Failed to send statements: ' + err.message)
     } finally {
       setIsSending(false)
+    }
+  }
+
+  const handleVerifyEmail = async (email: string) => {
+    setVerifyingEmail(email)
+    try {
+      const res = await fetch('/api/v1/reports/verify-debtor-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      toast.success(`Verification email sent to ${email}. Ask the debtor to click the link.`)
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to send verification')
+    } finally {
+      setVerifyingEmail(null)
     }
   }
 
@@ -262,7 +282,7 @@ export default function StatementsReviewClient() {
                           </Badge>
                         )}
                       </td>
-                      <td className="py-2 px-3 text-right">
+                      <td className="py-2 px-3 text-right flex items-center justify-end gap-1">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -271,6 +291,21 @@ export default function StatementsReviewClient() {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
+                        {stmt.customerEmail && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleVerifyEmail(stmt.customerEmail!)}
+                            disabled={verifyingEmail === stmt.customerEmail}
+                            title="Send SES verification to this email (required for sandbox)"
+                          >
+                            {verifyingEmail === stmt.customerEmail ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <ShieldCheck className="h-4 w-4" />
+                            )}
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   ))}

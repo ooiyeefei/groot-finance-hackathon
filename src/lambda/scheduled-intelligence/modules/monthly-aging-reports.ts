@@ -80,20 +80,37 @@ export async function runMonthlyAgingReports(): Promise<Omit<JobResult, 'duratio
           continue;
         }
 
+        // FR-015: Pre-generation reconciliation check
+        const reconResult = await convexQuery<{
+          matches: Array<{ bankDescription: string; matchedCustomerName: string; bankAmount: number }>;
+          matchCount: number;
+        }>('functions/reports:checkUnreconciledMatches', {
+          businessId: business._id,
+        });
+
+        const hasReconWarnings = (reconResult?.matchCount ?? 0) > 0;
+        const reconWarningText = hasReconWarnings
+          ? ` ⚠ ${reconResult!.matchCount} bank transaction(s) may match outstanding invoices — review before sending statements.`
+          : '';
+
         // Create Action Center notification
         await convexMutation('functions/actionCenterInsights:internalCreate', {
           userId: ownerMembership.userId,
           businessId: business._id,
-          category: 'deadline',
-          priority: 'medium',
-          title: `${periodMonth} Aging Reports Ready`,
-          description: `Your monthly AP and AR aging reports for ${periodMonth} are ready to generate. Visit the Reports page to generate consolidated reports and debtor statements.`,
-          affectedEntities: ['reports', 'aging'],
-          recommendedAction: `Generate your ${periodMonth} aging reports and review debtor statements before sending.`,
+          category: hasReconWarnings ? 'cashflow' : 'deadline',
+          priority: hasReconWarnings ? 'high' : 'medium',
+          title: `${periodMonth} Aging Reports Ready${hasReconWarnings ? ' (Review Needed)' : ''}`,
+          description: `Your monthly AP and AR aging reports for ${periodMonth} are ready to generate.${reconWarningText} Visit the Reports page to generate consolidated reports and debtor statements.`,
+          affectedEntities: ['reports', 'aging', ...(hasReconWarnings ? ['reconciliation'] : [])],
+          recommendedAction: hasReconWarnings
+            ? `Review ${reconResult!.matchCount} potential bank matches before generating statements to ensure accuracy.`
+            : `Generate your ${periodMonth} aging reports and review debtor statements before sending.`,
           metadata: {
             type: 'monthly_aging_report',
             periodMonth,
             link: '/reports',
+            hasReconWarnings,
+            reconMatchCount: reconResult?.matchCount ?? 0,
           },
         });
 

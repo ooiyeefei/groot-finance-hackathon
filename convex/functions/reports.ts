@@ -8,7 +8,7 @@
  */
 
 import { v } from "convex/values";
-import { query, mutation, internalMutation } from "../_generated/server";
+import { query, mutation, internalMutation, internalQuery } from "../_generated/server";
 import { Id } from "../_generated/dataModel";
 
 const TWELVE_MONTHS_MS = 365 * 24 * 60 * 60 * 1000;
@@ -483,5 +483,106 @@ export const deleteExpiredReports = internalMutation({
     }
 
     return { deleted };
+  },
+});
+
+// ============================================
+// PRE-GENERATION RECONCILIATION CHECK (FR-015)
+// ============================================
+
+/**
+ * Check for unreconciled bank deposits that might match outstanding AR invoices.
+ * Runs before monthly report generation to flag potential accuracy issues.
+ *
+ * Tier 1 matching: amount + date proximity (within 7 days of invoice due date).
+ * Returns potential matches for owner review.
+ */
+export const checkUnreconciledMatches = internalQuery({
+  args: {
+    businessId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const businessId = args.businessId as Id<"businesses">;
+
+    // Get unreconciled bank deposits from last 45 days
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - 45);
+    const cutoffStr = cutoffDate.toISOString().split("T")[0];
+
+    const bankTxns = await ctx.db
+      .query("bank_transactions")
+      .withIndex("by_businessId", (q) => q.eq("businessId", businessId))
+      .collect();
+
+    const unreconciledDeposits = bankTxns.filter(
+      (t) =>
+        !t.deletedAt &&
+        t.reconciliationStatus === "unmatched" &&
+        t.direction === "credit" &&
+        t.transactionDate >= cutoffStr
+    );
+
+    if (unreconciledDeposits.length === 0) {
+      return { matches: [], matchCount: 0 };
+    }
+
+    // Get outstanding AR invoices
+    const arInvoices = await ctx.db
+      .query("sales_invoices")
+      .withIndex("by_businessId", (q) => q.eq("businessId", businessId))
+      .collect();
+
+    const outstandingInvoices = arInvoices.filter(
+      (inv) =>
+        !inv.deletedAt &&
+        inv.balanceDue > 0 &&
+        ["sent", "partially_paid", "overdue"].includes(inv.status)
+    );
+
+    // Tier 1 matching: amount match + date proximity
+    const matches: Array<{
+      bankTransactionId: string;
+      bankDescription: string;
+      bankAmount: number;
+      bankDate: string;
+      matchedInvoiceId: string;
+      matchedInvoiceNumber: string;
+      matchedCustomerName: string;
+      matchedAmount: number;
+      confidence: number;
+    }> = [];
+
+    for (const deposit of unreconciledDeposits) {
+      for (const invoice of outstandingInvoices) {
+        // Amount match (exact or within 1% tolerance for rounding)
+        const amountDiff = Math.abs(deposit.amount - invoice.balanceDue);
+        const tolerance = invoice.balanceDue * 0.01;
+
+        if (amountDiff <= tolerance) {
+          // Date proximity check (deposit within 7 days of due date)
+          const depositDate = new Date(deposit.transactionDate + "T00:00:00Z");
+          const dueDate = new Date((invoice.dueDate || deposit.transactionDate) + "T00:00:00Z");
+          const daysDiff = Math.abs(
+            (depositDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
+          );
+
+          if (daysDiff <= 7) {
+            matches.push({
+              bankTransactionId: deposit._id,
+              bankDescription: deposit.description,
+              bankAmount: deposit.amount,
+              bankDate: deposit.transactionDate,
+              matchedInvoiceId: invoice._id,
+              matchedInvoiceNumber: invoice.invoiceNumber || "N/A",
+              matchedCustomerName: invoice.customerSnapshot?.businessName || "Unknown",
+              matchedAmount: invoice.balanceDue,
+              confidence: amountDiff === 0 ? 0.95 : 0.85,
+            });
+          }
+        }
+      }
+    }
+
+    return { matches, matchCount: matches.length };
   },
 });
