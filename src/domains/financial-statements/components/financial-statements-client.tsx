@@ -40,28 +40,29 @@ export function FinancialStatementsClient() {
 
   const generateReport = useCallback(async (tab: ReportTab, from: string, to: string) => {
     if (!from || !to || !businessId) return
+    const bizId = businessId // narrowed to string by guard above
     setIsLoading(true)
     try {
       switch (tab) {
         case 'trial_balance': {
-          const result = await getTrialBalance({ businessId: businessId, asOfDate: to })
+          const result = await getTrialBalance({ businessId: bizId, asOfDate: to })
           setTrialBalanceData(result)
           break
         }
         case 'pnl': {
-          const result = await getProfitLoss({ businessId: businessId, dateFrom: from, dateTo: to })
+          const result = await getProfitLoss({ businessId: bizId, dateFrom: from, dateTo: to })
           setPnlData(result)
           // Clear comparison when period changes
           setComparisonData(null)
           break
         }
         case 'balance_sheet': {
-          const result = await getBalanceSheet({ businessId: businessId, asOfDate: to })
+          const result = await getBalanceSheet({ businessId: bizId, asOfDate: to })
           setBalanceSheetData(result)
           break
         }
         case 'cash_flow': {
-          const result = await getCashFlow({ businessId: businessId, dateFrom: from, dateTo: to })
+          const result = await getCashFlow({ businessId: bizId, dateFrom: from, dateTo: to })
           setCashFlowData(result)
           break
         }
@@ -94,7 +95,7 @@ export function FinancialStatementsClient() {
       return
     }
 
-    if (!dateFrom || !dateTo) return
+    if (!dateFrom || !dateTo || !businessId) return
 
     // Calculate comparison period (same length, immediately prior)
     const fromDate = new Date(dateFrom)
@@ -108,7 +109,7 @@ export function FinancialStatementsClient() {
     setIsLoading(true)
     try {
       const result = await getProfitLossComparison({
-        businessId: businessId,
+        businessId,
         dateFrom,
         dateTo,
         comparisonDateFrom: compFrom.toISOString().slice(0, 10),
