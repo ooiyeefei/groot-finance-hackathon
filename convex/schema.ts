@@ -2560,6 +2560,9 @@ export default defineSchema({
     platform: v.union(v.literal("ios"), v.literal("android")),
     deviceToken: v.string(),
     isActive: v.boolean(),
+    // 034-leave-enhance: FR-011 failure tracking
+    failureCount: v.optional(v.number()),
+    lastFailureAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

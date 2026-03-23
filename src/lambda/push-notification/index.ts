@@ -7,9 +7,8 @@
  */
 
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
-import * as https from "https";
 import * as http2 from "http2";
-import * as jwt from "jsonwebtoken";
+import * as crypto from "crypto";
 
 const ssm = new SSMClient({ region: process.env.AWS_REGION || "us-west-2" });
 
@@ -63,13 +62,34 @@ async function getApnsCredentials() {
 }
 
 function createApnsJwt(keyId: string, teamId: string, privateKey: string): string {
-  return jwt.sign({}, privateKey, {
-    algorithm: "ES256",
-    keyid: keyId,
-    issuer: teamId,
-    expiresIn: "1h",
-    header: { alg: "ES256", kid: keyId },
-  });
+  // Build JWT manually using Node.js crypto (no jsonwebtoken dependency)
+  const now = Math.floor(Date.now() / 1000);
+  const header = Buffer.from(JSON.stringify({ alg: "ES256", kid: keyId })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ iss: teamId, iat: now })).toString("base64url");
+  const signingInput = `${header}.${payload}`;
+  const sign = crypto.createSign("SHA256");
+  sign.update(signingInput);
+  const derSig = sign.sign(privateKey);
+  // Convert DER signature to raw r||s (64 bytes) for ES256
+  const sig = derToRaw(derSig);
+  return `${signingInput}.${sig.toString("base64url")}`;
+}
+
+function derToRaw(derSig: Buffer): Buffer {
+  // DER: 0x30 <len> 0x02 <rlen> <r> 0x02 <slen> <s>
+  let offset = 2;
+  if (derSig[1] & 0x80) offset += (derSig[1] & 0x7f);
+  offset += 1; // skip 0x02
+  const rLen = derSig[offset++];
+  const r = derSig.subarray(offset, offset + rLen);
+  offset += rLen + 1; // skip r + 0x02
+  const sLen = derSig[offset++];
+  const s = derSig.subarray(offset, offset + sLen);
+  // Pad to 32 bytes each
+  const raw = Buffer.alloc(64);
+  r.copy(raw, 32 - r.length);
+  s.copy(raw, 64 - s.length);
+  return raw;
 }
 
 async function sendApns(
@@ -146,15 +166,21 @@ async function getFcmAccessToken(): Promise<string> {
   }
 
   const sa = cachedFcmServiceAccount;
-  const jwtToken = jwt.sign(
-    {
-      iss: sa.client_email,
-      scope: "https://www.googleapis.com/auth/firebase.messaging",
-      aud: "https://oauth2.googleapis.com/token",
-    },
-    sa.private_key,
-    { algorithm: "RS256", expiresIn: "1h" },
-  );
+  // Build FCM JWT using built-in crypto (RS256)
+  const nowSec = Math.floor(Date.now() / 1000);
+  const jwtHeader = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+  const jwtPayload = Buffer.from(JSON.stringify({
+    iss: sa.client_email,
+    scope: "https://www.googleapis.com/auth/firebase.messaging",
+    aud: "https://oauth2.googleapis.com/token",
+    iat: nowSec,
+    exp: nowSec + 3600,
+  })).toString("base64url");
+  const jwtSignInput = `${jwtHeader}.${jwtPayload}`;
+  const jwtSign = crypto.createSign("SHA256");
+  jwtSign.update(jwtSignInput);
+  const jwtSig = jwtSign.sign(sa.private_key, "base64url");
+  const jwtToken = `${jwtSignInput}.${jwtSig}`;
 
   // Exchange JWT for access token
   const response = await fetch("https://oauth2.googleapis.com/token", {

@@ -1497,7 +1497,21 @@ export default function LeaveManagementSettings() {
               `Import complete: ${importResult.created} created, ${importResult.updated} updated, ${importResult.skipped} skipped`
             );
             if (importResult.errors.length > 0) {
-              console.log('[Leave Import] Errors:', importResult.errors);
+              // FR-017: Downloadable error report for skipped rows
+              const errorCsv = [
+                'Row,Reason',
+                ...importResult.errors.map((e: { row: number; reason: string }) =>
+                  `${e.row},"${e.reason.replace(/"/g, '""')}"`
+                ),
+              ].join('\n');
+              const blob = new Blob([errorCsv], { type: 'text/csv;charset=utf-8;' });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = `leave-import-errors-${new Date().toISOString().split('T')[0]}.csv`;
+              link.click();
+              URL.revokeObjectURL(url);
+              toast.warning(`${importResult.skipped} rows skipped — error report downloaded`);
             }
           } catch (error) {
             console.error('[Leave Import] Failed:', error);

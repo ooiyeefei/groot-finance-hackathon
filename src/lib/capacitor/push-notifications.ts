@@ -53,8 +53,10 @@ export async function initPushNotifications(
   });
 
   // Listen for notification taps (user tapped a notification)
+  // 034-leave-enhance: Handle deepLink from leave notifications
   PushNotifications.addListener('pushNotificationActionPerformed', (action: ActionPerformed) => {
-    const resourceUrl = action.notification.data?.resourceUrl;
+    const deepLink = action.notification.data?.deepLink;
+    const resourceUrl = action.notification.data?.resourceUrl || deepLink;
     if (resourceUrl && tapCallback) {
       tapCallback(resourceUrl);
     }

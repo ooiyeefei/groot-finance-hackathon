@@ -108,6 +108,44 @@ export const getByUserId = internalQuery({
  * Deactivate a push subscription by device token (internal use).
  * Called when APNs returns 410 Gone (token no longer valid).
  */
+/**
+ * 034-leave-enhance: FR-011 Track push delivery failure.
+ * Increments failureCount; deactivates token after maxFailures consecutive failures.
+ * Called from notification API route when Lambda reports per-token errors.
+ */
+export const trackFailure = mutation({
+  args: {
+    deviceToken: v.string(),
+    maxFailures: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("push_subscriptions")
+      .withIndex("by_deviceToken", (q) => q.eq("deviceToken", args.deviceToken))
+      .first();
+
+    if (!existing || !existing.isActive) return;
+
+    const newCount = ((existing as any).failureCount ?? 0) + 1;
+
+    if (newCount >= args.maxFailures) {
+      await ctx.db.patch(existing._id, {
+        isActive: false,
+        failureCount: newCount,
+        lastFailureAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      console.log(`[Push] Token deactivated after ${newCount} failures: ${args.deviceToken.substring(0, 10)}...`);
+    } else {
+      await ctx.db.patch(existing._id, {
+        failureCount: newCount,
+        lastFailureAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    }
+  },
+});
+
 export const deactivateByToken = internalMutation({
   args: {
     deviceToken: v.string(),

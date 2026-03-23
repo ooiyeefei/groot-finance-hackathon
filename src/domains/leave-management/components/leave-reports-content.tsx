@@ -28,6 +28,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from '@/components/ui/sheet';
 import { useBusinessContext } from '@/contexts/business-context';
 import { useLeaveReports } from '../hooks/use-leave-reports';
 import { useLeaveReportPdf } from '../hooks/use-leave-report-pdf';
@@ -40,6 +47,7 @@ export default function LeaveReportsContent() {
   const [activeReport, setActiveReport] = useState('balance');
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
 
   const {
     balanceSummary,
@@ -71,11 +79,21 @@ export default function LeaveReportsContent() {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h3 className="text-lg font-medium text-foreground">Leave Reports</h3>
-          <p className="text-sm text-muted-foreground">
-            View leave utilization, balance summaries, and absence trends
-          </p>
+        <div className="flex items-center gap-2">
+          <div>
+            <h3 className="text-lg font-medium text-foreground">Leave Reports</h3>
+            <p className="text-sm text-muted-foreground">
+              View leave utilization, balance summaries, and absence trends
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowHowItWorks(true)}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <Info className="w-4 h-4" />
+          </Button>
         </div>
         <div className="flex items-center gap-2">
           <Select value={selectedYear.toString()} onValueChange={(val) => setSelectedYear(parseInt(val))}>
@@ -347,6 +365,72 @@ export default function LeaveReportsContent() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* T036: How It Works Info Drawer */}
+      <Sheet open={showHowItWorks} onOpenChange={setShowHowItWorks}>
+        <SheetContent className="overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>How Leave Reports Work</SheetTitle>
+            <SheetDescription>
+              Generate and export leave data reports for your team.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="space-y-6 mt-6">
+            <div className="space-y-3">
+              <h4 className="font-medium text-foreground">Steps</h4>
+              <div className="space-y-2">
+                <div className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center">1</span>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Select a report type</p>
+                    <p className="text-xs text-muted-foreground">Choose Balance Summary, Utilization, or Absence Trends.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center">2</span>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Choose a year</p>
+                    <p className="text-xs text-muted-foreground">Use the year dropdown to view different periods. If your business uses a non-January leave year (e.g., April-March), the period adjusts automatically.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center">3</span>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Export the data</p>
+                    <p className="text-xs text-muted-foreground">Click CSV for spreadsheet data or PDF for a formatted report with your business name and date range.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <h4 className="font-medium text-foreground">Report Types</h4>
+              <div className="space-y-2 text-sm">
+                <div className="p-3 rounded-lg bg-muted/50">
+                  <p className="font-medium text-foreground">Balance Summary</p>
+                  <p className="text-xs text-muted-foreground">Shows each employee's entitled, used, remaining, and carry-over days per leave type.</p>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/50">
+                  <p className="font-medium text-foreground">Utilization</p>
+                  <p className="text-xs text-muted-foreground">Shows how much of the allocated leave each team has used, as a percentage.</p>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/50">
+                  <p className="font-medium text-foreground">Absence Trends</p>
+                  <p className="text-xs text-muted-foreground">Monthly breakdown of total absence days, with peak month identification.</p>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <h4 className="font-medium text-foreground">Good to Know</h4>
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li>• Managers see only their direct reports' data</li>
+                <li>• Admins and owners see all employees</li>
+                <li>• Reports generate on-demand (not cached)</li>
+                <li>• PDF exports include your business name and date range</li>
+              </ul>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
