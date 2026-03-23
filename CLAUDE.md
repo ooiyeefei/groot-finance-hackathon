@@ -249,16 +249,14 @@ npx cdk deploy --profile groot-finanseal --region us-west-2
 - **Lambda execution role**: Use least-privilege — scope IAM actions to specific resource ARNs and add conditions where possible (e.g., `cloudwatch:namespace` condition for `PutMetricData`).
 
 **MCP as Single Intelligence Engine (CRITICAL)**:
-- **MCP is the single source of truth** for all financial intelligence AND all chat agent tools. Do NOT build parallel tool implementations in the LangGraph tool factory.
-- **MCP-first tool development**: ALL new agent capabilities (bank recon trigger, scheduled reports, receipt OCR, PDF generation, etc.) MUST be built as MCP server endpoints first, then consumed by the chat agent via `convex/lib/mcp-client.ts`. This ensures Slack bots, API partners, and mobile apps can also use them. See issue #354 for migration plan.
-- **Existing tool factory tools** are being migrated to MCP. Do NOT add new tools to `src/lib/ai/tools/tool-factory.ts` — add them to `finanseal-mcp-server` instead.
-- **MCP tool wrapper**: Chat agent tools delegate to MCP via `src/lib/ai/tools/mcp-tool-wrapper.ts` (`callMCPToolFromAgent()`). Handles retry-once, error translation to ToolResult format, and user context passing (`_businessId`, `_userId`, `_userRole`). No fallback to local execution.
-- **MCP observability**: CloudWatch alarms on `mcp-server-stack.ts` (error rate, P99 latency, API Gateway 5XX) → SNS → `dev@hellogroot.com`. Per-tool metrics tracked in `dspy_metrics_daily` table.
-- **Layer 1 (hard-coded detection)** in Convex crons is for triggering — it runs fast, cheap statistical checks. But when Layer 2 (LLM enrichment/discovery) needs structured analysis, it MUST call MCP tools — not re-query the DB with separate logic.
-- **Internal service-to-service calls** (Convex → MCP Lambda): Use the internal service key (`MCP_INTERNAL_SERVICE_KEY` stored in SSM + Convex env). Pass `X-Internal-Key` header and `_businessId` in params. No per-business API key needed.
-- **App → AWS Lambda direct calls** (Next.js API routes, Vercel serverless → Lambda): Use IAM auth via the Vercel OIDC role (`FinanSEAL-Vercel-S3-Role`). Never hardcode credentials or use API keys when IAM-native access is available.
-- **Convex → AWS services**: Convex actions cannot use AWS SDK/IAM natively. Use shared secrets stored in Convex env vars (set via `npx convex env set --prod`). For Lambda invocation, call via API Gateway HTTP endpoint with internal service key.
-- **Any new analysis capability** (e.g., tax compliance checks, fraud detection) should be added as an MCP tool first, then consumed by both the chat agent and the Action Center cron pipeline.
+- **MCP is the single source of truth** for all financial intelligence AND all chat agent tools. 36 tools live on MCP Lambda.
+- **Tool-factory eliminated (032-mcp-first)**: `src/lib/ai/tools/mcp-tool-registry.ts` is the only tool interface. Fetches schemas from MCP `tools/list`, filters by RBAC, executes via MCP `tools/call`. No local tool implementations.
+- **New tool workflow**: Add MCP endpoint in `src/lambda/mcp-server/tools/` → register in handler + contracts → deploy CDK → done. No other files needed.
+- **Agent architecture**: See `src/lib/ai/CLAUDE.md` for ADRs on custom LangGraph nodes, RBAC model, and MCP integration details.
+- **MCP observability**: CloudWatch alarms on `mcp-server-stack.ts` (error rate, P99 latency, API Gateway 5XX) → SNS → `dev@hellogroot.com`.
+- **Internal service-to-service calls** (Convex → MCP Lambda): Use `MCP_INTERNAL_SERVICE_KEY` (SSM + Convex env). Pass `X-Internal-Key` header and `_businessId` in params.
+- **App → AWS Lambda direct calls** (Next.js API routes, Vercel → Lambda): Use IAM auth via Vercel OIDC role (`FinanSEAL-Vercel-S3-Role`).
+- **Convex → AWS services**: Use shared secrets in Convex env vars. For Lambda, call via API Gateway HTTP with internal service key.
 - **MCP client helper**: `convex/lib/mcp-client.ts` — reusable `callMCPTool()` and `callMCPToolsBatch()` for Convex actions calling MCP.
 
 **Cost optimization — free tier first**:
@@ -376,6 +374,7 @@ After making changes to any system (e-invoice, expense claims, chat, etc.), **al
 | API Reference | `src/app/api/v1/CLAUDE.md` |
 | Expense Claims | `src/domains/expense-claims/CLAUDE.md` |
 | LHDN E-Invoice | `src/domains/expense-claims/einvoice/CLAUDE.md` |
+| AI Agent & MCP | `src/lib/ai/CLAUDE.md` |
 | App Patterns | `src/app/CLAUDE.md` |
 
 ## Accounting System Architecture (2026-03-14 Migration)
@@ -531,46 +530,8 @@ const arBalance = arLines.reduce((sum, line) =>
 
 ## Active Technologies
 - **Core**: TypeScript 5.9.3, Next.js 15.5.7, Convex 1.31.3, React 19.1.2, Clerk 6.30.0, Zod 3.23.8
-- **AI**: Gemini 3.1 Flash-Lite (chat + all AI), DSPy 2.6+ (self-improving modules), LangGraph 0.4.5
-- **Infrastructure**: AWS Lambda (Node.js 20 / Python 3.11), CDK v2, S3, CloudFront, SES, SSM
+- **AI**: Gemini 3.1 Flash-Lite (chat + all AI), DSPy 2.6+ (self-improving modules), LangGraph 0.4.5 (custom nodes)
+- **MCP**: 36 tools on AWS Lambda (Node.js 20), API Gateway REST, CloudWatch alarms
+- **Infrastructure**: AWS Lambda (Node.js 20 / Python 3.11), CDK v2, S3, CloudFront, SES, SSM, EventBridge
 - **Frontend**: Radix UI, Tailwind CSS, Recharts, lucide-react, @react-pdf/renderer, sonner
 - **Other**: Stripe SDK 20.1.0, papaparse, xlsx/SheetJS, Capacitor (iOS), Qdrant Cloud (RAG), Mem0
-- TypeScript 5.9.3, Next.js 15.5.7 + LangGraph 0.4.5, Convex 1.31.3, Qwen3-8B (Modal), Zod 3.23.8 (026-agent-rbac-hardening)
-- Convex (tables: invoices, sales_invoices, journal_entry_lines, business_memberships, users) (026-agent-rbac-hardening)
-- TypeScript 5.9.3 (Next.js 15.5.7 + LangGraph 0.4.5) + Python 3.11 (Lambda DSPy) + @langchain/langgraph, @langchain/core, dspy>=2.6.0 (Python), Convex 1.31.3 (027-gemini-dspy-chat-agent)
-- Convex (corrections, model versions), S3 finanseal-bucket (model artifacts) (027-gemini-dspy-chat-agent)
-- TypeScript 5.9.3 (frontend + Convex), Python 3.11 (Lambda instrumentation) + Next.js 15.5.7, Convex 1.31.3, Recharts (existing), Radix UI (existing) (027-dspy-dash)
-- Convex (`dspy_metrics_daily` aggregate table + existing correction tables) (027-dspy-dash)
-- TypeScript 5.9.3 (Node.js 20), Python 3.11 (DSPy optimizer, already exists) (030-eventbridge-migration)
-- TypeScript 5.9.3 + Next.js 15.5.7, Convex 1.31.3, LangGraph 0.4.5 (031-multi-curr-history-analysis)
-- Convex (journal_entries, journal_entry_lines, manual_exchange_rates) (031-multi-curr-history-analysis)
-- TypeScript 5.9.3 (Next.js 15.5.7 + Convex 1.31.3) + Convex (DB + real-time), LangGraph (chat agent), SES (email), APNs (push) (031-action-center-push-chat)
-- Convex tables (messages, conversations, proactive_alert_delivery) (031-action-center-push-chat)
-- TypeScript 5.9.3 (Next.js 15.5.7 + Convex 1.31.3) + LangGraph 0.4.5, Zod 3.23.8, Recharts, Radix UI, Tailwind CSS (031-budget-track-manager-team)
-- Convex (businesses table for budget config, actionCenterInsights for alerts, expense_submissions for spending data) (031-budget-track-manager-team)
-- TypeScript 5.9.3 (Node.js 20 for Lambda) + PDFKit (new — PDF generation in Lambda), existing: Convex, Qdrant, AWS S3 (031-cfo-copilot-tools)
-- S3 `finanseal-bucket` (PDF storage), Qdrant Cloud (tax KB embeddings), Convex (transaction data) (031-cfo-copilot-tools)
-- TypeScript 5.9.3, Next.js 15.5.7, React 19.1.2 + Convex 1.31.3, LangGraph 0.4.5, @aws-sdk/client-s3, @aws-sdk/client-lambda (031-chat-receipt-process)
-- S3 (finanseal-bucket, `chat-attachments/` prefix), Convex (messages, expense_claims tables) (031-chat-receipt-process)
-- TypeScript 5.9.3 (Next.js 15.5.7, Convex 1.31.3), Node.js 20 (Lambda) + Convex, LangGraph 0.4.5, @react-pdf/renderer, AWS SES, MCP client (031-chat-sched-report-bank-recon)
-- Convex (report_schedules, report_runs, bank_recon_runs tables) (031-chat-sched-report-bank-recon)
-- TypeScript 5.9.3 (Next.js 15.5.7, Node.js 20 Lambda) + LangGraph 0.4.5, Convex 1.31.3, AWS SES, Capacitor 8.1.0, Web Speech API (031-chat-cross-biz-voice)
-- Convex (3 new tables: `email_send_logs`, `benchmarking_opt_ins`, `benchmarking_aggregates`) (031-chat-cross-biz-voice)
-- TypeScript 5.9.3 (Next.js 15.5.7, Convex 1.31.3, Node.js 20 Lambda) + Convex (DB + real-time), LHDN API (e-invoice), AWS Lambda (digital signature), React 19.1.2 (032-credit-debit-note)
-- Convex (`sales_invoices`, `invoices`, `journal_entries`, `journal_entry_lines` tables) (032-credit-debit-note)
-- TypeScript 5.9.3, Next.js 15.5.7 + Convex 1.31.3, @react-pdf/renderer, qrcode (existing), Clerk 6.30.0 (auth bypass for public form), SES (email) (032-self-service-debtors-info-update)
-- Convex (2 new tables: `debtor_update_tokens`, `debtor_change_log`) (032-self-service-debtors-info-update)
-- TypeScript 5.9.3 (Next.js 15.5.7, Convex 1.31.3) + Convex (DB + real-time), React 19.1.2, Radix UI, Tailwind CSS, lucide-react (001-inv-stock-management)
-- Convex (3 new tables + 2 modified tables) (001-inv-stock-management)
-- TypeScript 5.9.3 (Next.js 15.5.7 + Convex 1.31.3) + Convex (DB + real-time), Recharts (charts), Radix UI (tabs/dialogs), Tailwind CSS (032-price-history-tracking)
-- Convex (2 new tables: `selling_price_history`, `catalog_vendor_item_mappings`; 1 modified: `businesses`) (032-price-history-tracking)
-- TypeScript 5.9.3 (Next.js 15.5.7, Node.js 20 Lambda) + LangGraph 0.4.5 (chat agent), Convex 1.31.3 (DB), AWS CDK v2 (infra), JSON-RPC 2.0 (MCP protocol) (032-mcp-first)
-- Convex (data layer), S3 (artifacts), CloudWatch (logs/metrics) (032-mcp-first)
-- TypeScript 5.9.3, Next.js 15.5.7, React 19.1.2 + Existing UI components (card, input, select, button, sheet), `formatCurrency` utility, Tailwind CSS (033-roi-calculator)
-- N/A — no persistence. Inputs encoded in URL query params. Partner data as static config. (033-roi-calculator)
-- TypeScript 5.9.3 (Next.js 15.5.7 + Convex 1.31.3) + Convex (DB + real-time), Capacitor 8.1.0 (mobile), @react-pdf/renderer (PDF export), papaparse/xlsx (CSV parsing), Recharts (charts), Radix UI + Tailwind CSS (UI) (034-leave-enhance)
-- Convex (leave_requests, leave_balances, leave_types, push_subscriptions, businesses tables) (034-leave-enhance)
-
-
-## Recent Changes
-- 026-agent-rbac-hardening: Added TypeScript 5.9.3, Next.js 15.5.7 + LangGraph 0.4.5, Convex 1.31.3, Qwen3-8B (Modal), Zod 3.23.8
