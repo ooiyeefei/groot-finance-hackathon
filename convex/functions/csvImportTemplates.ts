@@ -13,7 +13,8 @@ const schemaTypeValidator = v.union(
   v.literal("sales_statement"),
   v.literal("bank_statement"),
   v.literal("purchase_order"),
-  v.literal("goods_received_note")
+  v.literal("goods_received_note"),
+  v.literal("leave_balance")
 );
 
 const columnMappingValidator = v.object({
