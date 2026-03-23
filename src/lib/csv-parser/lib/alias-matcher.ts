@@ -11,6 +11,7 @@ import {
   BANK_STATEMENT_FIELDS,
   PURCHASE_ORDER_FIELDS,
   GRN_FIELDS,
+  LEAVE_BALANCE_FIELDS,
 } from "./schema-definitions";
 
 interface AliasMatch {
@@ -190,6 +191,7 @@ export function isAliasMatchSufficient(result: AliasMatchResult): boolean {
     bank_statement: BANK_STATEMENT_FIELDS,
     purchase_order: PURCHASE_ORDER_FIELDS,
     goods_received_note: GRN_FIELDS,
+    leave_balance: LEAVE_BALANCE_FIELDS,
   };
   const fields = schemaMap[result.detectedSchemaType] ?? BANK_STATEMENT_FIELDS;
   const requiredFields = fields.filter((f) => f.required);
