@@ -152,7 +152,7 @@ export function FinancialStatementsClient() {
           <ReportExportButtons
             reportType={activeTab}
             reportData={getActiveReportData()}
-            businessName={businessName}
+            businessName={businessName ?? ''}
             currency={currency}
             periodStart={dateFrom}
             periodEnd={dateTo}
