@@ -216,6 +216,13 @@ export async function POST(req: NextRequest) {
             accumulatedCitations = (event.data as { citations: unknown[] }).citations
           }
 
+          // Skip the agent's 'done' event — the finally block sends our own
+          // 'done' with serverPersisted flag. Forwarding both causes the client
+          // to see done:{} first (serverPersisted=undefined) and potentially
+          // skip the second done:{serverPersisted:true} if the stream closes
+          // before the client reads it.
+          if (event.event === 'done') continue
+
           writeEvent(event.event, event.data)
         }
       } catch (error) {
