@@ -73,22 +73,26 @@ export default function StatementsReviewClient() {
     setIsSending(true)
 
     try {
-      // For each selected statement, mark as sent
-      // (In production, this would call a send email action)
-      let sent = 0
-      for (const id of selectedIds) {
-        const statement = statements?.find((s) => s._id === id)
-        if (!statement || !statement.customerEmail) continue
+      const res = await fetch('/api/v1/reports/send-statements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ statementIds: Array.from(selectedIds) }),
+      })
 
-        await updateStatus({
-          statementId: id,
-          sendStatus: 'sent',
-          sentAt: Date.now(),
-        })
-        sent++
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Send failed')
       }
 
-      toast.success(`${sent} statement${sent > 1 ? 's' : ''} sent successfully`)
+      const { sent, failed } = data
+      if (sent > 0) {
+        toast.success(`${sent} statement${sent > 1 ? 's' : ''} sent successfully`)
+      }
+      if (failed > 0) {
+        toast.error(`${failed} statement${failed > 1 ? 's' : ''} failed to send`)
+      }
+
       setSelectedIds(new Set())
     } catch (err: any) {
       toast.error('Failed to send statements: ' + err.message)

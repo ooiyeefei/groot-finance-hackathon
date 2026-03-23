@@ -4,7 +4,8 @@ import { useState } from 'react'
 import { useQuery } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { useActiveBusiness } from '@/contexts/business-context'
-import { FileBarChart, Plus, Download, Loader2, AlertCircle, Info, Clock } from 'lucide-react'
+import { FileBarChart, Plus, Download, Loader2, AlertCircle, Info, Clock, Mail } from 'lucide-react'
+import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -15,10 +16,12 @@ import HowItWorksDrawer from './how-it-works-drawer'
 import type { GeneratedReport } from '../lib/types'
 
 export default function ReportsClient() {
-  const { businessId, isLoading: isBusinessLoading } = useActiveBusiness()
+  const { businessId, isLoading: isBusinessLoading, role } = useActiveBusiness()
+  const isAdmin = role === 'owner' || role === 'finance_admin'
   const [showGenerateDialog, setShowGenerateDialog] = useState(false)
   const [showHowItWorks, setShowHowItWorks] = useState(false)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [isGeneratingStatements, setIsGeneratingStatements] = useState(false)
 
   const reports = useQuery(
     api.functions.reports.listReports,
@@ -45,6 +48,26 @@ export default function ReportsClient() {
     }
   }
 
+  const handleGenerateStatements = async () => {
+    if (!businessId) return
+    setIsGeneratingStatements(true)
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const res = await fetch('/api/v1/reports/generate-statements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessId, asOfDate: today }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed')
+      toast.success(`${data.statementCount} debtor statement${data.statementCount !== 1 ? 's' : ''} generated`)
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to generate statements')
+    } finally {
+      setIsGeneratingStatements(false)
+    }
+  }
+
   if (isBusinessLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -58,6 +81,15 @@ export default function ReportsClient() {
       <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
         <AlertCircle className="h-8 w-8 mb-2" />
         <p>No business selected</p>
+      </div>
+    )
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+        <AlertCircle className="h-8 w-8 mb-2" />
+        <p>Reports are only accessible to finance administrators and business owners.</p>
       </div>
     )
   }
@@ -79,6 +111,18 @@ export default function ReportsClient() {
             onClick={() => setShowHowItWorks(true)}
           >
             <Info className="h-4 w-4" />
+          </Button>
+          <Button
+            className="bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+            onClick={handleGenerateStatements}
+            disabled={isGeneratingStatements}
+          >
+            {isGeneratingStatements ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Mail className="h-4 w-4 mr-2" />
+            )}
+            Generate Statements
           </Button>
           <Button
             className="bg-primary hover:bg-primary/90 text-primary-foreground"

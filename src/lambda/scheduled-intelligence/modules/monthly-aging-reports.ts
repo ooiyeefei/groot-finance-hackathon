@@ -2,13 +2,17 @@
  * Monthly Aging Reports Module
  *
  * Triggered on the 1st of each month by EventBridge.
- * Iterates all active businesses and triggers aging report generation
- * via Convex HTTP API.
+ * For each eligible business:
+ * 1. Creates Action Center notification for owner to generate/review reports
+ * 2. Gets the business owner's userId for the notification
+ *
+ * The actual PDF generation happens via Next.js API routes when the owner
+ * clicks "Generate" (since @react-pdf/renderer needs Node.js runtime).
  *
  * Part of 035-aging-payable-receivable-report feature.
  */
 
-import { convexQuery } from '../lib/convex-client';
+import { convexQuery, convexMutation } from '../lib/convex-client';
 import { JobResult } from '../lib/types';
 
 interface Business {
@@ -16,11 +20,20 @@ interface Business {
   name: string;
   reportSettings?: {
     autoGenerateMonthly?: boolean;
+    notifyEmail?: boolean;
   };
+}
+
+interface BusinessMembership {
+  userId: string;
+  role: string;
 }
 
 export async function runMonthlyAgingReports(): Promise<Omit<JobResult, 'durationMs'>> {
   console.log('[MonthlyAgingReports] Starting monthly aging report generation...');
+
+  const now = new Date();
+  const periodMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
   try {
     // Query all active businesses
@@ -45,24 +58,47 @@ export async function runMonthlyAgingReports(): Promise<Omit<JobResult, 'duratio
       `[MonthlyAgingReports] ${eligibleBusinesses.length}/${businesses.length} businesses eligible`
     );
 
-    let generated = 0;
+    let notified = 0;
     let errors = 0;
 
     for (const business of eligibleBusinesses) {
       try {
         console.log(`[MonthlyAgingReports] Processing business: ${business.name} (${business._id})`);
 
-        // For now, log that this business needs report generation.
-        // The actual PDF generation happens via the Next.js API route
-        // since @react-pdf/renderer requires Node.js (not available in Convex actions).
-        // The monthly flow will be:
-        // 1. This Lambda creates Action Center notifications for each business
-        // 2. Owner clicks "Generate" or auto-generation calls the API route
-        // TODO: Implement direct report generation via Lambda when PDF generation
-        // is moved to a dedicated Lambda function.
+        // Find the business owner (finance_admin or owner role)
+        const memberships = await convexQuery<BusinessMembership[]>(
+          'functions/businessMemberships:listByBusiness',
+          { businessId: business._id }
+        );
 
-        console.log(`[MonthlyAgingReports] Created notification for ${business.name}`);
-        generated++;
+        const ownerMembership = memberships?.find(
+          (m) => m.role === 'owner' || m.role === 'finance_admin'
+        );
+
+        if (!ownerMembership) {
+          console.warn(`[MonthlyAgingReports] No owner found for business ${business._id}, skipping`);
+          continue;
+        }
+
+        // Create Action Center notification
+        await convexMutation('functions/actionCenterInsights:internalCreate', {
+          userId: ownerMembership.userId,
+          businessId: business._id,
+          category: 'deadline',
+          priority: 'medium',
+          title: `${periodMonth} Aging Reports Ready`,
+          description: `Your monthly AP and AR aging reports for ${periodMonth} are ready to generate. Visit the Reports page to generate consolidated reports and debtor statements.`,
+          affectedEntities: ['reports', 'aging'],
+          recommendedAction: `Generate your ${periodMonth} aging reports and review debtor statements before sending.`,
+          metadata: {
+            type: 'monthly_aging_report',
+            periodMonth,
+            link: '/reports',
+          },
+        });
+
+        console.log(`[MonthlyAgingReports] Notification created for ${business.name}`);
+        notified++;
       } catch (error) {
         console.error(
           `[MonthlyAgingReports] Error processing business ${business._id}:`,
@@ -73,14 +109,14 @@ export async function runMonthlyAgingReports(): Promise<Omit<JobResult, 'duratio
     }
 
     console.log(
-      `[MonthlyAgingReports] Complete: ${generated} notified, ${errors} errors`
+      `[MonthlyAgingReports] Complete: ${notified} notified, ${errors} errors`
     );
 
     return {
       module: 'monthly-aging-reports',
       status: errors > 0 ? 'partial' : 'success',
       documentsRead: businesses.length,
-      documentsWritten: generated,
+      documentsWritten: notified,
       ...(errors > 0 && { error: `${errors} businesses failed` }),
     };
   } catch (error) {

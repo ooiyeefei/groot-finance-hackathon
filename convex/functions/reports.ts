@@ -132,6 +132,21 @@ export const getReportSettings = query({
 });
 
 /**
+ * Get a single debtor statement send by ID
+ */
+export const getStatementById = query({
+  args: {
+    statementId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    return await ctx.db.get(args.statementId as Id<"debtor_statement_sends">);
+  },
+});
+
+/**
  * Get a single report by ID
  */
 export const getReportById = query({
@@ -255,6 +270,49 @@ export const createReportPublic = mutation({
       hasWarnings: args.hasWarnings,
       aiInsightsSummary: args.aiInsightsSummary,
       expiresAt,
+    });
+  },
+});
+
+/**
+ * Create a debtor statement send record (public - called from API routes)
+ */
+export const createStatementSendPublic = mutation({
+  args: {
+    businessId: v.string(),
+    reportId: v.string(),
+    customerId: v.string(),
+    customerName: v.string(),
+    customerEmail: v.optional(v.string()),
+    totalOutstanding: v.number(),
+    invoiceCount: v.number(),
+    sendStatus: v.union(
+      v.literal("pending"),
+      v.literal("sent"),
+      v.literal("auto_sent"),
+      v.literal("failed"),
+      v.literal("no_email")
+    ),
+    periodMonth: v.string(),
+    hasDisclaimer: v.boolean(),
+    autoSendEnabled: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    return await ctx.db.insert("debtor_statement_sends", {
+      businessId: args.businessId as Id<"businesses">,
+      reportId: args.reportId as Id<"generated_reports">,
+      customerId: args.customerId,
+      customerName: args.customerName,
+      customerEmail: args.customerEmail,
+      totalOutstanding: args.totalOutstanding,
+      invoiceCount: args.invoiceCount,
+      sendStatus: args.sendStatus,
+      periodMonth: args.periodMonth,
+      hasDisclaimer: args.hasDisclaimer,
+      autoSendEnabled: args.autoSendEnabled,
     });
   },
 });
