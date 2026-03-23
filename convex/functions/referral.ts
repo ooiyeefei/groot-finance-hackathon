@@ -657,24 +657,6 @@ export const getPartnerBySlug = query({
       .first();
 
     if (!business) return null;
-
-    // Check if this business has an active partner referral code
-    const referralCode = await ctx.db
-      .query("referral_codes")
-      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("isActive"), true),
-          q.or(
-            q.eq(q.field("type"), "partner_referrer"),
-            q.eq(q.field("type"), "partner_reseller")
-          )
-        )
-      )
-      .first();
-
-    if (!referralCode) return null;
-
     return { name: business.name };
   },
 });
