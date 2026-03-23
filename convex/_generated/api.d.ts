@@ -86,6 +86,7 @@ import type * as functions_inventoryStock from "../functions/inventoryStock.js";
 import type * as functions_invoices from "../functions/invoices.js";
 import type * as functions_journalEntries from "../functions/journalEntries.js";
 import type * as functions_leaveBalances from "../functions/leaveBalances.js";
+import type * as functions_leaveReports from "../functions/leaveReports.js";
 import type * as functions_leaveRequests from "../functions/leaveRequests.js";
 import type * as functions_leaveTypes from "../functions/leaveTypes.js";
 import type * as functions_lhdnJobs from "../functions/lhdnJobs.js";
@@ -247,6 +248,7 @@ declare const fullApi: ApiFromModules<{
   "functions/invoices": typeof functions_invoices;
   "functions/journalEntries": typeof functions_journalEntries;
   "functions/leaveBalances": typeof functions_leaveBalances;
+  "functions/leaveReports": typeof functions_leaveReports;
   "functions/leaveRequests": typeof functions_leaveRequests;
   "functions/leaveTypes": typeof functions_leaveTypes;
   "functions/lhdnJobs": typeof functions_lhdnJobs;
