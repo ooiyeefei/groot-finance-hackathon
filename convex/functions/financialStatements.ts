@@ -1,109 +1,188 @@
 /**
  * Financial Statements Functions
  *
- * Query endpoints for generating financial statements.
+ * Non-reactive action endpoints for generating financial statements.
+ * Uses action + internalQuery pattern per CLAUDE.md bandwidth rules —
+ * heavy aggregations must NOT use reactive `query`.
+ *
+ * Internal queries live in financialStatementsInternal.ts to avoid
+ * circular type inference.
+ *
+ * Access: Owner/Admin and Manager roles only (enforced at UI + chat agent layers).
  */
 
-import { query } from "../_generated/server";
+import { action } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { v } from "convex/values";
-import { generateProfitLossStatement } from "../lib/statement_generators/profit_loss_generator";
-import { generateTrialBalance } from "../lib/statement_generators/trial_balance_generator";
 
 /**
- * Generate Profit & Loss Statement
+ * Generate Trial Balance — non-reactive action
  */
-export const profitLoss = query({
+export const getTrialBalance = action({
   args: {
-    businessId: v.id("businesses"),
+    businessId: v.string(),
+    asOfDate: v.string(),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    return await ctx.runQuery(
+      internal.functions.financialStatementsInternal.trialBalance,
+      args
+    );
+  },
+});
+
+/**
+ * Generate Profit & Loss Statement — non-reactive action
+ */
+export const getProfitLoss = action({
+  args: {
+    businessId: v.string(),
     dateFrom: v.string(),
     dateTo: v.string(),
   },
-  handler: async (ctx, args) => {
-    return await generateProfitLossStatement(ctx, args);
+  handler: async (ctx, args): Promise<any> => {
+    return await ctx.runQuery(
+      internal.functions.financialStatementsInternal.profitLoss,
+      args
+    );
   },
 });
 
 /**
- * Generate Trial Balance
+ * Generate P&L with Period Comparison — non-reactive action
  */
-export const trialBalance = query({
+export const getProfitLossComparison = action({
   args: {
-    businessId: v.id("businesses"),
+    businessId: v.string(),
+    dateFrom: v.string(),
+    dateTo: v.string(),
+    comparisonDateFrom: v.string(),
+    comparisonDateTo: v.string(),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    const [current, comparison] = await Promise.all([
+      ctx.runQuery(
+        internal.functions.financialStatementsInternal.profitLoss,
+        {
+          businessId: args.businessId,
+          dateFrom: args.dateFrom,
+          dateTo: args.dateTo,
+        }
+      ),
+      ctx.runQuery(
+        internal.functions.financialStatementsInternal.profitLoss,
+        {
+          businessId: args.businessId,
+          dateFrom: args.comparisonDateFrom,
+          dateTo: args.comparisonDateTo,
+        }
+      ),
+    ]);
+
+    const calcVariance = (currentVal: number, comparisonVal: number) => ({
+      amount: currentVal - comparisonVal,
+      percentage:
+        comparisonVal !== 0
+          ? ((currentVal - comparisonVal) / Math.abs(comparisonVal)) * 100
+          : currentVal !== 0
+            ? 100
+            : 0,
+    });
+
+    return {
+      current,
+      comparison,
+      variance: {
+        revenue: calcVariance(current.revenue.total, comparison.revenue.total),
+        costOfGoodsSold: calcVariance(
+          current.costOfGoodsSold.total,
+          comparison.costOfGoodsSold.total
+        ),
+        grossProfit: calcVariance(current.grossProfit, comparison.grossProfit),
+        operatingExpenses: calcVariance(
+          current.operatingExpenses.total,
+          comparison.operatingExpenses.total
+        ),
+        operatingIncome: calcVariance(
+          current.operatingIncome,
+          comparison.operatingIncome
+        ),
+        netProfit: calcVariance(current.netProfit, comparison.netProfit),
+      },
+    };
+  },
+});
+
+/**
+ * Generate Balance Sheet — non-reactive action
+ */
+export const getBalanceSheet = action({
+  args: {
+    businessId: v.string(),
     asOfDate: v.string(),
   },
-  handler: async (ctx, args) => {
-    return await generateTrialBalance(ctx, args);
+  handler: async (ctx, args): Promise<any> => {
+    return await ctx.runQuery(
+      internal.functions.financialStatementsInternal.balanceSheet,
+      args
+    );
   },
 });
 
 /**
- * Get dashboard metrics (current month summary)
+ * Generate Cash Flow Statement — non-reactive action
  */
-export const dashboardMetrics = query({
+export const getCashFlow = action({
   args: {
-    businessId: v.id("businesses"),
+    businessId: v.string(),
+    dateFrom: v.string(),
+    dateTo: v.string(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<any> => {
+    return await ctx.runQuery(
+      internal.functions.financialStatementsInternal.cashFlow,
+      args
+    );
+  },
+});
+
+/**
+ * Get dashboard metrics (current month summary) — non-reactive action
+ */
+export const getDashboardMetrics = action({
+  args: {
+    businessId: v.string(),
+  },
+  handler: async (ctx, args): Promise<any> => {
     const now = new Date();
-    const currentMonth = now.toISOString().slice(0, 7); // YYYY-MM
+    const currentMonth = now.toISOString().slice(0, 7);
     const dateFrom = `${currentMonth}-01`;
     const dateTo = now.toISOString().slice(0, 10);
 
-    // Generate P&L for current month
-    const pl = await generateProfitLossStatement(ctx, {
-      businessId: args.businessId,
-      dateFrom,
-      dateTo,
-    });
-
-    // Get cash balance (Trial Balance for just Cash account)
-    const cashAccount = await ctx.db
-      .query("chart_of_accounts")
-      .withIndex("by_business_code", (q) =>
-        q.eq("businessId", args.businessId).eq("accountCode", "1000")
-      )
-      .first();
-
-    let cashBalance = 0;
-    if (cashAccount) {
-      // Get posted entry IDs up to dateTo
-      const allEntries = await ctx.db
-        .query("journal_entries")
-        .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
-        .collect();
-
-      const postedEntryIds = new Set(
-        allEntries
-          .filter((e) => e.transactionDate <= dateTo && e.status === "posted")
-          .map((e) => e._id)
-      );
-
-      // Query cash account lines directly (eliminates N+1: 1 query instead of N)
-      const cashLines = await ctx.db
-        .query("journal_entry_lines")
-        .withIndex("by_business_account", (q) =>
-          q.eq("businessId", args.businessId).eq("accountCode", cashAccount.accountCode)
-        )
-        .collect();
-
-      // Filter to posted entries only
-      const postedCashLines = cashLines.filter((l) =>
-        postedEntryIds.has(l.journalEntryId)
-      );
-
-      const totalDebits = postedCashLines.reduce((sum, l) => sum + l.debitAmount, 0);
-      const totalCredits = postedCashLines.reduce(
-        (sum, l) => sum + l.creditAmount,
-        0
-      );
-      cashBalance = totalDebits - totalCredits; // Cash is a debit-normal account
-    }
-
-    return {
-      period: {
+    const pl = await ctx.runQuery(
+      internal.functions.financialStatementsInternal.profitLoss,
+      {
+        businessId: args.businessId,
         dateFrom,
         dateTo,
-      },
+      }
+    );
+
+    const tb = await ctx.runQuery(
+      internal.functions.financialStatementsInternal.trialBalance,
+      {
+        businessId: args.businessId,
+        asOfDate: dateTo,
+      }
+    );
+
+    const cashLine = tb.lines.find((l: any) => l.accountCode === "1000");
+    const cashBalance = cashLine
+      ? cashLine.debitBalance - cashLine.creditBalance
+      : 0;
+
+    return {
+      period: { dateFrom, dateTo },
       revenue: pl.revenue.total,
       expenses:
         pl.costOfGoodsSold.total +

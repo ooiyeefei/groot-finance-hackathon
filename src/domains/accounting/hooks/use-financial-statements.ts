@@ -1,12 +1,18 @@
 'use client'
 
-import { useQuery } from 'convex/react'
+import { useState, useEffect } from 'react'
+import { useAction } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
-import type { Id } from '../../../../convex/_generated/dataModel'
 import { useActiveBusiness } from '@/contexts/business-context'
 
 export function useFinancialStatements() {
   const { businessId } = useActiveBusiness()
+  const getProfitLoss = useAction(api.functions.financialStatements.getProfitLoss)
+  const getTrialBalance = useAction(api.functions.financialStatements.getTrialBalance)
+
+  const [profitLoss, setProfitLoss] = useState<any>(null)
+  const [trialBalance, setTrialBalance] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
   // Current month date range
   const now = new Date()
@@ -14,31 +20,40 @@ export function useFinancialStatements() {
   const dateTo = now.toISOString().split('T')[0]
   const asOfDate = dateTo
 
-  const profitLoss = useQuery(
-    api.functions.financialStatements.profitLoss,
-    businessId
-      ? {
-          businessId: businessId as Id<'businesses'>,
-          dateFrom,
-          dateTo,
-        }
-      : 'skip'
-  )
+  useEffect(() => {
+    if (!businessId) {
+      setIsLoading(false)
+      return
+    }
 
-  const trialBalance = useQuery(
-    api.functions.financialStatements.trialBalance,
-    businessId
-      ? {
-          businessId: businessId as Id<'businesses'>,
-          asOfDate,
+    let cancelled = false
+    setIsLoading(true)
+
+    Promise.all([
+      getProfitLoss({ businessId, dateFrom, dateTo }),
+      getTrialBalance({ businessId, asOfDate }),
+    ])
+      .then(([plResult, tbResult]) => {
+        if (!cancelled) {
+          setProfitLoss(plResult)
+          setTrialBalance(tbResult)
+          setIsLoading(false)
         }
-      : 'skip'
-  )
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error('Failed to fetch financial statements:', error)
+          setIsLoading(false)
+        }
+      })
+
+    return () => { cancelled = true }
+  }, [businessId, dateFrom, dateTo, asOfDate, getProfitLoss, getTrialBalance])
 
   return {
-    profitLoss: profitLoss ?? null,
-    trialBalance: trialBalance ?? null,
-    isLoading: profitLoss === undefined || trialBalance === undefined,
+    profitLoss,
+    trialBalance,
+    isLoading,
     dateRange: { dateFrom, dateTo, asOfDate },
   }
 }

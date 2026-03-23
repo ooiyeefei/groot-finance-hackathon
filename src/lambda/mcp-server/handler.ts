@@ -62,6 +62,11 @@ import { getActionCenterInsight } from './tools/get-action-center-insight.js';
 import { analyzeTrends } from './tools/analyze-trends.js';
 import { setBudget } from './tools/set-budget.js';
 import { checkBudgetStatus } from './tools/check-budget-status.js';
+// Financial Statements (033-fin-statements-gen)
+import { generateTrialBalance } from './tools/generate-trial-balance.js';
+import { generatePnl } from './tools/generate-pnl.js';
+import { generateBalanceSheet } from './tools/generate-balance-sheet.js';
+import { generateCashFlow } from './tools/generate-cash-flow.js';
 import {
   authenticateApiKey,
   authenticateInternalService,
@@ -121,6 +126,11 @@ const TOOL_IMPLEMENTATIONS: Record<string, (args: Record<string, unknown>, authC
   analyze_trends: analyzeTrends,
   set_budget: setBudget,
   check_budget_status: checkBudgetStatus,
+  // Financial Statements (033-fin-statements-gen)
+  generate_trial_balance: generateTrialBalance,
+  generate_pnl: generatePnl,
+  generate_balance_sheet: generateBalanceSheet,
+  generate_cash_flow: generateCashFlow,
 };
 
 // CORS headers for all responses

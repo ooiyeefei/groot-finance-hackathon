@@ -60,6 +60,11 @@ const MANAGER_TOOLS = new Set([
   'analyze_team_spending',
   'forecast_cash_flow',
   'generate_report_pdf',
+  // Financial Statements (033-fin-statements-gen)
+  'generate_trial_balance',
+  'generate_pnl',
+  'generate_balance_sheet',
+  'generate_cash_flow',
 ])
 
 const FINANCE_TOOLS = new Set([

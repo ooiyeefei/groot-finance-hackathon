@@ -18,6 +18,7 @@ import {
   FileCheck,
   CalendarDays,
   FileSpreadsheet,
+  BarChart3,
   Inbox,
   Package,
 } from 'lucide-react'
@@ -60,6 +61,7 @@ export function getNavigationGroups(userRole: UserRole): NavGroup[] {
           { icon: CreditCard, label: 'transactions', path: '/accounting' },
           { icon: Inbox, label: 'documentsInbox', path: '/documents-inbox' },
           { icon: Package, label: 'inventory', path: '/inventory' },
+          { icon: BarChart3, label: 'financialStatements', path: '/financial-statements' },
         ]
       : [],
   }
@@ -71,7 +73,10 @@ export function getNavigationGroups(userRole: UserRole): NavGroup[] {
       { icon: Receipt, label: 'expenseClaims', path: '/expense-claims' },
       { icon: CalendarDays, label: 'leaveManagement', path: '/leave-management' },
       ...((userRole.manager || userRole.finance_admin)
-        ? [{ icon: FileCheck, label: 'managerApprovals', path: '/manager/approvals' }]
+        ? [
+            { icon: FileCheck, label: 'managerApprovals', path: '/manager/approvals' },
+            ...(!userRole.finance_admin ? [{ icon: BarChart3, label: 'financialStatements', path: '/financial-statements' }] : []),
+          ]
         : []),
       { icon: FileSpreadsheet, label: 'reporting', path: '/reporting' },
     ],

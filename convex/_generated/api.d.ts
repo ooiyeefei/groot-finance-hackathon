@@ -75,6 +75,7 @@ import type * as functions_feeClassificationRules from "../functions/feeClassifi
 import type * as functions_feedback from "../functions/feedback.js";
 import type * as functions_financialIntelligence from "../functions/financialIntelligence.js";
 import type * as functions_financialStatements from "../functions/financialStatements.js";
+import type * as functions_financialStatementsInternal from "../functions/financialStatementsInternal.js";
 import type * as functions_goodsReceivedNotes from "../functions/goodsReceivedNotes.js";
 import type * as functions_integrations_arReconciliationIntegration from "../functions/integrations/arReconciliationIntegration.js";
 import type * as functions_integrations_expenseClaimIntegration from "../functions/integrations/expenseClaimIntegration.js";
@@ -156,6 +157,8 @@ import type * as lib_journal_entry_helpers from "../lib/journal_entry_helpers.js
 import type * as lib_llm from "../lib/llm.js";
 import type * as lib_mcpClient from "../lib/mcpClient.js";
 import type * as lib_resolvers from "../lib/resolvers.js";
+import type * as lib_statement_generators_balance_sheet_generator from "../lib/statement_generators/balance_sheet_generator.js";
+import type * as lib_statement_generators_cash_flow_generator from "../lib/statement_generators/cash_flow_generator.js";
 import type * as lib_statement_generators_profit_loss_generator from "../lib/statement_generators/profit_loss_generator.js";
 import type * as lib_statement_generators_trial_balance_generator from "../lib/statement_generators/trial_balance_generator.js";
 import type * as lib_validation from "../lib/validation.js";
@@ -237,6 +240,7 @@ declare const fullApi: ApiFromModules<{
   "functions/feedback": typeof functions_feedback;
   "functions/financialIntelligence": typeof functions_financialIntelligence;
   "functions/financialStatements": typeof functions_financialStatements;
+  "functions/financialStatementsInternal": typeof functions_financialStatementsInternal;
   "functions/goodsReceivedNotes": typeof functions_goodsReceivedNotes;
   "functions/integrations/arReconciliationIntegration": typeof functions_integrations_arReconciliationIntegration;
   "functions/integrations/expenseClaimIntegration": typeof functions_integrations_expenseClaimIntegration;
@@ -318,6 +322,8 @@ declare const fullApi: ApiFromModules<{
   "lib/llm": typeof lib_llm;
   "lib/mcpClient": typeof lib_mcpClient;
   "lib/resolvers": typeof lib_resolvers;
+  "lib/statement_generators/balance_sheet_generator": typeof lib_statement_generators_balance_sheet_generator;
+  "lib/statement_generators/cash_flow_generator": typeof lib_statement_generators_cash_flow_generator;
   "lib/statement_generators/profit_loss_generator": typeof lib_statement_generators_profit_loss_generator;
   "lib/statement_generators/trial_balance_generator": typeof lib_statement_generators_trial_balance_generator;
   "lib/validation": typeof lib_validation;

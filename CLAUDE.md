@@ -535,3 +535,5 @@ const arBalance = arLines.reduce((sum, line) =>
 - **Infrastructure**: AWS Lambda (Node.js 20 / Python 3.11), CDK v2, S3, CloudFront, SES, SSM, EventBridge
 - **Frontend**: Radix UI, Tailwind CSS, Recharts, lucide-react, @react-pdf/renderer, sonner
 - **Other**: Stripe SDK 20.1.0, papaparse, xlsx/SheetJS, Capacitor (iOS), Qdrant Cloud (RAG), Mem0
+- TypeScript 5.9.3 (Next.js 15.5.7 + Convex 1.31.3) + Convex (DB + real-time), @react-pdf/renderer (PDF export), Radix UI + Tailwind CSS (UI), lucide-react (icons) (033-fin-statements-gen)
+- Convex (journal_entries, journal_entry_lines, chart_of_accounts — all existing tables) (033-fin-statements-gen)

@@ -1435,6 +1435,42 @@ export type ShowReconStatusInput = z.infer<typeof ShowReconStatusInputSchema>;
 // Tool Registry (for MCP server initialization)
 // ============================================================================
 
+// ============================================================================
+// Financial Statements (033-fin-statements-gen)
+// ============================================================================
+
+export const GenerateTrialBalanceInputSchema = z.object({
+  as_of_date: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD format')
+    .describe('Generate trial balance as of this date (YYYY-MM-DD)'),
+});
+
+export const GeneratePnlInputSchema = z.object({
+  date_from: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD format')
+    .describe('Start date of P&L period (YYYY-MM-DD)'),
+  date_to: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD format')
+    .describe('End date of P&L period (YYYY-MM-DD)'),
+  comparison: z.boolean().optional().default(false)
+    .describe('If true, compare with same-length prior period'),
+});
+
+export const GenerateBalanceSheetInputSchema = z.object({
+  as_of_date: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD format')
+    .describe('Generate balance sheet as of this date (YYYY-MM-DD)'),
+});
+
+export const GenerateCashFlowInputSchema = z.object({
+  date_from: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD format')
+    .describe('Start date of cash flow period (YYYY-MM-DD)'),
+  date_to: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD format')
+    .describe('End date of cash flow period (YYYY-MM-DD)'),
+});
+
 export const MCP_TOOLS = {
   detect_anomalies: {
     name: 'detect_anomalies',
@@ -1619,6 +1655,27 @@ export const MCP_TOOLS = {
     name: 'check_budget_status',
     description: "Check budget utilization status across expense categories. Shows spending vs configured budget limits with status indicators (on_track, warning, overspent). If no budgets are configured, suggests using set_budget. Requires manager/finance_admin/owner role.",
     inputSchema: CheckBudgetStatusInputSchema
+  },
+  // Financial Statements (033-fin-statements-gen)
+  generate_trial_balance: {
+    name: 'generate_trial_balance',
+    description: "Generate a Trial Balance report listing all accounts with debit/credit balances as of a specific date. Verifies total debits equal total credits. Requires owner/admin or manager role.",
+    inputSchema: GenerateTrialBalanceInputSchema
+  },
+  generate_pnl: {
+    name: 'generate_pnl',
+    description: "Generate a Profit & Loss (Income) Statement showing revenue, COGS, expenses, and net profit for a date range. Optionally compares to the prior period of equal length. Requires owner/admin or manager role.",
+    inputSchema: GeneratePnlInputSchema
+  },
+  generate_balance_sheet: {
+    name: 'generate_balance_sheet',
+    description: "Generate a Balance Sheet showing Assets (current + non-current), Liabilities (current + non-current), and Equity as of a specific date. Verifies Assets = Liabilities + Equity. Requires owner/admin or manager role.",
+    inputSchema: GenerateBalanceSheetInputSchema
+  },
+  generate_cash_flow: {
+    name: 'generate_cash_flow',
+    description: "Generate a Cash Flow Statement using the direct method, categorizing cash transactions into Operating, Investing, and Financing activities for a date range. Requires owner/admin or manager role.",
+    inputSchema: GenerateCashFlowInputSchema
   },
 } as const;
 
