@@ -147,7 +147,7 @@
 
 - [x] T033 Run `npm run build` — fix any TypeScript/build errors until clean
 - [x] T034 Deploy Convex production: `npx convex deploy --yes`
-- [ ] T035 Deploy MCP server: `cd infra && npx cdk deploy --profile groot-finanseal --region us-west-2`
+- [x] T035 Deploy MCP server: `cd infra && npx cdk deploy --profile groot-finanseal --region us-west-2`
 - [ ] T036 Verify all 4 reports generate correctly on production URL
 - [ ] T037 Verify chat agent responds to "Show me P&L for this month" correctly
 
