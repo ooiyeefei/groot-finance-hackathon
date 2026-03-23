@@ -6,8 +6,9 @@
  */
 
 import { v } from "convex/values";
-import { mutation, internalQuery, internalMutation } from "../_generated/server";
-import { resolveUserByClerkId } from "../lib/resolvers";
+import { query, mutation, action, internalQuery, internalMutation } from "../_generated/server";
+import { internal } from "../_generated/api";
+import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 
 /**
  * Register a push notification device token.
@@ -105,6 +106,30 @@ export const getByUserId = internalQuery({
 });
 
 /**
+ * 034-leave-enhance: Public query for fetching active push tokens by user ID string.
+ * Callable via Convex HTTP API from the notification route (server-to-server).
+ * Returns only active tokens with platform and deviceToken (no sensitive data).
+ */
+export const getActiveTokensByUserId = query({
+  args: {
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await resolveById(ctx.db, "users", args.userId);
+    if (!user) return [];
+
+    const subscriptions = await ctx.db
+      .query("push_subscriptions")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .collect();
+
+    return subscriptions
+      .filter((s) => s.isActive)
+      .map((s) => ({ platform: s.platform, deviceToken: s.deviceToken, isActive: s.isActive }));
+  },
+});
+
+/**
  * Deactivate a push subscription by device token (internal use).
  * Called when APNs returns 410 Gone (token no longer valid).
  */
@@ -113,7 +138,7 @@ export const getByUserId = internalQuery({
  * Increments failureCount; deactivates token after maxFailures consecutive failures.
  * Called from notification API route when Lambda reports per-token errors.
  */
-export const trackFailure = mutation({
+export const trackFailure = internalMutation({
   args: {
     deviceToken: v.string(),
     maxFailures: v.number(),
@@ -162,5 +187,28 @@ export const deactivateByToken = internalMutation({
         updatedAt: Date.now(),
       });
     }
+  },
+});
+
+/**
+ * 034-leave-enhance: Public action to track push delivery failures.
+ * Callable via Convex HTTP API from the notification route.
+ * Wraps the internalMutation trackFailure for security.
+ */
+export const trackPushFailures = action({
+  args: {
+    failures: v.array(v.object({
+      deviceToken: v.string(),
+      maxFailures: v.number(),
+    })),
+  },
+  handler: async (ctx, args): Promise<{ tracked: number }> => {
+    for (const failure of args.failures) {
+      await ctx.runMutation(internal.functions.pushSubscriptions.trackFailure, {
+        deviceToken: failure.deviceToken,
+        maxFailures: failure.maxFailures,
+      });
+    }
+    return { tracked: args.failures.length };
   },
 });

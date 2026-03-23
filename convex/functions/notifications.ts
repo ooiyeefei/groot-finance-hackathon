@@ -17,7 +17,7 @@
 import { v } from "convex/values";
 import { query, mutation, internalMutation, internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
-import { resolveUserByClerkId } from "../lib/resolvers";
+import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
 import { Id } from "../_generated/dataModel";
 
 // ============================================
@@ -221,6 +221,30 @@ export const getPreferences = query({
       },
       digestFrequency: prefs.digestFrequency ?? DEFAULT_PREFERENCES.digestFrequency,
       digestTime: prefs.digestTime ?? DEFAULT_PREFERENCES.digestTime,
+    };
+  },
+});
+
+/**
+ * 034-leave-enhance: Get notification preferences by user ID string.
+ * For server-to-server calls (no Clerk auth context).
+ * Returns only the approval preference needed for push notification gating (FR-009).
+ */
+export const getPreferencesByUserId = query({
+  args: {
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await resolveById(ctx.db, "users", args.userId);
+    if (!user) return DEFAULT_PREFERENCES;
+
+    const prefs = (user as any).notificationPreferences;
+    if (!prefs) return DEFAULT_PREFERENCES;
+
+    return {
+      inApp: {
+        approval: prefs.inApp?.approval ?? DEFAULT_PREFERENCES.inApp.approval,
+      },
     };
   },
 });

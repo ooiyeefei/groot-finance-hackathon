@@ -57,7 +57,7 @@ async function dispatchPushNotification(params: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      path: 'functions/pushSubscriptions:getByUserId',
+      path: 'functions/pushSubscriptions:getActiveTokensByUserId',
       args: { userId: params.recipientUserId },
       format: 'json',
     }),
@@ -83,7 +83,7 @@ async function dispatchPushNotification(params: {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        path: 'functions/notifications:getPreferences',
+        path: 'functions/notifications:getPreferencesByUserId',
         args: { userId: params.recipientUserId },
         format: 'json',
       }),
@@ -147,20 +147,23 @@ async function dispatchPushNotification(params: {
 
     // FR-011: Track failures per token, deactivate after 3 consecutive failures
     if (resultPayload?.errors?.length > 0) {
-      for (const err of resultPayload.errors) {
-        try {
-          await fetch(`${convexUrl}/api/mutation`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              path: 'functions/pushSubscriptions:trackFailure',
-              args: { deviceToken: err.deviceToken, maxFailures: 3 },
-              format: 'json',
-            }),
-          })
-        } catch (trackErr) {
-          console.warn('[Push] Failed to track token failure:', trackErr)
-        }
+      try {
+        await fetch(`${convexUrl}/api/action`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            path: 'functions/pushSubscriptions:trackPushFailures',
+            args: {
+              failures: resultPayload.errors.map((err: any) => ({
+                deviceToken: err.deviceToken,
+                maxFailures: 3,
+              })),
+            },
+            format: 'json',
+          }),
+        })
+      } catch (trackErr) {
+        console.warn('[Push] Failed to track token failures:', trackErr)
       }
     }
 
