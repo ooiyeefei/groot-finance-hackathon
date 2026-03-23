@@ -204,7 +204,7 @@ export const balanceSummary = action({
     businessId: v.string(),
     year: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ year: number; yearLabel: string; employees: any[] }> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return { year: 0, yearLabel: "", employees: [] };
 
@@ -249,7 +249,7 @@ export const utilization = action({
     businessId: v.string(),
     year: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ year: number; yearLabel: string; teams: any[]; businessOverallRate: number }> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return { year: 0, yearLabel: "", teams: [], businessOverallRate: 0 };
 
@@ -327,7 +327,7 @@ export const absenceTrends = action({
     businessId: v.string(),
     year: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ year: number; yearLabel: string; months: any[]; peakMonth: string; totalAbsenceDays: number }> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return { year: 0, yearLabel: "", months: [], peakMonth: "N/A", totalAbsenceDays: 0 };
 
