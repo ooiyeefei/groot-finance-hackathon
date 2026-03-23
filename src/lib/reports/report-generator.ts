@@ -15,6 +15,8 @@ import type { ApAgingReportData } from './templates/ap-aging-template'
 import type { ExpenseSummaryReportData } from './templates/expense-summary-template'
 import type { TrialBalanceReportData } from './templates/trial-balance-template'
 import type { BalanceSheetReportData } from './templates/balance-sheet-template'
+import type { DebtorStatementData } from './templates/debtor-statement-template'
+import type { VendorStatementData } from './templates/vendor-statement-template'
 
 export type ReportType = 'pnl' | 'cash_flow' | 'ar_aging' | 'ap_aging' | 'expense_summary' | 'trial_balance' | 'balance_sheet'
 
@@ -236,4 +238,24 @@ function buildBalanceSheetHtmlSummary(data: BalanceSheetReportData): string {
 <tr style="border-top:2px solid #000;font-weight:bold;font-size:16px;"><td>Total L + E</td><td style="text-align:right">${fmt(data.totalLiabilitiesAndEquity, data.currency)}</td></tr>
 </table>
 <p style="font-size:12px;color:${data.balanced ? '#22c55e' : '#ef4444'};">${data.balanced ? '✓ A = L + E' : '✗ Equation does not balance'}</p>`
+}
+
+// ─── Individual Statement Generation ─────────────────────────
+
+/**
+ * Generate an individual debtor statement PDF
+ */
+export async function generateDebtorStatement(data: DebtorStatementData): Promise<Buffer> {
+  const { renderToBuffer } = await import('@react-pdf/renderer')
+  const { DebtorStatementDocument } = await import('./templates/debtor-statement-template')
+  return await renderToBuffer(DebtorStatementDocument({ data }) as any) as unknown as Buffer
+}
+
+/**
+ * Generate an individual vendor statement PDF
+ */
+export async function generateVendorStatement(data: VendorStatementData): Promise<Buffer> {
+  const { renderToBuffer } = await import('@react-pdf/renderer')
+  const { VendorStatementDocument } = await import('./templates/vendor-statement-template')
+  return await renderToBuffer(VendorStatementDocument({ data }) as any) as unknown as Buffer
 }

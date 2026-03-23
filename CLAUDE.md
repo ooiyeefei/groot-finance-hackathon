@@ -537,3 +537,5 @@ const arBalance = arLines.reduce((sum, line) =>
 - **Other**: Stripe SDK 20.1.0, papaparse, xlsx/SheetJS, Capacitor (iOS), Qdrant Cloud (RAG), Mem0
 - TypeScript 5.9.3 (Next.js 15.5.7 + Convex 1.31.3) + Convex (DB + real-time), @react-pdf/renderer (PDF export), Radix UI + Tailwind CSS (UI), lucide-react (icons) (033-fin-statements-gen)
 - Convex (journal_entries, journal_entry_lines, chart_of_accounts — all existing tables) (033-fin-statements-gen)
+- TypeScript 5.9.3 (Next.js 15.5.7, Node.js 20 Lambda, Convex 1.31.3) + @react-pdf/renderer (PDF), @aws-sdk/client-ses (email), @aws-sdk/client-s3 (storage), Convex (DB + real-time), Radix UI + Tailwind CSS (UI) (035-aging-payable-receivable-report)
+- Convex (metadata), S3 `finanseal-bucket` (PDFs at `reports/{businessId}/`), existing Action Center table (035-aging-payable-receivable-report)

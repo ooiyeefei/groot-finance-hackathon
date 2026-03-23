@@ -121,6 +121,7 @@ import type * as functions_reconciliationMatches from "../functions/reconciliati
 import type * as functions_referral from "../functions/referral.js";
 import type * as functions_reportRuns from "../functions/reportRuns.js";
 import type * as functions_reportSchedules from "../functions/reportSchedules.js";
+import type * as functions_reports from "../functions/reports.js";
 import type * as functions_retentionJobs from "../functions/retentionJobs.js";
 import type * as functions_salesInvoiceUsage from "../functions/salesInvoiceUsage.js";
 import type * as functions_salesInvoices from "../functions/salesInvoices.js";
@@ -286,6 +287,7 @@ declare const fullApi: ApiFromModules<{
   "functions/referral": typeof functions_referral;
   "functions/reportRuns": typeof functions_reportRuns;
   "functions/reportSchedules": typeof functions_reportSchedules;
+  "functions/reports": typeof functions_reports;
   "functions/retentionJobs": typeof functions_retentionJobs;
   "functions/salesInvoiceUsage": typeof functions_salesInvoiceUsage;
   "functions/salesInvoices": typeof functions_salesInvoices;

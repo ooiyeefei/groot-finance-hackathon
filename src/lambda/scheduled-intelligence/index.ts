@@ -24,6 +24,7 @@ import { runWeeklyEmailDigest } from './modules/weekly-email-digest';
 import { runBenchmarkingAggregation } from './modules/benchmarking-aggregation';
 import { runScheduledReports } from './modules/scheduled-reports';
 import { runDspyOptimization } from './modules/dspy-optimization';
+import { runMonthlyAgingReports } from './modules/monthly-aging-reports';
 
 export async function handler(event: EventBridgeEvent): Promise<JobResult> {
   const startTime = Date.now();
@@ -70,6 +71,9 @@ export async function handler(event: EventBridgeEvent): Promise<JobResult> {
         break;
       case 'benchmarking-aggregation':
         result = await runBenchmarkingAggregation();
+        break;
+      case 'monthly-aging-reports':
+        result = await runMonthlyAgingReports();
         break;
 
       // DSPy optimization modules (all use same handler)

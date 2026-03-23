@@ -218,6 +218,14 @@ export class ScheduledIntelligenceStack extends cdk.Stack {
         schedule: 'cron(0 4 * * ? *)',
         description: 'Daily check for scheduled reports (daily/weekly/monthly)',
       },
+
+      // Monthly aging reports (1st of month, 4am UTC = 12pm MYT)
+      // 035-aging-payable-receivable-report
+      {
+        module: 'monthly-aging-reports',
+        schedule: 'cron(0 4 1 * ? *)',
+        description: 'Monthly AP/AR aging report generation with debtor statements',
+      },
     ];
 
     // Create EventBridge rules for each job

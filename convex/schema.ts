@@ -289,6 +289,14 @@ export default defineSchema({
         threshold: v.number(),
       }))),
     })),
+
+    // 035-aging-payable-receivable-report: Report generation settings
+    reportSettings: v.optional(v.object({
+      autoGenerateMonthly: v.optional(v.boolean()),  // default: true
+      autoSendGlobal: v.optional(v.boolean()),       // default: false
+      autoSendDebtors: v.optional(v.array(v.string())), // customerIds with auto-send
+      notifyEmail: v.optional(v.boolean()),           // default: true
+    })),
   })
     .index("by_legacyId", ["legacyId"])
     .index("by_stripeCustomerId", ["stripeCustomerId"])
@@ -3851,5 +3859,59 @@ export default defineSchema({
     .index("by_catalogItem", ["catalogItemId", "businessId"])
     .index("by_vendor_item", ["businessId", "vendorId", "vendorItemIdentifier"])
     .index("by_business_source", ["businessId", "matchSource"]),
+
+  // 035-aging-payable-receivable-report: Generated report metadata
+  generated_reports: defineTable({
+    businessId: v.id("businesses"),
+    reportType: v.union(v.literal("ap_aging"), v.literal("ar_aging")),
+    reportScope: v.union(
+      v.literal("consolidated"),
+      v.literal("debtor_statement"),
+      v.literal("vendor_statement")
+    ),
+    asOfDate: v.string(),         // YYYY-MM-DD
+    periodMonth: v.string(),      // YYYY-MM
+    generationMethod: v.union(v.literal("manual"), v.literal("auto_monthly")),
+    generatedBy: v.string(),      // userId or "system"
+    s3Key: v.string(),
+    s3Bucket: v.string(),
+    fileSizeBytes: v.optional(v.number()),
+    entityId: v.optional(v.string()),   // customerId or vendorId for individual statements
+    entityName: v.optional(v.string()), // name snapshot at generation time
+    totalOutstanding: v.number(),
+    currency: v.string(),
+    hasWarnings: v.boolean(),
+    aiInsightsSummary: v.optional(v.string()),
+    expiresAt: v.number(),        // timestamp for 12-month auto-deletion
+  })
+    .index("by_business_period", ["businessId", "periodMonth"])
+    .index("by_business_type", ["businessId", "reportType"])
+    .index("by_expiry", ["expiresAt"]),
+
+  // 035-aging-payable-receivable-report: Debtor statement send tracking
+  debtor_statement_sends: defineTable({
+    businessId: v.id("businesses"),
+    reportId: v.id("generated_reports"),
+    customerId: v.string(),       // customer reference
+    customerName: v.string(),
+    customerEmail: v.optional(v.string()),
+    totalOutstanding: v.number(),
+    invoiceCount: v.number(),
+    sendStatus: v.union(
+      v.literal("pending"),
+      v.literal("sent"),
+      v.literal("auto_sent"),
+      v.literal("failed"),
+      v.literal("no_email")
+    ),
+    sentAt: v.optional(v.number()),
+    emailDeliveryStatus: v.optional(v.string()),
+    periodMonth: v.string(),      // YYYY-MM
+    hasDisclaimer: v.boolean(),
+    autoSendEnabled: v.boolean(),
+  })
+    .index("by_business_period", ["businessId", "periodMonth"])
+    .index("by_business_status", ["businessId", "sendStatus"])
+    .index("by_report", ["reportId"]),
 
 });

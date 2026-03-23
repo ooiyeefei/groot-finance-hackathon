@@ -19,6 +19,7 @@ import {
   CalendarDays,
   FileSpreadsheet,
   BarChart3,
+  FileBarChart,
   Inbox,
   Package,
 } from 'lucide-react'
@@ -62,6 +63,7 @@ export function getNavigationGroups(userRole: UserRole): NavGroup[] {
           { icon: Inbox, label: 'documentsInbox', path: '/documents-inbox' },
           { icon: Package, label: 'inventory', path: '/inventory' },
           { icon: BarChart3, label: 'financialStatements', path: '/financial-statements' },
+          { icon: FileBarChart, label: 'reports', path: '/reports' },
         ]
       : [],
   }
