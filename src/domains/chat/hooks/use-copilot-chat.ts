@@ -345,9 +345,14 @@ export function useCopilotBridge(
 
         if (timeoutId) clearTimeout(timeoutId)
 
-        // Persist the final assistant message to Convex (single write)
-        // Skip if the server already persisted (prevents duplicate messages)
-        if (accumulatedText && !serverPersisted) {
+        // Always persist the assistant message from the client.
+        // The server also persists (serverPersisted=true), but the client-side
+        // Convex mutation triggers the reactive useQuery subscription immediately,
+        // preventing the message-disappearance race condition where the server
+        // writes via a different auth context and the client subscription misses it.
+        // Duplicate detection: if server already wrote, Convex will have two copies
+        // but that's better than zero copies (disappearing message).
+        if (accumulatedText) {
           const metadata: Record<string, unknown> = {}
           if (accumulatedCitations.length > 0) {
             metadata.citations = accumulatedCitations

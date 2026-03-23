@@ -232,30 +232,11 @@ export async function POST(req: NextRequest) {
           code: 'STREAM_ERROR',
         })
       } finally {
-        // Server-side persistence: save the assistant message to Convex
-        // This guarantees the message is saved even if the client disconnects.
-        let serverPersisted = false
-        if (accumulatedText && conversationId && convexClient) {
-          try {
-            const metadata: Record<string, unknown> = {}
-            if (accumulatedCitations.length > 0) metadata.citations = accumulatedCitations
-            if (accumulatedActions.length > 0) metadata.actions = accumulatedActions
-
-            await convexClient.mutation(api.functions.messages.create, {
-              conversationId,
-              role: 'assistant',
-              content: accumulatedText,
-              metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-            })
-            serverPersisted = true
-            console.log(`[Chat API] Server persisted assistant message for conversation ${conversationId}`)
-          } catch (persistError) {
-            console.error('[Chat API] Server-side persistence failed:', persistError)
-          }
-        }
-
-        // Signal to the client whether the server already persisted
-        writeEvent('done', { serverPersisted })
+        // Client-side persistence is the primary path — the client's createMessage
+        // mutation triggers the reactive useQuery subscription immediately, ensuring
+        // the message appears in the UI without relying on cross-context subscription
+        // delivery. Server-side persistence disabled to prevent duplicate messages.
+        writeEvent('done', { serverPersisted: false })
         controller.close()
       }
     },
