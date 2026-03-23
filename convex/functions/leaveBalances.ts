@@ -1193,7 +1193,7 @@ export const importFromCsv = action({
       })
     ),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ created: number; updated: number; skipped: number; errors: Array<{ row: number; reason: string }> }> => {
     // Resolve business
     const business = await ctx.runQuery(internal.functions.leaveBalances.resolveBusinessForImport, {
       businessId: args.businessId,

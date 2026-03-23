@@ -677,7 +677,7 @@ export const checkOverlapsForApproval = action({
     businessId: v.string(),
     leaveRequestId: v.id("leave_requests"),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ hasOverlaps: boolean; overlappingMembers: any[]; totalOverlapDays: number }> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return { hasOverlaps: false, overlappingMembers: [], totalOverlapDays: 0 };
 
