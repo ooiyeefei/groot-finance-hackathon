@@ -2,6 +2,8 @@
 
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { useQuery } from 'convex/react'
+import { api } from '@/convex/_generated/api'
 import Image from 'next/image'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -41,7 +43,6 @@ import {
   calculateROI,
   type CalculationInput,
 } from '@/lib/roi-calculator/calculation'
-import { getPartner } from '@/lib/roi-calculator/partners'
 import {
   SUPPORTED_CURRENCIES,
   INPUT_LIMITS,
@@ -78,7 +79,10 @@ export function ROICalculatorClient() {
   const [copied, setCopied] = useState(false)
 
   const partnerCode = searchParams.get('partner')
-  const partner = useMemo(() => getPartner(partnerCode), [partnerCode])
+  const partnerData = useQuery(
+    api.functions.referral.getPartnerBySlug,
+    partnerCode ? { slug: partnerCode } : 'skip'
+  )
 
   const input: CalculationInput = useMemo(
     () => ({
@@ -161,11 +165,11 @@ export function ROICalculatorClient() {
       </nav>
 
       {/* Partner banner */}
-      {partner && (
+      {partnerData && (
         <div className="bg-[#4285F4]/5 border-b border-[#4285F4]/10">
-          <div className="max-w-6xl mx-auto px-6 py-1.5">
-            <p className="text-[0.8rem] text-[#4285F4] text-center">
-              Provided by <span className="font-semibold">{partner.name}</span>
+          <div className="max-w-6xl mx-auto px-6 py-2">
+            <p className="text-[0.95rem] text-[#4285F4] text-center font-medium">
+              Provided by <span className="font-bold">{partnerData.name}</span>
             </p>
           </div>
         </div>
@@ -320,12 +324,12 @@ export function ROICalculatorClient() {
                   >
                     Get Started <ArrowRight className="ml-1.5 h-4 w-4" />
                   </Button>
-                  {partner && (
+                  {partnerData && (
                     <Button
                       className="flex-1 bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#111] h-10 text-[0.9rem] rounded-lg"
-                      onClick={() => window.open(partner.contactUrl, '_blank')}
+                      onClick={() => window.open(`mailto:hello@hellogroot.com?subject=ROI Calculator inquiry via ${partnerData.name}`, '_blank')}
                     >
-                      Talk to {partner.name}
+                      Talk to {partnerData.name}
                     </Button>
                   )}
                   <Button

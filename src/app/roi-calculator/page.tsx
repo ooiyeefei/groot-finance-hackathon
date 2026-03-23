@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
-import { ROICalculatorClient } from './roi-calculator-client'
+import { ROICalculatorWrapper } from './roi-calculator-wrapper'
 
 export const metadata: Metadata = {
   title: 'ROI Calculator | Groot Finance',
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 export default function ROICalculatorPage() {
   return (
     <Suspense>
-      <ROICalculatorClient />
+      <ROICalculatorWrapper />
     </Suspense>
   )
 }

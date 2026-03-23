@@ -644,6 +644,42 @@ export const backfillAllCodes = internalMutation({
 });
 
 /**
+ * Public query to get partner info by business slug for the ROI calculator.
+ * Returns business name if slug matches an active partner/reseller business.
+ * No auth required — used on the public /roi-calculator page.
+ */
+export const getPartnerBySlug = query({
+  args: { slug: v.string() },
+  handler: async (ctx, args) => {
+    const business = await ctx.db
+      .query("businesses")
+      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
+      .first();
+
+    if (!business) return null;
+
+    // Check if this business has an active partner referral code
+    const referralCode = await ctx.db
+      .query("referral_codes")
+      .withIndex("by_businessId", (q) => q.eq("businessId", business._id))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("isActive"), true),
+          q.or(
+            q.eq(q.field("type"), "partner_referrer"),
+            q.eq(q.field("type"), "partner_reseller")
+          )
+        )
+      )
+      .first();
+
+    if (!referralCode) return null;
+
+    return { name: business.name };
+  },
+});
+
+/**
  * Internal query to get referral code by code string.
  */
 export const getByCode = internalQuery({
