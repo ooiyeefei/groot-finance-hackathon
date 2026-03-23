@@ -566,6 +566,8 @@ const arBalance = arLines.reduce((sum, line) =>
 - Convex (2 new tables: `selling_price_history`, `catalog_vendor_item_mappings`; 1 modified: `businesses`) (032-price-history-tracking)
 - TypeScript 5.9.3 (Next.js 15.5.7, Node.js 20 Lambda) + LangGraph 0.4.5 (chat agent), Convex 1.31.3 (DB), AWS CDK v2 (infra), JSON-RPC 2.0 (MCP protocol) (032-mcp-first)
 - Convex (data layer), S3 (artifacts), CloudWatch (logs/metrics) (032-mcp-first)
+- TypeScript 5.9.3, Next.js 15.5.7, React 19.1.2 + Existing UI components (card, input, select, button, sheet), `formatCurrency` utility, Tailwind CSS (033-roi-calculator)
+- N/A — no persistence. Inputs encoded in URL query params. Partner data as static config. (033-roi-calculator)
 
 
 ## Recent Changes

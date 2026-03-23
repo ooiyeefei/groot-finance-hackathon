@@ -47,6 +47,8 @@ const isPublicRoute = createRouteMatcher([
   // 032-self-service-debtors-info-update: Public debtor self-service form
   '/:locale/debtor-update(.*)',
   '/debtor-update(.*)',
+  // 033-roi-calculator: Public ROI calculator for partner prospects
+  '/roi-calculator(.*)',
 ])
 
 // Check if request is an API route
