@@ -1,9 +1,8 @@
 /**
  * ROI Calculator — Configurable Assumptions
  *
- * These values drive the ROI calculation. Update them here when
- * Groot Finance's pricing or productivity benchmarks change.
- * No code changes needed beyond this file.
+ * Time-savings assumptions and input constraints only.
+ * Pricing data comes from Stripe catalog via server-side props.
  */
 
 /** Minutes saved per document type (manual process vs Groot automation) */
@@ -13,16 +12,6 @@ export const MINUTES_PER_EXPENSE_RECEIPT = 4
 
 /** Standard working hours per month (22 days × 8 hours) */
 export const WORKING_HOURS_PER_MONTH = 176
-
-/** Groot Finance monthly subscription price (USD equivalent for payback calc) */
-export const GROOT_MONTHLY_PRICE_USD = 49
-
-/** Currency-specific Groot pricing for payback calculation */
-export const GROOT_MONTHLY_PRICE: Record<string, number> = {
-  MYR: 199,
-  SGD: 59,
-  USD: 49,
-}
 
 /** Supported currencies with their default display order */
 export const SUPPORTED_CURRENCIES = ['MYR', 'SGD', 'USD'] as const
@@ -37,3 +26,27 @@ export const INPUT_LIMITS = {
   minSalary: 0,
   maxSalary: 100_000,
 } as const
+
+/**
+ * Plan data passed from server-side Stripe catalog fetch.
+ * Contains only what the ROI calculator needs.
+ */
+export interface ROIPlanData {
+  name: string
+  teamLimit: number // -1 for unlimited
+  ocrLimit: number
+  aiMessageLimit: number
+  invoiceLimit: number
+  einvoiceLimit: number
+  currencyOptions: Record<string, number> // lowercase currency → display amount
+  price: number // default currency price
+  currency: string // default currency code
+  features: string[] // full feature list from Stripe metadata
+  highlightFeatures: string[] // curated highlights for display
+}
+
+export type ROIPlanMap = {
+  starter: ROIPlanData
+  pro: ROIPlanData
+  enterprise: ROIPlanData
+}

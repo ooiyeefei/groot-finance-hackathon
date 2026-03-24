@@ -3,8 +3,9 @@ import {
   MINUTES_PER_SALES_INVOICE,
   MINUTES_PER_EXPENSE_RECEIPT,
   WORKING_HOURS_PER_MONTH,
-  GROOT_MONTHLY_PRICE,
   type SupportedCurrency,
+  type ROIPlanData,
+  type ROIPlanMap,
 } from './constants'
 
 export interface CalculationInput {
@@ -17,27 +18,58 @@ export interface CalculationInput {
 }
 
 export interface CalculationResult {
-  /** Hours saved per month by automating with Groot */
   hoursSavedPerMonth: number
-  /** Monthly cost savings in selected currency */
   monthlyCostSavings: number
-  /** Annual cost savings in selected currency */
   annualCostSavings: number
-  /** Months until Groot subscription pays for itself */
   paybackPeriodMonths: number
-  /** % of finance staff time currently spent on manual tasks */
   timeSpentPercent: number
-  /** Derived hourly rate from monthly salary */
   hourlyRate: number
-  /** Whether the inputs produce meaningful results */
   hasResults: boolean
+  /** Groot monthly price for the selected plan tier */
+  grootPrice: number
+  /** Name of the selected plan tier */
+  planName: string
+  /** Quotas from the selected plan */
+  planQuotas: {
+    ocrLimit: number
+    aiMessageLimit: number
+    invoiceLimit: number
+    einvoiceLimit: number
+    teamLimit: number
+  }
+  /** Full feature list from the selected plan */
+  planFeatures: string[]
+  /** Curated highlight features for compact display */
+  planHighlightFeatures: string[]
+}
+
+/**
+ * Pick the right plan based on team member count.
+ */
+function getPlanForTeamSize(teamSize: number, plans: ROIPlanMap): ROIPlanData & { key: string } {
+  if (teamSize <= plans.starter.teamLimit) {
+    return { ...plans.starter, key: 'starter' }
+  }
+  if (plans.pro.teamLimit === -1 || teamSize <= plans.pro.teamLimit) {
+    return { ...plans.pro, key: 'pro' }
+  }
+  return { ...plans.enterprise, key: 'enterprise' }
+}
+
+/**
+ * Resolve price for a currency from plan's currencyOptions.
+ */
+function resolvePlanPrice(plan: ROIPlanData, currency: string): number {
+  const lower = currency.toLowerCase()
+  return plan.currencyOptions[lower] ?? plan.price
 }
 
 /**
  * Calculate ROI metrics from prospect inputs.
  * Pure function — no side effects, no network calls.
+ * Plans data comes from Stripe catalog (fetched server-side).
  */
-export function calculateROI(input: CalculationInput): CalculationResult {
+export function calculateROI(input: CalculationInput, plans: ROIPlanMap): CalculationResult {
   const {
     purchaseInvoices,
     salesInvoices,
@@ -57,7 +89,8 @@ export function calculateROI(input: CalculationInput): CalculationResult {
   const monthlyCostSavings = hoursSavedPerMonth * hourlyRate
   const annualCostSavings = monthlyCostSavings * 12
 
-  const grootPrice = GROOT_MONTHLY_PRICE[currency] ?? GROOT_MONTHLY_PRICE.USD
+  const plan = getPlanForTeamSize(financeStaff, plans)
+  const grootPrice = resolvePlanPrice(plan, currency)
   const paybackPeriodMonths =
     monthlyCostSavings > 0
       ? Math.round((grootPrice / monthlyCostSavings) * 10) / 10
@@ -81,5 +114,16 @@ export function calculateROI(input: CalculationInput): CalculationResult {
     timeSpentPercent,
     hourlyRate: Math.round(hourlyRate * 100) / 100,
     hasResults,
+    grootPrice,
+    planName: plan.name,
+    planQuotas: {
+      ocrLimit: plan.ocrLimit,
+      aiMessageLimit: plan.aiMessageLimit,
+      invoiceLimit: plan.invoiceLimit,
+      einvoiceLimit: plan.einvoiceLimit,
+      teamLimit: plan.teamLimit,
+    },
+    planFeatures: plan.features,
+    planHighlightFeatures: plan.highlightFeatures,
   }
 }

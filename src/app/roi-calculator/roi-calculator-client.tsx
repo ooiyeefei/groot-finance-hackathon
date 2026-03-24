@@ -42,12 +42,13 @@ import { formatCurrency, formatNumber } from '@/lib/utils/format-number'
 import {
   calculateROI,
   type CalculationInput,
+  type CalculationResult,
 } from '@/lib/roi-calculator/calculation'
 import {
   SUPPORTED_CURRENCIES,
   INPUT_LIMITS,
-  GROOT_MONTHLY_PRICE,
   type SupportedCurrency,
+  type ROIPlanMap,
 } from '@/lib/roi-calculator/constants'
 
 // Finance icon SVG (same as landing page)
@@ -65,7 +66,7 @@ function clampFloat(value: string, min: number, max: number): number {
   return Math.max(min, Math.min(max, n))
 }
 
-export function ROICalculatorClient() {
+export function ROICalculatorClient({ planData }: { planData: ROIPlanMap }) {
   const searchParams = useSearchParams()
 
   const [purchaseInvoices, setPurchaseInvoices] = useState(searchParams.get('pi') || '')
@@ -96,7 +97,7 @@ export function ROICalculatorClient() {
     [purchaseInvoices, salesInvoices, expenseReceipts, financeStaff, monthlySalary, currency]
   )
 
-  const result = useMemo(() => calculateROI(input), [input])
+  const result = useMemo(() => calculateROI(input, planData), [input, planData])
 
   const generateShareLink = useCallback(() => {
     const params = new URLSearchParams()
@@ -117,7 +118,8 @@ export function ROICalculatorClient() {
 
   useEffect(() => { setCopied(false) }, [purchaseInvoices, salesInvoices, expenseReceipts, financeStaff, monthlySalary, currency])
 
-  const grootPrice = GROOT_MONTHLY_PRICE[currency] ?? GROOT_MONTHLY_PRICE.USD
+  const grootPrice = result.grootPrice
+  const startsAtPrice = planData.starter.currencyOptions[currency.toLowerCase()] ?? planData.starter.price
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
@@ -175,7 +177,7 @@ export function ROICalculatorClient() {
         </div>
       )}
 
-      <main className="max-w-6xl mx-auto px-6 py-5 flex-1">
+      <main className="max-w-7xl mx-auto px-6 py-5 flex-1">
         {/* Hero — brand pitch */}
         <div className="text-center mb-5 roi-fade-up">
           <h2 className="text-[1.65rem] sm:text-[1.9rem] font-semibold text-[#111] tracking-tight mb-1">
@@ -186,9 +188,9 @@ export function ROICalculatorClient() {
           </p>
         </div>
 
-        {/* 40/60 split */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 lg:gap-7">
-          {/* Inputs */}
+        {/* 1:2:1 layout (inputs | savings | plan) */}
+        <div className="grid grid-cols-1 lg:grid-cols-8 gap-5 lg:gap-5">
+          {/* Inputs — col 1 */}
           <Card className="lg:col-span-2 roi-fade-up roi-stagger-1 border-[#E5E7EB]">
             <CardContent className="pt-5 pb-5 space-y-3">
               <div className="flex items-center gap-2 mb-0.5">
@@ -260,8 +262,8 @@ export function ROICalculatorClient() {
             </CardContent>
           </Card>
 
-          {/* Results */}
-          <div className="lg:col-span-3 space-y-4">
+          {/* Results — col 2 (wider) */}
+          <div className="lg:col-span-4 space-y-4">
             {result.hasResults ? (
               <>
                 {/* Metric cards */}
@@ -307,7 +309,9 @@ export function ROICalculatorClient() {
                     </div>
                   </div>
                   <div className="rounded-lg bg-[#4285F4]/[0.04] border border-[#4285F4]/10 px-4 py-3">
-                    <p className="font-semibold text-[#4285F4] text-[0.68rem] uppercase tracking-wider mb-2">After</p>
+                    <p className="font-semibold text-[#4285F4] text-[0.68rem] uppercase tracking-wider mb-2">
+                      After <span className="normal-case font-normal text-[#9CA3AF]">({result.planName} plan)</span>
+                    </p>
                     <div className="grid grid-cols-3 gap-2">
                       <ComparisonRow label="Hours / mo" value="Automated" variant="after" />
                       <ComparisonRow label="Monthly cost" value={formatCurrency(grootPrice, currency, 0)} variant="after" />
@@ -354,12 +358,21 @@ export function ROICalculatorClient() {
               </Card>
             )}
           </div>
+
+          {/* Recommended Plan — col 3 */}
+          <div className="lg:col-span-2 roi-fade-up roi-stagger-3">
+            <RecommendedPlanCard
+              result={result}
+              currency={currency}
+              grootPrice={grootPrice}
+            />
+          </div>
         </div>
 
         {/* Footer */}
         <footer className="mt-4 pt-3 border-t border-[#E5E7EB] text-center">
           <p className="text-[0.72rem] text-[#9CA3AF]">
-            Estimates based on average time savings from Groot Finance customers. Actual results may vary. Subscription starts at {formatCurrency(grootPrice, currency, 0)}/month.
+            Estimates based on average time savings from Groot Finance customers. Actual results may vary. Subscription starts at {formatCurrency(startsAtPrice, currency, 0)}/month.
           </p>
         </footer>
       </main>
@@ -390,6 +403,106 @@ function ComparisonRow({ label, value, variant }: { label: string; value: string
       <p className={`font-semibold text-[0.85rem] leading-snug ${variant === 'before' ? 'text-[#6B7280]' : 'text-[#4285F4]'}`}>
         {value}
       </p>
+    </div>
+  )
+}
+
+function formatLimit(limit: number): string {
+  if (limit === -1) return 'Unlimited'
+  return `${limit}`
+}
+
+function RecommendedPlanCard({
+  result,
+  currency,
+  grootPrice,
+}: {
+  result: CalculationResult
+  currency: SupportedCurrency
+  grootPrice: number
+}) {
+  if (!result.hasResults) {
+    return (
+      <Card className="border-dashed border-[#E5E7EB] h-full">
+        <CardContent className="flex flex-col items-center justify-center h-full py-16 text-center">
+          <div className="h-12 w-12 rounded-2xl bg-[#4285F4]/5 flex items-center justify-center mb-3">
+            <Sparkles className="h-6 w-6 text-[#4285F4]/30" />
+          </div>
+          <h3 className="text-[0.95rem] font-medium text-[#111] mb-1">Your recommended plan</h3>
+          <p className="text-[0.8rem] text-[#6B7280]">
+            Fill in your metrics to see which plan fits best.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const q = result.planQuotas
+  const isEnterprise = result.planName === 'Enterprise'
+
+  return (
+    <Card className="border-[#4285F4]/30 bg-gradient-to-b from-[#4285F4]/[0.03] to-white roi-scale-in h-full flex flex-col">
+      <CardContent className="pt-4 pb-4 flex flex-col flex-1">
+        {/* Plan header */}
+        <div className="text-center mb-3">
+          <span className="inline-block text-[0.6rem] font-semibold uppercase tracking-widest text-[#4285F4] bg-[#4285F4]/10 px-2.5 py-0.5 rounded-full mb-2">
+            Recommended
+          </span>
+          <h3 className="text-[1.1rem] font-bold text-[#111]">
+            Groot Finance {result.planName}
+          </h3>
+          {isEnterprise ? (
+            <p className="text-[0.85rem] text-[#6B7280] mt-0.5">Custom pricing</p>
+          ) : (
+            <div className="mt-1">
+              <span className="text-[1.5rem] font-bold text-[#111]">
+                {formatCurrency(grootPrice, currency, 0)}
+              </span>
+              <span className="text-[0.8rem] text-[#6B7280]">/mo</span>
+            </div>
+          )}
+        </div>
+
+        {/* Quotas */}
+        <div className="space-y-1.5 mb-3">
+          <p className="text-[0.68rem] font-semibold text-[#9CA3AF] uppercase tracking-wider">Plan quotas</p>
+          <QuotaRow label="Team members" value={formatLimit(q.teamLimit)} />
+          <QuotaRow label="OCR scans/mo" value={formatLimit(q.ocrLimit)} />
+          <QuotaRow label="AI messages/mo" value={formatLimit(q.aiMessageLimit)} />
+          <QuotaRow label="Sales invoices/mo" value={formatLimit(q.invoiceLimit)} />
+          <QuotaRow label="e-Invoices/mo" value={formatLimit(q.einvoiceLimit)} />
+        </div>
+
+        {/* Features */}
+        <div className="border-t border-[#E5E7EB] pt-3 flex-1">
+          <p className="text-[0.68rem] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-1.5">Includes</p>
+          <ul className="space-y-1">
+            {result.planHighlightFeatures.map((feature, i) => (
+              <li key={i} className="flex items-start gap-1.5 text-[0.75rem] text-[#374151]">
+                <Check className="h-3.5 w-3.5 text-[#4285F4] shrink-0 mt-0.5" />
+                <span>{feature}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* CTA */}
+        <Button
+          className="w-full mt-3 bg-[#4285F4] hover:bg-[#3B78E7] text-white h-9 text-[0.8rem] rounded-lg"
+          onClick={() => window.open('https://finance.hellogroot.com/sign-up', '_blank')}
+        >
+          {isEnterprise ? 'Contact Us' : 'Start Free Trial'}
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
+function QuotaRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between text-[0.78rem]">
+      <span className="text-[#6B7280]">{label}</span>
+      <span className="font-semibold text-[#111]">{value}</span>
     </div>
   )
 }
