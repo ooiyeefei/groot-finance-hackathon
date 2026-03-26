@@ -2,10 +2,13 @@
  * Action Center DSPy Optimization — Top-level orchestrator (033-ai-action-center-dspy)
  *
  * Loops through all businesses and calls prepareAndRun for each.
- * In a separate file from prepareAndRun to avoid circular type inference.
+ * Uses makeFunctionReference to avoid circular type inference.
  */
 import { internalAction } from "../_generated/server";
-import { internal } from "../_generated/api";
+import { makeFunctionReference } from "convex/server";
+
+const getActiveBusinessesRef = makeFunctionReference<"query">("functions/actionCenterJobs:getActiveBusinesses");
+const prepareAndRunRef = makeFunctionReference<"action">("functions/actionCenterOptimizationRunner:prepareAndRun");
 
 /**
  * Top-level orchestrator: run optimization for ALL active businesses.
@@ -16,7 +19,7 @@ export const runForAllBusinesses = internalAction({
   handler: async (ctx) => {
     console.log("[ActionCenterOptimization] Starting weekly optimization for all businesses");
 
-    const businesses = await ctx.runQuery(internal.functions.actionCenterJobs.getActiveBusinesses);
+    const businesses: any = await ctx.runQuery(getActiveBusinessesRef, {});
 
     let totalProcessed = 0;
     let totalPromoted = 0;
@@ -25,7 +28,7 @@ export const runForAllBusinesses = internalAction({
 
     for (const business of businesses) {
       try {
-        const result = await ctx.runAction(internal.functions.actionCenterOptimizationRunner.prepareAndRun, {
+        const result: any = await ctx.runAction(prepareAndRunRef, {
           businessId: business._id,
         });
 

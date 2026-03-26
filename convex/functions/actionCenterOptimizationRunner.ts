@@ -2,16 +2,27 @@
  * Action Center DSPy Optimization — Per-business runner (033-ai-action-center-dspy)
  *
  * Runs the full optimization pipeline for a single business.
- * In a separate file from the orchestrator to avoid circular type inference.
+ * Uses makeFunctionReference instead of importing `internal` to avoid
+ * circular type inference (importing `internal` forces TS to resolve ALL
+ * module types including this file, creating a cycle).
  */
 import { v } from "convex/values";
 import { internalAction } from "../_generated/server";
-import { api, internal } from "../_generated/api";
+import { makeFunctionReference } from "convex/server";
 
 const MIN_CORRECTIONS = 20;
 const MIN_UNIQUE_CONTEXTS = 10;
 const MODULE_NAME = "action-center-relevance";
 const PLATFORM_NAME = "action_center";
+
+// Function references that avoid importing `internal` (breaks circular type inference)
+const checkReadinessRef = makeFunctionReference<"query">("functions/actionCenterOptimization:checkReadiness");
+const getTrainingDataRef = makeFunctionReference<"query">("functions/actionCenterOptimization:getTrainingData");
+const getActiveModelRef = makeFunctionReference<"query">("functions/actionCenterOptimization:getActiveModel");
+const logOptimizationRunRef = makeFunctionReference<"mutation">("functions/actionCenterOptimization:logOptimizationRun");
+const createModelVersionRef = makeFunctionReference<"mutation">("functions/actionCenterOptimization:createModelVersion");
+const supersedePreviousVersionRef = makeFunctionReference<"mutation">("functions/actionCenterOptimization:supersedePreviousVersion");
+const markCorrectionsConsumedRef = makeFunctionReference<"mutation">("functions/actionCenterOptimization:markCorrectionsConsumed");
 
 /**
  * Run the full optimization pipeline for a single business.
@@ -24,14 +35,14 @@ export const prepareAndRun = internalAction({
     const startTime = Date.now();
 
     // Step 1: Check readiness
-    const readiness = await ctx.runQuery(internal.functions.actionCenterOptimization.checkReadiness, {
+    const readiness: any = await ctx.runQuery(checkReadinessRef, {
       businessId: args.businessId,
     });
 
     if (!readiness.readyToOptimize) {
       console.log(`[ActionCenterOptimization] Business ${args.businessId} not ready: ${readiness.totalCorrections} corrections, ${readiness.uniqueContexts} unique contexts`);
 
-      await ctx.runMutation(internal.functions.actionCenterOptimization.logOptimizationRun, {
+      await ctx.runMutation(logOptimizationRunRef, {
         businessId: args.businessId,
         status: "skipped",
         startedAt: startTime,
@@ -44,12 +55,12 @@ export const prepareAndRun = internalAction({
     }
 
     // Step 2: Get training data
-    const trainingData = await ctx.runQuery(internal.functions.actionCenterOptimization.getTrainingData, {
+    const trainingData: any = await ctx.runQuery(getTrainingDataRef, {
       businessId: args.businessId,
     });
 
     // Step 3: Get previous active model (for quality gate comparison)
-    const previousModel = await ctx.runQuery(api.functions.actionCenterOptimization.getActiveModel, {
+    const previousModel: any = await ctx.runQuery(getActiveModelRef, {
       businessId: args.businessId as string,
     });
 
@@ -101,7 +112,7 @@ export const prepareAndRun = internalAction({
     } catch (error: any) {
       console.error(`[ActionCenterOptimization] Lambda error:`, error.message);
 
-      await ctx.runMutation(internal.functions.actionCenterOptimization.logOptimizationRun, {
+      await ctx.runMutation(logOptimizationRunRef, {
         businessId: args.businessId,
         status: "failed",
         startedAt: startTime,
@@ -127,7 +138,7 @@ export const prepareAndRun = internalAction({
       evalSetSize: trainingData.validation.length,
     };
 
-    const modelVersionId = await ctx.runMutation(internal.functions.actionCenterOptimization.createModelVersion, {
+    const modelVersionId = await ctx.runMutation(createModelVersionRef, {
       platform: PLATFORM_NAME,
       module: MODULE_NAME,
       businessId: args.businessId,
@@ -145,20 +156,20 @@ export const prepareAndRun = internalAction({
     // Step 6: If promoted, supersede previous + mark corrections consumed
     if (qualityGateResult.passed) {
       if (previousModel.hasModel && previousModel.version?._id) {
-        await ctx.runMutation(internal.functions.actionCenterOptimization.supersedePreviousVersion, {
+        await ctx.runMutation(supersedePreviousVersionRef, {
           previousVersionId: previousModel.version._id,
           supersededBy: versionId,
         });
       }
 
-      await ctx.runMutation(internal.functions.actionCenterOptimization.markCorrectionsConsumed, {
+      await ctx.runMutation(markCorrectionsConsumedRef, {
         correctionIds: trainingData.correctionIds,
         versionId,
       });
     }
 
     // Step 7: Log optimization run
-    await ctx.runMutation(internal.functions.actionCenterOptimization.logOptimizationRun, {
+    await ctx.runMutation(logOptimizationRunRef, {
       businessId: args.businessId,
       status: qualityGateResult.passed ? "promoted" : "rejected",
       startedAt: startTime,
