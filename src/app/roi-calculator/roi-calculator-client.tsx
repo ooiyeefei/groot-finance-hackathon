@@ -449,7 +449,7 @@ function RecommendedPlanCard({
             Recommended
           </span>
           <h3 className="text-[1.1rem] font-bold text-[#111]">
-            Groot Finance {result.planName}
+            {result.planName}
           </h3>
           {isEnterprise ? (
             <p className="text-[0.85rem] text-[#6B7280] mt-0.5">Custom pricing</p>
