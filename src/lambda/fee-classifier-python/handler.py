@@ -553,6 +553,8 @@ def lambda_handler(event: dict, context: Any) -> dict:
             result = _optimize_vendor_item_model(arguments)
         elif tool_name == "optimize_chat_module":
             result = _optimize_chat_module(arguments)
+        elif tool_name == "optimize_action_center_model":
+            result = _optimize_action_center_model(arguments)
         else:
             return _error_response(request_id, -32601, f"Unknown tool: {tool_name}")
 
@@ -941,3 +943,9 @@ def _optimize_chat_module(arguments: dict) -> dict:
     """Run DSPy optimization for chat agent modules (intent, tool selector, etc.)."""
     from chat_optimizer import run_chat_module_optimization
     return run_chat_module_optimization(arguments)
+
+
+def _optimize_action_center_model(arguments: dict) -> dict:
+    """Run DSPy optimization for Action Center relevance classifier (033-ai-action-center-dspy)."""
+    from action_center_relevance import run_action_center_optimization
+    return run_action_center_optimization(arguments)

@@ -202,6 +202,12 @@ export class ScheduledIntelligenceStack extends cdk.Stack {
         schedule: 'cron(0 2 ? * SUN *)',
         description: 'Weekly email digest to business owners',
       },
+      {
+        module: 'action-center-dspy-optimization',
+        schedule: 'cron(0 2 ? * SUN *)',
+        description: 'Weekly Action Center DSPy relevance optimization (033-ai-action-center-dspy)',
+        isWeeklyDspy: true,
+      },
 
       // Scheduled reports — daily at 4am UTC (12pm MYT)
       // Handler checks each schedule's frequency and only processes due ones

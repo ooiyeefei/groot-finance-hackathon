@@ -487,6 +487,37 @@ const arBalance = arLines.reduce((sum, line) =>
 
 ---
 
+## Action Center DSPy Self-Improvement (2026-03-24 — 033-ai-action-center-dspy)
+
+**Overview**: User feedback on Action Center insights trains a unified relevance classifier that learns which insights each business finds useful vs. noise. Acts as a post-filter on the existing 7 detection algorithms.
+
+**Architecture**:
+- **Post-filter design**: Algorithms generate candidates as before → DSPy classifier decides what to surface per business
+- **Corrections capture**: `updateStatus` mutation creates correction on every dismiss/action/review
+- **Unified classifier**: Single `action-center-relevance` module across all algorithms (not per-algorithm)
+- **Per-business models**: Each business has its own trained model (corrections + models isolated by businessId)
+- **6-month rolling window**: Only corrections from the last 6 months used for training
+- **Readiness gate**: ≥20 corrections + ≥10 unique contexts before training
+- **Quality gate**: Candidate must outperform previous; first run auto-passes
+- **Schedule**: EventBridge weekly (Sunday 2am UTC), same as other DSPy modules
+
+**Key Files**:
+- `convex/functions/actionCenterOptimization.ts` — Full pipeline (readiness → split → train → gate → promote)
+- `convex/functions/actionCenterInsights.ts` — Corrections capture in `updateStatus` mutation
+- `convex/functions/actionCenterJobs.ts` — Post-filter `applyRelevanceFilter` mutation
+- `src/lambda/fee-classifier-python/action_center_relevance.py` — DSPy module (BootstrapFewShot)
+- `src/lambda/scheduled-intelligence/modules/action-center-dspy-optimization.ts` — EventBridge dispatcher
+- `src/lib/ai/dspy/model-version-loader.ts` — `loadActiveModelForBusiness()` for per-business model loading
+
+**Tables**:
+- `action_center_corrections` — User feedback with consumed flag (indexes: by_business, by_business_consumed, by_business_category)
+- `dspy_model_versions` — Reused with module="action-center-relevance" + businessId (new index: by_module_business_status)
+- `actionCenterInsights` — Added `userFeedback` field
+
+**Research finding**: Only 1 of 7 algorithms (employee expense spike) genuinely benefits from per-algorithm DSPy. The unified post-filter approach works across all algorithms by learning per-business relevance preferences.
+
+---
+
 ## Mem0 Persistent Memory System (2026-03-20 Activation)
 
 **Overview**: Long-term memory across sessions with semantic search, contradiction detection, and LRU eviction.
@@ -539,3 +570,4 @@ const arBalance = arLines.reduce((sum, line) =>
 - Convex (journal_entries, journal_entry_lines, chart_of_accounts — all existing tables) (033-fin-statements-gen)
 - TypeScript 5.9.3 (Next.js 15.5.7, Node.js 20 Lambda, Convex 1.31.3) + @react-pdf/renderer (PDF), @aws-sdk/client-ses (email), @aws-sdk/client-s3 (storage), Convex (DB + real-time), Radix UI + Tailwind CSS (UI) (035-aging-payable-receivable-report)
 - Convex (metadata), S3 `finanseal-bucket` (PDFs at `reports/{businessId}/`), existing Action Center table (035-aging-payable-receivable-report)
+- TypeScript 5.9.3 (Convex + Next.js), Python 3.11 (Lambda DSPy) + Convex 1.31.3, DSPy 2.6+, LangGraph 0.4.5, React 19.1.2 (033-ai-action-center-dspy)

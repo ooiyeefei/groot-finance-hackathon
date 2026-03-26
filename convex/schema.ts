@@ -1514,12 +1514,37 @@ export default defineSchema({
     expiresAt: v.optional(v.number()),    // Auto-expire for time-sensitive insights
 
     // Category-specific metadata (JSONB equivalent)
-    metadata: v.optional(v.any())
+    metadata: v.optional(v.any()),
+
+    // User feedback when dismissing (033-ai-action-center-dspy)
+    userFeedback: v.optional(v.string()),
   })
     .index("by_user_status", ["userId", "status"])
     .index("by_business_priority", ["businessId", "priority"])
     .index("by_category", ["category"])
     .index("by_detected", ["detectedAt"]),
+
+  // DSPy self-improvement corrections for Action Center insights (033-ai-action-center-dspy)
+  action_center_corrections: defineTable({
+    insightId: v.id("actionCenterInsights"),
+    insightType: v.string(),        // Algorithm identifier (e.g., "statistical_anomaly", "employee_expense_spike")
+    category: v.string(),           // Insight category (anomaly, compliance, etc.)
+    priority: v.string(),           // Original priority level
+    isUseful: v.boolean(),          // true = actioned/reviewed, false = dismissed
+    feedbackText: v.optional(v.string()), // User's explanation
+    originalContext: v.any(),       // Snapshot: { title, description, affectedEntities, recommendedAction }
+    businessId: v.id("businesses"),
+    userId: v.string(),
+    consumed: v.boolean(),          // Marked true after successful model promotion
+    consumedAt: v.optional(v.number()),
+    consumedByVersion: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_business", ["businessId"])
+    .index("by_business_consumed", ["businessId", "consumed"])
+    .index("by_business_category", ["businessId", "category"])
+    .index("by_insightType", ["insightType"])
+    .index("by_createdAt", ["createdAt"]),
 
   // ============================================
   // MCP SERVER DOMAIN: API Keys, Proposals, Rate Limits
@@ -3000,10 +3025,14 @@ export default defineSchema({
     promotedAt: v.optional(v.number()),
     supersededBy: v.optional(v.string()),
     rejectionReason: v.optional(v.string()),
+
+    // Per-business model support (033-ai-action-center-dspy)
+    businessId: v.optional(v.string()),
   })
     .index("by_platform_status", ["platform", "status"])
     .index("by_platform_version", ["platform", "version"])
-    .index("by_module_status", ["module", "status"]),
+    .index("by_module_status", ["module", "status"])
+    .index("by_module_business_status", ["module", "businessId", "status"]),
 
   dspy_optimization_logs: defineTable({
     platform: v.string(),

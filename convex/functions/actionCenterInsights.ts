@@ -486,7 +486,7 @@ export const internalCreate = internalMutation({
 });
 
 /**
- * Update insight status
+ * Update insight status and record correction for DSPy training (033-ai-action-center-dspy)
  */
 export const updateStatus = mutation({
   args: {
@@ -496,6 +496,7 @@ export const updateStatus = mutation({
       v.literal("dismissed"),
       v.literal("actioned")
     ),
+    feedbackText: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -545,9 +546,37 @@ export const updateStatus = mutation({
         break;
     }
 
+    // Store user feedback on the insight record (033-ai-action-center-dspy)
+    if (args.feedbackText && args.status === "dismissed") {
+      (updateData as any).userFeedback = args.feedbackText;
+    }
+
     await ctx.db.patch(args.insightId, updateData);
 
-    console.log(`[ActionCenterInsights] Updated insight ${args.insightId} to status: ${args.status}`);
+    // Record correction for DSPy training (033-ai-action-center-dspy)
+    const isUseful = args.status === "actioned" || args.status === "reviewed";
+    const insightType = (insight.metadata as any)?.insightType || insight.category;
+
+    await ctx.db.insert("action_center_corrections", {
+      insightId: args.insightId,
+      insightType,
+      category: insight.category,
+      priority: insight.priority,
+      isUseful,
+      feedbackText: args.feedbackText,
+      originalContext: {
+        title: insight.title,
+        description: insight.description,
+        affectedEntities: insight.affectedEntities,
+        recommendedAction: insight.recommendedAction,
+      },
+      businessId: business._id,
+      userId: identity.subject,
+      consumed: false,
+      createdAt: now,
+    });
+
+    console.log(`[ActionCenterInsights] Updated insight ${args.insightId} to status: ${args.status}, correction recorded (isUseful: ${isUseful})`);
     return { success: true };
   },
 });
@@ -603,10 +632,31 @@ export const batchMarkReviewed = mutation({
         status: "reviewed",
         reviewedAt: now,
       });
+
+      // Record positive correction for DSPy training (033-ai-action-center-dspy)
+      const insightType = (insight.metadata as any)?.insightType || insight.category;
+      await ctx.db.insert("action_center_corrections", {
+        insightId: insight._id,
+        insightType,
+        category: insight.category,
+        priority: insight.priority,
+        isUseful: true,
+        originalContext: {
+          title: insight.title,
+          description: insight.description,
+          affectedEntities: insight.affectedEntities,
+          recommendedAction: insight.recommendedAction,
+        },
+        businessId: business._id,
+        userId: identity.subject,
+        consumed: false,
+        createdAt: now,
+      });
+
       updatedCount++;
     }
 
-    console.log(`[ActionCenterInsights] Batch marked ${updatedCount} insights as reviewed`);
+    console.log(`[ActionCenterInsights] Batch marked ${updatedCount} insights as reviewed (with corrections)`);
     return { updatedCount };
   },
 });

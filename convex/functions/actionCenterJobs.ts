@@ -498,6 +498,23 @@ export const runProactiveAnalysis = internalAction({
 
       totalInsights += insightsCreated;
 
+      // Post-filter: Apply DSPy relevance model to suppress noise insights (033-ai-action-center-dspy)
+      if (insightsCreated > 0) {
+        try {
+          const suppressed = await ctx.runMutation(
+            internal.functions.actionCenterJobs.applyRelevanceFilter,
+            { businessId: business._id.toString() }
+          );
+          if (suppressed > 0) {
+            totalInsights -= suppressed;
+            console.log(`[ActionCenterJobs] Post-filter suppressed ${suppressed} noise insights for business ${business._id}`);
+          }
+        } catch (filterError) {
+          // Non-fatal: if filter fails, all insights remain (current behavior)
+          console.warn(`[ActionCenterJobs] Post-filter error (non-fatal):`, filterError);
+        }
+      }
+
       // Layer 2a: Schedule LLM enrichment for newly created insights
       if (insightsCreated > 0) {
         const recentInsights = await ctx.runQuery(
@@ -2912,5 +2929,105 @@ export const runDetectionForBusiness = internalMutation({
       default:
         return 0;
     }
+  },
+});
+
+// ============================================
+// POST-FILTER: DSPy Relevance Classifier (033-ai-action-center-dspy)
+// ============================================
+
+/**
+ * Apply the trained DSPy relevance model to newly created insights.
+ * Suppresses (deletes) insights classified as noise for this business.
+ *
+ * This runs inside a mutation (after detection inserts), so it uses the
+ * optimizedPrompt stored inline in dspy_model_versions (no S3/HTTP needed).
+ */
+export const applyRelevanceFilter = internalMutation({
+  args: {
+    businessId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Check if a promoted model exists for this business
+    const model = await ctx.db
+      .query("dspy_model_versions")
+      .withIndex("by_module_business_status", (q) =>
+        q.eq("module", "action-center-relevance").eq("businessId", args.businessId).eq("status", "promoted")
+      )
+      .first();
+
+    if (!model || !model.optimizedPrompt) {
+      // No model = no filtering (default behavior)
+      return 0;
+    }
+
+    // Parse the optimized prompt to get learned patterns
+    let modelState: any;
+    try {
+      modelState = JSON.parse(model.optimizedPrompt);
+    } catch {
+      console.warn("[ActionCenterJobs] Failed to parse optimizedPrompt for post-filter");
+      return 0;
+    }
+
+    // Get insights created in the last 5 minutes (recent batch)
+    const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+    const recentInsights = await ctx.db
+      .query("actionCenterInsights")
+      .withIndex("by_business_priority", (q) => q.eq("businessId", args.businessId))
+      .filter((q) => q.and(
+        q.eq(q.field("status"), "new"),
+        q.gte(q.field("detectedAt"), fiveMinAgo)
+      ))
+      .collect();
+
+    if (recentInsights.length === 0) return 0;
+
+    // Simple heuristic post-filter using learned dismissal patterns:
+    // If the model has learned that certain insightType+category combos are noise,
+    // suppress them. The modelState contains training examples that show
+    // what the business considers noise vs relevant.
+    const dismissedPatterns = new Set<string>();
+    const relevantPatterns = new Set<string>();
+
+    if (modelState.modelState?.demos) {
+      for (const demo of modelState.modelState.demos) {
+        const key = `${demo.insight_type || ""}:${demo.category || ""}`;
+        if (demo.relevant === false || demo.relevant === "false" || demo.relevant === "False") {
+          dismissedPatterns.add(key);
+        } else {
+          relevantPatterns.add(key);
+        }
+      }
+    }
+
+    let suppressed = 0;
+    for (const insight of recentInsights) {
+      const insightType = (insight.metadata as any)?.insightType || insight.category;
+      const key = `${insightType}:${insight.category}`;
+
+      // Suppress if this pattern was predominantly dismissed AND not also marked relevant
+      // Use soft-suppress (mark as dismissed) instead of hard-delete to preserve
+      // notification deep-links for critical/high insights that may have already fired
+      if (dismissedPatterns.has(key) && !relevantPatterns.has(key)) {
+        await ctx.db.patch(insight._id, {
+          status: "dismissed" as const,
+          dismissedAt: Date.now(),
+          metadata: {
+            ...(insight.metadata as any),
+            suppressedByDspy: true,
+          },
+        });
+        suppressed++;
+      }
+    }
+
+    if (suppressed > 0) {
+      console.log(
+        `[ActionCenterJobs] Post-filter: suppressed ${suppressed}/${recentInsights.length} insights for business ${args.businessId}`
+      );
+    }
+
+    return suppressed;
   },
 });

@@ -20,6 +20,7 @@ import { runEinvoiceMonitoring } from './modules/einvoice-monitoring';
 import { runAiDailyDigest } from './modules/ai-daily-digest';
 import { runEinvoiceDspyDigest } from './modules/einvoice-dspy-digest';
 import { runChatAgentOptimization } from './modules/chat-agent-optimization';
+import { runActionCenterDspyOptimization } from './modules/action-center-dspy-optimization';
 import { runWeeklyEmailDigest } from './modules/weekly-email-digest';
 import { runBenchmarkingAggregation } from './modules/benchmarking-aggregation';
 import { runScheduledReports } from './modules/scheduled-reports';
@@ -61,6 +62,9 @@ export async function handler(event: EventBridgeEvent): Promise<JobResult> {
         break;
       case 'chat-agent-optimization':
         result = await runChatAgentOptimization();
+        break;
+      case 'action-center-dspy-optimization':
+        result = await runActionCenterDspyOptimization();
         break;
 
       case 'weekly-email-digest':

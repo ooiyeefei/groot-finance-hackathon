@@ -165,3 +165,78 @@ export async function loadActivePromptCached(
 export function clearPromptCache(): void {
   promptCache.clear();
 }
+
+/**
+ * Load active model for a specific business (033-ai-action-center-dspy)
+ *
+ * Business-scoped lookup via actionCenterOptimization.getActiveModel.
+ * Returns the optimized prompt string (JSON) or null if no model exists.
+ *
+ * @param module - DSPy module name (e.g., "action-center-relevance")
+ * @param businessId - Business ID for per-business model isolation
+ * @returns Optimized prompt string or null
+ */
+export async function loadActiveModelForBusiness(
+  module: string,
+  businessId: string
+): Promise<{ optimizedPrompt: string | null; metrics: LoadingMetrics }> {
+  const startTime = Date.now();
+  const cacheKey = `${module}:${businessId}`;
+
+  // Check cache
+  const cached = promptCache.get(cacheKey);
+  if (cached && Date.now() - cached.loadedAt < CACHE_TTL_MS) {
+    return {
+      optimizedPrompt: JSON.stringify(cached.artifact),
+      metrics: { durationMs: Date.now() - startTime, source: "convex", cached: true },
+    };
+  }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await convexClient.query(
+      (api as any).functions.actionCenterOptimization.getActiveModel,
+      { businessId, module }
+    );
+
+    if (!result?.hasModel) {
+      return {
+        optimizedPrompt: null,
+        metrics: { durationMs: Date.now() - startTime, source: "convex", cached: false },
+      };
+    }
+
+    // If optimizedPrompt is stored inline in Convex (avoids S3 round-trip)
+    if (result.version?.optimizedPrompt) {
+      const artifact = JSON.parse(result.version.optimizedPrompt) as OptimizedPromptArtifact;
+      promptCache.set(cacheKey, { artifact, loadedAt: Date.now() });
+      return {
+        optimizedPrompt: result.version.optimizedPrompt,
+        metrics: { durationMs: Date.now() - startTime, source: "convex", cached: false },
+      };
+    }
+
+    // Otherwise load from S3
+    if (result.version?.s3Key) {
+      const artifact = await loadPromptFromS3(result.version.s3Key);
+      if (artifact) {
+        promptCache.set(cacheKey, { artifact, loadedAt: Date.now() });
+      }
+      return {
+        optimizedPrompt: artifact ? JSON.stringify(artifact) : null,
+        metrics: { durationMs: Date.now() - startTime, source: "both", cached: false },
+      };
+    }
+
+    return {
+      optimizedPrompt: null,
+      metrics: { durationMs: Date.now() - startTime, source: "convex", cached: false },
+    };
+  } catch (error) {
+    console.error(`[model-version-loader] Failed to load model for ${module}:${businessId}:`, error);
+    return {
+      optimizedPrompt: null,
+      metrics: { durationMs: Date.now() - startTime, source: "convex", cached: false },
+    };
+  }
+}

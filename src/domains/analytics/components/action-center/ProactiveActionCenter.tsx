@@ -54,8 +54,8 @@ export function ProactiveActionCenter({ businessId, defaultExpanded = true }: Pr
     limit: 100, // Fetch more since we're filtering client-side
   });
 
-  const handleDismiss = async (insightId: string) => {
-    await updateStatus(insightId as Id<'actionCenterInsights'>, 'dismissed');
+  const handleDismiss = async (insightId: string, feedbackText?: string) => {
+    await updateStatus(insightId as Id<'actionCenterInsights'>, 'dismissed', feedbackText);
   };
 
   const handleAction = async (insightId: string) => {

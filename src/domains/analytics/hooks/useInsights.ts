@@ -34,7 +34,7 @@ interface UseInsightsReturn {
     byPriority: Record<string, number>;
     actionableRate: number;
   } | null;
-  updateStatus: (insightId: Id<'actionCenterInsights'>, status: 'reviewed' | 'dismissed' | 'actioned') => Promise<void>;
+  updateStatus: (insightId: Id<'actionCenterInsights'>, status: 'reviewed' | 'dismissed' | 'actioned', feedbackText?: string) => Promise<void>;
   markAllReviewed: () => Promise<void>;
 }
 
@@ -52,8 +52,8 @@ export function useInsights(options: UseInsightsOptions): UseInsightsReturn {
   const batchMarkReviewedMutation = useMutation(api.functions.actionCenterInsights.batchMarkReviewed);
 
   const updateStatus = useCallback(
-    async (insightId: Id<'actionCenterInsights'>, newStatus: 'reviewed' | 'dismissed' | 'actioned') => {
-      await updateStatusMutation({ insightId, status: newStatus });
+    async (insightId: Id<'actionCenterInsights'>, newStatus: 'reviewed' | 'dismissed' | 'actioned', feedbackText?: string) => {
+      await updateStatusMutation({ insightId, status: newStatus, feedbackText });
     },
     [updateStatusMutation]
   );

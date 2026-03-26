@@ -21,7 +21,7 @@ type ActionCenterInsight = Doc<'actionCenterInsights'>;
 
 interface InsightCardProps {
   insight: ActionCenterInsight;
-  onDismiss?: (id: string) => void;
+  onDismiss?: (id: string, feedbackText?: string) => void;
   onAction?: (id: string) => void;
   onReview?: (id: string) => void;
   isHighlighted?: boolean;
@@ -62,6 +62,8 @@ const categoryConfig = {
 
 export function InsightCard({ insight, onDismiss, onAction, onReview, isHighlighted, autoOpen }: InsightCardProps) {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [isDismissDialogOpen, setIsDismissDialogOpen] = useState(false);
+  const [feedbackText, setFeedbackText] = useState('');
   const cardRef = useRef<HTMLDivElement>(null);
   const priority = priorityConfig[insight.priority];
   const category = categoryConfig[insight.category];
@@ -119,6 +121,25 @@ export function InsightCard({ insight, onDismiss, onAction, onReview, isHighligh
           "What's the financial impact?",
         ];
     }
+  };
+
+  const handleDismissWithFeedback = () => {
+    onDismiss?.(insight._id, feedbackText.trim() || undefined);
+    setFeedbackText('');
+    setIsDismissDialogOpen(false);
+    setIsDetailOpen(false);
+  };
+
+  const handleDismissSkip = () => {
+    onDismiss?.(insight._id);
+    setFeedbackText('');
+    setIsDismissDialogOpen(false);
+    setIsDetailOpen(false);
+  };
+
+  const openDismissDialog = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsDismissDialogOpen(true);
   };
 
   const handleAskAI = (e: React.MouseEvent) => {
@@ -220,10 +241,7 @@ export function InsightCard({ insight, onDismiss, onAction, onReview, isHighligh
           <Button
             variant="ghost"
             size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDismiss(insight._id);
-            }}
+            onClick={openDismissDialog}
             className="text-[11px] h-7 px-2"
           >
             <X className="h-3 w-3" />
@@ -315,13 +333,56 @@ export function InsightCard({ insight, onDismiss, onAction, onReview, isHighligh
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={(e) => { e.stopPropagation(); onDismiss(insight._id); setIsDetailOpen(false); }}
+                onClick={openDismissDialog}
                 className="text-xs"
               >
                 <X className="h-3.5 w-3.5" />
                 Dismiss
               </Button>
             )}
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Dismiss Feedback Dialog (033-ai-action-center-dspy) */}
+    {isDismissDialogOpen && (
+      <div
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60]"
+        onClick={(e) => { if (e.target === e.currentTarget) setIsDismissDialogOpen(false); }}
+      >
+        <div className="bg-card rounded-lg w-full max-w-sm border border-border m-4 shadow-lg">
+          <div className="p-4 border-b border-border">
+            <h3 className="font-medium text-foreground text-sm">Dismiss Insight</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Help Groot learn — why is this not useful?
+            </p>
+          </div>
+          <div className="p-4">
+            <textarea
+              value={feedbackText}
+              onChange={(e) => setFeedbackText(e.target.value)}
+              placeholder="e.g., This is a regular quarterly payment..."
+              className="w-full h-20 text-sm bg-input border border-border rounded-md p-2 text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+              autoFocus
+            />
+          </div>
+          <div className="flex items-center gap-2 p-3 border-t border-border">
+            <Button
+              size="sm"
+              onClick={handleDismissWithFeedback}
+              className="text-xs flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
+            >
+              Submit & Dismiss
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleDismissSkip}
+              className="text-xs bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+            >
+              Skip
+            </Button>
           </div>
         </div>
       </div>
