@@ -21,7 +21,7 @@ export async function runActionCenterDspyOptimization(): Promise<Omit<JobResult,
       totalPromoted: number;
       totalSkipped: number;
       totalFailed: number;
-    }>('functions/actionCenterOptimization:runForAllBusinesses', {});
+    }>('functions/actionCenterOptimizationOrchestrator:runForAllBusinesses', {});
 
     console.log(
       `[ActionCenterDspyOptimization] Complete: ${result.totalProcessed} businesses, ` +
