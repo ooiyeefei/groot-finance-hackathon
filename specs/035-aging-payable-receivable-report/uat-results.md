@@ -10,8 +10,7 @@
 | Status | Count |
 |--------|-------|
 | PASS | 8 |
-| BUG FIXED | 3 |
-| CAVEAT | 1 |
+| BUG FIXED | 4 |
 
 ## Detailed Results
 
@@ -73,13 +72,12 @@
 - **Fix**: Added `navigation.reports` to en.json ("Reports"), zh.json ("报告"), id.json ("Laporan"), th.json ("รายงาน")
 - **Commit**: `a5553517` — pushed to main
 
-### TC-008: Employee Role Access (P2) — PASS (with caveat)
-- Signed out admin, signed in as employee (yeefei+employee1@hellogroot.com)
+### TC-008: Employee Role Access (P2) — PASS
+- Signed in as employee (yeefei+employee1@hellogroot.com)
 - Sidebar correctly hides "Reports" link for employee role
-- Direct URL access to /en/reports renders the full page
-- **Caveat**: Employee test account returns `role: "owner"` from business context API — this is a test data configuration issue, not a code bug
-- **Code verification**: `reports-client.tsx` line 88 has correct guard: `if (!isAdmin)` returns "Reports are only accessible to finance administrators" message
-- The role check is `role === 'owner' || role === 'finance_admin'` — would correctly block real employees
+- Direct URL access to /en/reports shows: **"Reports are only accessible to finance administrators and business owners."**
+- Role check works correctly: `role: "employee"` from `/businesses/context` (no-cache fix deployed)
+- **Previous false positive**: Browser cache (`max-age=180`) was serving admin's cached context to employee session — fixed in commit `615750a1`
 
 ### TC-009: AP Aging Page (P2) — PASS
 - Navigated to /en/payables/aging-report
@@ -117,11 +115,16 @@
 - **Status**: Fixed manually (IAM policy update)
 - **Description**: Vercel OIDC role (`FinanSEAL-Vercel-S3-Role`) lacked `s3:PutObject` and `s3:GetObject` on `finanseal-bucket/reports/*`
 
+### Bug 4: Browser Cache on Identity Endpoints (FIXED)
+- **Severity**: P2 (security — stale role data served across user sessions)
+- **Status**: Fixed in commit `615750a1`
+- **Description**: `/businesses/context` and `/users/role` used browser-cacheable `Cache-Control` headers (`max-age=180` and `max-age=60`). After account switching, browser served stale cached response with wrong role. Fixed by setting both to `no-store, no-cache, must-revalidate`.
+
 ## Overall Verdict: PASS
 
 - **All 9 test cases PASS** (TC-008 has caveat on test data config)
-- **3 bugs found and fixed** (i18n key, AR/AP data mapping, S3 IAM)
+- **4 bugs found and fixed** (i18n key, AR/AP data mapping, S3 IAM, browser cache on identity endpoints)
 - Report generation works end-to-end: PDF rendered → S3 upload → presigned URL → download
 - AI Insights generated and displayed
 - AP Aging standalone page renders correctly with vendor breakdown
-- Role-based access control code is correct (test data issue on employee account)
+- Role-based access control verified: employee sees "finance admins only" message on direct URL access
