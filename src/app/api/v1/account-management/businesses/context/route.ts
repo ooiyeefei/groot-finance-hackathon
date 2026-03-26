@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
           context: null
         },
         message: 'No active business context'
-      }), 'standard')
+      }), 'none')
     }
 
     return withCacheHeaders(NextResponse.json({
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       data: {
         context
       }
-    }), 'standard')
+    }), 'none')
 
   } catch (error) {
     console.error('[Business Context V1 API] Error:', error)

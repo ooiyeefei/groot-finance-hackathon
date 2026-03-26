@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
           duration_ms: 0,
           source: 'redis-cache'
         }
-      }), 'volatile')
+      }), 'none')
     }
 
     const startTime = Date.now()
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
         cached: false,
         duration_ms: duration
       }
-    }), 'volatile')
+    }), 'none')
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
