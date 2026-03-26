@@ -20,7 +20,7 @@ export async function handleClarification(state: AgentState): Promise<Partial<Ag
     state.clarificationQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n');
 
   return {
-    messages: [...state.messages, new AIMessage(clarificationMessage)],
+    messages: [new AIMessage(clarificationMessage)],
     currentPhase: 'completed'
   };
 }

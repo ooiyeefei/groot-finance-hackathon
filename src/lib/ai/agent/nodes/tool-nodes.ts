@@ -17,7 +17,7 @@ export async function executeTool(state: AgentState): Promise<Partial<AgentState
   if (!state.securityValidated) {
     console.error('[ExecuteTool] Security validation not passed, refusing tool execution');
     return {
-      messages: [...state.messages, new ToolMessage({
+      messages: [new ToolMessage({
         content: 'Tool execution denied due to security restrictions',
         tool_call_id: 'security_error',
         name: 'security_error'
@@ -29,7 +29,7 @@ export async function executeTool(state: AgentState): Promise<Partial<AgentState
 
   if (!lastMessage || lastMessage._getType() !== 'ai' || !lastMessage.tool_calls || lastMessage.tool_calls.length === 0) {
     console.error('[ExecuteTool] No valid AI message with tool calls found for execution');
-    return { messages: state.messages };
+    return {};
   }
 
   let toolName = 'unknown'; // Declare at function level for catch block access
@@ -66,7 +66,7 @@ export async function executeTool(state: AgentState): Promise<Partial<AgentState
           name: fallbackTool
         });
         return {
-          messages: [...state.messages, toolMessage],
+          messages: [toolMessage],
           failureCount: 0,
           lastFailedTool: null,
           citations: fallbackCitations
@@ -128,7 +128,7 @@ export async function executeTool(state: AgentState): Promise<Partial<AgentState
       console.log(`[ExecuteTool] FAILURE COUNT: ${newFailureCount} for tool ${toolName}`)
 
       return {
-        messages: [...state.messages, toolMessage],
+        messages: [toolMessage],
         failureCount: newFailureCount,
         lastFailedTool: toolName,
         citations: [] // No citations on error
@@ -146,7 +146,7 @@ export async function executeTool(state: AgentState): Promise<Partial<AgentState
     });
 
     return {
-      messages: [...state.messages, toolMessage],
+      messages: [toolMessage],
       failureCount: 0, // Reset failure count on success
       lastFailedTool: null,
       citations: newCitations // Add citations to agent state
@@ -177,7 +177,7 @@ export async function executeTool(state: AgentState): Promise<Partial<AgentState
     });
 
     return {
-      messages: [...state.messages, errorMessage],
+      messages: [errorMessage],
       failureCount: (state.failureCount || 0) + 1,
       lastFailedTool: toolName || 'unknown'
     };
@@ -197,6 +197,6 @@ export async function correctToolCall(state: AgentState): Promise<Partial<AgentS
 
   // Return the state with the new message to guide the LLM.
   return {
-    messages: [...state.messages, correctionMessage]
+    messages: [correctionMessage]
   };
 }

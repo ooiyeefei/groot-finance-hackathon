@@ -184,7 +184,7 @@ export async function handleOffTopic(state: AgentState): Promise<Partial<AgentSt
   const message = rejectionMessages[language as keyof typeof rejectionMessages] || rejectionMessages.en;
 
   return {
-    messages: [...state.messages, new AIMessage(message)],
+    messages: [new AIMessage(message)],
     currentPhase: 'completed'
   };
 }

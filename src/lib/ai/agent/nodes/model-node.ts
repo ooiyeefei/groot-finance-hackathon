@@ -30,7 +30,7 @@ export async function callModel(state: AgentState): Promise<Partial<AgentState>>
   if (!state.securityValidated) {
     console.error('[CallModel] Security validation not passed, refusing to process');
     return {
-      messages: [...state.messages, new AIMessage('Request cannot be processed due to security restrictions.')],
+      messages: [new AIMessage('Request cannot be processed due to security restrictions.')],
       currentPhase: 'completed'
     };
   }
@@ -361,12 +361,12 @@ async function handleOpenAIResponse(state: AgentState, messages: any[], tools: a
 
       console.log('[CallModel] DONE command processed, returning final answer');
       return {
-        messages: [...state.messages, new AIMessage(finalAnswer)],
+        messages: [new AIMessage(finalAnswer)],
       };
     } else {
       // Fallback if no tool message found
       return {
-        messages: [...state.messages, new AIMessage('I\'ve completed the task but could not find the result to display.')],
+        messages: [new AIMessage('I\'ve completed the task but could not find the result to display.')],
       };
     }
   }
@@ -375,7 +375,7 @@ async function handleOpenAIResponse(state: AgentState, messages: any[], tools: a
   if (assistantResponse?.content?.trim()?.startsWith('ERROR:')) {
     console.log('[CallModel] Model issued ERROR command:', assistantResponse.content);
     return {
-      messages: [...state.messages, new AIMessage('I apologize, but I cannot determine how to process your request. Please try rephrasing your question.')],
+      messages: [new AIMessage('I apologize, but I cannot determine how to process your request. Please try rephrasing your question.')],
     };
   }
 
@@ -394,7 +394,7 @@ async function handleOpenAIResponse(state: AgentState, messages: any[], tools: a
 
     console.log('[CallModel] Tool call detected:', toolCall);
     return {
-      messages: [...state.messages, aiMessageWithToolCall],
+      messages: [aiMessageWithToolCall],
     };
   }
 
@@ -403,11 +403,60 @@ async function handleOpenAIResponse(state: AgentState, messages: any[], tools: a
 
   // CRITICAL ANTI-HALLUCINATION SAFEGUARD: Block financial responses without tool usage
   if (isFinancialQuery && !hasToolCalls) {
-    console.log(`[CallModel] 🚨 BLOCKED FINANCIAL HALLUCINATION: Financial query detected but no tools used - preventing fictional data response`);
+    // If no tools were available, this is a connectivity issue — tell the user clearly
+    if (tools.length === 0) {
+      console.error(`[CallModel] 🚨 FINANCIAL QUERY BLOCKED: No MCP tools available — cannot fetch data`);
+      return {
+        messages: [new AIMessage('I\'m unable to connect to our data services right now. Please try again in a moment.')],
+        currentPhase: 'completed' as const,
+      };
+    }
 
-    // Force the AI to use tools for financial data instead of hallucinating
+    // Tools were available but Gemini didn't call them — retry ONCE with an explicit nudge
+    console.log(`[CallModel] 🚨 FINANCIAL QUERY RETRY: Gemini had ${tools.length} tools but returned no tool_calls — retrying with nudge`);
+
+    const retryMessages = [
+      ...messages,
+      { role: 'assistant', content: 'I need to look up your financial data to answer accurately.' },
+      { role: 'user', content: 'Yes, please use the available tools to look up my actual data. Do not generate a text response — call a tool.' },
+    ];
+
+    const retryPayload = {
+      ...basePayload,
+      messages: retryMessages,
+      tools,
+      tool_choice: 'required' as const,
+    };
+
+    try {
+      const retryResponse = await fetch(`${aiConfig.chat.endpointUrl}/chat/completions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(retryPayload),
+      });
+
+      if (retryResponse.ok) {
+        const retryResult = await retryResponse.json();
+        const retryAssistant = retryResult.choices?.[0]?.message;
+        if (retryAssistant?.tool_calls && retryAssistant.tool_calls.length > 0) {
+          console.log('[CallModel] ✅ Retry succeeded — Gemini called tool:', retryAssistant.tool_calls[0].function?.name);
+          return {
+            messages: [new AIMessage({
+              content: '',
+              tool_calls: [retryAssistant.tool_calls[0]],
+            })],
+          };
+        }
+      }
+    } catch (retryError) {
+      console.error('[CallModel] Retry failed:', retryError instanceof Error ? retryError.message : retryError);
+    }
+
+    // Retry also failed — give clear error
+    console.error(`[CallModel] 🚨 FINANCIAL QUERY FAILED: Both attempts returned no tool calls`);
     return {
-      messages: [...state.messages, new AIMessage('I need to look up your actual financial data to answer that question accurately. Let me search your transactions now.')],
+      messages: [new AIMessage('I wasn\'t able to retrieve your financial data. Please try rephrasing your question, for example: "Show me my cash flow for this month".')],
+      currentPhase: 'completed' as const,
     };
   }
 
@@ -459,7 +508,7 @@ async function handleOpenAIResponse(state: AgentState, messages: any[], tools: a
 
   console.log(`[CallModel] AI response generated (${content.length} chars)`);
   return {
-    messages: [...state.messages, new AIMessage(content)],
+    messages: [new AIMessage(content)],
   };
 }
 
@@ -489,6 +538,6 @@ function handleModelError(state: AgentState, error: any): Partial<AgentState> {
   }
 
   return {
-    messages: [...state.messages, new AIMessage(errorMessage)],
+    messages: [new AIMessage(errorMessage)],
   };
 }

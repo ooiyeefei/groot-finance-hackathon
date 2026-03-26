@@ -15,7 +15,7 @@ export async function validate(state: AgentState): Promise<Partial<AgentState>> 
     console.error('[Validation] State keys:', Object.keys(state));
     console.error('[Validation] UserContext value:', state.userContext);
     return {
-      messages: [...state.messages, new AIMessage('I apologize, but I cannot process your request due to authentication issues. Please refresh and try again.')],
+      messages: [new AIMessage('I apologize, but I cannot process your request due to authentication issues. Please refresh and try again.')],
       securityValidated: false,
       currentPhase: 'completed' // Prevent infinite loop by ending the conversation
     };
@@ -25,7 +25,7 @@ export async function validate(state: AgentState): Promise<Partial<AgentState>> 
   if (typeof state.userContext.userId !== 'string' || state.userContext.userId.length === 0) {
     console.error('[Validation] Invalid userId format');
     return {
-      messages: [...state.messages, new AIMessage('I apologize, but there was an authentication error. Please refresh and try again.')],
+      messages: [new AIMessage('I apologize, but there was an authentication error. Please refresh and try again.')],
       securityValidated: false,
       currentPhase: 'completed' // Prevent infinite loop by ending the conversation
     };
