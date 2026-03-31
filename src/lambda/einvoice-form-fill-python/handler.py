@@ -1068,6 +1068,61 @@ def handle_validate_gate(page: Page, buyer: dict) -> bool:
         return False
 
 
+def _advance_multi_step_form(page: Page, max_clicks: int = 2):
+    """Detect and click through multi-step form pages (e.g. Shell/RONPOS receipt → form).
+
+    Some merchant e-invoice forms show a receipt summary first, with a Next/Continue
+    button leading to the actual buyer details form. This function checks if the current
+    page has fewer than 2 visible text inputs and clicks Next/Continue/Proceed if found.
+    Repeats up to max_clicks times for multi-step wizards.
+    """
+    for step in range(max_clicks):
+        # Count visible text/email inputs on the current page
+        field_count = page.evaluate("""() => {
+            return Array.from(document.querySelectorAll(
+                'input[type="text"], input[type="email"], input[type="number"], input:not([type]), textarea'
+            )).filter(el => el.type !== 'hidden' && el.offsetParent && !el.disabled && !el.readOnly).length;
+        }""")
+        if field_count >= 2:
+            if step > 0:
+                print(f"[Navigation] Form page reached after {step} click(s) — {field_count} fields found")
+            return  # Already on a form page
+
+        # Look for Next/Continue/Proceed buttons (case-insensitive, multiple patterns)
+        next_btn = None
+        for selector in [
+            'button:has-text("Next")', 'button:has-text("NEXT")',
+            'button:has-text("Continue")', 'button:has-text("CONTINUE")',
+            'button:has-text("Proceed")', 'button:has-text("PROCEED")',
+            'a:has-text("Next")', 'a:has-text("NEXT")',
+            'a:has-text("Continue")', 'a:has-text("CONTINUE")',
+            '[role="button"]:has-text("Next")', '[role="button"]:has-text("NEXT")',
+        ]:
+            loc = page.locator(selector).first
+            if loc.count() > 0 and loc.is_visible():
+                next_btn = loc
+                break
+
+        if not next_btn:
+            if field_count == 0:
+                print(f"[Navigation] No form fields and no Next/Continue button found on page")
+            return
+
+        try:
+            btn_text = next_btn.text_content().strip()
+            next_btn.click(timeout=10000)
+            print(f"[Navigation] Clicked '{btn_text}' button (step {step + 1}) — {field_count} fields on previous page")
+            time.sleep(2)
+            try:
+                page.wait_for_load_state("networkidle", timeout=10000)
+            except Exception:
+                pass
+            time.sleep(1)
+        except Exception as e:
+            print(f"[Navigation] Failed to click Next/Continue: {e}")
+            return
+
+
 def prefill_all(page: Page, buyer: dict, receipt: dict):
     """Pre-fill phone, native selects, and text inputs via label matching."""
     state = buyer["state"]
@@ -2934,6 +2989,12 @@ def handler(event: dict, context=None) -> dict:
                 "\n- Fill all receipt detail fields, then submit."
                 "\n- Do NOT try to log in again."
             )
+
+        # ── Phase 0a: Multi-step form navigation ──────────────────────────
+        # Some merchants (Shell/RONPOS, etc.) show a receipt summary page first
+        # with a "Next" button that leads to the actual buyer details form.
+        # If no form fields are detected on the current page, click Next/Continue.
+        _advance_multi_step_form(page)
 
         # ── Pre-fill with Playwright (runs BEFORE Tier 1 so phone/dropdowns are ready) ──
         # Phase 0b: Handle validate-gated forms (BRN+TIN → Validate → fields unlock)
