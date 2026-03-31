@@ -390,7 +390,7 @@ export class DocumentProcessingStack extends cdk.Stack {
         NEXT_PUBLIC_CONVEX_URL: 'https://kindhearted-lynx-129.convex.cloud',
         S3_BUCKET_NAME: 'finanseal-bucket',
         GEMINI_API_KEY_SSM_PARAM: '/finanseal/gemini-api-key',
-        RESEND_API_KEY: process.env.RESEND_API_KEY || '',
+        RESEND_API_KEY_SSM_PARAM: '/finanseal/resend-api-key',
         EINVOICE_FORM_FILL_LAMBDA_ARN: formFillFunction.functionArn,
       },
       bundling: {
@@ -409,6 +409,12 @@ export class DocumentProcessingStack extends cdk.Stack {
       parameterName: '/finanseal/gemini-api-key',
     });
     geminiKeyParamForEmailProcessor.grantRead(emailProcessorFunction);
+
+    // Resend API key (SSM SecureString) — read at runtime
+    const resendKeyParam = ssm.StringParameter.fromSecureStringParameterAttributes(this, 'ResendApiKeyEmailProcessor', {
+      parameterName: '/finanseal/resend-api-key',
+    });
+    resendKeyParam.grantRead(emailProcessorFunction);
 
     // Allow email processor to invoke form-fill Lambda for Playwright PDF downloads
     formFillFunction.grantInvoke(emailProcessorFunction);

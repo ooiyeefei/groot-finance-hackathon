@@ -10,12 +10,12 @@ import os
 import logging
 import urllib.request
 import urllib.error
+from ssm_secrets import get_mcp_service_key
 
 logger = logging.getLogger(__name__)
 
 # Convex deployment URL — same as CONVEX_URL but for HTTP endpoints
 CONVEX_HTTP_URL = os.environ.get("CONVEX_HTTP_URL", "")
-MCP_INTERNAL_SERVICE_KEY = os.environ.get("MCP_INTERNAL_SERVICE_KEY", "")
 
 
 def emit_metric(
@@ -49,7 +49,7 @@ def emit_metric(
 
     headers = {
         "Content-Type": "application/json",
-        "X-Internal-Key": MCP_INTERNAL_SERVICE_KEY,
+        "X-Internal-Key": get_mcp_service_key(),
     }
 
     try:

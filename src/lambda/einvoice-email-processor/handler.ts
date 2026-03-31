@@ -78,6 +78,7 @@ const lambdaClient = new LambdaClient({ region: process.env.AWS_REGION || "us-we
 const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL || "";
 const S3_BUCKET = process.env.S3_BUCKET_NAME || "finanseal-bucket";
 let GEMINI_KEY = process.env.GEMINI_API_KEY || "";
+let RESEND_KEY = process.env.RESEND_API_KEY || "";
 const FORWARD_FROM = "noreply@notifications.hellogroot.com";
 const FORM_FILL_LAMBDA_ARN = process.env.EINVOICE_FORM_FILL_LAMBDA_ARN || "";
 
@@ -102,6 +103,25 @@ async function resolveGeminiKey(): Promise<void> {
     console.log(`[Init] Resolved GEMINI_API_KEY from SSM (${ssmParam})`);
   } catch (err) {
     console.log(`[Init] Failed to resolve GEMINI_API_KEY from SSM: ${err}`);
+  }
+}
+
+/**
+ * Resolve RESEND_API_KEY from SSM SecureString at cold start.
+ */
+async function resolveResendKey(): Promise<void> {
+  if (RESEND_KEY) return;
+  const ssmParam = process.env.RESEND_API_KEY_SSM_PARAM;
+  if (!ssmParam) return;
+  try {
+    const result = await ssmClient.send(new GetParameterCommand({
+      Name: ssmParam,
+      WithDecryption: true,
+    }));
+    RESEND_KEY = result.Parameter?.Value || "";
+    console.log(`[Init] Resolved RESEND_API_KEY from SSM (${ssmParam})`);
+  } catch (err) {
+    console.log(`[Init] Failed to resolve RESEND_API_KEY from SSM: ${err}`);
   }
 }
 
@@ -640,7 +660,8 @@ async function forwardToUser(
   }
 
   // Fallback: Resend (works for any email, no SES verification needed)
-  const resendKey = process.env.RESEND_API_KEY;
+  await resolveResendKey();
+  const resendKey = RESEND_KEY;
   if (!resendKey) {
     console.log(`[Email] No RESEND_API_KEY — cannot forward`);
     return;

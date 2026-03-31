@@ -8,6 +8,7 @@ Called weekly via Convex cron → Lambda.
 import json
 import logging
 import os
+from ssm_secrets import get_gemini_api_key
 import time
 
 import boto3
@@ -42,7 +43,7 @@ def run_optimization(params: dict) -> dict:
         }
 
     # Configure LM
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+    api_key = get_gemini_api_key()
     configure_lm(api_key, temperature=0.3)
 
     # Prepare training data
@@ -182,7 +183,7 @@ def run_bank_recon_optimization(params: dict) -> dict:
         }
 
     # Configure LM
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+    api_key = get_gemini_api_key()
     configure_lm(api_key, temperature=0.3)
 
     # Prepare training data

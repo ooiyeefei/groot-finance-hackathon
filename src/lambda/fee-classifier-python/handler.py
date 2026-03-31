@@ -21,6 +21,7 @@ from typing import Any
 
 import dspy
 from dspy.teleprompt import BootstrapFewShot
+from ssm_secrets import get_gemini_api_key
 
 from fee_module import (
     FeeClassifier,
@@ -120,7 +121,7 @@ def _classify_fees(params: dict) -> dict:
         return {"classifications": [], "balanceCheck": None, "usedDspy": False}
 
     # Configure LM
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+    api_key = get_gemini_api_key()
     configure_lm(api_key)
 
     # Decide: DSPy (optimized) vs fallback (raw prompting)
@@ -269,7 +270,7 @@ def _classify_bank_transactions(params: dict) -> dict:
         return {"classifications": [], "usedDspy": False}
 
     # Configure LM
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+    api_key = get_gemini_api_key()
     configure_lm(api_key)
 
     # Build valid account codes set from available accounts
@@ -408,7 +409,7 @@ def _match_orders(params: dict) -> dict:
         return {"matches": [], "usedDspy": False}
 
     # Configure LM
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+    api_key = get_gemini_api_key()
     configure_lm(api_key)
 
     # Decide: DSPy (optimized) vs fallback
@@ -674,7 +675,7 @@ def _match_po_invoice(arguments: dict) -> dict:
     """Tier 2 AI matching for PO-Invoice line items."""
     global _po_matcher
 
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+    api_key = get_gemini_api_key()
     configure_lm(api_key)
 
     po_lines = arguments.get("po_line_items", [])
@@ -767,7 +768,7 @@ def _diagnose_variance(arguments: dict) -> dict:
     """AI-powered variance diagnosis for matched line items."""
     global _variance_diagnoser
 
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+    api_key = get_gemini_api_key()
     configure_lm(api_key)
 
     if _variance_diagnoser is None:

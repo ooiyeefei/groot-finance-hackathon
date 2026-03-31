@@ -18,6 +18,7 @@ import logging
 import os
 import time
 from typing import Any
+from ssm_secrets import get_gemini_api_key
 
 import boto3
 import dspy
@@ -139,7 +140,7 @@ def run_action_center_optimization(params: dict) -> dict:
     )
 
     # Configure DSPy with Gemini
-    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    gemini_key = get_gemini_api_key()
     lm = dspy.LM(
         model="gemini/gemini-3.1-flash-lite-preview",
         api_key=gemini_key,

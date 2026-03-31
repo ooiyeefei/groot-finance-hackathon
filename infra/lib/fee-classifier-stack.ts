@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 import * as path from 'path';
@@ -38,8 +39,9 @@ export class FeeClassifierStack extends cdk.Stack {
 
     // Environment variables — loaded from .env.local (same pattern as document-processing-stack)
     const envVars: Record<string, string> = {
-      GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
-      MCP_INTERNAL_SERVICE_KEY: process.env.MCP_INTERNAL_SERVICE_KEY || '',
+      // Secrets read from SSM at Lambda runtime (not synth time)
+      GEMINI_API_KEY_SSM_PARAM: '/finanseal/gemini-api-key',
+      MCP_SERVICE_KEY_SSM_PARAM: '/finanseal/mcp/internal-service-key',
       S3_BUCKET: 'finanseal-bucket',
       SENTRY_DSN: process.env.SENTRY_DSN ?? '',
     };
@@ -66,6 +68,16 @@ export class FeeClassifierStack extends cdk.Stack {
     // Grant S3 read/write for model state files
     bucket.grantRead(this.feeClassifierFunction, 'dspy-models/*');
     bucket.grantPut(this.feeClassifierFunction, 'dspy-models/*');
+
+    // SSM read permission for secrets (Gemini API key + MCP service key)
+    const geminiKeyParam = ssm.StringParameter.fromSecureStringParameterAttributes(this, 'GeminiKeyParam', {
+      parameterName: '/finanseal/gemini-api-key',
+    });
+    geminiKeyParam.grantRead(this.feeClassifierFunction);
+    const mcpKeyParam = ssm.StringParameter.fromSecureStringParameterAttributes(this, 'MCPKeyParam', {
+      parameterName: '/finanseal/mcp/internal-service-key',
+    });
+    mcpKeyParam.grantRead(this.feeClassifierFunction);
 
     // Create alias for stable invocation
     const version = this.feeClassifierFunction.currentVersion;

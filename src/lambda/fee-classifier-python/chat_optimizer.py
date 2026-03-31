@@ -15,6 +15,7 @@ import boto3
 from typing import Any
 
 import dspy
+from ssm_secrets import get_gemini_api_key
 from dspy.teleprompt import BootstrapFewShot
 
 from fee_module import configure_lm
@@ -100,7 +101,7 @@ def run_chat_module_optimization(params: dict) -> dict:
         return {"success": False, "error": "No corrections provided"}
 
     # Configure LM
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+    api_key = get_gemini_api_key()
     configure_lm(api_key)
 
     # Load module, training example creator, and metric

@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import time
+from ssm_secrets import get_gemini_api_key
 
 import boto3
 import dspy
@@ -62,7 +63,7 @@ def run_ar_match_optimization(params: dict) -> dict:
         }
 
     # Configure LM
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+    api_key = get_gemini_api_key()
     configure_lm(api_key, temperature=0.3)
 
     # Prepare training data
