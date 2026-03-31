@@ -238,7 +238,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // Try internal service auth first (Layer 2 service-to-service calls)
     // Then fall back to standard API key auth
     const authResult = internalKeyHeader
-      ? authenticateInternalService(internalKeyHeader, internalBusinessId)
+      ? await authenticateInternalService(internalKeyHeader, internalBusinessId)
       : await authenticateApiKey(authHeader);
 
     if (!authResult.authenticated) {

@@ -57,10 +57,10 @@ export class MCPServerStack extends cdk.Stack {
     const lambdaEnvVars: Record<string, string> = {
       // Convex production URL
       NEXT_PUBLIC_CONVEX_URL: props?.convexUrl || process.env.NEXT_PUBLIC_CONVEX_URL || 'https://kindhearted-lynx-129.convex.cloud',
-      // Internal service key for Layer 2 service-to-service calls (Convex → MCP)
-      // Read from MCP_INTERNAL_SERVICE_KEY env var at synth time.
-      // Set before deploy: export MCP_INTERNAL_SERVICE_KEY=$(aws ssm get-parameter --name /finanseal/mcp/internal-service-key --with-decryption --query Parameter.Value --output text --profile groot-finanseal --region us-west-2)
-      ...(process.env.MCP_INTERNAL_SERVICE_KEY ? { MCP_INTERNAL_SERVICE_KEY: process.env.MCP_INTERNAL_SERVICE_KEY } : {}),
+      // Internal service key: read from SSM at Lambda runtime (not synth time).
+      // This eliminates the fragile "must export before deploy" pattern.
+      // SSM parameter: /finanseal/mcp/internal-service-key (SecureString)
+      MCP_SERVICE_KEY_SSM_PARAM: '/finanseal/mcp/internal-service-key',
       // Sentry error tracking
       SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN || '',
       SENTRY_ENVIRONMENT: 'production',
@@ -100,6 +100,12 @@ export class MCPServerStack extends cdk.Stack {
     // S3 write permission for PDF report generation
     const reportsBucket = s3.Bucket.fromBucketName(this, 'ReportsBucket', 'finanseal-bucket');
     reportsBucket.grantWrite(this.mcpServerFunction, 'reports/*');
+
+    // SSM read permission for MCP internal service key (read at runtime, not synth time)
+    const serviceKeyParam = ssm.StringParameter.fromSecureStringParameterAttributes(this, 'MCPServiceKeyParam', {
+      parameterName: '/finanseal/mcp/internal-service-key',
+    });
+    serviceKeyParam.grantRead(this.mcpServerFunction);
 
     // ========================================================================
     // SES Permissions (031-chat-cross-biz-voice: send_email_report tool)

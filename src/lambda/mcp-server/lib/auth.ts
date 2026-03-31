@@ -5,9 +5,39 @@
  * for immediate revocation support. No caching.
  */
 
+import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import { ConvexHttpClient } from 'convex/browser';
 import { api } from '../../../../convex/_generated/api';
 import { logger } from './logger.js';
+
+// SSM-backed service key: cached for Lambda lifetime (cold start only reads SSM)
+let cachedServiceKey: string | null = null;
+
+async function getInternalServiceKey(): Promise<string | null> {
+  if (cachedServiceKey) return cachedServiceKey;
+
+  // Fallback: check env var directly (for local dev / testing)
+  if (process.env.MCP_INTERNAL_SERVICE_KEY) {
+    cachedServiceKey = process.env.MCP_INTERNAL_SERVICE_KEY;
+    return cachedServiceKey;
+  }
+
+  const paramName = process.env.MCP_SERVICE_KEY_SSM_PARAM;
+  if (!paramName) return null;
+
+  try {
+    const ssm = new SSMClient({});
+    const result = await ssm.send(new GetParameterCommand({
+      Name: paramName,
+      WithDecryption: true,
+    }));
+    cachedServiceKey = result.Parameter?.Value || null;
+    return cachedServiceKey;
+  } catch (err) {
+    logger.error('Failed to read service key from SSM', { error: (err as Error).message });
+    return null;
+  }
+}
 
 // Convex client - initialized lazily
 let convexClient: ConvexHttpClient | null = null;
@@ -226,11 +256,11 @@ export async function updateApiKeyUsage(apiKeyId: string): Promise<void> {
  *
  * Returns an AuthResult with wildcard permissions (all tools allowed, no rate limit).
  */
-export function authenticateInternalService(
+export async function authenticateInternalService(
   internalKeyHeader: string | undefined,
   businessId: string | undefined
-): AuthResult {
-  const serviceKey = process.env.MCP_INTERNAL_SERVICE_KEY;
+): Promise<AuthResult> {
+  const serviceKey = await getInternalServiceKey();
 
   if (!serviceKey) {
     return {
