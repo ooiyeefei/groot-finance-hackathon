@@ -365,7 +365,7 @@ export default function FormattedExpenseReport({ reportData }: FormattedExpenseR
         </div>
 
         <Card ref={reportRef} className="bg-white border-gray-300 max-w-4xl mx-auto print:shadow-none print:border-0 print-area">
-          <CardContent className="p-8 space-y-6 print:p-6">
+          <CardContent className="p-4 sm:p-8 space-y-6 print:p-6">
         {/* Duplicate Warning Banner */}
         {duplicateCount > 0 && (
           <div className="bg-red-50 border-2 border-red-500 rounded-lg p-4 flex items-start gap-3">
@@ -419,16 +419,16 @@ export default function FormattedExpenseReport({ reportData }: FormattedExpenseR
           </div>
         </div>
 
-        {/* Expense Table */}
-        <div className="border-2 border-gray-800">
-          <table className="w-full text-sm">
+        {/* Expense Table — breaks out of card padding on mobile for max width */}
+        <div className="-mx-4 sm:mx-0 border-y-2 sm:border-2 border-gray-800 overflow-x-auto print:mx-0 print:border-2">
+          <table className="w-full text-sm table-fixed">
             <thead>
               <tr className="border-b-2 border-gray-800">
-                <th className="border-r border-gray-800 px-2 py-3 text-left font-bold w-12">No.</th>
-                <th className="border-r border-gray-800 px-2 py-3 text-left font-bold w-24">Date</th>
-                <th className="border-r border-gray-800 px-2 py-3 text-left font-bold">Particulars</th>
-                <th className="border-r border-gray-800 px-2 py-3 text-center font-bold w-24">Amount ({summary.currency})</th>
-                <th className="px-2 py-3 text-center font-bold w-24">Total ({summary.currency})</th>
+                <th className="border-r border-gray-800 px-1 sm:px-2 py-2 sm:py-3 text-left font-bold w-[7%]">No.</th>
+                <th className="border-r border-gray-800 px-1 sm:px-2 py-2 sm:py-3 text-left font-bold w-[14%]">Date</th>
+                <th className="border-r border-gray-800 px-1 sm:px-2 py-2 sm:py-3 text-left font-bold">Particulars</th>
+                <th className="border-r border-gray-800 px-1 sm:px-2 py-2 sm:py-3 text-right font-bold w-[16%]">Amount ({summary.currency})</th>
+                <th className="px-1 sm:px-2 py-2 sm:py-3 text-right font-bold w-[16%]">Total ({summary.currency})</th>
               </tr>
             </thead>
             <tbody>
@@ -436,13 +436,13 @@ export default function FormattedExpenseReport({ reportData }: FormattedExpenseR
                 <React.Fragment key={category.categoryId}>
                   {/* Category Header Row */}
                   <tr className="bg-gray-50">
-                    <td className="border-r border-gray-400 px-2 py-2"></td>
-                    <td className="border-r border-gray-400 px-2 py-2"></td>
-                    <td className="border-r border-gray-400 px-2 py-2 font-bold text-gray-900">
+                    <td className="border-r border-gray-400 px-1 sm:px-2 py-2"></td>
+                    <td className="border-r border-gray-400 px-1 sm:px-2 py-2"></td>
+                    <td className="border-r border-gray-400 px-1 sm:px-2 py-2 font-bold text-gray-900">
                       {category.categoryName.toUpperCase()}
                     </td>
-                    <td className="border-r border-gray-400 px-2 py-2"></td>
-                    <td className="px-2 py-2"></td>
+                    <td className="border-r border-gray-400 px-1 sm:px-2 py-2"></td>
+                    <td className="px-1 sm:px-2 py-2"></td>
                   </tr>
 
                   {/* Category Line Items */}
@@ -458,13 +458,13 @@ export default function FormattedExpenseReport({ reportData }: FormattedExpenseR
                           : ''
                       }`}
                     >
-                      <td className="border-r border-gray-400 px-2 py-2 text-center">
+                      <td className="border-r border-gray-400 px-1 sm:px-2 py-2 text-center whitespace-nowrap">
                         {categoryIndex + 1}.{itemIndex + 1}
                       </td>
-                      <td className="border-r border-gray-400 px-2 py-2">
+                      <td className="border-r border-gray-400 px-1 sm:px-2 py-2 whitespace-nowrap">
                         {item.date}
                       </td>
-                      <td className="border-r border-gray-400 px-2 py-2">
+                      <td className="border-r border-gray-400 px-1 sm:px-2 py-2 break-words">
                         <div>
                           <div className="font-medium">{item.description}</div>
                           {item.vendor && (
@@ -485,21 +485,21 @@ export default function FormattedExpenseReport({ reportData }: FormattedExpenseR
                           )}
                         </div>
                       </td>
-                      <td className={`border-r border-gray-400 px-2 py-2 text-right ${isDuplicate ? 'text-red-700 font-semibold' : ''}`}>
+                      <td className={`border-r border-gray-400 px-1 sm:px-2 py-2 text-right whitespace-nowrap ${isDuplicate ? 'text-red-700 font-semibold' : ''}`}>
                         {item.amount.toFixed(2)}
                       </td>
-                      <td className="px-2 py-2"></td>
+                      <td className="px-1 sm:px-2 py-2"></td>
                     </tr>
                     )
                   })}
 
                   {/* Category Subtotal Row */}
                   <tr className="bg-gray-100 border-b-2 border-gray-400">
-                    <td className="border-r border-gray-400 px-2 py-2"></td>
-                    <td className="border-r border-gray-400 px-2 py-2"></td>
-                    <td className="border-r border-gray-400 px-2 py-2"></td>
-                    <td className="border-r border-gray-400 px-2 py-2"></td>
-                    <td className="px-2 py-2 text-right font-bold">
+                    <td className="border-r border-gray-400 px-1 sm:px-2 py-2"></td>
+                    <td className="border-r border-gray-400 px-1 sm:px-2 py-2"></td>
+                    <td className="border-r border-gray-400 px-1 sm:px-2 py-2"></td>
+                    <td className="border-r border-gray-400 px-1 sm:px-2 py-2"></td>
+                    <td className="px-1 sm:px-2 py-2 text-right font-bold whitespace-nowrap">
                       {category.subtotal.toFixed(2)}
                     </td>
                   </tr>
@@ -508,15 +508,15 @@ export default function FormattedExpenseReport({ reportData }: FormattedExpenseR
 
               {/* Grand Total Row */}
               <tr className="border-t-2 border-gray-800 bg-gray-100">
-                <td className="border-r border-gray-800 px-2 py-3"></td>
-                <td className="border-r border-gray-800 px-2 py-3"></td>
-                <td className="border-r border-gray-800 px-2 py-3 text-center font-bold">
+                <td className="border-r border-gray-800 px-1 sm:px-2 py-3"></td>
+                <td className="border-r border-gray-800 px-1 sm:px-2 py-3"></td>
+                <td className="border-r border-gray-800 px-1 sm:px-2 py-3 text-center font-bold">
                   TOTAL
                 </td>
-                <td className="border-r border-gray-800 px-2 py-3 text-right font-bold">
+                <td className="border-r border-gray-800 px-1 sm:px-2 py-3 text-right font-bold whitespace-nowrap">
                   {summary.totalAmount.toFixed(2)}
                 </td>
-                <td className="px-2 py-3 text-right font-bold text-lg">
+                <td className="px-1 sm:px-2 py-3 text-right font-bold text-base sm:text-lg whitespace-nowrap">
                   {summary.totalAmount.toFixed(2)}
                 </td>
               </tr>

@@ -195,16 +195,20 @@ const DocumentsList = forwardRef<DocumentsListRef, DocumentsListProps>(({ onRefr
         title: 'Document deleted',
         description: 'The document has been successfully deleted'
       })
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Delete failed:', error)
       // Keep dialog open on error, just stop loading
       setDeleteConfirmation(prev => ({ ...prev, isLoading: false }))
 
-      // Show error message
+      // Extract message from ConvexError (data field) or regular Error (message field)
+      const message = error && typeof error === 'object' && 'data' in error && typeof (error as { data: unknown }).data === 'string'
+        ? (error as { data: string }).data
+        : error instanceof Error ? error.message : 'Unable to delete the document'
+
       addToast({
         type: 'error',
         title: 'Delete failed',
-        description: error instanceof Error ? error.message : 'Unable to delete the document'
+        description: message
       })
     }
   }, [deleteConfirmation.documentId, deleteDocument, addToast])

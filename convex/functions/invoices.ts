@@ -8,7 +8,7 @@
  * - Processing status management
  */
 
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { query, mutation, internalMutation, internalQuery } from "../_generated/server";
 import { Id } from "../_generated/dataModel";
 import { resolveUserByClerkId, resolveById } from "../lib/resolvers";
@@ -753,29 +753,22 @@ export const updateStatus = mutation({
 export const softDelete = mutation({
   args: { id: v.string() },
   handler: async (ctx, args) => {
-    console.log(`[softDelete] Attempting to delete invoice: ${args.id}`);
-
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
-      console.log(`[softDelete] No auth identity for invoice: ${args.id}`);
-      throw new Error("Not authenticated");
+      throw new ConvexError("Not authenticated");
     }
 
     const user = await resolveUserByClerkId(ctx.db, identity.subject);
     if (!user) {
-      console.log(`[softDelete] User not found for clerk ID: ${identity.subject}`);
-      throw new Error("User not found");
+      throw new ConvexError("User not found");
     }
 
     const invoice = await resolveById(ctx.db, "invoices", args.id);
     if (!invoice || invoice.deletedAt) {
-      console.log(`[softDelete] Invoice not found: ${args.id}, found: ${!!invoice}, deleted: ${invoice?.deletedAt}`);
-      throw new Error(`Invoice not found: ${args.id}`);
+      throw new ConvexError("Invoice not found");
     }
 
-    console.log(`[softDelete] Found invoice ${args.id}, owner: ${invoice.userId}, current user: ${user._id}`);
-
-    // Check ownership or finance_admin access
+    // Check ownership or finance role access
     if (invoice.userId !== user._id && invoice.businessId) {
       const membership = await ctx.db
         .query("business_memberships")
@@ -784,14 +777,17 @@ export const softDelete = mutation({
         )
         .first();
 
-      if (!membership || membership.role !== "owner") {
-        throw new Error("Not authorized to delete this invoice");
+      if (!membership || !["owner", "finance_admin", "manager"].includes(membership.role)) {
+        throw new ConvexError("Not authorized to delete this invoice");
       }
     }
 
-    // Can't delete completed invoices that may have transactions
-    if (invoice.status === "completed" || invoice.status === "paid") {
-      throw new Error("Cannot delete processed invoices");
+    // Can't delete invoices that have been posted to accounting or paid
+    if (invoice.accountingStatus === "posted" || invoice.journalEntryId) {
+      throw new ConvexError("Cannot delete — this invoice has been posted to the general ledger. Void the journal entry first.");
+    }
+    if (invoice.paymentStatus === "paid" || (invoice.paidAmount && invoice.paidAmount > 0)) {
+      throw new ConvexError("Cannot delete — this invoice has recorded payments. Reverse payments first.");
     }
 
     await ctx.db.patch(invoice._id, {
