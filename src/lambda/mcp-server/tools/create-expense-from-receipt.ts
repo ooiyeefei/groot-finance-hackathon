@@ -66,11 +66,14 @@ export async function createExpenseFromReceipt(
     // Delegate to the proposal system for human approval
     const proposalResult = await createProposal(
       {
-        action_type: 'approve_expense' as const,
+        action_type: 'create_expense_claim' as const,
         target_id: `receipt-${Date.now()}`,
         parameters: {
           attachments: input.attachments,
           businessPurpose: input.businessPurpose,
+          // Include user context so the executor can create claims for the right user
+          userId: authContext.userId,
+          userName: authContext.userName,
         },
         summary: `Create expense claim from ${input.attachments.length} receipt(s)${input.businessPurpose ? `: ${input.businessPurpose}` : ''}`,
       },

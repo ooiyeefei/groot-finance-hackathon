@@ -18,6 +18,7 @@ const VALID_ACTION_TYPES = [
   "reject_expense",
   "categorize_expense",
   "update_vendor",
+  "create_expense_claim",
 ] as const;
 
 type ActionType = (typeof VALID_ACTION_TYPES)[number];
@@ -380,6 +381,75 @@ async function executeProposalAction(
         action: "update_vendor",
         expenseId: proposal.targetId,
         updatedFields: Object.keys(updates),
+      };
+    }
+
+    case "create_expense_claim": {
+      // Create a draft expense claim from receipt attachments (chat receipt flow)
+      const params = proposal.parameters as {
+        attachments: Array<{ s3Path: string; mimeType: string; filename: string }>;
+        businessPurpose?: string;
+        userId?: string;
+        userName?: string;
+      };
+
+      if (!params.userId) {
+        throw new Error("userId is required to create expense claims");
+      }
+
+      const userId = params.userId as Id<"users">;
+
+      // Find existing draft submission for this user, or create a new one
+      // (all receipts in the same session batch into one submission)
+      const allUserSubmissions = await ctx.db
+        .query("expense_submissions")
+        .withIndex("by_businessId_userId", (q: any) =>
+          q.eq("businessId", proposal.businessId).eq("userId", userId)
+        )
+        .collect();
+
+      let submissionId: Id<"expense_submissions">;
+      const draftSubmission = allUserSubmissions
+        .filter((s: any) => s.status === "draft" && !s.deletedAt)
+        .sort((a: any, b: any) => b._creationTime - a._creationTime)[0];
+
+      if (draftSubmission) {
+        submissionId = draftSubmission._id;
+      } else {
+        const now = new Date();
+        const title = `Chat Upload - ${now.toLocaleString("en-US", { month: "short", day: "numeric" })} ${now.getFullYear()}`;
+        submissionId = await ctx.db.insert("expense_submissions", {
+          businessId: proposal.businessId as Id<"businesses">,
+          userId,
+          title,
+          status: "draft",
+          updatedAt: Date.now(),
+        });
+      }
+
+      // Create expense claims for each attachment
+      const claimIds: string[] = [];
+      for (const att of params.attachments) {
+        const claimId = await ctx.db.insert("expense_claims", {
+          businessId: proposal.businessId as Id<"businesses">,
+          userId,
+          submissionId,
+          businessPurpose: params.businessPurpose || `Receipt: ${att.filename}`,
+          storagePath: att.s3Path,
+          fileName: att.filename,
+          fileType: att.mimeType,
+          status: "draft",
+          updatedAt: Date.now(),
+        });
+        claimIds.push(claimId);
+      }
+
+      return {
+        action: "create_expense_claim",
+        submissionId,
+        claimIds,
+        claimCount: claimIds.length,
+        message: `Created ${claimIds.length} draft expense claim(s) in submission report`,
       };
     }
 

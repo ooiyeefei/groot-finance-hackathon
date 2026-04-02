@@ -295,8 +295,8 @@ export interface AnalyzeVendorRiskOutput {
 // ============================================================================
 
 export const CreateProposalInputSchema = z.object({
-  action_type: z.enum(['approve_expense', 'reject_expense', 'categorize_expense', 'update_vendor'])
-    .describe('Type of action to propose: approve_expense, reject_expense, categorize_expense, update_vendor'),
+  action_type: z.enum(['approve_expense', 'reject_expense', 'categorize_expense', 'update_vendor', 'create_expense_claim'])
+    .describe('Type of action to propose: approve_expense, reject_expense, categorize_expense, update_vendor, create_expense_claim'),
 
   target_id: z.string()
     .min(1)
