@@ -285,6 +285,13 @@ export async function* streamLangGraphAgent(
       .replace(new RegExp(`\\[\\s*\\{[\\s\\S]*?"type"\\s*:\\s*"(?:${ACTION_TYPES_PATTERN})"[\\s\\S]*?\\}\\s*\\]`, 'g'), '')
       .trim()
 
+    // Safety: strip expense_approval cards when create_expense_from_receipt was used.
+    // The LLM sometimes incorrectly emits expense_approval for receipt uploads —
+    // receipt uploads should NEVER produce expense_approval cards (they use receipt_claim).
+    const receiptToolUsed = finalMessages.some(
+      (m) => m._getType?.() === 'tool' && (m as ToolMessage).name === 'create_expense_from_receipt'
+    )
+
     // Deduplicate action cards: LLM-emitted cards take priority.
     // Bulk-capable types (invoice_posting, expense_approval) allow multiple cards
     // but deduplicate by content key (invoiceId / expenseId).
@@ -295,6 +302,9 @@ export async function* streamLangGraphAgent(
     const seenContentKeys = new Set<string>()
     const seenTypes = new Set<string>()
     const actions = allActions.filter((a) => {
+      // Strip expense_approval cards when the user just uploaded a receipt
+      if (receiptToolUsed && a.type === 'expense_approval') return false
+
       if (a.id && seenIds.has(a.id)) return false
       if (a.id) seenIds.add(a.id)
 
