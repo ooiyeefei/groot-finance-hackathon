@@ -274,7 +274,7 @@ export async function* streamLangGraphAgent(
 
     // Always strip residual action card JSON from text (safety net for edge cases
     // where the regex extraction partially matched or the LLM used unusual formatting).
-    const ACTION_TYPES_PATTERN = 'invoice_posting|cash_flow_dashboard|compliance_alert|budget_alert|budget_status|spending_time_series|anomaly_card|vendor_comparison|expense_approval|expense_reimbursement|revenue_summary|receipt_claim|trend_comparison_card|late_approvals|team_comparison'
+    const ACTION_TYPES_PATTERN = 'invoice_posting|cash_flow_dashboard|compliance_alert|budget_alert|budget_status|spending_time_series|anomaly_card|vendor_comparison|expense_approval|expense_reimbursement|revenue_summary|receipt_claim|receipt_proposal|trend_comparison_card|late_approvals|team_comparison'
     finalContent = finalContent
       // Strip ```actions ... ``` fenced blocks
       .replace(/(?:\\*`){3,}actions[\s\S]*?(?:\\*`){3,}/g, '')
@@ -594,7 +594,19 @@ function autoGenerateActionsFromToolResults(messages: BaseMessage[]): ActionCard
     // 031-chat-receipt-process: Receipt claim tool returns action card data
     if (toolName === 'create_expense_from_receipt' && content) {
       try {
-        if (parsed && (parsed.claimId || parsed.batch || parsed.claims)) {
+        if (parsed && parsed.proposal_id && parsed.confirmation_required) {
+          // Proposal created — show confirmation card with Create/Add More buttons
+          actions.push({
+            type: 'receipt_proposal',
+            id: `receipt-proposal-${parsed.proposal_id}`,
+            data: {
+              proposalId: parsed.proposal_id,
+              attachmentCount: parsed.attachment_count ?? 1,
+              message: parsed.message ?? '',
+            },
+          })
+        } else if (parsed && (parsed.claimId || parsed.batch || parsed.claims)) {
+          // Claim actually created — show receipt claim card
           actions.push({
             type: 'receipt_claim',
             id: `receipt-${parsed.claimId || `batch-${Date.now()}`}`,
