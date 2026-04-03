@@ -25,6 +25,8 @@ import { showMultipleMemoryCandidates } from './memory-auto-save-toast'
 import { showMemoryConfirmationToast, type MemoryConflict } from './memory-confirmation-toast'
 import { ImageAttachmentInput, AttachmentPreviewStrip, type AttachedFile } from './image-attachment-input'
 import { VoiceInputButton } from './voice-input-button'
+import { useVoiceOutput } from '../hooks/use-voice-output'
+import { Volume2, VolumeX } from 'lucide-react'
 
 interface ChatWindowProps {
   onClose: () => void
@@ -78,6 +80,10 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
   // Rich content panel state
   const [richContent, setRichContent] = useState<RichContentData | null>(null)
 
+  // Auto-speak: when enabled, automatically reads agent responses aloud via MiniMax TTS
+  const [autoSpeak, setAutoSpeak] = useState(false)
+  const { speak: speakText, stop: stopSpeaking, isPlaying: isSpeaking } = useVoiceOutput()
+
   const handleViewDetails = useCallback((payload: { type: 'chart' | 'table' | 'dashboard'; title: string; data: unknown }) => {
     setRichContent(payload as RichContentData)
   }, [])
@@ -122,6 +128,11 @@ export function ChatWindow({ onClose, onMinimize, businessId, initialMessage, on
     const lastMsg = convexMessages[convexMessages.length - 1]
     if (lastMsg.role === 'assistant' && !sessionStreamedIds.current.has(lastMsg.id)) {
       sessionStreamedIds.current.add(lastMsg.id)
+
+      // INTEGRATION POINT: Auto-speak via MiniMax TTS when enabled
+      if (autoSpeak && lastMsg.content) {
+        speakText(lastMsg.content)
+      }
 
       // INTEGRATION POINT 3: Auto-save detection after streaming completes
       // Check if the user's last message has memory-worthy content
@@ -478,13 +489,23 @@ User question: ${trimmed}`
             isLoading={isLoadingConversations}
           />
         </div>
-        <button
-          onClick={onClose}
-          className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
-          aria-label="Close"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => { setAutoSpeak(!autoSpeak); if (isSpeaking) stopSpeaking() }}
+            className={`p-1.5 rounded transition-colors ${autoSpeak ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+            aria-label={autoSpeak ? 'Disable voice' : 'Enable voice'}
+            title={autoSpeak ? 'Voice on — click to disable' : 'Enable voice responses'}
+          >
+            {autoSpeak ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+          </button>
+          <button
+            onClick={onClose}
+            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* AI Data Consent — shown before first interaction (Apple 5.1.1(i)) */}

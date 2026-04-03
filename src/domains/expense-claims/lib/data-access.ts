@@ -936,6 +936,21 @@ export async function updateExpenseClaim(
               reviewed_by: nextApproverId
             }
           })
+
+          // Fire n8n webhook for automation (non-blocking)
+          import('@/lib/n8n/notify').then(({ notifyN8n }) => {
+            notifyN8n({
+              event: 'expense.submitted',
+              claimId,
+              businessId: userProfile.business_id,
+              userId: existingClaim.userId,
+              amount: existingClaim.totalAmount || 0,
+              currency: existingClaim.originalCurrency || 'USD',
+              vendor: existingClaim.vendorName || 'Unknown',
+              category: existingClaim.expenseCategory || 'General',
+              timestamp: now,
+            })
+          }).catch(() => {}) // swallow import/notify errors
           break
 
         case 'approved':

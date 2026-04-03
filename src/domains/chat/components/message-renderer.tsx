@@ -36,6 +36,7 @@ import { BulkActionBar } from './action-cards/bulk-action-bar'
 import type { CitationData } from '@/lib/ai/tools/base-tool'
 import type { ChatAction } from '../lib/sse-parser'
 import { CorrectionFeedback } from './correction-feedback'
+import { VoiceOutputButton } from './voice-output-button'
 import { FileImage } from 'lucide-react'
 
 /** Module-level counter for assistant messages to trigger periodic "Was this helpful?" prompt */
@@ -318,16 +319,19 @@ export function MessageRenderer({
         </div>
         {actionCards}
         {suggestionPills}
-        {originalQuery && (
-          <CorrectionFeedback
-            messageId={messageId}
-            conversationId={conversationId}
-            originalQuery={originalQuery}
-            originalIntent={originalIntent}
-            originalToolName={originalToolName}
-            showPromptLabel={showPromptLabel}
-          />
-        )}
+        <div className="flex items-center gap-1 mt-1">
+          <VoiceOutputButton text={processedContent} />
+          {originalQuery && (
+            <CorrectionFeedback
+              messageId={messageId}
+              conversationId={conversationId}
+              originalQuery={originalQuery}
+              originalIntent={originalIntent}
+              originalToolName={originalToolName}
+              showPromptLabel={showPromptLabel}
+            />
+          )}
+        </div>
         <CitationOverlay
           citation={activeCitation}
           isOpen={isCitationOpen}
@@ -381,16 +385,19 @@ export function MessageRenderer({
               </div>
               {actionCards}
               {suggestionPills}
-              {originalQuery && (
-                <CorrectionFeedback
-                  messageId={messageId}
-                  conversationId={conversationId}
-                  originalQuery={originalQuery}
-                  originalIntent={originalIntent}
-                  originalToolName={originalToolName}
-                  showPromptLabel={showPromptLabel}
-                />
-              )}
+              <div className="flex items-center gap-1 mt-1">
+                <VoiceOutputButton text={processedContent} />
+                {originalQuery && (
+                  <CorrectionFeedback
+                    messageId={messageId}
+                    conversationId={conversationId}
+                    originalQuery={originalQuery}
+                    originalIntent={originalIntent}
+                    originalToolName={originalToolName}
+                    showPromptLabel={showPromptLabel}
+                  />
+                )}
+              </div>
             </>
           )}
         </div>
