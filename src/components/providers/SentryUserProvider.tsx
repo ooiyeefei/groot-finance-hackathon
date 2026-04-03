@@ -10,7 +10,7 @@
  */
 
 import { useEffect } from "react";
-import { useAuth, useUser } from "@clerk/nextjs";
+import { useSafeAuth as useAuth, useSafeUser as useUser } from "@/lib/hooks/use-demo-auth";
 import { useBusinessContext } from "@/contexts/business-context";
 import {
   setUserContext,

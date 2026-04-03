@@ -12,7 +12,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { MessageCircle } from 'lucide-react'
 import { ChatWindow } from './chat-window'
-import { useAuth } from '@clerk/nextjs'
+import { useSafeAuth as useAuth } from '@/lib/hooks/use-demo-auth'
 import { useActiveBusiness } from '@/contexts/business-context'
 import { useSubscription } from '@/domains/billing/hooks/use-subscription'
 import { useQuery } from 'convex/react'

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect, useCallback } from 'react'
-import { useAuth } from '@clerk/nextjs'
+import { useSafeAuth as useAuth } from '@/lib/hooks/use-demo-auth'
 import { MessageSquare, Menu } from 'lucide-react'
 import { getNavigationGroups } from '@/lib/navigation/nav-items'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'

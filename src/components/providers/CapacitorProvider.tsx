@@ -16,7 +16,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@clerk/nextjs';
+import { useSafeAuth as useAuth } from '@/lib/hooks/use-demo-auth';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { App } from '@capacitor/app';

@@ -21,7 +21,7 @@ import {
   type Conversation,
   type ChatMessage,
 } from './use-realtime-chat'
-import { useUser } from '@clerk/nextjs'
+import { useSafeUser as useUser } from '@/lib/hooks/use-demo-auth'
 import { useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { parseSSEStream, type StreamEvent, type ChatAction } from '../lib/sse-parser'

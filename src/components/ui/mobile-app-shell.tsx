@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { useState, useEffect, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
-import { useAuth } from '@clerk/nextjs'
+import { useSafeAuth as useAuth } from '@/lib/hooks/use-demo-auth'
 import { BottomNav, BottomNavSpacer, type BottomNavItem } from './bottom-nav'
 import { fetchUserRoleWithCache, clearUserRoleCache } from '@/lib/cache-utils'
 import { useActiveBusiness } from '@/contexts/business-context'

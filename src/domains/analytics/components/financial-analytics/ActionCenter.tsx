@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useEffect, useState } from 'react';
-import { useAuth } from '@clerk/nextjs';
+import { useSafeAuth as useAuth } from '@/lib/hooks/use-demo-auth';
 import { AlertTriangle, TrendingDown, TrendingUp, CheckCircle, CreditCard, PiggyBank, AlertCircle, Calendar, Clock } from 'lucide-react';
 import ActionButton from '@/components/ui/action-button';
 import { AnalyticsData, AnalyticsTrends, ActionItem } from '@/domains/analytics/types/analytics';

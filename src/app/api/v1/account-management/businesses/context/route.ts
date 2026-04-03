@@ -10,7 +10,9 @@ import { withCacheHeaders } from '@/lib/cache/cache-headers'
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth()
+    const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
+    const clerkAuth = await auth()
+    const userId = demoMode ? 'user_39b0XuoRawLEh1V6G8rrXpfzE6P' : clerkAuth.userId
 
     if (!userId) {
       return NextResponse.json(

@@ -6,7 +6,7 @@
 'use client'
 
 import React from 'react'
-import { useUser, useAuth } from '@clerk/nextjs'
+import { useSafeUser as useUser, useSafeAuth as useAuth } from '@/lib/hooks/use-demo-auth'
 import { UserRole, RolePermissions } from '@/domains/security/lib/rbac'
 
 /**

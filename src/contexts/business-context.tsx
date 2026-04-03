@@ -11,7 +11,7 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
-import { useAuth } from '@clerk/nextjs'
+import { useSafeAuth as useAuth } from '@/lib/hooks/use-demo-auth'
 import {
   TBusinessWithMembership,
   TBusinessContext,
@@ -108,7 +108,7 @@ interface BusinessContextProviderProps {
 }
 
 export function BusinessContextProvider({ children }: BusinessContextProviderProps) {
-  // Clerk authentication
+  // Clerk authentication (or demo bypass via useSafeAuth)
   const { isLoaded: isAuthLoaded, isSignedIn, userId } = useAuth()
 
   // Helper to get initial profile from localStorage

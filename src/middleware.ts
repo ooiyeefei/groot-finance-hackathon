@@ -127,9 +127,21 @@ function encodeCachedTrialStatus(status: { businessId: string | null; isExpired:
   return `${status.businessId || ''}|${status.isExpired ? '1' : '0'}`
 }
 
+// DEMO MODE: Skip all auth, allow all routes
+const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
+
 // Clerk middleware with route protection and trial expiration checking
 // Redirects unauthenticated users to sign-in page (pages only, not API)
 export default clerkMiddleware(async (auth, req) => {
+  // DEMO MODE: bypass all auth and trial checks
+  if (DEMO_MODE) {
+    // Redirect root to dashboard
+    if (req.nextUrl.pathname === '/' || req.nextUrl.pathname === '') {
+      return NextResponse.redirect(new URL('/en', req.url))
+    }
+    return NextResponse.next()
+  }
+
   // Gate partner pages behind a secret token
   if (isPartnerPage(req)) {
     const token = req.nextUrl.searchParams.get('t')
