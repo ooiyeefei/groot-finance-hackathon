@@ -77,8 +77,7 @@ export async function POST(req: NextRequest) {
         await convex.mutation(api.functions.expenseClaims.updateStatus, {
           id: claimId as any,
           status: 'approved',
-          reviewedBy: userId,
-          approvalNotes: reason || 'Auto-approved by n8n automation policy',
+          reviewerNotes: reason || 'Auto-approved by n8n automation policy',
         })
 
         return NextResponse.json({
@@ -92,8 +91,7 @@ export async function POST(req: NextRequest) {
         await convex.mutation(api.functions.expenseClaims.updateStatus, {
           id: claimId as any,
           status: 'reimbursed',
-          reviewedBy: userId,
-          approvalNotes: `Payment processed via ${paymentMethod || 'bank transfer'} — automated by n8n`,
+          reviewerNotes: `Payment processed via ${paymentMethod || 'bank transfer'} — automated by n8n`,
         })
 
         return NextResponse.json({
