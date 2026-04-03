@@ -9,7 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedConvex } from '@/lib/convex'
+import { getPublicConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'
 
 const N8N_WEBHOOK_SECRET = process.env.N8N_WEBHOOK_SECRET || 'hackathon-demo-secret'
@@ -21,7 +21,7 @@ interface N8nWebhookPayload {
   claimId: string
   reason?: string
   paymentMethod?: string
-  /** Service account userId for Convex auth bypass */
+  /** Service account userId for status updates */
   actingUserId?: string
 }
 
@@ -40,17 +40,16 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Use service account or provided userId for Convex operations
     const userId = actingUserId || process.env.N8N_SERVICE_USER_ID
     if (!userId) {
       return NextResponse.json({ error: 'No acting user configured' }, { status: 500 })
     }
 
-    const convex = await getAuthenticatedConvex(userId)
+    // Use public (unauthenticated) Convex client — webhook auth is via secret
+    const convex = getPublicConvex()
 
     switch (action) {
       case 'policy_check': {
-        // Fetch claim details for n8n policy evaluation
         const claim = await convex.query(api.functions.expenseClaims.getById, {
           id: claimId as any,
         })
@@ -75,7 +74,6 @@ export async function POST(req: NextRequest) {
       }
 
       case 'auto_approve': {
-        // Auto-approve the expense claim
         await convex.mutation(api.functions.expenseClaims.updateStatus, {
           id: claimId as any,
           status: 'approved',
@@ -91,7 +89,6 @@ export async function POST(req: NextRequest) {
       }
 
       case 'mark_reimbursed': {
-        // Mark as reimbursed (mock payment)
         await convex.mutation(api.functions.expenseClaims.updateStatus, {
           id: claimId as any,
           status: 'reimbursed',
