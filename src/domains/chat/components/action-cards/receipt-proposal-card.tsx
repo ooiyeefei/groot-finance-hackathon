@@ -72,8 +72,17 @@ function ReceiptProposalCard({ action, isHistorical }: ActionCardProps) {
       if (result.success) {
         const execResult = result.result as Record<string, unknown> | undefined
         const claimCount = execResult?.claimCount ?? 1
-        setResultMsg(`Created ${claimCount} draft expense claim${Number(claimCount) > 1 ? 's' : ''}`)
+        const claimIds = execResult?.claimIds as string[] | undefined
+        setResultMsg(`Created ${claimCount} draft expense claim${Number(claimCount) > 1 ? 's' : ''}. Processing receipt...`)
         setCardState('done')
+
+        // Trigger OCR/extraction for each claim (fire-and-forget)
+        if (claimIds && claimIds.length > 0) {
+          for (const claimId of claimIds) {
+            fetch(`/api/v1/expense-claims/${claimId}/reprocess`, { method: 'POST' })
+              .catch((e) => console.warn('[ReceiptProposal] OCR trigger failed:', e))
+          }
+        }
       } else {
         const err = result.error || ''
         // Already executed = success (e.g. double-click, refresh)
