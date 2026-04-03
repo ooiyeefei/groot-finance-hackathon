@@ -181,7 +181,8 @@ export default function MyLeaveRequests({
               approverNotes?: string;
             }) => {
               const leaveType = leaveTypeMap.get(request.leaveTypeId);
-              const canCancel = canCancelRequest(request.status, request.startDate);
+              const cancelCheck = canCancelRequest(request.status, request.startDate);
+              const canCancel = cancelCheck.canCancel;
               const isActioning = actioningId === request._id;
 
               return (
