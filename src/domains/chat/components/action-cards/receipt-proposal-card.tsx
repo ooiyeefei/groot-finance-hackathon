@@ -24,7 +24,7 @@ interface ReceiptProposalData {
   message: string
 }
 
-type CardState = 'idle' | 'loading' | 'done' | 'error' | 'expired'
+type CardState = 'idle' | 'loading' | 'done' | 'error' | 'expired' | 'deleted'
 
 function ReceiptProposalCard({ action, isHistorical }: ActionCardProps) {
   const data = action.data as unknown as ReceiptProposalData
@@ -43,12 +43,18 @@ function ReceiptProposalCard({ action, isHistorical }: ActionCardProps) {
       : 'skip'
   )
 
+  // Check if the submission still exists (detects deletion)
+  const submissionCheck = useQuery(
+    api.functions.expenseSubmissions.getById,
+    submissionId ? { id: submissionId } : 'skip'
+  )
+
   // Sync card state with proposal status from DB
   useEffect(() => {
     if (!proposalResult?.found || !proposalResult.proposal) return
 
     const status = proposalResult.proposal.status
-    if ((status === 'executed' || status === 'confirmed') && cardState !== 'done') {
+    if ((status === 'executed' || status === 'confirmed') && cardState !== 'done' && cardState !== 'deleted') {
       setResultMsg('Expense claim created')
       // Extract submissionId from execution result for the link
       const execResult = proposalResult.proposal.executionResult as Record<string, unknown> | undefined
@@ -61,6 +67,17 @@ function ReceiptProposalCard({ action, isHistorical }: ActionCardProps) {
       setCardState('error')
     }
   }, [proposalResult, cardState])
+
+  // Detect if the submission/claims were deleted after creation
+  useEffect(() => {
+    // Only check when we're in 'done' state and have a submissionId to check
+    if (cardState !== 'done' || !submissionId) return
+    // submissionCheck === undefined means still loading, null means deleted/not found
+    if (submissionCheck === undefined) return
+    if (submissionCheck === null) {
+      setCardState('deleted')
+    }
+  }, [submissionCheck, cardState, submissionId])
 
   if (!data?.proposalId) return null
 
@@ -138,6 +155,11 @@ function ReceiptProposalCard({ action, isHistorical }: ActionCardProps) {
             Expired
           </span>
         )}
+        {cardState === 'deleted' && (
+          <span className="ml-auto text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
+            Deleted
+          </span>
+        )}
       </div>
 
       {/* Body */}
@@ -157,6 +179,13 @@ function ReceiptProposalCard({ action, isHistorical }: ActionCardProps) {
               <p>You can view it in Expense Claims.</p>
             )}
           </div>
+        )}
+
+        {/* Deleted */}
+        {cardState === 'deleted' && (
+          <p className="text-xs text-muted-foreground">
+            This expense claim has been deleted. Upload the receipt again to create a new one.
+          </p>
         )}
 
         {/* Expired */}
