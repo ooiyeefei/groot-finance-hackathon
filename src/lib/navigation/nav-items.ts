@@ -52,44 +52,33 @@ interface UserRole {
 export function getNavigationGroups(userRole: UserRole): NavGroup[] {
   const isAdmin = userRole.finance_admin
 
-  // Group 1: Finance (admin/owner only) — core financial management tools
+  // Group 1: Finance — dashboard only (hackathon demo)
   const financeGroup: NavGroup = {
     id: 'finance',
     items: isAdmin
       ? [
           { icon: Home, label: 'dashboard', path: '/' },
-          { icon: FileText, label: 'invoices', path: '/invoices' },
-          { icon: CreditCard, label: 'transactions', path: '/accounting' },
-          { icon: Inbox, label: 'documentsInbox', path: '/documents-inbox' },
-          { icon: Package, label: 'inventory', path: '/inventory' },
-          { icon: BarChart3, label: 'financialStatements', path: '/financial-statements' },
-          { icon: FileBarChart, label: 'reports', path: '/reports' },
         ]
       : [],
   }
 
-  // Group 2: Workspace (all users) — day-to-day work items + conditional manager tools
+  // Group 2: Workspace — expense claims + manager approvals only (hackathon demo)
   const workspaceGroup: NavGroup = {
     id: 'workspace',
     items: [
       { icon: Receipt, label: 'expenseClaims', path: '/expense-claims' },
-      { icon: CalendarDays, label: 'leaveManagement', path: '/leave-management' },
       ...((userRole.manager || userRole.finance_admin)
         ? [
             { icon: FileCheck, label: 'managerApprovals', path: '/manager/approvals' },
-            ...(!userRole.finance_admin ? [{ icon: BarChart3, label: 'financialStatements', path: '/financial-statements' }] : []),
           ]
         : []),
-      { icon: FileSpreadsheet, label: 'reporting', path: '/reporting' },
     ],
   }
 
-  // Group 3: Utility (all users) — settings
+  // Group 3: Utility — hidden for hackathon demo
   const utilityGroup: NavGroup = {
     id: 'utility',
-    items: [
-      { icon: Settings, label: 'settings', path: '/business-settings' },
-    ],
+    items: [],
   }
 
   return [financeGroup, workspaceGroup, utilityGroup].filter(g => g.items.length > 0)
