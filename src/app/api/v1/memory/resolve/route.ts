@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/lib/demo-server-auth'
 import { ConvexHttpClient } from 'convex/browser'
 
 // Lazy-initialize Convex client

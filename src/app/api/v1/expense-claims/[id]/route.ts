@@ -5,7 +5,7 @@
  * DELETE /api/v1/expense-claims/{id} - Delete expense claim (draft, failed, or classification_failed)
  */
 
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/lib/demo-server-auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { getExpenseClaim, updateExpenseClaim, deleteExpenseClaim } from '@/domains/expense-claims/lib/data-access'
 import { UpdateExpenseClaimRequest } from '@/domains/expense-claims/types'

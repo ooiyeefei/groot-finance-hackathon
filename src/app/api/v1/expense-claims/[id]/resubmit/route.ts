@@ -6,7 +6,7 @@
  * Creates a new draft claim linked to the original rejected claim.
  */
 
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/lib/demo-server-auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedConvex } from '@/lib/convex'
 import { api } from '@/convex/_generated/api'

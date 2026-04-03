@@ -1,7 +1,7 @@
 // Force dynamic rendering - required for authentication
 export const dynamic = 'force-dynamic'
 
-import { auth, currentUser } from '@clerk/nextjs/server'
+import { auth, currentUser } from '@/lib/demo-server-auth'
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import Sidebar from '@/components/ui/sidebar'
@@ -15,19 +15,24 @@ import { RenewalBanner } from '@/domains/billing/components/renewal-banner'
 import { getUserRole } from '@/domains/users/lib/user.service'
 
 export default async function Dashboard({ params }: { params: Promise<{ locale: string }> }) {
-  // Server-side authentication check
+  // Server-side authentication check (demo mode bypass)
+  const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
   let userId: string | null = null
 
-  try {
-    const authResult = await auth()
-    userId = authResult.userId
-  } catch (error) {
-    console.error('[Dashboard] Auth error:', error)
-    redirect('/sign-in')
-  }
+  if (demoMode) {
+    userId = 'user_39b0XuoRawLEh1V6G8rrXpfzE6P'
+  } else {
+    try {
+      const authResult = await auth()
+      userId = authResult.userId
+    } catch (error) {
+      console.error('[Dashboard] Auth error:', error)
+      redirect('/sign-in')
+    }
 
-  if (!userId) {
-    redirect('/sign-in')
+    if (!userId) {
+      redirect('/sign-in')
+    }
   }
 
   // CRITICAL FIX: Check business context before rendering dashboard

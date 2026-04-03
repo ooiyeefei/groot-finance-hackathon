@@ -11,7 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/lib/demo-server-auth'
 import { uploadFile } from '@/lib/aws-s3'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB

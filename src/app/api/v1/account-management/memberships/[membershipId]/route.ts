@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/lib/demo-server-auth'
 import { updateMembership, deleteMembership } from '@/domains/account-management/lib/account-management.service'
 import { getCurrentUserContext } from '@/domains/security/lib/rbac'
 import { rateLimiters } from '@/domains/security/lib/rate-limit'

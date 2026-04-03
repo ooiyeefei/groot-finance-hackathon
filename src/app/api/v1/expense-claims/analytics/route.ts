@@ -15,7 +15,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/lib/demo-server-auth'
 import { ensureUserProfile } from '@/domains/security/lib/ensure-employee-profile'
 import { getExpenseAnalytics } from '@/domains/expense-claims/lib/data-access'
 import { withCacheHeaders } from '@/lib/cache/cache-headers'

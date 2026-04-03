@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
  * Implements Mel's role-adaptive dashboard with progressive disclosure
  */
 
-import { auth, currentUser } from '@clerk/nextjs/server'
+import { auth, currentUser } from '@/lib/demo-server-auth'
 import { redirect } from 'next/navigation'
 import Sidebar from '@/components/ui/sidebar'
 import HeaderWithUser from '@/components/ui/header-with-user'

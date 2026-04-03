@@ -12,7 +12,7 @@
  * ~50ms vs ~400ms per URL compared to the per-document routes.
  */
 
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/lib/demo-server-auth'
 import { NextRequest, NextResponse } from 'next/server'
 import {
   isCloudFrontConfigured,

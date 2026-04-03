@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
  * SECURITY: Server-side role authorization required
  */
 
-import { auth, currentUser } from '@clerk/nextjs/server'
+import { auth, currentUser } from '@/lib/demo-server-auth'
 import { redirect } from 'next/navigation'
 import { requirePermission } from '@/domains/security/lib/rbac'
 import Sidebar from '@/components/ui/sidebar'

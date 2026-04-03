@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/lib/demo-server-auth'
 import { getUserProfile, updateUserProfile, updateUserName } from '@/domains/users/lib/user.service'
 import { rateLimit, RATE_LIMIT_CONFIGS } from '@/domains/security/lib/rate-limit'
 import { withCache, apiCache, CACHE_TTL } from '@/lib/cache/api-cache'

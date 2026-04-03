@@ -17,7 +17,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/lib/demo-server-auth'
 import { getUserDataConvex } from '@/lib/convex'
 import { getAnalyticsPeriod } from '@/domains/analytics/lib/engine'
 import {

@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/lib/demo-server-auth'
 import { executeTool } from '@/lib/ai/tools/mcp-tool-registry'
 import { getUserDataConvex } from '@/lib/convex'
 

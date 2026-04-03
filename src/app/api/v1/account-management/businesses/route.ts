@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { auth, currentUser } from '@clerk/nextjs/server'
+import { auth, currentUser } from '@/lib/demo-server-auth'
 import { createBusiness, getUserBusinessMemberships, updateBusinessProfile, type CreateBusinessRequest } from '@/domains/account-management/lib/account-management.service'
 import { rateLimiters } from '@/domains/security/lib/rate-limit'
 import { getAuthenticatedConvex } from '@/lib/convex'

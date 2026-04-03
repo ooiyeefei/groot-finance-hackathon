@@ -4,7 +4,7 @@
  * POST /api/v1/expense-claims - Create new expense claim (rate limited for mutations/uploads)
  */
 
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/lib/demo-server-auth'
 import { NextRequest, NextResponse, after } from 'next/server'
 import { createExpenseClaim, listExpenseClaims } from '@/domains/expense-claims/lib/data-access'
 import { CreateExpenseClaimRequest, ExpenseClaimListParams } from '@/domains/expense-claims/types'

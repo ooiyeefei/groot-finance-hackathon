@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateCSRFTokenForUser } from '@/domains/security/lib/csrf-protection'
 import { createErrorResponse, ERROR_CODES, withErrorSanitization } from '@/domains/security/lib/error-sanitizer'
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/lib/demo-server-auth'
 import { rateLimit, RATE_LIMIT_CONFIGS } from '@/domains/security/lib/rate-limit'
 
 export const GET = withErrorSanitization(async (request: NextRequest) => {
