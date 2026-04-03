@@ -32,6 +32,9 @@ export function useSafeUser() {
       user: {
         id: 'user_39b0XuoRawLEh1V6G8rrXpfzE6P',
         fullName: 'Finance Admin Kate',
+        firstName: 'Kate',
+        lastName: 'Admin',
+        username: 'demo-admin',
         primaryEmailAddress: { emailAddress: 'demo@financecopilot.ai' },
         imageUrl: null,
       },
