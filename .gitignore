@@ -159,3 +159,4 @@ DerivedData/
 *.dSYM.zip
 *.dSYM
 infra/cdk.context.json
+env.vercel
