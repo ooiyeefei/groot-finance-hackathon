@@ -31,6 +31,7 @@ function ReceiptProposalCard({ action, isHistorical }: ActionCardProps) {
   const [cardState, setCardState] = useState<CardState>('idle')
   const [resultMsg, setResultMsg] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
+  const [submissionId, setSubmissionId] = useState<string | null>(null)
 
   const confirmProposal = useMutation(api.functions.mcpProposals.confirmProposal)
 
@@ -49,6 +50,9 @@ function ReceiptProposalCard({ action, isHistorical }: ActionCardProps) {
     const status = proposalResult.proposal.status
     if ((status === 'executed' || status === 'confirmed') && cardState !== 'done') {
       setResultMsg('Expense claim created')
+      // Extract submissionId from execution result for the link
+      const execResult = proposalResult.proposal.executionResult as Record<string, unknown> | undefined
+      if (execResult?.submissionId) setSubmissionId(execResult.submissionId as string)
       setCardState('done')
     } else if (status === 'expired' && cardState === 'idle') {
       setCardState('expired')
@@ -73,6 +77,8 @@ function ReceiptProposalCard({ action, isHistorical }: ActionCardProps) {
         const execResult = result.result as Record<string, unknown> | undefined
         const claimCount = execResult?.claimCount ?? 1
         const claimIds = execResult?.claimIds as string[] | undefined
+        const resultSubmissionId = execResult?.submissionId as string | undefined
+        if (resultSubmissionId) setSubmissionId(resultSubmissionId)
         setResultMsg(`Created ${claimCount} draft expense claim${Number(claimCount) > 1 ? 's' : ''}. Processing receipt...`)
         setCardState('done')
 
@@ -138,9 +144,19 @@ function ReceiptProposalCard({ action, isHistorical }: ActionCardProps) {
       <div className="px-3 py-2.5">
         {/* Success */}
         {cardState === 'done' && (
-          <p className="text-xs text-green-600 dark:text-green-400 font-medium">
-            {resultMsg || 'Expense claim created'}. You can view it in Expense Claims.
-          </p>
+          <div className="text-xs text-green-600 dark:text-green-400 font-medium">
+            <p>{resultMsg || 'Expense claim created'}.</p>
+            {submissionId ? (
+              <a
+                href={`/en/expense-claims/submissions/${submissionId}`}
+                className="inline-flex items-center gap-1 mt-1 text-primary hover:text-primary/80 underline"
+              >
+                View in Expense Claims →
+              </a>
+            ) : (
+              <p>You can view it in Expense Claims.</p>
+            )}
+          </div>
         )}
 
         {/* Expired */}

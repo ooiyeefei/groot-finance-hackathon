@@ -79,6 +79,32 @@ export async function POST(
     // Determine file type from storage path
     const fileType: 'pdf' | 'image' = claim.storagePath.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image'
 
+    // Fetch business details for e-invoice form fill (required for QR → e-invoice flow)
+    let businessDetails: { name: string; tin: string; brn: string; address: string; phone?: string; contactEmail?: string; [key: string]: any } | undefined
+    try {
+      const business = await client.query(api.functions.businesses.getBusinessProfileByStringId, {
+        businessId: claim.businessId,
+      })
+      if (business?.lhdn_tin) {
+        businessDetails = {
+          name: business.name,
+          tin: business.lhdn_tin,
+          brn: business.business_registration_number || business.lhdn_tin,
+          addressLine1: business.address_line1 || '',
+          addressLine2: business.address_line2 || '',
+          city: business.city || '',
+          stateCode: business.state_code || '',
+          postalCode: business.postal_code || '',
+          address: [business.address_line1, business.city, business.state_code, business.postal_code].filter(Boolean).join(', '),
+          phone: business.contact_phone || '',
+          contactEmail: business.contact_email || '',
+          countryCode: business.country_code || 'MYS',
+        }
+      }
+    } catch (bizError) {
+      console.warn('[Reprocess API] Could not fetch business details for e-invoice:', bizError)
+    }
+
     const lambdaResult = await invokeDocumentProcessor({
       documentId: expenseClaimId,
       domain: 'expense_claims',
@@ -88,6 +114,7 @@ export async function POST(
       userId: user._id,
       idempotencyKey: `expense-${expenseClaimId}-${Date.now()}`,
       expectedDocumentType: 'receipt',
+      businessDetails,
     })
 
     // Map Lambda executionId to taskId for API compatibility
