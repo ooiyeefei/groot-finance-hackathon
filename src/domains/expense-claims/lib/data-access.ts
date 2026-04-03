@@ -945,7 +945,7 @@ export async function updateExpenseClaim(
               businessId: userProfile.business_id,
               userId: existingClaim.userId,
               amount: existingClaim.totalAmount || 0,
-              currency: existingClaim.originalCurrency || 'USD',
+              currency: existingClaim.currency || 'USD',
               vendor: existingClaim.vendorName || 'Unknown',
               category: existingClaim.expenseCategory || 'General',
               timestamp: now,

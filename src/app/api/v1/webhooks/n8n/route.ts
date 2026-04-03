@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
             id: claim._id,
             status: claim.status,
             amount: claim.totalAmount,
-            currency: claim.originalCurrency,
+            currency: claim.currency,
             vendor: claim.vendorName,
             category: claim.expenseCategory,
             submittedBy: claim.userId,
