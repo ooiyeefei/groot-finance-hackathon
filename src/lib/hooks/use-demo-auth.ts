@@ -17,6 +17,12 @@ export function useSafeAuth() {
       isSignedIn: true,
       userId: 'user_39b0XuoRawLEh1V6G8rrXpfzE6P',
       sessionId: 'demo-session',
+      sessionClaims: {
+        metadata: {
+          role: 'finance_admin',
+          permissions: { employee: true, manager: true, finance_admin: true },
+        },
+      },
       getToken: async () => null,
     }
   }
