@@ -389,7 +389,7 @@ async function executeProposalAction(
       const params = proposal.parameters as {
         attachments: Array<{ s3Path: string; mimeType: string; filename: string }>;
         businessPurpose?: string;
-        userId?: string;
+        userId?: string;  // Clerk user ID (from MCP auth context)
         userName?: string;
       };
 
@@ -397,7 +397,17 @@ async function executeProposalAction(
         throw new Error("userId is required to create expense claims");
       }
 
-      const userId = params.userId as Id<"users">;
+      // Resolve Clerk user ID → Convex user ID
+      const userDoc = await ctx.db
+        .query("users")
+        .withIndex("by_clerkUserId", (q: any) => q.eq("clerkUserId", params.userId))
+        .first();
+
+      if (!userDoc) {
+        throw new Error(`User not found for clerkUserId: ${params.userId}`);
+      }
+
+      const userId = userDoc._id;
 
       // Find existing draft submission for this user, or create a new one
       // (all receipts in the same session batch into one submission)
