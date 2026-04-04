@@ -52,8 +52,15 @@ const nextConfig = {
   
   // Performance optimizations and bundle analysis
   webpack: (config: any, { dev, isServer }: { dev: boolean, isServer: boolean }) => {
+    const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
+
     config.resolve.alias = {
       ...config.resolve.alias,
+      // DEMO MODE: Replace all Clerk imports with shims (no auth needed)
+      ...(demoMode ? {
+        '@clerk/nextjs/server': require.resolve('./src/lib/clerk-server-shim.ts'),
+        '@clerk/nextjs': require.resolve('./src/lib/clerk-shim.ts'),
+      } : {}),
     };
 
     // ✅ PERFORMANCE OPTIMIZATION: Enhanced production optimizations
